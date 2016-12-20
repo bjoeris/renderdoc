@@ -113,9 +113,12 @@
 // Global constants
 enum
 {
-  RenderDoc_FirstTargetControlPort = 38920,
+  // YETI: Modify the ports used to fall within our devkit port range.
+  // Original RenderDoc_FirstTargetControlPort was 38920
+  RenderDoc_FirstTargetControlPort = 44710,
   RenderDoc_LastTargetControlPort = RenderDoc_FirstTargetControlPort + 7,
-  RenderDoc_RemoteServerPort = 39920,
+  // Original RenderDoc_RemoteServerPort was 39920
+  RenderDoc_RemoteServerPort = 44720,
   RenderDoc_AndroidPortOffset = 50,
 };
 
