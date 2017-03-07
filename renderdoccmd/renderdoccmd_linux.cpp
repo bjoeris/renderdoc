@@ -155,7 +155,7 @@ string layerRegistrationPath[COUNT] = {
     // TODO(b/35626300): Refactor this code so we don't have to call getenv() to
     // initialize this global variable and then we can use an environment
     // variable instead of hardcoding this path.
-    "/usr/local/cloudcast/etc/vulkan/implicit_layer.d",
+    "/usr/local/cloudcast/etc/vulkan/implicit_layer.d/renderdoc_capture.json",
 #else
     string(getenv("HOME")) + "/.local/share/vulkan/implicit_layer.d/renderdoc_capture.json",
 #endif
