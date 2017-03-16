@@ -1,0 +1,17 @@
+me: "RenderDoc"
+description:
+    "RenderDoc is a stand-alone graphics debugging tool."
+
+third_party {
+  url {
+    type: HOMEPAGE
+    value: "https://github.com/baldurk/renderdoc"
+  }
+  url {
+    type: GIT
+    value: "https://github.com/baldurk/renderdoc.git"
+  }
+  version: "a0d84d0daaebb1623d4af8d3bd03714d8e36b0c5"
+  last_upgrade_date { year: 2017 month: 3 day: 16 }
+  local_modifications: "see MODIFICATIONS file"
+}

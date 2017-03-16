@@ -1,0 +1,10 @@
+77e34b92 YETI: [RenderDoc] LICENSE, README, MODIFICATIONS files
+e1dc1e7c YETI: [RenderDoc] Fix registration path for Yeti.
+9cb49dd1 YETI: [RenderDoc] Disable IP whitelist for Yeti builds
+9215198e YETI: [RenderDoc] Fix a crash when HOME env is not defined.
+c7e8cc31 YETI: Modify SPRIV disassembler to not crash on old instruction.
+ca52653d YETI: Renderdoc changes to support Yeti capture and replay.
+1fc720fe YETI: Add yeti specific changes to the vulkan header.
+1230e5c7 YETI: Change the port range used to our allowed ports.
+8e97ad68 Fix RenderDoc build to work at the command line.
+5c2b916c Upgrade the RenderDoc projects to VS2015 in-place.
