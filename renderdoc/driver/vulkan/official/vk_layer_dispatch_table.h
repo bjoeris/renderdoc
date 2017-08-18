@@ -137,6 +137,14 @@ typedef struct VkLayerInstanceDispatchTable_ {
     PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallbackEXT;
     PFN_vkDebugReportMessageEXT DebugReportMessageEXT;
 
+    // ---- VK_GOOGLE_yeti_surface extension commands
+#ifdef VK_USE_PLATFORM_YETI_GOOGLE
+    PFN_vkCreateYetiSurfaceGOOGLE CreateYetiSurfaceGOOGLE;
+#endif // VK_USE_PLATFORM_YETI_GOOGLE
+#ifdef VK_USE_PLATFORM_YETI_GOOGLE
+    PFN_vkGetPhysicalDeviceYetiPresentationSupportGOOGLE GetPhysicalDeviceYetiPresentationSupportGOOGLE;
+#endif // VK_USE_PLATFORM_YETI_GOOGLE
+
     // ---- VK_NV_external_memory_capabilities extension commands
     PFN_vkGetPhysicalDeviceExternalImageFormatPropertiesNV GetPhysicalDeviceExternalImageFormatPropertiesNV;
 
