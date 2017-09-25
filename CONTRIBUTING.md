@@ -133,6 +133,14 @@ For qrenderdoc you need Qt5 >= 5.6 along with the 'svg' and 'x11extras' packages
 This is the apt-get line you'd need to install the requirements bar Qt on Ubuntu 14.04 or above:
 
 ```
+cmake -DCMAKE_BUILD_TYPE=Debug \
+      -DENABLE_YETI=ON \
+      -DENABLE_GL=OFF \
+      -DENABLE_QRENDERDOC=OFF \
+      -DENABLE_XCB=OFF \
+      -DENABLE_XLIB=OFF \
+      -Bbuild -H.
+make -C build
 sudo apt-get install libx11-dev libx11-xcb-dev mesa-common-dev libgl1-mesa-dev libxcb-keysyms1-dev cmake python3-dev bison autoconf automake libpcre3-dev
 ```
 
@@ -141,6 +149,16 @@ Your version of Ubuntu might not include a recent enough Qt version, so you can 
 For Archlinux (as of 2017.04.18) you'll need:
 
 ```
+mkdir build &&
+   cd build &&
+   cmake -DCMAKE_BUILD_TYPE=Debug \
+         -DENABLE_YETI=ON \
+         -DENABLE_GL=OFF \
+         -DENABLE_QRENDERDOC=OFF \
+         -DENABLE_XCB=OFF \
+         -DENABLE_XLIB=OFF \
+         .. &&
+   make
 sudo pacman -S libx11 libxcb xcb-util-keysyms mesa libgl qt5-base qt5-svg qt5-x11extras cmake python3 bison autoconf automake pcre
 ```
 
