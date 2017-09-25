@@ -39,6 +39,80 @@
 #include "vk_layer_dispatch_table.h"
 
 #define MAX_NUM_UNKNOWN_EXTS 250
+typedef struct VkLayerInstanceDispatchTable_ {
+    PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
+    PFN_vkDestroyInstance DestroyInstance;
+    PFN_vkEnumeratePhysicalDevices EnumeratePhysicalDevices;
+    PFN_vkGetPhysicalDeviceFeatures GetPhysicalDeviceFeatures;
+    PFN_vkGetPhysicalDeviceImageFormatProperties
+        GetPhysicalDeviceImageFormatProperties;
+    PFN_vkGetPhysicalDeviceFormatProperties GetPhysicalDeviceFormatProperties;
+    PFN_vkGetPhysicalDeviceSparseImageFormatProperties
+        GetPhysicalDeviceSparseImageFormatProperties;
+    PFN_vkGetPhysicalDeviceProperties GetPhysicalDeviceProperties;
+    PFN_vkGetPhysicalDeviceQueueFamilyProperties
+        GetPhysicalDeviceQueueFamilyProperties;
+    PFN_vkGetPhysicalDeviceMemoryProperties GetPhysicalDeviceMemoryProperties;
+    PFN_vkEnumerateDeviceExtensionProperties EnumerateDeviceExtensionProperties;
+    PFN_vkEnumerateDeviceLayerProperties EnumerateDeviceLayerProperties;
+    PFN_vkDestroySurfaceKHR DestroySurfaceKHR;
+    PFN_vkGetPhysicalDeviceSurfaceSupportKHR GetPhysicalDeviceSurfaceSupportKHR;
+    PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR
+        GetPhysicalDeviceSurfaceCapabilitiesKHR;
+    PFN_vkGetPhysicalDeviceSurfaceFormatsKHR GetPhysicalDeviceSurfaceFormatsKHR;
+    PFN_vkGetPhysicalDeviceSurfacePresentModesKHR
+        GetPhysicalDeviceSurfacePresentModesKHR;
+    PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallbackEXT;
+    PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallbackEXT;
+    PFN_vkDebugReportMessageEXT DebugReportMessageEXT;
+#ifdef VK_USE_PLATFORM_MIR_KHR
+    PFN_vkCreateMirSurfaceKHR CreateMirSurfaceKHR;
+    PFN_vkGetPhysicalDeviceMirPresentationSupportKHR
+        GetPhysicalDeviceMirPresentationSupportKHR;
+#endif
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+    PFN_vkCreateWaylandSurfaceKHR CreateWaylandSurfaceKHR;
+    PFN_vkGetPhysicalDeviceWaylandPresentationSupportKHR
+        GetPhysicalDeviceWaylandPresentationSupportKHR;
+#endif
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+    PFN_vkCreateWin32SurfaceKHR CreateWin32SurfaceKHR;
+    PFN_vkGetPhysicalDeviceWin32PresentationSupportKHR
+        GetPhysicalDeviceWin32PresentationSupportKHR;
+#endif
+#ifdef VK_USE_PLATFORM_XCB_KHR
+    PFN_vkCreateXcbSurfaceKHR CreateXcbSurfaceKHR;
+    PFN_vkGetPhysicalDeviceXcbPresentationSupportKHR
+        GetPhysicalDeviceXcbPresentationSupportKHR;
+#endif
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+    PFN_vkCreateXlibSurfaceKHR CreateXlibSurfaceKHR;
+    PFN_vkGetPhysicalDeviceXlibPresentationSupportKHR
+        GetPhysicalDeviceXlibPresentationSupportKHR;
+#endif
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+    PFN_vkCreateAndroidSurfaceKHR CreateAndroidSurfaceKHR;
+#endif
+    PFN_vkGetPhysicalDeviceDisplayPropertiesKHR
+        GetPhysicalDeviceDisplayPropertiesKHR;
+    PFN_vkGetPhysicalDeviceDisplayPlanePropertiesKHR
+        GetPhysicalDeviceDisplayPlanePropertiesKHR;
+    PFN_vkGetDisplayPlaneSupportedDisplaysKHR
+        GetDisplayPlaneSupportedDisplaysKHR;
+    PFN_vkGetDisplayModePropertiesKHR
+        GetDisplayModePropertiesKHR;
+    PFN_vkCreateDisplayModeKHR
+        CreateDisplayModeKHR;
+    PFN_vkGetDisplayPlaneCapabilitiesKHR
+        GetDisplayPlaneCapabilitiesKHR;
+    PFN_vkCreateDisplayPlaneSurfaceKHR
+        CreateDisplayPlaneSurfaceKHR;
+#ifdef VK_USE_PLATFORM_YETI_GOOGLE
+    PFN_vkCreateYetiSurfaceGOOGLE CreateYetiSurfaceGOOGLE;
+    PFN_vkGetPhysicalDeviceYetiPresentationSupportGOOGLE
+      GetPhysicalDeviceYetiPresentationSupportGOOGLE;
+#endif
+} VkLayerInstanceDispatchTable;
 
  // Loader-Layer version negotiation API.  Versions add the following features:
  //   Versions 0/1 - Initial.  Doesn't support vk_layerGetPhysicalDeviceProcAddr

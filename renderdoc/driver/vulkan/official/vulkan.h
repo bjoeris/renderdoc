@@ -222,6 +222,8 @@ typedef enum VkStructureType {
     VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_IMAGE_CREATE_INFO_NV = 1000026000,
     VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_BUFFER_CREATE_INFO_NV = 1000026001,
     VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV = 1000026002,
+    VK_STRUCTURE_TYPE_YETI_SURFACE_CREATE_INFO_GOOGLE = 1000048000,
+    VK_STRUCTURE_TYPE_YETI_PRESENT_METADATA_GOOGLE = 1000048001,
     VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD = 1000041000,
     VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO_KHX = 1000053000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES_KHX = 1000053001,
@@ -5187,6 +5189,40 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirectCountAMD(
 #define VK_AMD_SHADER_BALLOT_SPEC_VERSION 1
 #define VK_AMD_SHADER_BALLOT_EXTENSION_NAME "VK_AMD_shader_ballot"
 
+#ifdef VK_USE_PLATFORM_YETI_GOOGLE
+#define VK_GOOGLE_yeti_surface 1
+#define VK_GOOGLE_YETI_SURFACE_SPEC_VERSION 2
+#define VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME "VK_GOOGLE_yeti_surface"
+
+typedef struct VkYetiSurfaceCreateInfoGOOGLE {
+  VkStructureType    sType;
+  const void*        pNext;
+  int32_t            streamIndex;
+} VkYetiSurfaceCreateInfoGOOGLE;
+
+typedef struct VkYetiPresentMetadataGOOGLE {
+  VkStructureType    sType;
+  const void*        pNext;
+  uint32_t           inputSequenceNumber;
+} VkYetiPresentMetadataGOOGLE;
+
+
+typedef VkResult(VKAPI_PTR *PFN_vkCreateYetiSurfaceGOOGLE)(VkInstance instance, const VkYetiSurfaceCreateInfoGOOGLE* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface);
+typedef VkBool32(VKAPI_PTR *PFN_vkGetPhysicalDeviceYetiPresentationSupportGOOGLE)(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, int32_t streamIndex);
+
+#ifndef VK_NO_PROTOTYPES
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateYetiSurfaceGOOGLE(
+  VkInstance                                  instance,
+  const VkYetiSurfaceCreateInfoGOOGLE*        pCreateInfo,
+  const VkAllocationCallbacks*                pAllocator,
+  VkSurfaceKHR*                               pSurface);
+
+VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceYetiPresentationSupportGOOGLE(
+  VkPhysicalDevice                            physicalDevice,
+  uint32_t                                    queueFamilyIndex,
+  int32_t                                     streamIndex);
+#endif
+#endif /* VK_USE_PLATFORM_YETI_GOOGLE */
 
 #define VK_AMD_texture_gather_bias_lod 1
 #define VK_AMD_TEXTURE_GATHER_BIAS_LOD_SPEC_VERSION 1
