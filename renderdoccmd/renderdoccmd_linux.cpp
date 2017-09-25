@@ -51,6 +51,116 @@ void Daemonise()
   daemon(1, 0);
 }
 
+// this is exported from vk_linux.cpp
+
+#if defined(RENDERDOC_SUPPORT_VULKAN)
+
+extern "C" void RENDERDOC_GetLayerJSON(char **txt, int *len);
+
+#else
+
+// just for ease of compiling, define a dummy function
+
+void RENDERDOC_GetLayerJSON(char **txt, int *len)
+{
+  static char dummy[] = "";
+  *txt = dummy;
+  *len = 0;
+}
+
+#endif
+
+static string GenerateJSON(const string &sopath)
+{
+  char *txt = NULL;
+  int len = 0;
+
+  RENDERDOC_GetLayerJSON(&txt, &len);
+
+  if(len <= 0)
+    return "";
+
+  string json = string(txt, txt + len);
+
+  const char dllPathString[] = ".\\\\renderdoc.dll";
+
+  size_t idx = json.find(dllPathString);
+
+  return json.substr(0, idx) + sopath + json.substr(idx + sizeof(dllPathString) - 1);
+}
+
+static bool FileExists(const string &path)
+{
+  FILE *f = fopen(path.c_str(), "r");
+
+  if(f)
+  {
+    fclose(f);
+    return true;
+  }
+
+  return false;
+}
+
+static string GetSOFromJSON(const string &json)
+{
+  char *json_string = new char[1024];
+  memset(json_string, 0, 1024);
+
+  FILE *f = fopen(json.c_str(), "r");
+
+  if(f)
+  {
+    fread(json_string, 1, 1024, f);
+
+    fclose(f);
+  }
+
+  string ret = "";
+
+  // The line is:
+  // "library_path": "/foo/bar/librenderdoc.so",
+  char *c = strstr(json_string, "library_path");
+
+  if(c)
+  {
+    c += sizeof("library_path\": \"") - 1;
+
+    char *quote = strchr(c, '"');
+
+    if(quote)
+    {
+      *quote = 0;
+      ret = c;
+    }
+  }
+
+  delete[] json_string;
+
+  return ret;
+}
+
+enum
+{
+  USR,
+  ETC,
+  HOME,
+  COUNT
+};
+
+string layerRegistrationPath[COUNT] = {
+    "/usr/share/vulkan/implicit_layer.d/renderdoc_capture.json",
+    "/etc/vulkan/implicit_layer.d/renderdoc_capture.json",
+#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
+    // TODO(b/35626300): Refactor this code so we don't have to call getenv() to
+    // initialize this global variable and then we can use an environment
+    // variable instead of hardcoding this path.
+    "/usr/local/cloudcast/etc/vulkan/implicit_layer.d",
+#else
+    string(getenv("HOME")) + "/.local/share/vulkan/implicit_layer.d/renderdoc_capture.json",
+#endif
+    };
+
 struct VulkanRegisterCommand : public Command
 {
   VulkanRegisterCommand(const GlobalEnvironment &env) : Command(env) {}
@@ -111,8 +221,14 @@ void VerifyVulkanLayer(const GlobalEnvironment &env, int argc, char *argv[])
   rdctype::array<rdctype::str> myJSONs;
   rdctype::array<rdctype::str> otherJSONs;
 
-  bool needUpdate = RENDERDOC_NeedVulkanLayerRegistration(&flags, &myJSONs, &otherJSONs);
+  char* home_path = getenv("HOME");
+  // YETI: Only use the ignore vulkan layer file if the HOME env is set.
+  if (home_path != NULL) {
+    string ignorePath = string(home_path) + "/.renderdoc/ignore_vulkan_layer_issues";
+    if(FileExists(ignorePath))
+      return;  }
 
+  bool needUpdate = RENDERDOC_NeedVulkanLayerRegistration(&flags, &myJSONs, &otherJSONs);
   if(!needUpdate)
   {
     if(!(flags & VulkanLayerFlags::Unfixable))
@@ -144,7 +260,7 @@ void VerifyVulkanLayer(const GlobalEnvironment &env, int argc, char *argv[])
   if(!(flags & VulkanLayerFlags::ThisInstallRegistered))
   {
     if(registerAll)
-    {
+  {
       for(const rdctype::str &j : myJSONs)
         std::cerr << (updateAllowed ? "Register/update: " : "Register: ") << j.c_str() << std::endl;
     }
@@ -156,7 +272,7 @@ void VerifyVulkanLayer(const GlobalEnvironment &env, int argc, char *argv[])
     }
   }
 
-  std::cerr << std::endl;
+    std::cerr << std::endl;
 
   if(flags & VulkanLayerFlags::Unfixable)
   {
