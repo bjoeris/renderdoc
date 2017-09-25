@@ -1427,10 +1427,30 @@ struct SPVInstruction
         if(!inlineOp)
           ret = StringFormat::Fmt("%s %s = ", op->type->GetName().c_str(), GetIDName().c_str());
 
+        // YETI: Check canonicalNames and friendlyNames for validity before
+        // using.
+        // TODO(b/34471309): Support for several SPIRV extensions needs to be
+        // added.
 #if USE_CANONICAL_EXT_INST_NAMES
-        ret += op->arguments[0]->ext->setname + "::";
+        ret += op->arguments[0]->ext->setname;
+        if(op->arguments[0]->ext->canonicalNames)
+        {
+          ret += "::";
+          ret += op->arguments[0]->ext->canonicalNames[op->literals[0]];
+        }
         const char **names = op->arguments[0]->ext->canonicalNames;
 #else
+        if(op->arguments[0]->ext->friendlyNames)
+        {
+          ret += op->arguments[0]->ext->friendlyNames[op->literals[0]];
+        }
+        else
+        {
+          ret += StringFormat::Fmt("UnknownExt(%s(%d))",
+                                   op->arguments[0]->ext->setname.c_str(),
+                                   op->literals[0]);
+          RDCWARN("Cannot parse extension instruction.  %s", ret.c_str());
+        }
         const char **names = op->arguments[0]->ext->friendlyNames;
 #endif
         if(names)
