@@ -32,7 +32,7 @@
   HookInitExtension(VK_KHR_win32_surface, CreateWin32SurfaceKHR); \
   HookInitExtension(VK_KHR_win32_surface, GetPhysicalDeviceWin32PresentationSupportKHR);
 
-#define HookInitDevice_PlatformSpecific()                                             \
+#define HookInitDevice_PlatformSpecific() \
   HookInitExtension(VK_NV_win32_keyed_mutex, GetMemoryWin32HandleNV);                 \
   HookInitExtension(VK_KHR_external_memory_win32, GetMemoryWin32HandleKHR);           \
   HookInitExtension(VK_KHR_external_memory_win32, GetMemoryWin32HandlePropertiesKHR); \
@@ -94,17 +94,17 @@
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
 
-#define HookInitInstance_PlatformSpecific_Xlib()                                       \
-  HookInitExtension(VK_KHR_xlib_surface, CreateXlibSurfaceKHR);                        \
+#define HookInitInstance_PlatformSpecific_Xlib()                \
+  HookInitExtension(VK_KHR_xlib_surface, CreateXlibSurfaceKHR); \
   HookInitExtension(VK_KHR_xlib_surface, GetPhysicalDeviceXlibPresentationSupportKHR); \
   HookInitExtension(VK_EXT_acquire_xlib_display, AcquireXlibDisplayEXT);               \
   HookInitExtension(VK_EXT_acquire_xlib_display, GetRandROutputDisplayEXT);
 
-#define HookDefine_PlatformSpecific_Xlib()                                                         \
-  HookDefine4(VkResult, vkCreateXlibSurfaceKHR, VkInstance, instance,                              \
-              const VkXlibSurfaceCreateInfoKHR *, pCreateInfo, const VkAllocationCallbacks *,      \
-              pAllocator, VkSurfaceKHR *, pSurface);                                               \
-  HookDefine4(VkBool32, vkGetPhysicalDeviceXlibPresentationSupportKHR, VkPhysicalDevice,           \
+#define HookDefine_PlatformSpecific_Xlib()                                                    \
+  HookDefine4(VkResult, vkCreateXlibSurfaceKHR, VkInstance, instance,                         \
+              const VkXlibSurfaceCreateInfoKHR *, pCreateInfo, const VkAllocationCallbacks *, \
+              pAllocator, VkSurfaceKHR *, pSurface);                                          \
+  HookDefine4(VkBool32, vkGetPhysicalDeviceXlibPresentationSupportKHR, VkPhysicalDevice,      \
               physicalDevice, uint32_t, queueFamilyIndex, Display *, dpy, VisualID, visualID);     \
   HookDefine3(VkResult, vkAcquireXlibDisplayEXT, VkPhysicalDevice, physicalDevice, Display *, dpy, \
               VkDisplayKHR, display);                                                              \
@@ -118,11 +118,30 @@
 
 #endif
 
+#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
+
+#define HookInitInstance_PlatformSpecific_Yeti()                      \
+  HookInitExtension(VK_GOOGLE_yeti_surface, CreateYetiSurfaceGOOGLE); \
+  HookInitExtension(VK_GOOGLE_yeti_surface, GetPhysicalDeviceYetiPresentationSupportGOOGLE);
+
+#define HookDefine_PlatformSpecific_Yeti()                                                       \
+  HookDefine4(VkResult, vkCreateYetiSurfaceGOOGLE, VkInstance, instance,                         \
+              const VkYetiSurfaceCreateInfoGOOGLE *, pCreateInfo, const VkAllocationCallbacks *, \
+              pAllocator, VkSurfaceKHR *, pSurface);                                             \
+  HookDefine3(VkBool32, vkGetPhysicalDeviceYetiPresentationSupportGOOGLE, VkPhysicalDevice,      \
+              physicalDevice, uint32_t, queueFamilyIndex, uint32_t, streamIndex);
+#else
+
+#define HookInitInstance_PlatformSpecific_Yeti()
+#define HookDefine_PlatformSpecific_Yeti()
+
+#endif
+
 #define HookInitInstance_PlatformSpecific() \
-  HookInitInstance_PlatformSpecific_Xcb() HookInitInstance_PlatformSpecific_Xlib()
+  HookInitInstance_PlatformSpecific_Xcb() HookInitInstance_PlatformSpecific_Xlib() HookInitInstance_PlatformSpecific_Yeti()
 #define HookInitDevice_PlatformSpecific()
 #define HookDefine_PlatformSpecific() \
-  HookDefine_PlatformSpecific_Xcb() HookDefine_PlatformSpecific_Xlib()
+  HookDefine_PlatformSpecific_Xcb() HookDefine_PlatformSpecific_Xlib() HookDefine_PlatformSpecific_Yeti()
 
 #endif
 
@@ -268,14 +287,15 @@
 
 // for simplicity and since the check itself is platform agnostic,
 // these aren't protected in platform defines
-#define CheckInstanceExts()                         \
-  CheckExt(VK_KHR_xlib_surface);                    \
-  CheckExt(VK_KHR_xcb_surface);                     \
-  CheckExt(VK_KHR_win32_surface);                   \
-  CheckExt(VK_KHR_android_surface);                 \
-  CheckExt(VK_KHR_surface);                         \
-  CheckExt(VK_EXT_debug_report);                    \
-  CheckExt(VK_KHR_display);                         \
+#define CheckInstanceExts()         \
+  CheckExt(VK_KHR_xlib_surface);    \
+  CheckExt(VK_GOOGLE_yeti_surface); \
+  CheckExt(VK_KHR_xcb_surface);     \
+  CheckExt(VK_KHR_win32_surface);   \
+  CheckExt(VK_KHR_android_surface); \
+  CheckExt(VK_KHR_surface);         \
+  CheckExt(VK_EXT_debug_report);    \
+  CheckExt(VK_KHR_display);         \
   CheckExt(VK_NV_external_memory_capabilities);     \
   CheckExt(VK_KHR_get_physical_device_properties2); \
   CheckExt(VK_EXT_display_surface_counter);         \
@@ -284,12 +304,12 @@
   CheckExt(VK_KHR_external_memory_capabilities);    \
   CheckExt(VK_KHR_external_semaphore_capabilities);
 
-#define CheckDeviceExts()                    \
-  CheckExt(VK_EXT_debug_marker);             \
-  CheckExt(VK_KHR_swapchain);                \
-  CheckExt(VK_KHR_display_swapchain);        \
-  CheckExt(VK_NV_external_memory);           \
-  CheckExt(VK_NV_external_memory_win32);     \
+#define CheckDeviceExts()                \
+  CheckExt(VK_EXT_debug_marker);         \
+  CheckExt(VK_KHR_swapchain);            \
+  CheckExt(VK_KHR_display_swapchain);    \
+  CheckExt(VK_NV_external_memory);       \
+  CheckExt(VK_NV_external_memory_win32); \
   CheckExt(VK_NV_win32_keyed_mutex);         \
   CheckExt(VK_KHR_maintenance1);             \
   CheckExt(VK_EXT_display_control);          \
@@ -301,24 +321,24 @@
   CheckExt(VK_KHR_external_semaphore_fd);    \
   CheckExt(VK_KHR_get_memory_requirements2);
 
-#define HookInitVulkanInstanceExts()                                                                \
-  HookInitExtension(VK_KHR_surface, DestroySurfaceKHR);                                             \
-  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfaceSupportKHR);                            \
-  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfaceCapabilitiesKHR);                       \
-  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfaceFormatsKHR);                            \
-  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfacePresentModesKHR);                       \
-  HookInitExtension(VK_EXT_debug_report, CreateDebugReportCallbackEXT);                             \
-  HookInitExtension(VK_EXT_debug_report, DestroyDebugReportCallbackEXT);                            \
-  HookInitExtension(VK_EXT_debug_report, DebugReportMessageEXT);                                    \
-  HookInitExtension(VK_KHR_display, GetPhysicalDeviceDisplayPropertiesKHR);                         \
-  HookInitExtension(VK_KHR_display, GetPhysicalDeviceDisplayPlanePropertiesKHR);                    \
-  HookInitExtension(VK_KHR_display, GetDisplayPlaneSupportedDisplaysKHR);                           \
-  HookInitExtension(VK_KHR_display, GetDisplayModePropertiesKHR);                                   \
-  HookInitExtension(VK_KHR_display, CreateDisplayModeKHR);                                          \
-  HookInitExtension(VK_KHR_display, GetDisplayPlaneCapabilitiesKHR);                                \
-  HookInitExtension(VK_KHR_display, CreateDisplayPlaneSurfaceKHR);                                  \
-  HookInitExtension(VK_NV_external_memory_capabilities,                                             \
-                    GetPhysicalDeviceExternalImageFormatPropertiesNV);                              \
+#define HookInitVulkanInstanceExts()                                             \
+  HookInitExtension(VK_KHR_surface, DestroySurfaceKHR);                          \
+  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfaceSupportKHR);         \
+  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfaceCapabilitiesKHR);    \
+  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfaceFormatsKHR);         \
+  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfacePresentModesKHR);    \
+  HookInitExtension(VK_EXT_debug_report, CreateDebugReportCallbackEXT);          \
+  HookInitExtension(VK_EXT_debug_report, DestroyDebugReportCallbackEXT);         \
+  HookInitExtension(VK_EXT_debug_report, DebugReportMessageEXT);                 \
+  HookInitExtension(VK_KHR_display, GetPhysicalDeviceDisplayPropertiesKHR);      \
+  HookInitExtension(VK_KHR_display, GetPhysicalDeviceDisplayPlanePropertiesKHR); \
+  HookInitExtension(VK_KHR_display, GetDisplayPlaneSupportedDisplaysKHR);        \
+  HookInitExtension(VK_KHR_display, GetDisplayModePropertiesKHR);                \
+  HookInitExtension(VK_KHR_display, CreateDisplayModeKHR);                       \
+  HookInitExtension(VK_KHR_display, GetDisplayPlaneCapabilitiesKHR);             \
+  HookInitExtension(VK_KHR_display, CreateDisplayPlaneSurfaceKHR);               \
+  HookInitExtension(VK_NV_external_memory_capabilities,                          \
+                    GetPhysicalDeviceExternalImageFormatPropertiesNV);           \
   HookInitExtension(VK_KHR_get_physical_device_properties2, GetPhysicalDeviceFeatures2KHR);         \
   HookInitExtension(VK_KHR_get_physical_device_properties2, GetPhysicalDeviceProperties2KHR);       \
   HookInitExtension(VK_KHR_get_physical_device_properties2, GetPhysicalDeviceFormatProperties2KHR); \
@@ -337,18 +357,18 @@
                     GetPhysicalDeviceExternalSemaphorePropertiesKHR);                               \
   HookInitInstance_PlatformSpecific()
 
-#define HookInitVulkanDeviceExts()                                                          \
-  HookInitExtension(VK_EXT_debug_marker, DebugMarkerSetObjectTagEXT);                       \
-  HookInitExtension(VK_EXT_debug_marker, DebugMarkerSetObjectNameEXT);                      \
-  HookInitExtension(VK_EXT_debug_marker, CmdDebugMarkerBeginEXT);                           \
-  HookInitExtension(VK_EXT_debug_marker, CmdDebugMarkerEndEXT);                             \
-  HookInitExtension(VK_EXT_debug_marker, CmdDebugMarkerInsertEXT);                          \
-  HookInitExtension(VK_KHR_swapchain, CreateSwapchainKHR);                                  \
-  HookInitExtension(VK_KHR_swapchain, DestroySwapchainKHR);                                 \
-  HookInitExtension(VK_KHR_swapchain, GetSwapchainImagesKHR);                               \
-  HookInitExtension(VK_KHR_swapchain, AcquireNextImageKHR);                                 \
-  HookInitExtension(VK_KHR_swapchain, QueuePresentKHR);                                     \
-  HookInitExtension(VK_KHR_display_swapchain, CreateSharedSwapchainsKHR);                   \
+#define HookInitVulkanDeviceExts()                                        \
+  HookInitExtension(VK_EXT_debug_marker, DebugMarkerSetObjectTagEXT);     \
+  HookInitExtension(VK_EXT_debug_marker, DebugMarkerSetObjectNameEXT);    \
+  HookInitExtension(VK_EXT_debug_marker, CmdDebugMarkerBeginEXT);         \
+  HookInitExtension(VK_EXT_debug_marker, CmdDebugMarkerEndEXT);           \
+  HookInitExtension(VK_EXT_debug_marker, CmdDebugMarkerInsertEXT);        \
+  HookInitExtension(VK_KHR_swapchain, CreateSwapchainKHR);                \
+  HookInitExtension(VK_KHR_swapchain, DestroySwapchainKHR);               \
+  HookInitExtension(VK_KHR_swapchain, GetSwapchainImagesKHR);             \
+  HookInitExtension(VK_KHR_swapchain, AcquireNextImageKHR);               \
+  HookInitExtension(VK_KHR_swapchain, QueuePresentKHR);                   \
+  HookInitExtension(VK_KHR_display_swapchain, CreateSharedSwapchainsKHR); \
   HookInitExtension(VK_KHR_maintenance1, TrimCommandPoolKHR);                               \
   HookInitExtension(VK_EXT_display_control, DisplayPowerControlEXT);                        \
   HookInitExtension(VK_EXT_display_control, RegisterDeviceEventEXT);                        \

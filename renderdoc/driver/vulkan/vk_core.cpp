@@ -849,6 +849,11 @@ static const VkExtensionProperties supportedExtensions[] = {
         VK_KHR_XCB_SURFACE_EXTENSION_NAME, VK_KHR_XCB_SURFACE_SPEC_VERSION,
     },
 #endif
+#ifdef VK_GOOGLE_yeti_surface
+    {
+      VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME, VK_GOOGLE_YETI_SURFACE_SPEC_VERSION,
+    },
+#endif
 #ifdef VK_KHR_xlib_surface
     {
         VK_KHR_XLIB_SURFACE_EXTENSION_NAME, VK_KHR_XLIB_SURFACE_SPEC_VERSION,

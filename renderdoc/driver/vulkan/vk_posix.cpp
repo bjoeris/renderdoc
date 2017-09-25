@@ -103,6 +103,26 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
     }
 #endif
 
+#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
+    // check if supported
+    if(supportedExtensions.find(VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME) !=
+              supportedExtensions.end())
+    {
+      oneSurfaceTypeSupported = true;
+
+      // TODO(b/34081210): Determine if we need to expose yeti as a supported
+      // window system.
+
+      // don't add duplicates
+      if(std::find(extensionList.begin(), extensionList.end(),
+                 VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME) == extensionList.end())
+       {
+         extensionList.push_back(VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME);
+       }
+    }
+#endif
+
+    if(!oneSurfaceTypeSupported)
 #if EXPECT_WSI
     // we must have VK_KHR_surface to support WSI at all
     if(supportedExtensions.find(VK_KHR_SURFACE_EXTENSION_NAME) == supportedExtensions.end())
@@ -115,6 +135,11 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
 
 #if EXPECT_WSI
 
+#elif defined(VK_USE_PLATFORM_YETI_GOOGLE)
+      RDCERR("Require the yeti surface '%s' to be present", VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME);
+      return false;
+
+#elif defined(VK_USE_PLATFORM_XCB_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR)
     // if we expected WSI support, warn about it but continue. The UI will have no supported
     // window systems to work with so will be forced to be headless.
     if(m_SupportedWindowSystems.empty())
@@ -138,19 +163,19 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
     }
 
 #endif
-  }
+    }
   else if(device)
   {
     if(!m_SupportedWindowSystems.empty())
     {
-      if(supportedExtensions.find(VK_KHR_SWAPCHAIN_EXTENSION_NAME) == supportedExtensions.end())
-      {
+    if(supportedExtensions.find(VK_KHR_SWAPCHAIN_EXTENSION_NAME) == supportedExtensions.end())
+    {
         RDCWARN("Unsupported required device extension '%s'", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-      }
+    }
       else
       {
-        extensionList.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-      }
+    extensionList.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+  }
     }
   }
 }
@@ -199,6 +224,39 @@ VkResult WrappedVulkan::vkCreateXcbSurfaceKHR(VkInstance instance,
   return ret;
 }
 
+#endif
+
+#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
+
+VkBool32 WrappedVulkan::vkGetPhysicalDeviceYetiPresentationSupportGOOGLE(
+    VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+    int32_t streamIndex) {
+  return ObjDisp(physicalDevice)
+      ->GetPhysicalDeviceYetiPresentationSupportGOOGLE(
+          Unwrap(physicalDevice), queueFamilyIndex, streamIndex);
+}
+
+VkResult WrappedVulkan::vkCreateYetiSurfaceGOOGLE(VkInstance instance,
+                                                  const VkYetiSurfaceCreateInfoGOOGLE *pCreateInfo,
+                                                  const VkAllocationCallbacks *pAllocator,
+                                                  VkSurfaceKHR *pSurface) {
+  // should not come in here at all on replay
+  RDCASSERT(m_State >= WRITING);
+
+  VkResult ret =
+    ObjDisp(instance)->CreateYetiSurfaceGOOGLE(Unwrap(instance), pCreateInfo, pAllocator, pSurface);
+
+  if (ret == VK_SUCCESS) {
+    GetResourceManager()->WrapResource(Unwrap(instance), *pSurface);
+
+    WrappedVkSurfaceKHR *wrapped = GetWrapped(*pSurface);
+
+    // YETI: Copy the XCB hack and fudge our streamIndex into the record.  Add
+    // one so that null checks still work for the streamIndex = 0 case.
+    wrapped->record = (VkResourceRecord *)(uintptr_t)pCreateInfo->streamIndex + 1;
+  }
+  return ret;
+}
 #endif
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)

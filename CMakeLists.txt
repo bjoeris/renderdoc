@@ -104,6 +104,7 @@ option(ENABLE_QRENDERDOC "Enable qrenderdoc" ON)
 
 option(ENABLE_XLIB "Enable xlib windowing support" ON)
 option(ENABLE_XCB "Enable xcb windowing support" ON)
+option(ENABLE_YETI "Enable Yeti support" OFF)
 
 if(WIN32)
     message(FATAL_ERROR "CMake is not needed on Windows, just open and build renderdoc.sln")
@@ -228,6 +229,10 @@ elseif(UNIX)
 
     if(ENABLE_XCB)
         add_definitions(-DRENDERDOC_WINDOWING_XCB)
+    endif()
+
+    if(ENABLE_YETI)
+        add_definitions(-DVK_USE_PLATFORM_YETI_GOOGLE)
     endif()
 endif()
 
