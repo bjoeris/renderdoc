@@ -237,6 +237,17 @@ enum class LayerPath : int
   Count,
 };
 
+// TODO(akharlamov): Figure out if the loader paths code below is correct
+// because our internal implementation (below) conflicted with ITERABLE_OPERATORS(LayerPath);
+string layerRegistrationPath[COUNT] = {
+    "/usr/share/vulkan/implicit_layer.d/renderdoc_capture.json",
+// YETI: The Yeti loader uses a modified ETC path.
+#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
+    "/usr/local/cloudcast/etc/vulkan/implicit_layer.d/renderdoc_capture.json",
+#else
+    "/etc/vulkan/implicit_layer.d/renderdoc_capture.json",
+#endif
+    string(getenv("HOME")) + "/.local/share/vulkan/implicit_layer.d/renderdoc_capture.json"};
 ITERABLE_OPERATORS(LayerPath);
 
 string LayerRegistrationPath(LayerPath path)
