@@ -555,7 +555,7 @@ void RenderDoc::BecomeRemoteServer(const char *listenhost, uint16_t port, volati
 
   if(listenRanges.empty())
   {
-#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
+#if defined(RENDERDOC_PLATFORM_YETI)
     RDCLOG("Yeti is configured to disable the IP whitelist");
     listenRanges.push_back(std::make_pair(Network::MakeIP(0, 0, 0, 0), 0));
 #else

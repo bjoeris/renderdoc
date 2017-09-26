@@ -488,6 +488,7 @@ int main(int argc, char *argv[])
 
   GlobalEnvironment env;
 
+// YETI: Yeti does not run an X server.
 #if defined(RENDERDOC_WINDOWING_XLIB) || defined(RENDERDOC_WINDOWING_XCB)
   // call XInitThreads - although we don't use xlib concurrently the driver might need to.
   XInitThreads();

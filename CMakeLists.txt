@@ -104,6 +104,7 @@ option(ENABLE_QRENDERDOC "Enable qrenderdoc" ON)
 
 option(ENABLE_XLIB "Enable xlib windowing support" ON)
 option(ENABLE_XCB "Enable xcb windowing support" ON)
+
 option(ENABLE_YETI "Enable Yeti support" OFF)
 
 if(WIN32)
@@ -232,7 +233,8 @@ elseif(UNIX)
     endif()
 
     if(ENABLE_YETI)
-        add_definitions(-DVK_USE_PLATFORM_YETI_GOOGLE)
+        add_definitions(-DRENDERDOC_PLATFORM_YETI)
+        add_definitions(-DRENDERDOC_WINDOWING_YETI)
     endif()
 endif()
 

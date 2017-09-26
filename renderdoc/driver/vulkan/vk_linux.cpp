@@ -242,7 +242,7 @@ enum class LayerPath : int
 string layerRegistrationPath[COUNT] = {
     "/usr/share/vulkan/implicit_layer.d/renderdoc_capture.json",
 // YETI: The Yeti loader uses a modified ETC path.
-#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
+#if defined(RENDERDOC_PLATFORM_YETI)
     "/usr/local/cloudcast/etc/vulkan/implicit_layer.d/renderdoc_capture.json",
 #else
     "/etc/vulkan/implicit_layer.d/renderdoc_capture.json",
