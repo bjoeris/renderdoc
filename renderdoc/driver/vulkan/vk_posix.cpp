@@ -108,11 +108,6 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
     if(supportedExtensions.find(VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME) !=
               supportedExtensions.end())
     {
-      oneSurfaceTypeSupported = true;
-
-      // TODO(b/34081210): Determine if we need to expose yeti as a supported
-      // window system.
-
       // don't add duplicates
       if(std::find(extensionList.begin(), extensionList.end(),
                  VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME) == extensionList.end())
@@ -122,7 +117,6 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
     }
 #endif
 
-    if(!oneSurfaceTypeSupported)
 #if EXPECT_WSI
     // we must have VK_KHR_surface to support WSI at all
     if(supportedExtensions.find(VK_KHR_SURFACE_EXTENSION_NAME) == supportedExtensions.end())

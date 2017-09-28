@@ -70,25 +70,6 @@ void RENDERDOC_GetLayerJSON(char **txt, int *len)
 
 #endif
 
-static string GenerateJSON(const string &sopath)
-{
-  char *txt = NULL;
-  int len = 0;
-
-  RENDERDOC_GetLayerJSON(&txt, &len);
-
-  if(len <= 0)
-    return "";
-
-  string json = string(txt, txt + len);
-
-  const char dllPathString[] = ".\\\\renderdoc.dll";
-
-  size_t idx = json.find(dllPathString);
-
-  return json.substr(0, idx) + sopath + json.substr(idx + sizeof(dllPathString) - 1);
-}
-
 static bool FileExists(const string &path)
 {
   FILE *f = fopen(path.c_str(), "r");
@@ -101,65 +82,6 @@ static bool FileExists(const string &path)
 
   return false;
 }
-
-static string GetSOFromJSON(const string &json)
-{
-  char *json_string = new char[1024];
-  memset(json_string, 0, 1024);
-
-  FILE *f = fopen(json.c_str(), "r");
-
-  if(f)
-  {
-    fread(json_string, 1, 1024, f);
-
-    fclose(f);
-  }
-
-  string ret = "";
-
-  // The line is:
-  // "library_path": "/foo/bar/librenderdoc.so",
-  char *c = strstr(json_string, "library_path");
-
-  if(c)
-  {
-    c += sizeof("library_path\": \"") - 1;
-
-    char *quote = strchr(c, '"');
-
-    if(quote)
-    {
-      *quote = 0;
-      ret = c;
-    }
-  }
-
-  delete[] json_string;
-
-  return ret;
-}
-
-enum
-{
-  USR,
-  ETC,
-  HOME,
-  COUNT
-};
-
-string layerRegistrationPath[COUNT] = {
-    "/usr/share/vulkan/implicit_layer.d/renderdoc_capture.json",
-    "/etc/vulkan/implicit_layer.d/renderdoc_capture.json",
-#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
-    // TODO(b/35626300): Refactor this code so we don't have to call getenv() to
-    // initialize this global variable and then we can use an environment
-    // variable instead of hardcoding this path.
-    "/usr/local/cloudcast/etc/vulkan/implicit_layer.d/renderdoc_capture.json",
-#else
-    string(getenv("HOME")) + "/.local/share/vulkan/implicit_layer.d/renderdoc_capture.json",
-#endif
-    };
 
 struct VulkanRegisterCommand : public Command
 {

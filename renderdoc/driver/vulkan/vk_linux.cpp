@@ -237,17 +237,6 @@ enum class LayerPath : int
   Count,
 };
 
-// TODO(akharlamov): Figure out if the loader paths code below is correct
-// because our internal implementation (below) conflicted with ITERABLE_OPERATORS(LayerPath);
-string layerRegistrationPath[COUNT] = {
-    "/usr/share/vulkan/implicit_layer.d/renderdoc_capture.json",
-// YETI: The Yeti loader uses a modified ETC path.
-#if defined(RENDERDOC_PLATFORM_YETI)
-    "/usr/local/cloudcast/etc/vulkan/implicit_layer.d/renderdoc_capture.json",
-#else
-    "/etc/vulkan/implicit_layer.d/renderdoc_capture.json",
-#endif
-    string(getenv("HOME")) + "/.local/share/vulkan/implicit_layer.d/renderdoc_capture.json"};
 ITERABLE_OPERATORS(LayerPath);
 
 string LayerRegistrationPath(LayerPath path)
@@ -255,7 +244,11 @@ string LayerRegistrationPath(LayerPath path)
   switch(path)
   {
     case LayerPath::usr: return "/usr/share/vulkan/implicit_layer.d/renderdoc_capture.json";
+#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
+    case LayerPath::etc: return "/usr/local/cloudcast/etc/vulkan/implicit_layer.d/renderdoc_capture.json";
+#else
     case LayerPath::etc: return "/etc/vulkan/implicit_layer.d/renderdoc_capture.json";
+#endif
     case LayerPath::home:
     {
       const char *xdg = getenv("XDG_DATA_HOME");
