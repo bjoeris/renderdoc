@@ -99,6 +99,7 @@ void InitInstanceExtensionTables(VkInstance instance, InstanceDeviceInfo *info)
 
 #ifdef VK_USE_PLATFORM_YETI_GOOGLE
   InstanceGPA(CreateYetiSurfaceGOOGLE);
+  InstanceGPA(GetPhysicalDeviceYetiPresentationSupportGOOGLE);
 #endif
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR
