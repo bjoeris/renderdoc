@@ -129,6 +129,8 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
 
 #if EXPECT_WSI
 
+    // TODO(akharlamov) Figure out the purpose of this message. The check for
+    // Google Yeti Surface doesn't fail.
 #elif defined(VK_USE_PLATFORM_YETI_GOOGLE)
       RDCERR("Require the yeti surface '%s' to be present", VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME);
 

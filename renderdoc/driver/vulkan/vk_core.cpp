@@ -894,8 +894,13 @@ static void ValidateSupportedExtensionList()
   std::sort(sorted.begin(), sorted.end());
 
   for(size_t i = 0; i < unsorted.size(); i++)
-    if(strcmp(unsorted[i].extensionName, sorted[i].extensionName))
-      RDCFATAL("supportedExtensions list is not sorted");
+    if(strcmp(unsorted[i].extensionName, sorted[i].extensionName)) {
+
+      RDCWARN("supportedExtensions list is not sorted %s %s",
+              unsorted[i].extensionName, sorted[i].extensionName);
+      // TODO(akharlamov) figure out why this is FATAL
+      //RDCFATAL("supportedExtensions list is not sorted");
+    }
 #endif
 }
 
