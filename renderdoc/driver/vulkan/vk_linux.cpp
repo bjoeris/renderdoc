@@ -244,7 +244,7 @@ string LayerRegistrationPath(LayerPath path)
   switch(path)
   {
     case LayerPath::usr: return "/usr/share/vulkan/implicit_layer.d/renderdoc_capture.json";
-#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
+#if defined(RENDERDOC_PLATFORM_YETI)
     case LayerPath::etc: return "/usr/local/cloudcast/etc/vulkan/implicit_layer.d/renderdoc_capture.json";
 #else
     case LayerPath::etc: return "/etc/vulkan/implicit_layer.d/renderdoc_capture.json";
