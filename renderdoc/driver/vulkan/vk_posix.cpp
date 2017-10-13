@@ -131,7 +131,6 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
 
 #elif defined(VK_USE_PLATFORM_YETI_GOOGLE)
       RDCERR("Require the yeti surface '%s' to be present", VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME);
-      return false;
 
 #elif defined(VK_USE_PLATFORM_XCB_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR)
     // if we expected WSI support, warn about it but continue. The UI will have no supported
