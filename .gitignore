@@ -12,7 +12,6 @@ build-*/
 dist/
 Resources/*.png
 qrenderdoc/Makefile*
-*.exe
 *.aps
 *.ilk
 *.manifest
@@ -28,10 +27,8 @@ obj/
 *.so
 *.a
 *.exp
-*.lib
 *.sdf
 *.suo
-*.dll
 *.swp
 *.orig
 symsrv.yes
