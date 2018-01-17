@@ -1,5 +1,17 @@
 @echo on
 
+:: This scripts requires the following parameters:
+::    %1: Represents the release type. It has two following
+::        values: Release, Debug
+::    %2: A value of 0 or 1. 1 means full clean. 0 means use existing
+::        build artifacts such as obj files.
+:: The following parameter is optional:
+::    %3: The GCS_URL_BASE link to upload the renderdoc build artifacts.
+::
+:: The following tools are required in order to build the renderdoc:
+::    1) Visual Studio 2015
+::    2) gsutil application to upload the build artifacts.
+
 set RELEASE_TYPE=%1
 if "%RELEASE_TYPE%" == "" (
    echo ERROR: Release type not defined as a first parameter of this script.
