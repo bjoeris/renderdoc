@@ -1,6 +1,6 @@
 @echo on
 
-:: This scripts requires the following parameters:
+:: This script requires the following parameters:
 ::    %1: Represents the release type. It has two following
 ::        values: Release, Debug
 ::    %2: A value of 0 or 1. 1 means full clean. 0 means use existing
@@ -47,7 +47,7 @@ set RENDER_DOC_BUILD_OPTIONS=/m ^
     /p:BuildInParallel=true
 
 :: Load the required environment variables to locate the required build tools
-call "%PROGRAMFILES(X86)\Microsoft Visual Studio 14.0\Common7\Tools\VsMSBuildCmd.bat" || exit /b 1
+call "%PROGRAMFILES(X86)%\Microsoft Visual Studio 14.0\Common7\Tools\VsMSBuildCmd.bat" || exit /b 1
 
 :: Remove any artifacts left from the previous build
 :if "%CLEAN_BUILD%" == "1" (
