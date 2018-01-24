@@ -457,6 +457,7 @@ SwigPyBuiltin_destructor_closure(SwigPyWrapperFunction wrapper, const char *wrap
   SwigPyObject *sobj;
   sobj = (SwigPyObject *)a;
   Py_XDECREF(sobj->dict);
+  Py_XDECREF(sobj->parent);
   if (sobj->own) {
     PyObject *o;
     PyObject *val = 0, *type = 0, *tb = 0;

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -83,8 +83,11 @@ class WrappedID3D12CommandQueue : public ID3D12CommandQueue,
   ResourceId m_ResourceID;
   D3D12ResourceRecord *m_QueueRecord;
 
-  Serialiser *m_pSerialiser;
-  LogState &m_State;
+  CaptureState &m_State;
+
+  bool m_MarkedActive = false;
+
+  ReplayStatus m_FailedReplayStatus = ReplayStatus::APIReplayFailed;
 
   WrappedID3D12DebugCommandQueue m_WrappedDebug;
 
@@ -93,38 +96,46 @@ class WrappedID3D12CommandQueue : public ID3D12CommandQueue,
   // D3D12 guarantees that queues are thread-safe
   Threading::CriticalSection m_Lock;
 
+  std::set<std::string> m_StringDB;
+
+  WriteSerialiser &GetThreadSerialiser();
+
+  StreamReader *m_FrameReader = NULL;
+
+  SDFile *m_StructuredFile = NULL;
+
   // command recording/replay data shared between queues and lists
   D3D12CommandData m_Cmd;
 
   ResourceId m_PrevQueueId;
   ResourceId m_BackbufferID;
 
-  void ProcessChunk(uint64_t offset, D3D12ChunkType context);
+  bool ProcessChunk(ReadSerialiser &ser, D3D12Chunk context);
 
-  const char *GetChunkName(uint32_t idx) { return m_pDevice->GetChunkName(idx); }
+  static std::string GetChunkName(uint32_t idx);
   D3D12ResourceManager *GetResourceManager() { return m_pDevice->GetResourceManager(); }
 public:
   static const int AllocPoolCount = 16;
   ALLOCATE_WITH_WRAPPED_POOL(WrappedID3D12CommandQueue, AllocPoolCount);
 
   WrappedID3D12CommandQueue(ID3D12CommandQueue *real, WrappedID3D12Device *device,
-                            Serialiser *serialiser, LogState &state);
+                            CaptureState &state);
   virtual ~WrappedID3D12CommandQueue();
 
-  Serialiser *GetSerialiser() { return m_pSerialiser; }
   ResourceId GetResourceID() { return m_ResourceID; }
   ID3D12CommandQueue *GetReal() { return m_pReal; }
   D3D12ResourceRecord *GetResourceRecord() { return m_QueueRecord; }
   WrappedID3D12Device *GetWrappedDevice() { return m_pDevice; }
   const vector<D3D12ResourceRecord *> &GetCmdLists() { return m_CmdListRecords; }
   D3D12DrawcallTreeNode &GetParentDrawcall() { return m_Cmd.m_ParentDrawcall; }
-  const APIEvent &GetEvent(uint32_t eventID);
-  uint32_t GetMaxEID() { return m_Cmd.m_Events.back().eventID; }
+  const APIEvent &GetEvent(uint32_t eventId);
+  uint32_t GetMaxEID() { return m_Cmd.m_Events.back().eventId; }
   ResourceId GetBackbufferResourceID() { return m_BackbufferID; }
   void ClearAfterCapture();
 
-  void ReplayLog(LogState readType, uint32_t startEventID, uint32_t endEventID, bool partial);
-
+  ReplayStatus ReplayLog(CaptureState readType, uint32_t startEventID, uint32_t endEventID,
+                         bool partial);
+  void SetFrameReader(StreamReader *reader) { m_FrameReader = reader; }
   D3D12CommandData *GetCommandData() { return &m_Cmd; }
   const vector<EventUsage> &GetUsage(ResourceId id) { return m_Cmd.m_ResourceUses[id]; }
   // interface for DXGI
@@ -139,7 +150,7 @@ public:
     if(iid == __uuidof(ID3D12CommandQueue))
       return (ID3D12CommandQueue *)this;
 
-    RDCERR("Requested unknown device interface %s", ToStr::Get(iid).c_str());
+    RDCERR("Requested unknown device interface %s", ToStr(iid).c_str());
 
     return NULL;
   }
@@ -183,7 +194,7 @@ public:
   HRESULT STDMETHODCALLTYPE SetPrivateData(REFGUID guid, UINT DataSize, const void *pData)
   {
     if(guid == WKPDID_D3DDebugObjectName)
-      m_pDevice->SetResourceName(this, (const char *)pData);
+      m_pDevice->SetName(this, (const char *)pData);
 
     return m_pReal->SetPrivateData(guid, DataSize, pData);
   }
@@ -196,7 +207,7 @@ public:
   HRESULT STDMETHODCALLTYPE SetName(LPCWSTR Name)
   {
     string utf8 = StringFormat::Wide2UTF8(Name);
-    m_pDevice->SetResourceName(this, utf8.c_str());
+    m_pDevice->SetName(this, utf8.c_str());
 
     return m_pReal->SetName(Name);
   }
@@ -222,46 +233,44 @@ public:
   //////////////////////////////
   // implement ID3D12CommandQueue
 
-  IMPLEMENT_FUNCTION_SERIALISED(
-      virtual void STDMETHODCALLTYPE,
-      UpdateTileMappings(ID3D12Resource *pResource, UINT NumResourceRegions,
-                         const D3D12_TILED_RESOURCE_COORDINATE *pResourceRegionStartCoordinates,
-                         const D3D12_TILE_REGION_SIZE *pResourceRegionSizes, ID3D12Heap *pHeap,
-                         UINT NumRanges, const D3D12_TILE_RANGE_FLAGS *pRangeFlags,
-                         const UINT *pHeapRangeStartOffsets, const UINT *pRangeTileCounts,
-                         D3D12_TILE_MAPPING_FLAGS Flags));
+  IMPLEMENT_FUNCTION_SERIALISED(virtual void STDMETHODCALLTYPE, UpdateTileMappings,
+                                ID3D12Resource *pResource, UINT NumResourceRegions,
+                                const D3D12_TILED_RESOURCE_COORDINATE *pResourceRegionStartCoordinates,
+                                const D3D12_TILE_REGION_SIZE *pResourceRegionSizes, ID3D12Heap *pHeap,
+                                UINT NumRanges, const D3D12_TILE_RANGE_FLAGS *pRangeFlags,
+                                const UINT *pHeapRangeStartOffsets, const UINT *pRangeTileCounts,
+                                D3D12_TILE_MAPPING_FLAGS Flags);
 
-  IMPLEMENT_FUNCTION_SERIALISED(
-      virtual void STDMETHODCALLTYPE,
-      CopyTileMappings(ID3D12Resource *pDstResource,
-                       const D3D12_TILED_RESOURCE_COORDINATE *pDstRegionStartCoordinate,
-                       ID3D12Resource *pSrcResource,
-                       const D3D12_TILED_RESOURCE_COORDINATE *pSrcRegionStartCoordinate,
-                       const D3D12_TILE_REGION_SIZE *pRegionSize, D3D12_TILE_MAPPING_FLAGS Flags));
+  IMPLEMENT_FUNCTION_SERIALISED(virtual void STDMETHODCALLTYPE, CopyTileMappings,
+                                ID3D12Resource *pDstResource,
+                                const D3D12_TILED_RESOURCE_COORDINATE *pDstRegionStartCoordinate,
+                                ID3D12Resource *pSrcResource,
+                                const D3D12_TILED_RESOURCE_COORDINATE *pSrcRegionStartCoordinate,
+                                const D3D12_TILE_REGION_SIZE *pRegionSize,
+                                D3D12_TILE_MAPPING_FLAGS Flags);
 
-  IMPLEMENT_FUNCTION_SERIALISED(virtual void STDMETHODCALLTYPE,
-                                ExecuteCommandLists(UINT NumCommandLists,
-                                                    ID3D12CommandList *const *ppCommandLists));
+  IMPLEMENT_FUNCTION_SERIALISED(virtual void STDMETHODCALLTYPE, ExecuteCommandLists,
+                                UINT NumCommandLists, ID3D12CommandList *const *ppCommandLists);
 
-  IMPLEMENT_FUNCTION_SERIALISED(virtual void STDMETHODCALLTYPE,
-                                SetMarker(UINT Metadata, const void *pData, UINT Size));
+  IMPLEMENT_FUNCTION_SERIALISED(virtual void STDMETHODCALLTYPE, SetMarker, UINT Metadata,
+                                const void *pData, UINT Size);
 
-  IMPLEMENT_FUNCTION_SERIALISED(virtual void STDMETHODCALLTYPE,
-                                BeginEvent(UINT Metadata, const void *pData, UINT Size));
+  IMPLEMENT_FUNCTION_SERIALISED(virtual void STDMETHODCALLTYPE, BeginEvent, UINT Metadata,
+                                const void *pData, UINT Size);
 
-  IMPLEMENT_FUNCTION_SERIALISED(virtual void STDMETHODCALLTYPE, EndEvent());
+  IMPLEMENT_FUNCTION_SERIALISED(virtual void STDMETHODCALLTYPE, EndEvent, );
 
-  IMPLEMENT_FUNCTION_SERIALISED(virtual HRESULT STDMETHODCALLTYPE,
-                                Signal(ID3D12Fence *pFence, UINT64 Value));
+  IMPLEMENT_FUNCTION_SERIALISED(virtual HRESULT STDMETHODCALLTYPE, Signal, ID3D12Fence *pFence,
+                                UINT64 Value);
 
-  IMPLEMENT_FUNCTION_SERIALISED(virtual HRESULT STDMETHODCALLTYPE,
-                                Wait(ID3D12Fence *pFence, UINT64 Value));
+  IMPLEMENT_FUNCTION_SERIALISED(virtual HRESULT STDMETHODCALLTYPE, Wait, ID3D12Fence *pFence,
+                                UINT64 Value);
 
-  IMPLEMENT_FUNCTION_SERIALISED(virtual HRESULT STDMETHODCALLTYPE,
-                                GetTimestampFrequency(UINT64 *pFrequency));
+  IMPLEMENT_FUNCTION_SERIALISED(virtual HRESULT STDMETHODCALLTYPE, GetTimestampFrequency,
+                                UINT64 *pFrequency);
 
-  IMPLEMENT_FUNCTION_SERIALISED(virtual HRESULT STDMETHODCALLTYPE,
-                                GetClockCalibration(UINT64 *pGpuTimestamp, UINT64 *pCpuTimestamp));
+  IMPLEMENT_FUNCTION_SERIALISED(virtual HRESULT STDMETHODCALLTYPE, GetClockCalibration,
+                                UINT64 *pGpuTimestamp, UINT64 *pCpuTimestamp);
 
   virtual D3D12_COMMAND_QUEUE_DESC STDMETHODCALLTYPE GetDesc() { return m_pReal->GetDesc(); }
 };

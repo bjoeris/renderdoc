@@ -375,6 +375,7 @@ typedef struct {
   void *ptr;
   swig_type_info *ty;
   int own;
+  PyObject *parent;
   PyObject *next;
 #ifdef SWIGPYTHON_BUILTIN
   PyObject *dict;
@@ -1472,12 +1473,14 @@ SWIG_Python_NewPointerObj(PyObject *self, void *ptr, swig_type_info *type, int f
 	  newobj = (SwigPyObject *) newobj->next;
         newobj->next = next_self;
         newobj = (SwigPyObject *)next_self;
+        newobj->parent = 0;
 #ifdef SWIGPYTHON_BUILTIN
         newobj->dict = 0;
 #endif
       }
     } else {
       newobj = PyObject_New(SwigPyObject, clientdata->pytype);
+      newobj->parent = 0;
 #ifdef SWIGPYTHON_BUILTIN
       newobj->dict = 0;
 #endif

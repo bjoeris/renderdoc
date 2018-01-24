@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -40,31 +40,36 @@ public:
   DOCUMENT(
       "Ping the host to check current status - if the server is running, connection status, etc.");
   void CheckStatus();
-  DOCUMENT("Runs the command specified in :data:`RunCommand`.");
+  DOCUMENT("Runs the command specified in :data:`runCommand`.");
   void Launch();
 
   DOCUMENT("``True`` if a remote server is currently running on this host.");
-  bool ServerRunning : 1;
+  bool serverRunning : 1;
   DOCUMENT("``True`` if an active connection exists to this remote server.");
-  bool Connected : 1;
+  bool connected : 1;
   DOCUMENT("``True`` if someone else is currently connected to this server.");
-  bool Busy : 1;
+  bool busy : 1;
   DOCUMENT("``True`` if there is a code version mismatch with this server.");
-  bool VersionMismatch : 1;
+  bool versionMismatch : 1;
 
   DOCUMENT("The hostname of this host.");
-  QString Hostname;
+  rdcstr hostname;
   DOCUMENT("The friendly name for this host, if available (if empty, the Hostname is used).");
-  QString FriendlyName;
+  rdcstr friendlyName;
   DOCUMENT("The command to run locally to try to launch the server remotely.");
-  QString RunCommand;
+  rdcstr runCommand;
 
   DOCUMENT(R"(
-Returns the name to display for this host in the UI, either :data:`FriendlyName` or :data:`Hostname`
+Returns the name to display for this host in the UI, either :data:`friendlyName` or :data:`hostname`
 )");
-  const QString &Name() const { return !FriendlyName.isEmpty() ? FriendlyName : Hostname; }
+  const rdcstr &Name() const { return !friendlyName.isEmpty() ? friendlyName : hostname; }
   DOCUMENT("Returns ``True`` if this host represents a connected ADB (Android) device.");
-  bool IsHostADB() const { return Hostname.startsWith(lit("adb:")); }
+  bool IsADB() const
+  {
+    return hostname[0] == 'a' && hostname[1] == 'd' && hostname[2] == 'b' && hostname[3] == ':';
+  }
+  DOCUMENT("Returns ``True`` if this host represents the special localhost device.");
+  bool IsLocalhost() const { return hostname == "localhost"; }
 };
 
 DECLARE_REFLECTION_STRUCT(RemoteHost);

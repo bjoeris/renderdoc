@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -421,6 +421,15 @@ typedef void *RENDERDOC_DevicePointer;
 //
 // This would be an HWND, GLXDrawable, etc
 typedef void *RENDERDOC_WindowHandle;
+
+// A helper macro for Vulkan, where the device handle cannot be used directly.
+//
+// Passing the VkInstance to this macro will return the RENDERDOC_DevicePointer to use.
+//
+// Specifically, the value needed is the dispatch table pointer, which sits as the first
+// pointer-sized object in the memory pointed to by the VkInstance. Thus we cast to a void** and
+// indirect once.
+#define RENDERDOC_DEVICEPOINTER_FROM_VKINSTANCE(inst) (*((void **)(inst)))
 
 // This sets the RenderDoc in-app overlay in the API/window pair as 'active' and it will
 // respond to keypresses. Neither parameter can be NULL

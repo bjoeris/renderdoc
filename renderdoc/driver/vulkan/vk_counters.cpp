@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,22 +25,6 @@
 #include "vk_core.h"
 #include "vk_replay.h"
 #include "vk_resources.h"
-
-void VulkanReplay::PreDeviceInitCounters()
-{
-}
-
-void VulkanReplay::PostDeviceInitCounters()
-{
-}
-
-void VulkanReplay::PreDeviceShutdownCounters()
-{
-}
-
-void VulkanReplay::PostDeviceShutdownCounters()
-{
-}
 
 vector<GPUCounter> VulkanReplay::EnumerateCounters()
 {
@@ -74,14 +58,15 @@ vector<GPUCounter> VulkanReplay::EnumerateCounters()
   return ret;
 }
 
-void VulkanReplay::DescribeCounter(GPUCounter counterID, CounterDescription &desc)
+CounterDescription VulkanReplay::DescribeCounter(GPUCounter counterID)
 {
-  desc.counterID = counterID;
+  CounterDescription desc = {};
+  desc.counter = counterID;
   // 6839CB5B-FBD2-4550-B606-8C65157C684C
-  desc.uuid.bytes[0] = 0x6839CB5B;
-  desc.uuid.bytes[1] = 0xFBD24550;
-  desc.uuid.bytes[2] = 0xB6068C65;
-  desc.uuid.bytes[3] = 0x157C684C ^ (uint32_t)counterID;
+  desc.uuid.words[0] = 0x6839CB5B;
+  desc.uuid.words[1] = 0xFBD24550;
+  desc.uuid.words[2] = 0xB6068C65;
+  desc.uuid.words[3] = 0x157C684C ^ (uint32_t)counterID;
 
   switch(counterID)
   {
@@ -185,6 +170,8 @@ void VulkanReplay::DescribeCounter(GPUCounter counterID, CounterDescription &des
       desc.unit = CounterUnit::Absolute;
       break;
   }
+
+  return desc;
 }
 
 struct VulkanGPUTimerCallback : public VulkanDrawcallCallback
@@ -231,7 +218,6 @@ struct VulkanGPUTimerCallback : public VulkanDrawcallCallback
   void PreMisc(uint32_t eid, DrawFlags flags, VkCommandBuffer cmd) { PreDraw(eid, cmd); }
   bool PostMisc(uint32_t eid, DrawFlags flags, VkCommandBuffer cmd) { return PostDraw(eid, cmd); }
   void PostRemisc(uint32_t eid, DrawFlags flags, VkCommandBuffer cmd) { PostRedraw(eid, cmd); }
-  bool RecordAllCmds() { return true; }
   void AliasEvent(uint32_t primary, uint32_t alias)
   {
     m_AliasEvents.push_back(std::make_pair(primary, alias));
@@ -394,8 +380,8 @@ vector<CounterResult> VulkanReplay::FetchCounters(const vector<GPUCounter> &coun
     {
       CounterResult result;
 
-      result.eventID = cb.m_Results[i];
-      result.counterID = counters[c];
+      result.eventId = cb.m_Results[i];
+      result.counter = counters[c];
 
       switch(counters[c])
       {
@@ -434,17 +420,23 @@ vector<CounterResult> VulkanReplay::FetchCounters(const vector<GPUCounter> &coun
     for(size_t c = 0; c < counters.size(); c++)
     {
       CounterResult search;
-      search.counterID = counters[c];
-      search.eventID = cb.m_AliasEvents[i].first;
+      search.counter = counters[c];
+      search.eventId = cb.m_AliasEvents[i].first;
 
       // find the result we're aliasing
       auto it = std::find(ret.begin(), ret.end(), search);
-      RDCASSERT(it != ret.end());
-
-      // duplicate the result and append
-      CounterResult aliased = *it;
-      aliased.eventID = cb.m_AliasEvents[i].second;
-      ret.push_back(aliased);
+      if(it != ret.end())
+      {
+        // duplicate the result and append
+        CounterResult aliased = *it;
+        aliased.eventId = cb.m_AliasEvents[i].second;
+        ret.push_back(aliased);
+      }
+      else
+      {
+        RDCERR("Expected to find alias-target result for EID %u counter %u, but didn't",
+               search.eventId, search.counter);
+      }
     }
   }
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -157,6 +157,9 @@ inline T AlignUpPtr(T x, A a)
 
 bool FindDiffRange(void *a, void *b, size_t bufSize, size_t &diffStart, size_t &diffEnd);
 uint32_t CalcNumMips(int Width, int Height, int Depth);
+
+byte *AllocAlignedBuffer(uint64_t size, uint64_t alignment = 64);
+void FreeAlignedBuffer(byte *buf);
 
 uint32_t Log2Floor(uint32_t value);
 #if ENABLED(RDOC_X64)
@@ -387,5 +390,3 @@ void rdcassert(const char *msg, const char *file, unsigned int line, const char 
 #else
 #define RDCCOMPILE_ASSERT(condition, message) static_assert(condition, message)
 #endif
-
-typedef uint8_t byte;

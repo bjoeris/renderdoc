@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -29,7 +29,7 @@
 #include "driver/gl/gl_common.h"
 #include "driver/gl/gl_driver.h"
 #include "hooks/hooks.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 #include "gl_hooks_linux_shared.h"
 
 typedef GLXContext (*PFNGLXCREATECONTEXTPROC)(Display *dpy, XVisualInfo *vis, GLXContext shareList,
@@ -220,28 +220,25 @@ public:
     return true;
   }
 
-  GLWindowingData MakeOutputWindow(WindowingSystem system, void *data, bool depth,
-                                   GLWindowingData share_context)
+  GLWindowingData MakeOutputWindow(WindowingData window, bool depth, GLWindowingData share_context)
   {
     GLWindowingData ret;
 
     Display *dpy = NULL;
     Drawable draw = 0;
 
-    if(system == WindowingSystem::Xlib)
+    if(window.system == WindowingSystem::Xlib)
     {
 #if ENABLED(RDOC_XLIB)
-      XlibWindowData *xlib = (XlibWindowData *)data;
-
-      dpy = xlib->display;
-      draw = xlib->window;
+      dpy = window.xlib.display;
+      draw = window.xlib.window;
 #else
       RDCERR(
           "Xlib windowing system data passed in, but support is not compiled in. GL must have xlib "
           "support compiled in");
 #endif
     }
-    else if(system == WindowingSystem::Unknown)
+    else if(window.system == WindowingSystem::Unknown)
     {
       // allow WindowingSystem::Unknown so that internally we can create a window-less context
       dpy = RenderDoc::Inst().GetGlobalEnvironment().xlibDisplay;
@@ -375,7 +372,7 @@ public:
   WrappedOpenGL *GetDriver()
   {
     if(m_GLDriver == NULL)
-      m_GLDriver = new WrappedOpenGL("", GL, *this);
+      m_GLDriver = new WrappedOpenGL(GL, *this);
 
     return m_GLDriver;
   }
@@ -546,7 +543,7 @@ __attribute__((visibility("default"))) GLXContext glXCreateContextAttribsARB(
 
       if(name == GLX_CONTEXT_FLAGS_ARB)
       {
-        if(RenderDoc::Inst().GetCaptureOptions().APIValidation)
+        if(RenderDoc::Inst().GetCaptureOptions().apiValidation)
           val |= GLX_CONTEXT_DEBUG_BIT_ARB;
         else
           val &= ~GLX_CONTEXT_DEBUG_BIT_ARB;
@@ -561,7 +558,7 @@ __attribute__((visibility("default"))) GLXContext glXCreateContextAttribsARB(
       attribVec.push_back(val);
     }
 
-    if(!flagsFound && RenderDoc::Inst().GetCaptureOptions().APIValidation)
+    if(!flagsFound && RenderDoc::Inst().GetCaptureOptions().apiValidation)
     {
       attribVec.push_back(GLX_CONTEXT_FLAGS_ARB);
       attribVec.push_back(GLX_CONTEXT_DEBUG_BIT_ARB);
@@ -802,6 +799,63 @@ __attribute__((visibility("default"))) void glXDestroyWindow(Display *dpy, GLXWi
   return glhooks.glXDestroyWindow_real(dpy, window);
 }
 
+// because we intercept all dlopen calls to "libGL.so*" to ourselves, we can interfere with some
+// vulkan ICDs. For some reason they point the vulkan ICD to that file and so the vulkan loader
+// tries to get the bootstrap entry points from us. I think this is a distribution thing and is not
+// true in the official nvidia package, I'm not sure.
+// Unfortunately there's no perfect way to fix this, since if we declare a function the ICD doesn't
+// support we're screwed. We just have to hope the ICD exports all these functions that we can
+// forward on to.
+
+// declare minimal typedefs to get by
+typedef void *VkInstance;
+enum VkResult
+{
+  VK_ERROR_INCOMPATIBLE_DRIVER = -9
+};
+struct VkNegotiateLayerInterface;
+
+typedef void (*PFN_vkVoidFunction)(void);
+typedef PFN_vkVoidFunction (*PFN_vkGetInstanceProcAddr)(VkInstance instance, const char *pName);
+typedef PFN_vkVoidFunction (*PFN_GetPhysicalDeviceProcAddr)(VkInstance instance, const char *pName);
+typedef VkResult (*PFN_vkNegotiateLoaderLayerInterfaceVersion)(VkNegotiateLayerInterface *pVersionStruct);
+
+__attribute__((visibility("default"))) PFN_vkVoidFunction vk_icdGetInstanceProcAddr(
+    VkInstance instance, const char *pName)
+{
+  PFN_vkGetInstanceProcAddr real =
+      (PFN_vkGetInstanceProcAddr)dlsym(libGLdlsymHandle, "vk_icdGetInstanceProcAddr");
+
+  if(real)
+    return real(instance, pName);
+
+  return NULL;
+}
+
+__attribute__((visibility("default"))) PFN_vkVoidFunction vk_icdGetPhysicalDeviceProcAddr(
+    VkInstance instance, const char *pName)
+{
+  PFN_GetPhysicalDeviceProcAddr real =
+      (PFN_GetPhysicalDeviceProcAddr)dlsym(libGLdlsymHandle, "vk_icdGetPhysicalDeviceProcAddr");
+
+  if(real)
+    return real(instance, pName);
+
+  return NULL;
+}
+
+__attribute__((visibility("default"))) VkResult vk_icdNegotiateLoaderLayerInterfaceVersion(
+    VkNegotiateLayerInterface *pVersionStruct)
+{
+  PFN_vkNegotiateLoaderLayerInterfaceVersion real = (PFN_vkNegotiateLoaderLayerInterfaceVersion)dlsym(
+      libGLdlsymHandle, "vk_icdNegotiateLoaderLayerInterfaceVersion");
+
+  if(real)
+    return real(pVersionStruct);
+
+  return VK_ERROR_INCOMPATIBLE_DRIVER;
+}
+
 };    // extern "C"
 
 bool OpenGLHook::PopulateHooks()
@@ -810,8 +864,9 @@ bool OpenGLHook::PopulateHooks()
 
   glXGetProcAddress((const GLubyte *)"glXCreateContextAttribsARB");
 
-  return SharedPopulateHooks(
-      [](const char *funcName) { return (void *)glXGetProcAddress((const GLubyte *)funcName); });
+  return SharedPopulateHooks(true, [](const char *funcName) {
+    return (void *)glXGetProcAddress((const GLubyte *)funcName);
+  });
 }
 
 const GLHookSet &GetRealGLFunctions()

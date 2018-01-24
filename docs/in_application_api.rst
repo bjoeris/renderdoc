@@ -270,13 +270,14 @@ The other way is a closer integration, where your code will explicitly load up R
 .. cpp:function:: uint32_t GetNumCaptures()
 
     This function returns the number of frame captures that have been made.
-    :return: Returns the number of frame captures that have been made
+
+    :return: the number of frame captures that have been made
 
 .. cpp:function:: uint32_t GetCapture(uint32_t idx, char *logfile, uint32_t *pathlength, uint64_t *timestamp)
 
     This function returns the details of a particular frame capture, as specified by an index from 0 to :cpp:func:`GetNumCaptures` - 1.
 
-    :param uint32_t idx: specifies which capture to return the details of. Must be less than the return value of:cpp:func:`GetNumCaptures`.
+    :param uint32_t idx: specifies which capture to return the details of. Must be less than the return value of :cpp:func:`GetNumCaptures`.
     :param char* logfile: is an optional parameter filled with the UTF-8 null-terminated path to the file. There must be enough space in the array to contain all characters including the null terminator. If set to NULL, nothing is written.
     :param uint32_t* pathlength: is an optional parameter filled with the byte length of the above `logfile` including the null-terminator. If set to NULL, nothing is written.
     :param uint64_t* timestamp: is an optional parameter filled with the 64-bit timestamp of the file - equivalent to the `time()` system call. If set to NULL, nothing is written.
@@ -303,7 +304,7 @@ The path follows the template set in :cpp:func:`SetLogFilePathTemplate` so it ma
 
     This function will determine the closest matching replay UI executable for the current RenderDoc module and launch it.
 
-    :param uint32_t connectTargetControl should be set to 1 if the UI should immediately connect to the application.
+    :param uint32_t connectTargetControl: should be set to 1 if the UI should immediately connect to the application.
     :param const char* cmdline: is an optional UTF-8 null-terminated string to be appended to the command line, e.g. a capture filename. If this parameter is NULL, the command line will be unmodified.
     :return: If the UI was successfully launched, this function will return the PID of the new process. Otherwise it will return ``0``.
 
@@ -320,7 +321,7 @@ The path follows the template set in :cpp:func:`SetLogFilePathTemplate` so it ma
 
     * For D3D11 it must be the ``ID3D11Device`` device object.
     * For OpenGL it must be the ``HGLRC`` or ``GLXContext`` context object.
-    * For Vulkan it must be the dispatch table pointer within the ``VkInstance``. This is a pointer-sized value at the location pointed to by the ``VkInstance``. NOTE - this is not the actual ``VkInstance`` pointer itself.
+    * For Vulkan it must be the dispatch table pointer within the ``VkInstance``. This is a pointer-sized value at the location pointed to by the ``VkInstance``. NOTE - this is not the actual ``VkInstance`` pointer itself. You can use the RENDERDOC_DEVICEPOINTER_FROM_VKINSTANCE helper macro defined in the renderdoc header to obtain this pointer from any VkInstance.
 
     ``RENDERDOC_WindowHandle`` is a typedef to ``void *``. It is the platform specific ``HWND``, ``xcb_window_t``, or Xlib ``Window``.
 

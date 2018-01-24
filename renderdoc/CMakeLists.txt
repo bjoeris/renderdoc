@@ -26,6 +26,7 @@ elseif(UNIX)
     list(APPEND RDOC_LIBRARIES
         PRIVATE m
         PRIVATE dl
+        PRIVATE rt
         PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
     if(ENABLE_XLIB)
@@ -55,8 +56,11 @@ endif()
 set(sources
     api/app/renderdoc_app.h
     api/replay/basic_types.h
+    api/replay/stringise.h
+    api/replay/structured_data.h
     api/replay/capture_options.h
     api/replay/control_types.h
+    api/replay/common_pipestate.h
     api/replay/d3d11_pipestate.h
     api/replay/data_types.h
     api/replay/gl_pipestate.h
@@ -65,6 +69,8 @@ set(sources
     api/replay/shader_types.h
     api/replay/vk_pipestate.h
     api/replay/version.h
+    api/replay/renderdoc_tostr.inl
+    api/replay/version.cpp
     common/common.cpp
     common/common.h
     common/custom_assert.h
@@ -89,7 +95,6 @@ set(sources
     core/plugins.h
     core/resource_manager.cpp
     core/resource_manager.h
-    core/socket_helpers.h
     data/hlsl/debugcbuffers.h
     data/glsl/debuguniforms.h
     data/glsl/vk_texsample.h
@@ -110,7 +115,9 @@ set(sources
     os/os_specific.cpp
     os/os_specific.h
     replay/app_api.cpp
+    replay/basic_types_tests.cpp
     replay/capture_options.cpp
+    replay/renderdoc_serialise.inl
     replay/capture_file.cpp
     replay/entry_points.cpp
     replay/replay_driver.cpp
@@ -118,22 +125,63 @@ set(sources
     replay/replay_output.cpp
     replay/replay_controller.cpp
     replay/replay_controller.h
-    replay/type_helpers.cpp
-    replay/type_helpers.h
-    serialise/grisu2.cpp
     serialise/serialiser.cpp
     serialise/serialiser.h
-    serialise/string_utils.cpp
-    serialise/string_utils.h
-    serialise/utf8printf.cpp
+    serialise/lz4io.cpp
+    serialise/lz4io.h
+    serialise/zstdio.cpp
+    serialise/zstdio.h
+    serialise/streamio.cpp
+    serialise/streamio.h
+    serialise/rdcfile.cpp
+    serialise/rdcfile.h
+    serialise/codecs/xml_codec.cpp
+    serialise/codecs/chrome_json_codec.cpp
+    serialise/comp_io_tests.cpp
+    serialise/serialiser_tests.cpp
+    serialise/streamio_tests.cpp
+    strings/grisu2.cpp
+    strings/string_utils.cpp
+    strings/string_utils.h
+    strings/utf8printf.cpp
     3rdparty/jpeg-compressor/jpgd.cpp
     3rdparty/jpeg-compressor/jpgd.h
     3rdparty/jpeg-compressor/jpge.cpp
     3rdparty/jpeg-compressor/jpge.h
     3rdparty/catch/catch.cpp
     3rdparty/catch/catch.hpp
+    3rdparty/pugixml/pugixml.cpp
+    3rdparty/pugixml/pugixml.hpp
+    3rdparty/pugixml/pugiconfig.hpp
     3rdparty/lz4/lz4.c
     3rdparty/lz4/lz4.h
+    3rdparty/zstd/bitstream.h
+    3rdparty/zstd/compiler.h
+    3rdparty/zstd/entropy_common.c
+    3rdparty/zstd/error_private.c
+    3rdparty/zstd/error_private.h
+    3rdparty/zstd/fse.h
+    3rdparty/zstd/fse_decompress.c
+    3rdparty/zstd/huf.h
+    3rdparty/zstd/mem.h
+    3rdparty/zstd/pool.c
+    3rdparty/zstd/pool.h
+    3rdparty/zstd/threading.c
+    3rdparty/zstd/threading.h
+    3rdparty/zstd/xxhash.c
+    3rdparty/zstd/xxhash.h
+    3rdparty/zstd/zstd_common.c
+    3rdparty/zstd/zstd_errors.h
+    3rdparty/zstd/zstd_internal.h
+    3rdparty/zstd/fse_compress.c
+    3rdparty/zstd/huf_compress.c
+    3rdparty/zstd/zstdmt_compress.c
+    3rdparty/zstd/zstdmt_compress.h
+    3rdparty/zstd/zstd_compress.c
+    3rdparty/zstd/zstd_opt.h
+    3rdparty/zstd/huf_decompress.c
+    3rdparty/zstd/zstd_decompress.c
+    3rdparty/zstd/zstd.h
     3rdparty/stb/stb_image.h
     3rdparty/stb/stb_image_write.h
     3rdparty/stb/stb_image_resize.h
@@ -152,7 +200,9 @@ if(ANDROID)
         os/posix/android/android_process.cpp
         os/posix/android/android_threading.cpp
         os/posix/android/android_hook.cpp
+        os/posix/android/android_network.cpp
         os/posix/posix_hook.h
+        os/posix/posix_network.h
         os/posix/posix_network.cpp
         os/posix/posix_process.cpp
         os/posix/posix_stringio.cpp
@@ -169,7 +219,9 @@ elseif(APPLE)
         os/posix/apple/apple_process.cpp
         os/posix/apple/apple_threading.cpp
         os/posix/apple/apple_hook.cpp
+        os/posix/apple/apple_network.cpp
         os/posix/posix_hook.h
+        os/posix/posix_network.h
         os/posix/posix_network.cpp
         os/posix/posix_process.cpp
         os/posix/posix_stringio.cpp
@@ -186,9 +238,11 @@ elseif(UNIX)
         os/posix/linux/linux_process.cpp
         os/posix/linux/linux_threading.cpp
         os/posix/linux/linux_hook.cpp
+        os/posix/linux/linux_network.cpp
         3rdparty/plthook/plthook.h
         3rdparty/plthook/plthook_elf.c
         os/posix/posix_hook.h
+        os/posix/posix_network.h
         os/posix/posix_network.cpp
         os/posix/posix_process.cpp
         os/posix/posix_stringio.cpp
@@ -211,6 +265,9 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR APPLE)
     if(CMAKE_COMPILER_IS_GNUCXX)
         set_property(SOURCE 3rdparty/jpeg-compressor/jpgd.cpp
             APPEND_STRING PROPERTY COMPILE_FLAGS " -Wno-unknown-warning -Wno-implicit-fallthrough")
+
+        set_property(SOURCE strings/utf8printf.cpp
+            APPEND_STRING PROPERTY COMPILE_FLAGS " -Wno-unknown-warning -Wno-format-truncation")
     endif()
 endif()
 
@@ -298,10 +355,11 @@ endif()
 if(ENABLE_GL OR ENABLE_GLES OR ENABLE_VULKAN)
     add_subdirectory(driver/shaders/spirv)
     list(APPEND renderdoc_objects $<TARGET_OBJECTS:rdoc_spirv>)
-
-    add_subdirectory(driver/ihv/amd)
-    list(APPEND renderdoc_objects $<TARGET_OBJECTS:rdoc_amd>)
 endif()
+
+# always pull in the amd folder
+add_subdirectory(driver/ihv/amd)
+list(APPEND renderdoc_objects $<TARGET_OBJECTS:rdoc_amd>)
 
 # rdoc must be after its drivers because of linux_libentry.cpp
 list(APPEND renderdoc_objects
@@ -314,16 +372,22 @@ target_include_directories(renderdoc ${RDOC_INCLUDES})
 target_link_libraries(renderdoc ${RDOC_LIBRARIES})
 
 if(UNIX AND NOT ANDROID AND NOT APPLE)
-    set_target_properties(renderdoc PROPERTIES LINK_FLAGS "-Wl,--version-script,${CMAKE_CURRENT_SOURCE_DIR}/renderdoc.version")
+    set_target_properties(renderdoc PROPERTIES LINK_FLAGS "-Wl,--version-script,${CMAKE_CURRENT_SOURCE_DIR}/renderdoc.version -Wl,--no-undefined")
 endif()
 
 if(ANDROID)
     set_target_properties(renderdoc PROPERTIES LINK_FLAGS "-Wl,--build-id")
     # rename output library
     set_target_properties(renderdoc PROPERTIES OUTPUT_NAME "VkLayer_GLES_RenderDoc")
+
+    if(STRIP_ANDROID_LIBRARY AND CMAKE_STRIP AND CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_custom_command(TARGET renderdoc POST_BUILD
+            COMMAND echo Stripping $<TARGET_FILE:renderdoc>
+            COMMAND ${CMAKE_STRIP} --strip-unneeded $<TARGET_FILE:renderdoc>)
+    endif()
 endif()
 
-install (TARGETS renderdoc DESTINATION lib${LIB_SUFFIX})
+install (TARGETS renderdoc DESTINATION lib${LIB_SUFFIX}/${LIB_SUBFOLDER})
 
 # Copy in application API header to include
 install (FILES api/app/renderdoc_app.h DESTINATION include RENAME renderdoc.h)

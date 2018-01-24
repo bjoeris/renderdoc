@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -77,7 +77,7 @@ public:
 
   struct
   {
-    vector<byte> data;
+    bytebuf data;
     uint32_t firstElement;
     uint32_t numElements;
 
@@ -91,7 +91,7 @@ public:
 
   struct
   {
-    vector<byte> data;
+    bytebuf data;
     uint32_t firstElement;
     uint32_t numElements;
 
@@ -104,7 +104,7 @@ public:
     uint32_t bytestride;
     uint32_t count;    // of structures (above stride), or uint32s (raw)
 
-    vector<byte> data;
+    bytebuf data;
   };
 
   vector<groupsharedMem> groupshared;

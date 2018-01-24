@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,8 @@
 
 #pragma once
 
+#include <algorithm>
+#include <map>
 #include <type_traits>
 
 // struct to allow partial specialisation for enums
@@ -58,14 +60,14 @@ struct TypeConversion
     return res;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const T &in)
+  static PyObject *ConvertToPy(const T &in)
   {
     swig_type_info *type_info = GetTypeInfo();
     if(type_info == NULL)
       return NULL;
 
     T *pyCopy = new T(in);
-    return SWIG_NewPointerObj((void *)pyCopy, type_info, SWIG_BUILTIN_INIT);
+    return SWIG_InternalNewPointerObj((void *)pyCopy, type_info, SWIG_POINTER_OWN);
   }
 };
 
@@ -101,7 +103,7 @@ struct TypeConversion<Opaque *, false>
     return res;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const Opaque *&in)
+  static PyObject *ConvertToPy(const Opaque *&in)
   {
     swig_type_info *type_info = GetTypeInfo();
     if(type_info == NULL)
@@ -110,13 +112,41 @@ struct TypeConversion<Opaque *, false>
     return SWIG_InternalNewPointerObj((void *)in, type_info, 0);
   }
 
-  static PyObject *ConvertToPy(PyObject *self, Opaque *in)
-  {
-    return ConvertToPy(self, (const Opaque *&)in);
-  }
+  static PyObject *ConvertToPy(Opaque *in) { return ConvertToPy((const Opaque *&)in); }
 };
 
 // specialisations for basic types
+template <>
+struct TypeConversion<bool, false>
+{
+  static int ConvertFromPy(PyObject *in, bool &out)
+  {
+    if(!PyBool_Check(in))
+      return SWIG_TypeError;
+
+    if(in == Py_True)
+      out = true;
+    else
+      out = false;
+
+    return SWIG_OK;
+  }
+
+  static PyObject *ConvertToPy(const bool &in)
+  {
+    if(in)
+    {
+      Py_IncRef(Py_True);
+      return Py_True;
+    }
+    else
+    {
+      Py_IncRef(Py_False);
+      return Py_False;
+    }
+  }
+};
+
 template <>
 struct TypeConversion<uint8_t, false>
 {
@@ -135,10 +165,28 @@ struct TypeConversion<uint8_t, false>
     return SWIG_OK;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const uint8_t &in)
+  static PyObject *ConvertToPy(const uint8_t &in) { return PyLong_FromUnsignedLong(in); }
+};
+
+template <>
+struct TypeConversion<uint16_t, false>
+{
+  static int ConvertFromPy(PyObject *in, uint16_t &out)
   {
-    return PyLong_FromUnsignedLong(in);
+    if(!PyLong_Check(in))
+      return SWIG_TypeError;
+
+    uint32_t longval = PyLong_AsUnsignedLong(in);
+
+    if(PyErr_Occurred() || longval > 0xffff)
+      return SWIG_OverflowError;
+
+    out = uint16_t(longval & 0xff);
+
+    return SWIG_OK;
   }
+
+  static PyObject *ConvertToPy(const uint16_t &in) { return PyLong_FromUnsignedLong(in); }
 };
 
 template <>
@@ -157,10 +205,7 @@ struct TypeConversion<uint32_t, false>
     return SWIG_OK;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const uint32_t &in)
-  {
-    return PyLong_FromUnsignedLong(in);
-  }
+  static PyObject *ConvertToPy(const uint32_t &in) { return PyLong_FromUnsignedLong(in); }
 };
 
 template <>
@@ -179,7 +224,7 @@ struct TypeConversion<int32_t, false>
     return SWIG_OK;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const int32_t &in) { return PyLong_FromLong(in); }
+  static PyObject *ConvertToPy(const int32_t &in) { return PyLong_FromLong(in); }
 };
 
 template <>
@@ -198,10 +243,7 @@ struct TypeConversion<uint64_t, false>
     return SWIG_OK;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const uint64_t &in)
-  {
-    return PyLong_FromUnsignedLongLong(in);
-  }
+  static PyObject *ConvertToPy(const uint64_t &in) { return PyLong_FromUnsignedLongLong(in); }
 };
 
 template <>
@@ -220,7 +262,7 @@ struct TypeConversion<float, false>
     return SWIG_OK;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const float &in) { return PyFloat_FromDouble(in); }
+  static PyObject *ConvertToPy(const float &in) { return PyFloat_FromDouble(in); }
 };
 
 template <>
@@ -239,7 +281,7 @@ struct TypeConversion<double, false>
     return SWIG_OK;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const double &in) { return PyFloat_FromDouble(in); }
+  static PyObject *ConvertToPy(const double &in) { return PyFloat_FromDouble(in); }
 };
 
 // partial specialisation for enums, we just convert as their underlying type,
@@ -257,17 +299,44 @@ struct TypeConversion<T, true>
     return ret;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const T &in)
+  static PyObject *ConvertToPy(const T &in)
   {
-    return TypeConversion<etype>::ConvertToPy(self, etype(in));
+    return TypeConversion<etype>::ConvertToPy(etype(in));
+  }
+};
+
+// specialisation for datetime
+template <>
+struct TypeConversion<rdcdatetime, false>
+{
+  static int ConvertFromPy(PyObject *in, rdcdatetime &out)
+  {
+    if(!PyDateTime_Check(in))
+      return SWIG_TypeError;
+
+    out.year = PyDateTime_GET_YEAR(in);
+    out.month = PyDateTime_GET_MONTH(in);
+    out.day = PyDateTime_GET_DAY(in);
+    out.hour = PyDateTime_DATE_GET_HOUR(in);
+    out.minute = PyDateTime_DATE_GET_MINUTE(in);
+    out.second = PyDateTime_DATE_GET_SECOND(in);
+    out.microsecond = PyDateTime_TIME_GET_MICROSECOND(in);
+
+    return SWIG_OK;
+  }
+
+  static PyObject *ConvertToPy(const rdcdatetime &in)
+  {
+    return PyDateTime_FromDateAndTime(in.year, in.month, in.day, in.hour, in.minute, in.second,
+                                      in.microsecond);
   }
 };
 
 // specialisation for pair
 template <typename A, typename B>
-struct TypeConversion<rdctype::pair<A, B>, false>
+struct TypeConversion<rdcpair<A, B>, false>
 {
-  static int ConvertFromPy(PyObject *in, rdctype::pair<A, B> &out, int *failIdx)
+  static int ConvertFromPy(PyObject *in, rdcpair<A, B> &out, int *failIdx)
   {
     if(!PyTuple_Check(in))
       return SWIG_TypeError;
@@ -298,14 +367,14 @@ struct TypeConversion<rdctype::pair<A, B>, false>
     return ret;
   }
 
-  static int ConvertFromPy(PyObject *in, rdctype::pair<A, B> &out)
+  static int ConvertFromPy(PyObject *in, rdcpair<A, B> &out)
   {
     return ConvertFromPy(in, out, NULL);
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const rdctype::pair<A, B> &in, int *failIdx)
+  static PyObject *ConvertToPy(const rdcpair<A, B> &in, int *failIdx)
   {
-    PyObject *first = TypeConversion<A>::ConvertToPy(self, in.first);
+    PyObject *first = TypeConversion<A>::ConvertToPy(in.first);
     if(!first)
     {
       if(failIdx)
@@ -313,7 +382,7 @@ struct TypeConversion<rdctype::pair<A, B>, false>
       return NULL;
     }
 
-    PyObject *second = TypeConversion<B>::ConvertToPy(self, in.second);
+    PyObject *second = TypeConversion<B>::ConvertToPy(in.second);
     if(!second)
     {
       if(failIdx)
@@ -331,70 +400,72 @@ struct TypeConversion<rdctype::pair<A, B>, false>
     return ret;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const rdctype::pair<A, B> &in)
-  {
-    return ConvertToPy(self, in, NULL);
-  }
+  static PyObject *ConvertToPy(const rdcpair<A, B> &in) { return ConvertToPy(in, NULL); }
 };
 
-// specialisation for array<byte>
+// specialisation for bytebuf
 template <>
-struct TypeConversion<rdctype::array<byte>, false>
+struct TypeConversion<bytebuf, false>
 {
   // we add some extra parameters so the typemaps for array can use these to get
   // nicer failure error messages out with the index that failed
-  static int ConvertFromPy(PyObject *in, rdctype::array<byte> &out, int *failIdx)
+  static int ConvertFromPy(PyObject *in, bytebuf &out, int *failIdx)
   {
     if(!PyBytes_Check(in))
       return SWIG_TypeError;
 
     Py_ssize_t len = PyBytes_Size(in);
 
-    out.create((int)len);
-    memcpy(&out[0], PyBytes_AsString(in), out.count);
+    out.resize((size_t)len);
+    memcpy(out.data(), PyBytes_AsString(in), out.size());
 
     return SWIG_OK;
   }
 
-  static int ConvertFromPy(PyObject *in, rdctype::array<byte> &out)
-  {
-    return ConvertFromPy(in, out, NULL);
-  }
-
-  static PyObject *ConvertToPyInPlace(PyObject *self, PyObject *list,
-                                      const rdctype::array<byte> &in, int *failIdx)
+  static int ConvertFromPy(PyObject *in, bytebuf &out) { return ConvertFromPy(in, out, NULL); }
+  static PyObject *ConvertToPyInPlace(PyObject *list, const bytebuf &in, int *failIdx)
   {
     // can't modify bytes objects
-    return NULL;
+    return SWIG_Py_Void();
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const rdctype::array<byte> &in, int *failIdx)
+  static PyObject *ConvertToPy(const bytebuf &in, int *failIdx)
   {
-    return PyBytes_FromStringAndSize((const char *)in.elems, (Py_ssize_t)in.count);
+    return PyBytes_FromStringAndSize((const char *)in.data(), (Py_ssize_t)in.size());
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const rdctype::array<byte> &in)
-  {
-    return ConvertToPy(self, in, NULL);
-  }
+  static PyObject *ConvertToPy(const bytebuf &in) { return ConvertToPy(in, NULL); }
 };
 
 // specialisation for array
 template <typename U>
-struct TypeConversion<rdctype::array<U>, false>
+struct TypeConversion<rdcarray<U>, false>
 {
+  static swig_type_info *GetTypeInfo()
+  {
+    static swig_type_info *cached_type_info = NULL;
+    static std::string typeName = std::string("rdcarray < ") + TypeName<U>() + " > *";
+
+    if(cached_type_info)
+      return cached_type_info;
+
+    cached_type_info = SWIG_TypeQuery(typeName.c_str());
+
+    return cached_type_info;
+  }
+
   // we add some extra parameters so the typemaps for array can use these to get
   // nicer failure error messages out with the index that failed
-  static int ConvertFromPy(PyObject *in, rdctype::array<U> &out, int *failIdx)
+  static int ConvertFromPy(PyObject *in, rdcarray<U> &out, int *failIdx)
   {
     if(!PyList_Check(in))
       return SWIG_TypeError;
 
-    out.create((int)PyList_Size(in));
+    out.resize((size_t)PyList_Size(in));
 
-    for(int i = 0; i < out.count; i++)
+    for(int i = 0; i < out.count(); i++)
     {
-      int ret = TypeConversion<U>::ConvertFromPy(PyList_GetItem(in, i), out.elems[i]);
+      int ret = TypeConversion<U>::ConvertFromPy(PyList_GetItem(in, i), out[i]);
       if(!SWIG_IsOK(ret))
       {
         if(failIdx)
@@ -406,20 +477,18 @@ struct TypeConversion<rdctype::array<U>, false>
     return SWIG_OK;
   }
 
-  static int ConvertFromPy(PyObject *in, rdctype::array<U> &out)
+  static int ConvertFromPy(PyObject *in, rdcarray<U> &out) { return ConvertFromPy(in, out, NULL); }
+  static PyObject *ConvertToPyInPlace(PyObject *list, const rdcarray<U> &in, int *failIdx)
   {
-    return ConvertFromPy(in, out, NULL);
-  }
-  static PyObject *ConvertToPyInPlace(PyObject *self, PyObject *list, const rdctype::array<U> &in,
-                                      int *failIdx)
-  {
-    for(int i = 0; i < in.count; i++)
+    for(int i = 0; i < in.count(); i++)
     {
-      PyObject *elem = TypeConversion<U>::ConvertToPy(self, in.elems[i]);
+      PyObject *elem = TypeConversion<U>::ConvertToPy(in[i]);
 
       if(elem)
       {
         PyList_Append(list, elem);
+        // release our reference
+        Py_DecRef(elem);
       }
       else
       {
@@ -433,13 +502,13 @@ struct TypeConversion<rdctype::array<U>, false>
     return list;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const rdctype::array<U> &in, int *failIdx)
+  static PyObject *ConvertToPy(const rdcarray<U> &in, int *failIdx)
   {
     PyObject *list = PyList_New(0);
     if(!list)
       return NULL;
 
-    PyObject *ret = ConvertToPyInPlace(self, list, in, failIdx);
+    PyObject *ret = ConvertToPyInPlace(list, in, failIdx);
 
     // if a failure happened, don't leak the list we created
     if(!ret)
@@ -448,15 +517,12 @@ struct TypeConversion<rdctype::array<U>, false>
     return ret;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const rdctype::array<U> &in)
-  {
-    return ConvertToPy(self, in, NULL);
-  }
+  static PyObject *ConvertToPy(const rdcarray<U> &in) { return ConvertToPy(in, NULL); }
 };
 
 // specialisation for string
 template <>
-struct TypeConversion<rdctype::str, false>
+struct TypeConversion<rdcstr, false>
 {
   static swig_type_info *GetTypeInfo()
   {
@@ -465,12 +531,12 @@ struct TypeConversion<rdctype::str, false>
     if(cached_type_info)
       return cached_type_info;
 
-    cached_type_info = SWIG_TypeQuery("rdctype::str *");
+    cached_type_info = SWIG_TypeQuery("rdcstr *");
 
     return cached_type_info;
   }
 
-  static int ConvertFromPy(PyObject *in, rdctype::str &out)
+  static int ConvertFromPy(PyObject *in, rdcstr &out)
   {
     if(PyUnicode_Check(in))
     {
@@ -486,10 +552,7 @@ struct TypeConversion<rdctype::str, false>
 
       if(ret == 0)
       {
-        out.count = (int)size;
-        out.elems = (char *)out.allocate(size + 1);
-        memcpy(out.elems, buf, size);
-        out.elems[size] = 0;
+        out.assign(buf, size);
 
         Py_DecRef(bytes);
 
@@ -505,7 +568,7 @@ struct TypeConversion<rdctype::str, false>
     if(!type_info)
       return SWIG_ERROR;
 
-    rdctype::str *ptr = NULL;
+    rdcstr *ptr = NULL;
     int res = SWIG_ConvertPtr(in, (void **)&ptr, type_info, 0);
     if(SWIG_IsOK(res))
       out = *ptr;
@@ -513,308 +576,13 @@ struct TypeConversion<rdctype::str, false>
     return res;
   }
 
-  static PyObject *ConvertToPy(PyObject *self, const rdctype::str &in)
+  static PyObject *ConvertToPy(const rdcstr &in)
   {
-    return PyUnicode_FromStringAndSize(in.elems, in.count);
+    return PyUnicode_FromStringAndSize(in.c_str(), in.size());
   }
 };
 
-#ifdef ENABLE_QT_CONVERT
-
-template <>
-struct TypeConversion<QString, false>
-{
-  static int ConvertFromPy(PyObject *in, QString &out)
-  {
-    if(PyUnicode_Check(in))
-    {
-      PyObject *bytes = PyUnicode_AsUTF8String(in);
-
-      if(!bytes)
-        return SWIG_ERROR;
-
-      char *buf = NULL;
-      Py_ssize_t size = 0;
-
-      int ret = PyBytes_AsStringAndSize(bytes, &buf, &size);
-
-      if(ret == 0)
-      {
-        out = QString::fromUtf8(buf, (int)size);
-
-        Py_DecRef(bytes);
-
-        return SWIG_OK;
-      }
-
-      Py_DecRef(bytes);
-
-      return SWIG_ERROR;
-    }
-
-    return SWIG_ERROR;
-  }
-
-  static PyObject *ConvertToPy(PyObject *self, const QString &in)
-  {
-    QByteArray bytes = in.toUtf8();
-    return PyUnicode_FromStringAndSize(bytes.data(), bytes.size());
-  }
-};
-
-template <>
-struct TypeConversion<QDateTime, false>
-{
-  static int ConvertFromPy(PyObject *in, QDateTime &out)
-  {
-    if(!PyDateTime_Check(in))
-      return SWIG_TypeError;
-
-    QDate date(PyDateTime_GET_YEAR(in), PyDateTime_GET_MONTH(in), PyDateTime_GET_DAY(in));
-    QTime time(PyDateTime_DATE_GET_HOUR(in), PyDateTime_DATE_GET_MINUTE(in),
-               PyDateTime_DATE_GET_SECOND(in), PyDateTime_DATE_GET_MICROSECOND(in) / 1000);
-
-    out = QDateTime(date, time, QTimeZone::utc());
-
-    return SWIG_OK;
-  }
-
-  static PyObject *ConvertToPy(PyObject *self, const QDateTime &in)
-  {
-    QDate date = in.date();
-    QTime time = in.time();
-    return PyDateTime_FromDateAndTime(date.year(), date.month(), date.day(), time.hour(),
-                                      time.minute(), time.second(), time.msec() * 1000);
-  }
-};
-
-template <typename Container, typename U>
-struct ContainerConversion
-{
-  // we add some extra parameters so the typemaps for array can use these to get
-  // nicer failure error messages out with the index that failed
-  static int ConvertFromPy(PyObject *in, Container &out, int *failIdx)
-  {
-    if(!PyList_Check(in))
-      return SWIG_TypeError;
-
-    Py_ssize_t len = PyList_Size(in);
-
-    for(Py_ssize_t i = 0; i < len; i++)
-    {
-      U u;
-      int ret = TypeConversion<U>::ConvertFromPy(PyList_GetItem(in, i), u);
-      if(!SWIG_IsOK(ret))
-      {
-        if(failIdx)
-          *failIdx = i;
-        return ret;
-      }
-      out.append(u);
-    }
-
-    return SWIG_OK;
-  }
-
-  static int ConvertFromPy(PyObject *in, Container &out) { return ConvertFromPy(in, out, NULL); }
-  static PyObject *ConvertToPyInPlace(PyObject *self, PyObject *list, const Container &in,
-                                      int *failIdx)
-  {
-    for(int i = 0; i < in.size(); i++)
-    {
-      PyObject *elem = TypeConversion<U>::ConvertToPy(self, in[i]);
-
-      if(elem)
-      {
-        PyList_Append(list, elem);
-      }
-      else
-      {
-        if(failIdx)
-          *failIdx = i;
-
-        return NULL;
-      }
-    }
-
-    return list;
-  }
-
-  static PyObject *ConvertToPy(PyObject *self, const Container &in, int *failIdx)
-  {
-    PyObject *list = PyList_New(0);
-    if(!list)
-      return NULL;
-
-    PyObject *ret = ConvertToPyInPlace(self, list, in, failIdx);
-
-    // if a failure happened, don't leak the list we created
-    if(!ret)
-      Py_XDECREF(list);
-
-    return ret;
-  }
-
-  static PyObject *ConvertToPy(PyObject *self, const Container &in)
-  {
-    return ConvertToPy(self, in, NULL);
-  }
-};
-
-template <typename U>
-struct TypeConversion<QList<U>, false> : ContainerConversion<QList<U>, U>
-{
-};
-
-template <>
-struct TypeConversion<QStringList, false> : ContainerConversion<QList<QString>, QString>
-{
-};
-
-template <typename U>
-struct TypeConversion<QVector<U>, false> : ContainerConversion<QVector<U>, U>
-{
-};
-
-// specialisation for pair
-template <typename A, typename B>
-struct TypeConversion<QPair<A, B>, false>
-{
-  static int ConvertFromPy(PyObject *in, QPair<A, B> &out)
-  {
-    if(!PyTuple_Check(in))
-      return SWIG_TypeError;
-
-    Py_ssize_t size = PyTuple_Size(in);
-
-    if(size != 2)
-      return SWIG_TypeError;
-
-    int ret = TypeConversion<A>::ConvertFromPy(PyTuple_GetItem(in, 0), out.first);
-    if(SWIG_IsOK(ret))
-      ret = TypeConversion<B>::ConvertFromPy(PyTuple_GetItem(in, 1), out.second);
-
-    return ret;
-  }
-
-  static PyObject *ConvertToPy(PyObject *self, const QPair<A, B> &in)
-  {
-    PyObject *first = TypeConversion<A>::ConvertToPy(self, in.first);
-    if(!first)
-      return NULL;
-
-    PyObject *second = TypeConversion<B>::ConvertToPy(self, in.second);
-    if(!second)
-      return NULL;
-
-    PyObject *ret = PyTuple_New(2);
-    if(!ret)
-      return NULL;
-
-    PyTuple_SetItem(ret, 0, first);
-    PyTuple_SetItem(ret, 1, second);
-
-    return ret;
-  }
-};
-
-template <typename K, typename V>
-struct TypeConversion<QMap<K, V>, false>
-{
-  // we add some extra parameters so the typemaps for array can use these to get
-  // nicer failure error messages out with the index that failed
-  static int ConvertFromPy(PyObject *in, QMap<K, V> &out, int *failIdx)
-  {
-    if(!PyDict_Check(in))
-      return SWIG_TypeError;
-
-    PyObject *keys = PyDict_Keys(in);
-
-    if(!keys)
-      return SWIG_TypeError;
-
-    Py_ssize_t len = PyList_Size(keys);
-
-    for(Py_ssize_t i = 0; i < len; i++)
-    {
-      K k;
-      V v;
-
-      PyObject *key = PyList_GetItem(keys, i);
-      PyObject *value = PyDict_GetItem(in, key);
-      int ret = TypeConversion<K>::ConvertFromPy(key, k);
-      int ret2 = TypeConversion<V>::ConvertFromPy(value, v);
-      if(!SWIG_IsOK(ret) || !SWIG_IsOK(ret2))
-      {
-        if(failIdx)
-          *failIdx = i;
-        Py_DecRef(keys);
-        if(!SWIG_IsOK(ret))
-          return ret;
-        else
-          return ret2;
-      }
-      out.insert(k, v);
-    }
-
-    Py_DecRef(keys);
-
-    return SWIG_OK;
-  }
-
-  static int ConvertFromPy(PyObject *in, QMap<K, V> &out) { return ConvertFromPy(in, out, NULL); }
-  static PyObject *ConvertToPyInPlace(PyObject *self, PyObject *pymap, const QMap<K, V> &in,
-                                      int *failIdx)
-  {
-    QList<K> keys = in.keys();
-
-    for(int i = 0; i < keys.size(); i++)
-    {
-      const K &k = keys[i];
-      PyObject *key = TypeConversion<K>::ConvertToPy(self, k);
-
-      if(key)
-      {
-        PyObject *value = TypeConversion<V>::ConvertToPy(self, in[k]);
-
-        if(value)
-        {
-          PyDict_SetItem(pymap, key, value);
-          continue;
-        }
-      }
-
-      if(failIdx)
-        *failIdx = i;
-
-      return NULL;
-    }
-
-    return pymap;
-  }
-
-  static PyObject *ConvertToPy(PyObject *self, const QMap<K, V> &in, int *failIdx)
-  {
-    PyObject *list = PyDict_New();
-    if(!list)
-      return NULL;
-
-    PyObject *ret = ConvertToPyInPlace(self, list, in, failIdx);
-
-    // if a failure happened, don't leak the map we created
-    if(!ret)
-      Py_XDECREF(list);
-
-    return ret;
-  }
-
-  static PyObject *ConvertToPy(PyObject *self, const QMap<K, V> &in)
-  {
-    return ConvertToPy(self, in, NULL);
-  }
-};
-
-#endif
+#include "structured_conversion.h"
 
 // free functions forward to struct
 template <typename T>
@@ -824,200 +592,9 @@ int ConvertFromPy(PyObject *in, T &out)
 }
 
 template <typename T>
-PyObject *ConvertToPy(PyObject *self, const T &in)
+PyObject *ConvertToPy(const T &in)
 {
-  return TypeConversion<T>::ConvertToPy(self, in);
-}
-
-// this is defined elsewhere for managing the opaque global_handle object
-extern "C" PyThreadState *GetExecutingThreadState(PyObject *global_handle);
-extern "C" void HandleException(PyObject *global_handle);
-extern "C" bool IsThreadBlocking(PyObject *global_handle);
-extern "C" void SetThreadBlocking(PyObject *global_handle, bool block);
-
-struct ExceptionHandling
-{
-  bool failFlag = false;
-  PyObject *exObj = NULL;
-  PyObject *valueObj = NULL;
-  PyObject *tracebackObj = NULL;
-};
-
-// this function handles failures in callback functions. If we're synchronously calling the callback
-// from within an execute scope, then we can assign to failflag and let the error propagate upwards.
-// If we're not, then the callback is being executed on another thread with no knowledge of python,
-// so we need to use the global handle to try and emit the exception through the context. None of
-// this is multi-threaded because we're inside the GIL at all times
-inline void HandleCallbackFailure(PyObject *global_handle, ExceptionHandling &exHandle)
-{
-  // if there's no global handle assume we are not running in the usual environment, so there are no
-  // external-to-python threads
-  if(!global_handle)
-  {
-    exHandle.failFlag = true;
-    return;
-  }
-
-  PyThreadState *current = PyGILState_GetThisThreadState();
-  PyThreadState *executing = GetExecutingThreadState(global_handle);
-
-  // we are executing synchronously, set the flag and return
-  if(current == executing)
-  {
-    exHandle.failFlag = true;
-    return;
-  }
-
-  // if we have the blocking flag set, then we may be on another thread but we can still propagate
-  // up the error
-  if(IsThreadBlocking(global_handle))
-  {
-    exHandle.failFlag = true;
-
-    // we need to rethrow the exception to that thread, so fetch (and clear it) on this thread.
-    //
-    // Note that the exception can only propagate up to one place. However since we know that python
-    // is inherently single threaded, so if we're doing this blocking funciton call on another
-    // thread then we *know* there isn't python further up the stack. Therefore we're safe to
-    // swallow the exception here (since there's nowhere for it to bubble up to anyway) and rethrow
-    // on the python thread.
-    PyErr_Fetch(&exHandle.exObj, &exHandle.valueObj, &exHandle.tracebackObj);
-
-    return;
-  }
-
-  // in this case we are executing asynchronously, and must handle the exception manually as there's
-  // nothing above us that knows about python exceptions
-  HandleException(global_handle);
-}
-
-template <typename T>
-inline T get_return(const char *funcname, PyObject *result, PyObject *global_handle,
-                    ExceptionHandling &exHandle)
-{
-  T val = T();
-
-  int res = ConvertToPy(result, val);
-
-  if(!SWIG_IsOK(res))
-  {
-    HandleCallbackFailure(global_handle, exHandle);
-
-    PyErr_Format(PyExc_TypeError, "Expected a '%s' for return value of callback in %s",
-                 TypeName<T>(), funcname);
-  }
-
-  Py_XDECREF(result);
-
-  return val;
-}
-
-template <>
-inline void get_return(const char *funcname, PyObject *result, PyObject *global_handle,
-                       ExceptionHandling &exHandle)
-{
-  Py_XDECREF(result);
-}
-
-template <typename rettype, typename... paramTypes>
-struct varfunc
-{
-  varfunc(PyObject *self, const char *funcname, paramTypes... params)
-  {
-    args = PyTuple_New(sizeof...(paramTypes));
-
-    currentarg = 0;
-
-    // avoid unused parameter errors when calling a parameter-less function
-    (void)self;
-    (void)funcname;
-
-    using expand_type = int[];
-    (void)expand_type{0, (push_arg(self, funcname, params), 0)...};
-  }
-
-  template <typename T>
-  void push_arg(PyObject *self, const char *funcname, const T &arg)
-  {
-    if(!args)
-      return;
-
-    PyObject *obj = ConvertToPy(self, arg);
-
-    if(!obj)
-    {
-      Py_DecRef(args);
-      args = NULL;
-
-      PyErr_Format(PyExc_TypeError, "Unexpected type for arg %d of callback in %s", currentarg + 1,
-                   funcname);
-
-      return;
-    }
-
-    PyTuple_SetItem(args, currentarg++, obj);
-  }
-
-  ~varfunc() { Py_XDECREF(args); }
-  rettype call(const char *funcname, PyObject *func, PyObject *global_handle,
-               ExceptionHandling &exHandle)
-  {
-    if(!func || func == Py_None || !PyCallable_Check(func) || !args)
-    {
-      HandleCallbackFailure(global_handle, exHandle);
-      return rettype();
-    }
-
-    PyObject *result = PyObject_Call(func, args, 0);
-
-    if(result == NULL)
-      HandleCallbackFailure(global_handle, exHandle);
-
-    Py_DECREF(args);
-
-    return get_return<rettype>(funcname, result, global_handle, exHandle);
-  }
-
-  int currentarg = 0;
-  PyObject *args;
-};
-
-struct ScopedFuncCall
-{
-  ScopedFuncCall(PyObject *h)
-  {
-    handle = h;
-    Py_XINCREF(handle);
-    gil = PyGILState_Ensure();
-  }
-
-  ~ScopedFuncCall()
-  {
-    Py_XDECREF(handle);
-    PyGILState_Release(gil);
-  }
-
-  PyObject *handle;
-  PyGILState_STATE gil;
-};
-
-template <typename funcType>
-funcType ConvertFunc(PyObject *self, const char *funcname, PyObject *func, ExceptionHandling &exHandle)
-{
-  // add a reference to the global object so it stays alive while we execute, in case this is an
-  // async call
-  PyObject *global_internal_handle = NULL;
-
-  PyObject *globals = PyEval_GetGlobals();
-  if(globals)
-    global_internal_handle = PyDict_GetItemString(globals, "_renderdoc_internal");
-
-  return [global_internal_handle, self, funcname, func, &exHandle](auto... param) {
-    ScopedFuncCall gil(global_internal_handle);
-
-    varfunc<typename funcType::result_type, decltype(param)...> f(self, funcname, param...);
-    return f.call(funcname, func, global_internal_handle, exHandle);
-  };
+  return TypeConversion<T>::ConvertToPy(in);
 }
 
 namespace
@@ -1073,3 +650,9 @@ inline typename std::remove_pointer<T>::type &indirect(T &ptr)
 {
   return pointer_unwrap<T>::indirect(ptr);
 }
+
+#include "function_conversion.h"
+
+#include "container_handling.h"
+
+#include "ext_refcounts.h"

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,7 @@
 #pragma once
 
 #include <QFrame>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
 namespace Ui
 {
@@ -34,11 +34,12 @@ class GLPipelineStateViewer;
 
 class QXmlStreamWriter;
 
+class RDLabel;
 class RDTreeWidget;
 class RDTreeWidgetItem;
 class PipelineStateViewer;
 
-class GLPipelineStateViewer : public QFrame, public ILogViewer
+class GLPipelineStateViewer : public QFrame, public ICaptureViewer
 {
   Q_OBJECT
 
@@ -47,11 +48,11 @@ public:
                                  QWidget *parent = 0);
   ~GLPipelineStateViewer();
 
-  // ILogViewerForm
-  void OnLogfileLoaded() override;
-  void OnLogfileClosed() override;
-  void OnSelectedEventChanged(uint32_t eventID) override {}
-  void OnEventChanged(uint32_t eventID) override;
+  // ICaptureViewer
+  void OnCaptureLoaded() override;
+  void OnCaptureClosed() override;
+  void OnSelectedEventChanged(uint32_t eventId) override {}
+  void OnEventChanged(uint32_t eventId) override;
 
 private slots:
   // automatic slots
@@ -67,7 +68,6 @@ private slots:
 
   // manual slots
   void shaderView_clicked();
-  void shaderLabel_clicked(QMouseEvent *event);
   void shaderEdit_clicked();
   void shaderSave_clicked();
   void resource_itemActivated(RDTreeWidgetItem *item, int column);
@@ -90,9 +90,9 @@ private:
                                  const GLPipe::VertexAttribute &val);
   GLReadWriteType GetGLReadWriteType(ShaderResource res);
 
-  void setShaderState(const GLPipe::Shader &stage, QLabel *shader, RDTreeWidget *tex,
+  void setShaderState(const GLPipe::Shader &stage, RDLabel *shader, RDTreeWidget *tex,
                       RDTreeWidget *samp, RDTreeWidget *ubo, RDTreeWidget *sub, RDTreeWidget *rw);
-  void clearShaderState(QLabel *shader, RDTreeWidget *tex, RDTreeWidget *samp, RDTreeWidget *ubo,
+  void clearShaderState(RDLabel *shader, RDTreeWidget *tex, RDTreeWidget *samp, RDTreeWidget *ubo,
                         RDTreeWidget *sub, RDTreeWidget *rw);
   void setState();
   void clearState();
@@ -101,8 +101,7 @@ private:
   void setEmptyRow(RDTreeWidgetItem *node);
   void highlightIABind(int slot);
 
-  QString formatMembers(int indent, const QString &nameprefix,
-                        const rdctype::array<ShaderConstant> &vars);
+  QString formatMembers(int indent, const QString &nameprefix, const rdcarray<ShaderConstant> &vars);
   const GLPipe::Shader *stageForSender(QWidget *widget);
 
   bool showNode(bool usedSlot, bool filledSlot);

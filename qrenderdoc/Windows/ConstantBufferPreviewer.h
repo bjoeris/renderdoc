@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,17 +25,18 @@
 #pragma once
 
 #include <QFrame>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
 namespace Ui
 {
 class ConstantBufferPreviewer;
 }
 
+class QTextStream;
 class RDTreeWidgetItem;
 struct FormatElement;
 
-class ConstantBufferPreviewer : public QFrame, public IConstantBufferPreviewer, public ILogViewer
+class ConstantBufferPreviewer : public QFrame, public IConstantBufferPreviewer, public ICaptureViewer
 {
   Q_OBJECT
 
@@ -49,16 +50,17 @@ public:
 
   // IConstantBufferPreviewer
   QWidget *Widget() override { return this; }
-  // ILogViewerForm
-  void OnLogfileLoaded() override;
-  void OnLogfileClosed() override;
-  void OnSelectedEventChanged(uint32_t eventID) override {}
-  void OnEventChanged(uint32_t eventID) override;
+  // ICaptureViewer
+  void OnCaptureLoaded() override;
+  void OnCaptureClosed() override;
+  void OnSelectedEventChanged(uint32_t eventId) override {}
+  void OnEventChanged(uint32_t eventId) override;
 
 private slots:
   // automatic slots
   void on_setFormat_toggled(bool checked);
   void on_saveCSV_clicked();
+  void on_resourceDetails_clicked();
 
   // manual slots
   void processFormat(const QString &format);
@@ -75,15 +77,15 @@ private:
 
   void exportCSV(QTextStream &ts, const QString &prefix, RDTreeWidgetItem *item);
 
-  rdctype::array<ShaderVariable> applyFormatOverride(const rdctype::array<byte> &data);
+  rdcarray<ShaderVariable> applyFormatOverride(const bytebuf &data);
 
-  void addVariables(RDTreeWidgetItem *root, const rdctype::array<ShaderVariable> &vars);
-  void setVariables(const rdctype::array<ShaderVariable> &vars);
+  void addVariables(RDTreeWidgetItem *root, const rdcarray<ShaderVariable> &vars);
+  void setVariables(const rdcarray<ShaderVariable> &vars);
 
-  rdctype::array<ShaderVariable> m_Vars;
+  rdcarray<ShaderVariable> m_Vars;
 
-  bool updateVariables(RDTreeWidgetItem *root, const rdctype::array<ShaderVariable> &prevVars,
-                       const rdctype::array<ShaderVariable> &newVars);
+  bool updateVariables(RDTreeWidgetItem *root, const rdcarray<ShaderVariable> &prevVars,
+                       const rdcarray<ShaderVariable> &newVars);
 
   void updateLabels();
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -40,6 +40,10 @@ public:
   double GetMilliseconds() const
   {
     return double(Timing::GetTick() - m_Start) / m_CounterFrequency;
+  }
+  double GetMicroseconds() const
+  {
+    return (double(Timing::GetTick() - m_Start) * 1000.0) / m_CounterFrequency;
   }
 
   void Restart() { m_Start = Timing::GetTick(); }

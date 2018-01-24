@@ -387,6 +387,9 @@ SWIG_init(void) {
   PyObject *thisown_descr;
   PyObject *self = 0;
   int i;
+  PyObject *enum_module;
+  PyObject *Enum_class;
+  PyObject *Flag_class;
 
   (void)builtin_pytype;
   (void)builtin_base_count;
@@ -407,6 +410,18 @@ SWIG_init(void) {
   m = PyModule_Create(&SWIG_module);
 #else
   m = Py_InitModule((char *) SWIG_name, SwigMethods);
+#endif
+
+  /* Try to find strong enum module */
+  Enum_class = NULL;
+  Flag_class = NULL;
+#if PY_VERSION_HEX >= 0x03000000
+  enum_module = PyImport_ImportModule("enum");
+
+  if (enum_module) {
+    Enum_class = PyObject_GetAttrString(enum_module, "IntEnum");
+    Flag_class = PyObject_GetAttrString(enum_module, "IntFlag");
+  }
 #endif
 
   md = d = PyModule_GetDict(m);

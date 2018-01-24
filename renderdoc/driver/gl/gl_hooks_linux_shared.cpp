@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +30,7 @@
 #include "driver/gl/gl_hookset.h"
 #include "driver/gl/gl_hookset_defs.h"
 #include "hooks/hooks.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 
 GLHookSet GL;
 WrappedOpenGL *m_GLDriver;
@@ -87,39 +87,60 @@ Threading::CriticalSection &GetGLLock()
 /*
   in bash:
 
-    function HookWrapper()
+    function WrapperMacro()
     {
-        N=$1;
-        echo -n "#define HookWrapper$N(ret, function";
+        NAME=$1;
+        N=$2;
+        ALIAS=$3;
+        if [ $ALIAS -eq 1 ]; then
+          echo -n "#define $NAME$N(ret, function, realfunc";
+        else
+          echo -n "#define $NAME$N(ret, function";
+        fi
             for I in `seq 1 $N`; do echo -n ", t$I, p$I"; done;
         echo ") \\";
 
-        echo -en "\ttypedef ret (*CONCAT(function, _hooktype)) (";
+        echo -en "  typedef ret (*CONCAT(function, _hooktype))(";
             for I in `seq 1 $N`; do echo -n "t$I"; if [ $I -ne $N ]; then echo -n ", "; fi; done;
         echo "); \\";
 
-        echo -e "\textern \"C\" __attribute__ ((visibility (\"default\"))) \\";
-
-        echo -en "\tret function(";
+        echo -en "  extern \"C\" __attribute__((visibility (\"default\"))) ret function(";
             for I in `seq 1 $N`; do echo -n "t$I p$I"; if [ $I -ne $N ]; then echo -n ", "; fi;
   done;
         echo ") \\";
 
-        echo -en "\t{ SCOPED_LOCK(glLock); return m_GLDriver->function(";
+        echo -e "  { \\";
+        echo -e "    SCOPED_LOCK(glLock); \\";
+        echo -e "    gl_CurChunk = GLChunk::function; \\";
+        if [ $ALIAS -eq 1 ]; then
+          echo -n "    return m_GLDriver->realfunc(";
+        else
+          echo -n "    return m_GLDriver->function(";
+        fi
             for I in `seq 1 $N`; do echo -n "p$I"; if [ $I -ne $N ]; then echo -n ", "; fi; done;
-        echo "); } \\";
+        echo -e "); \\";
+        echo -e "  } \\";
 
-        echo -en "\tret CONCAT(function,_renderdoc_hooked)(";
+        echo -en "  ret CONCAT(function,_renderdoc_hooked)(";
             for I in `seq 1 $N`; do echo -n "t$I p$I"; if [ $I -ne $N ]; then echo -n ", "; fi;
   done;
         echo ") \\";
 
-        echo -en "\t{ SCOPED_LOCK(glLock); return m_GLDriver->function(";
+        echo -e "  { \\";
+        echo -e "    SCOPED_LOCK(glLock); \\";
+        echo -e "    gl_CurChunk = GLChunk::function; \\";
+        if [ $ALIAS -eq 1 ]; then
+          echo -n "    return m_GLDriver->realfunc(";
+        else
+          echo -n "    return m_GLDriver->function(";
+        fi
             for I in `seq 1 $N`; do echo -n "p$I"; if [ $I -ne $N ]; then echo -n ", "; fi; done;
-        echo -n "); }";
+        echo -e "); \\";
+        echo -e "  }";
     }
 
-  for I in `seq 0 15`; do HookWrapper $I; echo; done
+  for I in `seq 0 17`; do WrapperMacro HookWrapper $I 0; echo; done
+  for I in `seq 0 17`; do WrapperMacro HookAliasWrapper $I 1; echo; done
 
   */
 
@@ -143,112 +164,139 @@ Threading::CriticalSection &GetGLLock()
   extern "C" __attribute__((visibility("default"))) ret function() \
   {                                                                \
     SCOPED_LOCK(glLock);                                           \
+    gl_CurChunk = GLChunk::function;                               \
     return m_GLDriver->function();                                 \
   }                                                                \
   ret CONCAT(function, _renderdoc_hooked)()                        \
   {                                                                \
     SCOPED_LOCK(glLock);                                           \
+    gl_CurChunk = GLChunk::function;                               \
     return m_GLDriver->function();                                 \
   }
+
 #define HookWrapper1(ret, function, t1, p1)                             \
   typedef ret (*CONCAT(function, _hooktype))(t1);                       \
   extern "C" __attribute__((visibility("default"))) ret function(t1 p1) \
   {                                                                     \
     SCOPED_LOCK(glLock);                                                \
+    gl_CurChunk = GLChunk::function;                                    \
     return m_GLDriver->function(p1);                                    \
   }                                                                     \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1)                        \
   {                                                                     \
     SCOPED_LOCK(glLock);                                                \
+    gl_CurChunk = GLChunk::function;                                    \
     return m_GLDriver->function(p1);                                    \
   }
+
 #define HookWrapper2(ret, function, t1, p1, t2, p2)                            \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2);                          \
   extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2) \
   {                                                                            \
     SCOPED_LOCK(glLock);                                                       \
+    gl_CurChunk = GLChunk::function;                                           \
     return m_GLDriver->function(p1, p2);                                       \
   }                                                                            \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2)                        \
   {                                                                            \
     SCOPED_LOCK(glLock);                                                       \
+    gl_CurChunk = GLChunk::function;                                           \
     return m_GLDriver->function(p1, p2);                                       \
   }
+
 #define HookWrapper3(ret, function, t1, p1, t2, p2, t3, p3)                           \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3);                             \
   extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3) \
   {                                                                                   \
     SCOPED_LOCK(glLock);                                                              \
+    gl_CurChunk = GLChunk::function;                                                  \
     return m_GLDriver->function(p1, p2, p3);                                          \
   }                                                                                   \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3)                        \
   {                                                                                   \
     SCOPED_LOCK(glLock);                                                              \
+    gl_CurChunk = GLChunk::function;                                                  \
     return m_GLDriver->function(p1, p2, p3);                                          \
   }
+
 #define HookWrapper4(ret, function, t1, p1, t2, p2, t3, p3, t4, p4)                          \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4);                                \
   extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3, t4 p4) \
   {                                                                                          \
     SCOPED_LOCK(glLock);                                                                     \
+    gl_CurChunk = GLChunk::function;                                                         \
     return m_GLDriver->function(p1, p2, p3, p4);                                             \
   }                                                                                          \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4)                        \
   {                                                                                          \
     SCOPED_LOCK(glLock);                                                                     \
+    gl_CurChunk = GLChunk::function;                                                         \
     return m_GLDriver->function(p1, p2, p3, p4);                                             \
   }
+
 #define HookWrapper5(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5)                         \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5);                                   \
   extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5) \
   {                                                                                                 \
     SCOPED_LOCK(glLock);                                                                            \
+    gl_CurChunk = GLChunk::function;                                                                \
     return m_GLDriver->function(p1, p2, p3, p4, p5);                                                \
   }                                                                                                 \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5)                        \
   {                                                                                                 \
     SCOPED_LOCK(glLock);                                                                            \
+    gl_CurChunk = GLChunk::function;                                                                \
     return m_GLDriver->function(p1, p2, p3, p4, p5);                                                \
   }
+
 #define HookWrapper6(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6)          \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6);                        \
   extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3, t4 p4, \
                                                                  t5 p5, t6 p6)               \
   {                                                                                          \
     SCOPED_LOCK(glLock);                                                                     \
+    gl_CurChunk = GLChunk::function;                                                         \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6);                                     \
   }                                                                                          \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6)          \
   {                                                                                          \
     SCOPED_LOCK(glLock);                                                                     \
+    gl_CurChunk = GLChunk::function;                                                         \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6);                                     \
   }
+
 #define HookWrapper7(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7)  \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7);                    \
   extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3, t4 p4, \
                                                                  t5 p5, t6 p6, t7 p7)        \
   {                                                                                          \
     SCOPED_LOCK(glLock);                                                                     \
+    gl_CurChunk = GLChunk::function;                                                         \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7);                                 \
   }                                                                                          \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7)   \
   {                                                                                          \
     SCOPED_LOCK(glLock);                                                                     \
+    gl_CurChunk = GLChunk::function;                                                         \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7);                                 \
   }
+
 #define HookWrapper8(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8, p8) \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8);                       \
   extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3, t4 p4,        \
                                                                  t5 p5, t6 p6, t7 p7, t8 p8)        \
   {                                                                                                 \
     SCOPED_LOCK(glLock);                                                                            \
+    gl_CurChunk = GLChunk::function;                                                                \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8);                                    \
   }                                                                                                 \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8)   \
   {                                                                                                 \
     SCOPED_LOCK(glLock);                                                                            \
+    gl_CurChunk = GLChunk::function;                                                                \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8);                                    \
   }
+
 #define HookWrapper9(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8,   \
                      p8, t9, p9)                                                                  \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9);                 \
@@ -256,14 +304,17 @@ Threading::CriticalSection &GetGLLock()
       t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9)                              \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9);                              \
   }                                                                                               \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
                                           t9 p9)                                                  \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9);                              \
   }
+
 #define HookWrapper10(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8,  \
                       p8, t9, p9, t10, p10)                                                       \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10);            \
@@ -271,14 +322,17 @@ Threading::CriticalSection &GetGLLock()
       t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10)                     \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10);                         \
   }                                                                                               \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
                                           t9 p9, t10 p10)                                         \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10);                         \
   }
+
 #define HookWrapper11(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8,  \
                       p8, t9, p9, t10, p10, t11, p11)                                             \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11);       \
@@ -286,14 +340,17 @@ Threading::CriticalSection &GetGLLock()
       t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10, t11 p11)            \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11);                    \
   }                                                                                               \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
                                           t9 p9, t10 p10, t11 p11)                                \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11);                    \
   }
+
 #define HookWrapper12(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8,  \
                       p8, t9, p9, t10, p10, t11, p11, t12, p12)                                   \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12);  \
@@ -301,14 +358,17 @@ Threading::CriticalSection &GetGLLock()
       t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10, t11 p11, t12 p12)   \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12);               \
   }                                                                                               \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
                                           t9 p9, t10 p10, t11 p11, t12 p12)                       \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12);               \
   }
+
 #define HookWrapper13(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8,  \
                       p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13)                         \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,   \
@@ -318,14 +378,17 @@ Threading::CriticalSection &GetGLLock()
       t13 p13)                                                                                    \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13);          \
   }                                                                                               \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
                                           t9 p9, t10 p10, t11 p11, t12 p12, t13 p13)              \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13);          \
   }
+
 #define HookWrapper14(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8,  \
                       p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13, t14, p14)               \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,   \
@@ -335,14 +398,17 @@ Threading::CriticalSection &GetGLLock()
       t13 p13, t14 p14)                                                                           \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14);     \
   }                                                                                               \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
                                           t9 p9, t10 p10, t11 p11, t12 p12, t13 p13, t14 p14)     \
   {                                                                                               \
     SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14);     \
   }
+
 #define HookWrapper15(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8,   \
                       p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13, t14, p14, t15, p15)      \
   typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,    \
@@ -352,6 +418,7 @@ Threading::CriticalSection &GetGLLock()
       t13 p13, t14 p14, t15 p15)                                                                   \
   {                                                                                                \
     SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15); \
   }                                                                                                \
   ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8,  \
@@ -359,7 +426,379 @@ Threading::CriticalSection &GetGLLock()
                                           t15 p15)                                                 \
   {                                                                                                \
     SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
     return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15); \
+  }
+
+#define HookWrapper16(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8,   \
+                      p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13, t14, p14, t15, p15, t16, \
+                      p16)                                                                         \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,    \
+                                             t13, t14, t15, t16);                                  \
+  extern "C" __attribute__((visibility("default"))) ret function(                                  \
+      t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10, t11 p11, t12 p12,    \
+      t13 p13, t14 p14, t15 p15, t16 p16)                                                          \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15,  \
+                                p16);                                                              \
+  }                                                                                                \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8,  \
+                                          t9 p9, t10 p10, t11 p11, t12 p12, t13 p13, t14 p14,      \
+                                          t15 p15, t16 p16)                                        \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15,  \
+                                p16);                                                              \
+  }
+
+#define HookWrapper17(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8,   \
+                      p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13, t14, p14, t15, p15, t16, \
+                      p16, t17, p17)                                                               \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,    \
+                                             t13, t14, t15, t16, t17);                             \
+  extern "C" __attribute__((visibility("default"))) ret function(                                  \
+      t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10, t11 p11, t12 p12,    \
+      t13 p13, t14 p14, t15 p15, t16 p16, t17 p17)                                                 \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15,  \
+                                p16, p17);                                                         \
+  }                                                                                                \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8,  \
+                                          t9 p9, t10 p10, t11 p11, t12 p12, t13 p13, t14 p14,      \
+                                          t15 p15, t16 p16, t17 p17)                               \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->function(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15,  \
+                                p16, p17);                                                         \
+  }
+
+#define HookAliasWrapper0(ret, function, realfunc)                 \
+  typedef ret (*CONCAT(function, _hooktype))();                    \
+  extern "C" __attribute__((visibility("default"))) ret function() \
+  {                                                                \
+    SCOPED_LOCK(glLock);                                           \
+    gl_CurChunk = GLChunk::function;                               \
+    return m_GLDriver->realfunc();                                 \
+  }                                                                \
+  ret CONCAT(function, _renderdoc_hooked)()                        \
+  {                                                                \
+    SCOPED_LOCK(glLock);                                           \
+    gl_CurChunk = GLChunk::function;                               \
+    return m_GLDriver->realfunc();                                 \
+  }
+
+#define HookAliasWrapper1(ret, function, realfunc, t1, p1)              \
+  typedef ret (*CONCAT(function, _hooktype))(t1);                       \
+  extern "C" __attribute__((visibility("default"))) ret function(t1 p1) \
+  {                                                                     \
+    SCOPED_LOCK(glLock);                                                \
+    gl_CurChunk = GLChunk::function;                                    \
+    return m_GLDriver->realfunc(p1);                                    \
+  }                                                                     \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1)                        \
+  {                                                                     \
+    SCOPED_LOCK(glLock);                                                \
+    gl_CurChunk = GLChunk::function;                                    \
+    return m_GLDriver->realfunc(p1);                                    \
+  }
+
+#define HookAliasWrapper2(ret, function, realfunc, t1, p1, t2, p2)             \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2);                          \
+  extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2) \
+  {                                                                            \
+    SCOPED_LOCK(glLock);                                                       \
+    gl_CurChunk = GLChunk::function;                                           \
+    return m_GLDriver->realfunc(p1, p2);                                       \
+  }                                                                            \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2)                        \
+  {                                                                            \
+    SCOPED_LOCK(glLock);                                                       \
+    gl_CurChunk = GLChunk::function;                                           \
+    return m_GLDriver->realfunc(p1, p2);                                       \
+  }
+
+#define HookAliasWrapper3(ret, function, realfunc, t1, p1, t2, p2, t3, p3)            \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3);                             \
+  extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3) \
+  {                                                                                   \
+    SCOPED_LOCK(glLock);                                                              \
+    gl_CurChunk = GLChunk::function;                                                  \
+    return m_GLDriver->realfunc(p1, p2, p3);                                          \
+  }                                                                                   \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3)                        \
+  {                                                                                   \
+    SCOPED_LOCK(glLock);                                                              \
+    gl_CurChunk = GLChunk::function;                                                  \
+    return m_GLDriver->realfunc(p1, p2, p3);                                          \
+  }
+
+#define HookAliasWrapper4(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4)           \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4);                                \
+  extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3, t4 p4) \
+  {                                                                                          \
+    SCOPED_LOCK(glLock);                                                                     \
+    gl_CurChunk = GLChunk::function;                                                         \
+    return m_GLDriver->realfunc(p1, p2, p3, p4);                                             \
+  }                                                                                          \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4)                        \
+  {                                                                                          \
+    SCOPED_LOCK(glLock);                                                                     \
+    gl_CurChunk = GLChunk::function;                                                         \
+    return m_GLDriver->realfunc(p1, p2, p3, p4);                                             \
+  }
+
+#define HookAliasWrapper5(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5)          \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5);                                   \
+  extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5) \
+  {                                                                                                 \
+    SCOPED_LOCK(glLock);                                                                            \
+    gl_CurChunk = GLChunk::function;                                                                \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5);                                                \
+  }                                                                                                 \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5)                        \
+  {                                                                                                 \
+    SCOPED_LOCK(glLock);                                                                            \
+    gl_CurChunk = GLChunk::function;                                                                \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5);                                                \
+  }
+
+#define HookAliasWrapper6(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6) \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6);                              \
+  extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3, t4 p4,       \
+                                                                 t5 p5, t6 p6)                     \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6);                                           \
+  }                                                                                                \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6)                \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6);                                           \
+  }
+
+#define HookAliasWrapper7(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, \
+                          t7, p7)                                                                  \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7);                          \
+  extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3, t4 p4,       \
+                                                                 t5 p5, t6 p6, t7 p7)              \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7);                                       \
+  }                                                                                                \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7)         \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7);                                       \
+  }
+
+#define HookAliasWrapper8(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, \
+                          t7, p7, t8, p8)                                                          \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8);                      \
+  extern "C" __attribute__((visibility("default"))) ret function(t1 p1, t2 p2, t3 p3, t4 p4,       \
+                                                                 t5 p5, t6 p6, t7 p7, t8 p8)       \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8);                                   \
+  }                                                                                                \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8)  \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8);                                   \
+  }
+
+#define HookAliasWrapper9(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, \
+                          t7, p7, t8, p8, t9, p9)                                                  \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9);                  \
+  extern "C" __attribute__((visibility("default"))) ret function(                                  \
+      t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9)                               \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9);                               \
+  }                                                                                                \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8,  \
+                                          t9 p9)                                                   \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9);                               \
+  }
+
+#define HookAliasWrapper10(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6,   \
+                           p6, t7, p7, t8, p8, t9, p9, t10, p10)                                  \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10);            \
+  extern "C" __attribute__((visibility("default"))) ret function(                                 \
+      t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10)                     \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10);                         \
+  }                                                                                               \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
+                                          t9 p9, t10 p10)                                         \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10);                         \
+  }
+
+#define HookAliasWrapper11(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6,   \
+                           p6, t7, p7, t8, p8, t9, p9, t10, p10, t11, p11)                        \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11);       \
+  extern "C" __attribute__((visibility("default"))) ret function(                                 \
+      t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10, t11 p11)            \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11);                    \
+  }                                                                                               \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
+                                          t9 p9, t10 p10, t11 p11)                                \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11);                    \
+  }
+
+#define HookAliasWrapper12(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6,   \
+                           p6, t7, p7, t8, p8, t9, p9, t10, p10, t11, p11, t12, p12)              \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12);  \
+  extern "C" __attribute__((visibility("default"))) ret function(                                 \
+      t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10, t11 p11, t12 p12)   \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12);               \
+  }                                                                                               \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
+                                          t9 p9, t10 p10, t11 p11, t12 p12)                       \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12);               \
+  }
+
+#define HookAliasWrapper13(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6,   \
+                           p6, t7, p7, t8, p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13)    \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,   \
+                                             t13);                                                \
+  extern "C" __attribute__((visibility("default"))) ret function(                                 \
+      t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10, t11 p11, t12 p12,   \
+      t13 p13)                                                                                    \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13);          \
+  }                                                                                               \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
+                                          t9 p9, t10 p10, t11 p11, t12 p12, t13 p13)              \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13);          \
+  }
+
+#define HookAliasWrapper14(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6,   \
+                           p6, t7, p7, t8, p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13,    \
+                           t14, p14)                                                              \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,   \
+                                             t13, t14);                                           \
+  extern "C" __attribute__((visibility("default"))) ret function(                                 \
+      t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10, t11 p11, t12 p12,   \
+      t13 p13, t14 p14)                                                                           \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14);     \
+  }                                                                                               \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
+                                          t9 p9, t10 p10, t11 p11, t12 p12, t13 p13, t14 p14)     \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14);     \
+  }
+
+#define HookAliasWrapper15(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6,    \
+                           p6, t7, p7, t8, p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13,     \
+                           t14, p14, t15, p15)                                                     \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,    \
+                                             t13, t14, t15);                                       \
+  extern "C" __attribute__((visibility("default"))) ret function(                                  \
+      t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10, t11 p11, t12 p12,    \
+      t13 p13, t14 p14, t15 p15)                                                                   \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15); \
+  }                                                                                                \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8,  \
+                                          t9 p9, t10 p10, t11 p11, t12 p12, t13 p13, t14 p14,      \
+                                          t15 p15)                                                 \
+  {                                                                                                \
+    SCOPED_LOCK(glLock);                                                                           \
+    gl_CurChunk = GLChunk::function;                                                               \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15); \
+  }
+
+#define HookAliasWrapper16(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6,   \
+                           p6, t7, p7, t8, p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13,    \
+                           t14, p14, t15, p15, t16, p16)                                          \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,   \
+                                             t13, t14, t15, t16);                                 \
+  extern "C" __attribute__((visibility("default"))) ret function(                                 \
+      t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10, t11 p11, t12 p12,   \
+      t13 p13, t14 p14, t15 p15, t16 p16)                                                         \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, \
+                                p16);                                                             \
+  }                                                                                               \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
+                                          t9 p9, t10 p10, t11 p11, t12 p12, t13 p13, t14 p14,     \
+                                          t15 p15, t16 p16)                                       \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, \
+                                p16);                                                             \
+  }
+
+#define HookAliasWrapper17(ret, function, realfunc, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6,   \
+                           p6, t7, p7, t8, p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13,    \
+                           t14, p14, t15, p15, t16, p16, t17, p17)                                \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,   \
+                                             t13, t14, t15, t16, t17);                            \
+  extern "C" __attribute__((visibility("default"))) ret function(                                 \
+      t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, t9 p9, t10 p10, t11 p11, t12 p12,   \
+      t13 p13, t14 p14, t15 p15, t16 p16, t17 p17)                                                \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, \
+                                p16, p17);                                                        \
+  }                                                                                               \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8, \
+                                          t9 p9, t10 p10, t11 p11, t12 p12, t13 p13, t14 p14,     \
+                                          t15 p15, t16 p16, t17 p17)                              \
+  {                                                                                               \
+    SCOPED_LOCK(glLock);                                                                          \
+    gl_CurChunk = GLChunk::function;                                                              \
+    return m_GLDriver->realfunc(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, \
+                                p16, p17);                                                        \
   }
 
 DefineDLLExportHooks();
@@ -388,15 +827,15 @@ DefineGLExtensionHooks();
         echo ") \\";
 
         echo -e "\t{ \\";
-        echo -e "\tstatic bool hit = false; if(hit == false) { RDCERR(\"Function \"
-  STRINGIZE(function) \" not supported - capture may be broken\"); hit = true; } \\";
+        echo -e "\tstatic bool hit = false; if(hit == false) { RDCERR(\"Function \" \\";
+        echo -e "\t\tSTRINGIZE(function)\" not supported - capture may be broken\");hit = true;}\\";
         echo -en "\treturn CONCAT(unsupported_real_,function)(";
             for I in `seq 1 $N`; do echo -n "p$I"; if [ $I -ne $N ]; then echo -n ", "; fi; done;
         echo -e "); \\";
         echo -e "\t}";
     }
 
-  for I in `seq 0 15`; do HookWrapper $I; echo; done
+  for I in `seq 0 17`; do HookWrapper $I; echo; done
 
   */
 
@@ -676,6 +1115,48 @@ DefineGLExtensionHooks();
                                                p13, p14, p15);                                    \
   }
 
+#undef HookWrapper16
+#define HookWrapper16(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8,   \
+                      p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13, t14, p14, t15, p15, t16, \
+                      p16)                                                                         \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,    \
+                                             t13, t14, t15, t16);                                  \
+  CONCAT(function, _hooktype) CONCAT(unsupported_real_, function) = NULL;                          \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8,  \
+                                          t9 p9, t10 p10, t11 p11, t12 p12, t13 p13, t14 p14,      \
+                                          t15 p15, t16 p16)                                        \
+  {                                                                                                \
+    static bool hit = false;                                                                       \
+    if(hit == false)                                                                               \
+    {                                                                                              \
+      RDCERR("Function " STRINGIZE(function) " not supported - capture may be broken");            \
+      hit = true;                                                                                  \
+    }                                                                                              \
+    return CONCAT(unsupported_real_, function)(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12,  \
+                                               p13, p14, p15, p16);                                \
+  }
+
+#undef HookWrapper17
+#define HookWrapper17(ret, function, t1, p1, t2, p2, t3, p3, t4, p4, t5, p5, t6, p6, t7, p7, t8,   \
+                      p8, t9, p9, t10, p10, t11, p11, t12, p12, t13, p13, t14, p14, t15, p15, t16, \
+                      p16, t17, p17)                                                               \
+  typedef ret (*CONCAT(function, _hooktype))(t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12,    \
+                                             t13, t14, t15, t16, t17);                             \
+  CONCAT(function, _hooktype) CONCAT(unsupported_real_, function) = NULL;                          \
+  ret CONCAT(function, _renderdoc_hooked)(t1 p1, t2 p2, t3 p3, t4 p4, t5 p5, t6 p6, t7 p7, t8 p8,  \
+                                          t9 p9, t10 p10, t11 p11, t12 p12, t13 p13, t14 p14,      \
+                                          t15 p15, t16 p16, t17 p17)                               \
+  {                                                                                                \
+    static bool hit = false;                                                                       \
+    if(hit == false)                                                                               \
+    {                                                                                              \
+      RDCERR("Function " STRINGIZE(function) " not supported - capture may be broken");            \
+      hit = true;                                                                                  \
+    }                                                                                              \
+    return CONCAT(unsupported_real_, function)(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12,  \
+                                               p13, p14, p15, p16, p17);                           \
+  }
+
 DefineUnsupportedDummies();
 
 void *SharedLookupFuncPtr(const char *func, void *realFunc)
@@ -694,14 +1175,15 @@ void *SharedLookupFuncPtr(const char *func, void *realFunc)
   return NULL;
 }
 
-bool SharedPopulateHooks(void *(*lookupFunc)(const char *))
+bool SharedPopulateHooks(bool dlsymFirst, void *(*lookupFunc)(const char *))
 {
 #undef HookInit
-#define HookInit(function)                                                                   \
-  if(GL.function == NULL)                                                                    \
-  {                                                                                          \
-    GL.function = (CONCAT(function, _hooktype))dlsym(libGLdlsymHandle, STRINGIZE(function)); \
-    lookupFunc((const char *)STRINGIZE(function));                                           \
+#define HookInit(function)                                                                     \
+  if(GL.function == NULL)                                                                      \
+  {                                                                                            \
+    if(dlsymFirst)                                                                             \
+      GL.function = (CONCAT(function, _hooktype))dlsym(libGLdlsymHandle, STRINGIZE(function)); \
+    lookupFunc((const char *)STRINGIZE(function));                                             \
   }
 
 // cheeky

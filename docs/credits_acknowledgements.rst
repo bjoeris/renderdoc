@@ -40,9 +40,9 @@ The following libraries and components are incorporated into RenderDoc, listed h
 
   Used to compress screenshots into jpg format for thumbnail previews.
 
-* `lz4 <https://github.com/Cyan4973/lz4>`_ - Copyright 2013 Yann Collet, distributed under the New BSD License (3 Clause).
+* `lz4 <https://github.com/lz4/lz4>`_ - Copyright 2013 Yann Collet, distributed under the BSD 2-Clause license.
 
-  compresses large data transfers (textures and buffers) when going across network connections as well as in the capture files themselves.
+  Compresses large data transfers (textures and buffers) when going across network connections as well as in the capture files themselves.
 
 * `stb <https://github.com/nothings/stb>`_ - Released to the Public Domain by Sean Barrett.
 
@@ -99,6 +99,18 @@ The following libraries and components are incorporated into RenderDoc, listed h
 * `Catch <https://github.com/philsquared/Catch>`_ - Copyright (c) 2012 Two Blue Cubes Ltd., distributed under the Boost Software License.
 
   Implements unit testing during development.
+
+* `zstd <https://github.com/facebook/zstd>`_ - Copyright (c) 2016-present, Facebook, Inc., distributed under the BSD License.
+
+  Compresses capture files at a higher rate of compression off-line (not at capture time).
+
+* `pugixml <https://pugixml.org/>`_ - Copyright (c) 2006-2017 Arseny Kapoulkine, distributed under the MIT License.
+
+  Used for converting capture files to and from xml.
+
+* `AOSP <https://source.android.com/>`_ - Copyright (c) 2006-2016, The Android Open Source Project, distributed under the Apache 2.0 License.
+
+  Used to simplify Android workflows by distributing some tools from the android SDK.
 
 Thanks
 ------

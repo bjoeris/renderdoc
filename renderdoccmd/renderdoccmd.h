@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -57,4 +57,5 @@ void readCapOpts(const std::string &str, CaptureOptions *opts);
 // these must be defined in platform .cpps
 void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &displayCfg, uint32_t width,
                             uint32_t height);
+WindowingData DisplayRemoteServerPreview(bool active, const rdcarray<WindowingSystem> &systems);
 void Daemonise();

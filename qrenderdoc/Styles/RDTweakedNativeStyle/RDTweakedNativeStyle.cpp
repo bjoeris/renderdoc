@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +27,13 @@
 #include <QPainter>
 #include <QPen>
 #include <QStyleOption>
+
+namespace Constants
+{
+static const int MenuBarItemHPadding = 4;
+static const int MenuBarItemVPadding = 2;
+static const int MenuBarItemSpacing = 4;
+};
 
 RDTweakedNativeStyle::RDTweakedNativeStyle(QStyle *parent) : QProxyStyle(parent)
 {
@@ -67,6 +74,25 @@ QSize RDTweakedNativeStyle::sizeFromContents(ContentsType type, const QStyleOpti
       sz = sz.expandedTo(toolbutton->iconSize);
   }
 
+  // menu bar items can be sized for both the icon *and* the text
+  if(type == CT_MenuBarItem)
+  {
+    const QStyleOptionMenuItem *menuopt = qstyleoption_cast<const QStyleOptionMenuItem *>(opt);
+    int iconSize = pixelMetric(QStyle::PM_SmallIconSize, opt, widget);
+    sz = menuopt->fontMetrics.size(Qt::TextShowMnemonic, menuopt->text);
+
+    if(!menuopt->icon.isNull())
+    {
+      sz.setWidth(sz.width() + Constants::MenuBarItemSpacing + iconSize);
+      sz = sz.expandedTo(QSize(1, iconSize));
+    }
+
+    sz += QSize(Constants::MenuBarItemHPadding * 2 + Constants::MenuBarItemSpacing * 2,
+                Constants::MenuBarItemVPadding * 2);
+
+    return sz;
+  }
+
   return QProxyStyle::sizeFromContents(type, opt, sz, widget);
 }
 
@@ -81,6 +107,15 @@ int RDTweakedNativeStyle::pixelMetric(PixelMetric metric, const QStyleOption *op
   }
 
   return QProxyStyle::pixelMetric(metric, opt, widget);
+}
+
+int RDTweakedNativeStyle::styleHint(StyleHint stylehint, const QStyleOption *opt,
+                                    const QWidget *widget, QStyleHintReturn *returnData) const
+{
+  if(stylehint == QStyle::SH_Menu_Scrollable)
+    return 1;
+
+  return QProxyStyle::styleHint(stylehint, opt, widget, returnData);
 }
 
 QIcon RDTweakedNativeStyle::standardIcon(StandardPixmap standardIcon, const QStyleOption *opt,
@@ -298,5 +333,51 @@ void RDTweakedNativeStyle::drawPrimitive(PrimitiveElement element, const QStyleO
 void RDTweakedNativeStyle::drawControl(ControlElement control, const QStyleOption *opt, QPainter *p,
                                        const QWidget *widget) const
 {
+  if(control == QStyle::CE_MenuBarItem)
+  {
+    // we can't take over control of just rendering the icon/text, so we call down to common style
+    // to draw the background since then we know how to render matching text over the top.
+    const QStyleOptionMenuItem *menuopt = qstyleoption_cast<const QStyleOptionMenuItem *>(opt);
+
+    QRect rect =
+        menuopt->rect.adjusted(Constants::MenuBarItemSpacing, 0, -Constants::MenuBarItemSpacing, 0);
+
+    const bool selected = menuopt->state & State_Selected;
+    const bool hovered = menuopt->state & State_MouseOver;
+    const bool enabled = menuopt->state & State_Enabled;
+
+    QPalette::ColorRole textRole = QPalette::ButtonText;
+
+    if(enabled && (selected || hovered))
+    {
+      p->fillRect(rect, opt->palette.brush(QPalette::Highlight));
+      textRole = QPalette::HighlightedText;
+    }
+
+    int flags = Qt::AlignCenter | Qt::TextShowMnemonic | Qt::TextDontClip | Qt::TextSingleLine;
+    if(!styleHint(SH_UnderlineShortcut, opt, widget))
+      flags |= Qt::TextHideMnemonic;
+
+    rect.adjust(Constants::MenuBarItemHPadding, Constants::MenuBarItemVPadding,
+                -Constants::MenuBarItemHPadding, -Constants::MenuBarItemVPadding);
+
+    int iconSize = pixelMetric(QStyle::PM_SmallIconSize, opt, widget);
+
+    QPixmap pix = menuopt->icon.pixmap(
+        iconSize, iconSize, (menuopt->state & State_Enabled) ? QIcon::Normal : QIcon::Disabled);
+
+    if(!pix.isNull())
+    {
+      QRect iconRect = rect;
+      iconRect.setWidth(iconSize);
+      drawItemPixmap(p, iconRect, flags, pix);
+      rect.adjust(Constants::MenuBarItemSpacing + iconSize, 0, 0, 0);
+    }
+
+    drawItemText(p, rect, flags, menuopt->palette, enabled, menuopt->text, textRole);
+
+    return;
+  }
+
   QProxyStyle::drawControl(control, opt, p, widget);
 }

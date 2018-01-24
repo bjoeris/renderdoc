@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -66,8 +66,8 @@ struct D3D11ResourceRecord : public ResourceRecord
   {
     if(ShadowPtr[ctx][0] == NULL)
     {
-      ShadowPtr[ctx][0] = Serialiser::AllocAlignedBuffer(size + sizeof(markerValue));
-      ShadowPtr[ctx][1] = Serialiser::AllocAlignedBuffer(size + sizeof(markerValue));
+      ShadowPtr[ctx][0] = AllocAlignedBuffer(size + sizeof(markerValue));
+      ShadowPtr[ctx][1] = AllocAlignedBuffer(size + sizeof(markerValue));
 
       memcpy(ShadowPtr[ctx][0] + size, markerValue, sizeof(markerValue));
       memcpy(ShadowPtr[ctx][1] + size, markerValue, sizeof(markerValue));
@@ -95,8 +95,8 @@ struct D3D11ResourceRecord : public ResourceRecord
     {
       if(ShadowPtr[i][0] != NULL)
       {
-        Serialiser::FreeAlignedBuffer(ShadowPtr[i][0]);
-        Serialiser::FreeAlignedBuffer(ShadowPtr[i][1]);
+        FreeAlignedBuffer(ShadowPtr[i][0]);
+        FreeAlignedBuffer(ShadowPtr[i][1]);
       }
       ShadowPtr[i][0] = ShadowPtr[i][1] = NULL;
     }
@@ -157,7 +157,7 @@ struct D3D11ResourceRecord : public ResourceRecord
   bool ignoreSerialise;
 
   int NumSubResources;
-  ResourceRecord **SubResources;
+  D3D11ResourceRecord **SubResources;
 
 private:
   byte *ShadowPtr[32][2];
@@ -170,11 +170,7 @@ class D3D11ResourceManager
     : public ResourceManager<ID3D11DeviceChild *, ID3D11DeviceChild *, D3D11ResourceRecord>
 {
 public:
-  D3D11ResourceManager(LogState state, Serialiser *ser, WrappedID3D11Device *dev)
-      : ResourceManager(state, ser), m_Device(dev)
-  {
-  }
-
+  D3D11ResourceManager(WrappedID3D11Device *dev) : m_Device(dev) {}
   ID3D11DeviceChild *UnwrapResource(ID3D11DeviceChild *res);
   ID3D11Resource *UnwrapResource(ID3D11Resource *res)
   {
@@ -190,7 +186,8 @@ private:
   bool Force_InitialState(ID3D11DeviceChild *res, bool prepare);
   bool Need_InitialStateChunk(ID3D11DeviceChild *res);
   bool Prepare_InitialState(ID3D11DeviceChild *res);
-  bool Serialise_InitialState(ResourceId resid, ID3D11DeviceChild *res);
+  uint32_t GetSize_InitialState(ResourceId id, ID3D11DeviceChild *res);
+  bool Serialise_InitialState(WriteSerialiser &ser, ResourceId resid, ID3D11DeviceChild *res);
   void Create_InitialState(ResourceId id, ID3D11DeviceChild *live, bool hasData);
   void Apply_InitialState(ID3D11DeviceChild *live, InitialContentData data);
 

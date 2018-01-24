@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,23 +28,127 @@
 #include "QRDInterface.h"
 #include "RemoteHost.h"
 
-typedef QMap<QString, QString> QStringMap;
+DOCUMENT(R"(Identifies a particular known SPIR-V tool used for disassembly.
+
+.. data:: Unknown
+
+  Corresponds to no known tool.
+
+.. data:: SPIRV_Cross
+
+  `SPIRV-Cross <https://github.com/KhronosGroup/SPIRV-Cross>`_.
+
+.. data:: spirv_dis
+
+  `spirv-dis from SPIRV-Tools <https://github.com/KhronosGroup/SPIRV-Tools>`_.
+)");
+enum class KnownSPIRVTool : uint32_t
+{
+  Unknown,
+  First = Unknown,
+  SPIRV_Cross,
+  spirv_dis,
+  Count,
+};
+
+ITERABLE_OPERATORS(KnownSPIRVTool);
+
+inline rdcstr ToolExecutable(KnownSPIRVTool tool)
+{
+  if(tool == KnownSPIRVTool::SPIRV_Cross)
+    return "spirv-cross";
+  else if(tool == KnownSPIRVTool::spirv_dis)
+    return "spirv-dis";
+
+  return "";
+}
 
 DOCUMENT("Describes an external program that can be used to disassemble SPIR-V.");
 struct SPIRVDisassembler
 {
-  SPIRVDisassembler() {}
+  DOCUMENT("");
+  SPIRVDisassembler() = default;
   VARIANT_CAST(SPIRVDisassembler);
-
+  bool operator==(const SPIRVDisassembler &o) const
+  {
+    return tool == o.tool && name == o.name && executable == o.executable && args == o.args;
+  }
+  bool operator<(const SPIRVDisassembler &o) const
+  {
+    if(tool != o.tool)
+      return tool < o.tool;
+    if(name != o.name)
+      return name < o.name;
+    if(executable != o.executable)
+      return executable < o.executable;
+    if(args != o.args)
+      return args < o.args;
+    return false;
+  }
+  DOCUMENT("The :class:`KnownSPIRVTool` identifying which known tool this disassembler is.");
+  KnownSPIRVTool tool = KnownSPIRVTool::Unknown;
   DOCUMENT("The human-readable name of the program.");
-  QString name;
+  rdcstr name;
   DOCUMENT("The path to the executable to run for this program.");
-  QString executable;
+  rdcstr executable;
   DOCUMENT("The command line argmuents to pass to the program.");
-  QString args;
+  rdcstr args;
+
+  DOCUMENT(R"(Runs this disassembler for a given shader reflection.
+
+:param QWidget window: A handle to the window to use when showing a progress bar or error messages.
+:param ~renderdoc.ShaderReflection shader: The shader to disassemble.
+:return: The disassembly, or an empty string if something went wrong.
+:rtype: ``str``
+)");
+  rdcstr DisassembleShader(QWidget *window, const ShaderReflection *reflection) const;
 };
 
 DECLARE_REFLECTION_STRUCT(SPIRVDisassembler);
+
+#define BUGREPORT_URL "https://renderdoc.org/bugreporter"
+
+DOCUMENT("Describes a submitted bug report.");
+struct BugReport
+{
+  DOCUMENT("");
+  BugReport() { unreadUpdates = false; }
+  VARIANT_CAST(BugReport);
+  bool operator==(const BugReport &o) const
+  {
+    return reportId == o.reportId && submitDate == o.submitDate && checkDate == o.checkDate &&
+           unreadUpdates == o.unreadUpdates;
+  }
+  bool operator<(const BugReport &o) const
+  {
+    if(reportId != o.reportId)
+      return reportId < o.reportId;
+    if(submitDate != o.submitDate)
+      return submitDate < o.submitDate;
+    if(checkDate != o.checkDate)
+      return checkDate < o.checkDate;
+    if(unreadUpdates != o.unreadUpdates)
+      return unreadUpdates < o.unreadUpdates;
+    return false;
+  }
+  DOCUMENT("The private ID of the bug report.");
+  rdcstr reportId;
+  DOCUMENT("The original date when this bug was submitted.");
+  rdcdatetime submitDate;
+  DOCUMENT("The last date that we checked for updates.");
+  rdcdatetime checkDate;
+  DOCUMENT("Unread updates to the bug exist");
+  bool unreadUpdates = false;
+
+  DOCUMENT(R"(Gets the URL for this report.
+
+:return: The URL to the report.
+:rtype: ``str``
+)");
+  rdcstr URL() const;
+};
+
+DECLARE_REFLECTION_STRUCT(BugReport);
 
 #define CONFIG_SETTING_VAL(access, variantType, type, name, defaultValue) \
   access:                                                                 \
@@ -59,21 +163,21 @@ DECLARE_REFLECTION_STRUCT(SPIRVDisassembler);
 // Note that only public properties should be documented.
 #define CONFIG_SETTINGS()                                                                  \
                                                                                            \
-  CONFIG_SETTING_VAL(public, QString, QString, UIStyle, QString())                         \
+  CONFIG_SETTING_VAL(public, QString, rdcstr, UIStyle, "")                                 \
                                                                                            \
-  CONFIG_SETTING_VAL(public, QString, QString, LastLogPath, QString())                     \
+  CONFIG_SETTING_VAL(public, QString, rdcstr, LastCaptureFilePath, "")                     \
                                                                                            \
-  CONFIG_SETTING(public, QVariantList, QList<QString>, RecentLogFiles)                     \
+  CONFIG_SETTING(public, QVariantList, rdcarray<rdcstr>, RecentCaptureFiles)               \
                                                                                            \
-  CONFIG_SETTING_VAL(public, QString, QString, LastCapturePath, QString())                 \
+  CONFIG_SETTING_VAL(public, QString, rdcstr, LastCapturePath, "")                         \
                                                                                            \
-  CONFIG_SETTING_VAL(public, QString, QString, LastCaptureExe, QString())                  \
+  CONFIG_SETTING_VAL(public, QString, rdcstr, LastCaptureExe, "")                          \
                                                                                            \
-  CONFIG_SETTING(public, QVariantList, QList<QString>, RecentCaptureSettings)              \
+  CONFIG_SETTING(public, QVariantList, rdcarray<rdcstr>, RecentCaptureSettings)            \
                                                                                            \
-  CONFIG_SETTING_VAL(public, QString, QString, TemporaryCaptureDirectory, QString())       \
+  CONFIG_SETTING_VAL(public, QString, rdcstr, TemporaryCaptureDirectory, "")               \
                                                                                            \
-  CONFIG_SETTING_VAL(public, QString, QString, DefaultCaptureSaveDirectory, QString())     \
+  CONFIG_SETTING_VAL(public, QString, rdcstr, DefaultCaptureSaveDirectory, "")             \
                                                                                            \
   CONFIG_SETTING_VAL(public, bool, bool, TextureViewer_ResetRange, false)                  \
                                                                                            \
@@ -97,6 +201,8 @@ DECLARE_REFLECTION_STRUCT(SPIRVDisassembler);
                                                                                            \
   CONFIG_SETTING_VAL(public, bool, bool, EventBrowser_ColorEventRow, true)                 \
                                                                                            \
+  CONFIG_SETTING_VAL(public, bool, bool, Comments_ShowOnLoad, false)                       \
+                                                                                           \
   CONFIG_SETTING_VAL(public, int, int, Formatter_MinFigures, 2)                            \
                                                                                            \
   CONFIG_SETTING_VAL(public, int, int, Formatter_MaxFigures, 5)                            \
@@ -107,7 +213,9 @@ DECLARE_REFLECTION_STRUCT(SPIRVDisassembler);
                                                                                            \
   CONFIG_SETTING_VAL(public, bool, bool, Font_PreferMonospaced, false)                     \
                                                                                            \
-  CONFIG_SETTING_VAL(public, QString, QString, Android_AdbExecutablePath, QString())       \
+  CONFIG_SETTING_VAL(public, QString, rdcstr, Android_SDKPath, "")                         \
+                                                                                           \
+  CONFIG_SETTING_VAL(public, QString, rdcstr, Android_JDKPath, "")                         \
                                                                                            \
   CONFIG_SETTING_VAL(public, int, int, Android_MaxConnectTimeout, 30)                      \
                                                                                            \
@@ -117,23 +225,37 @@ DECLARE_REFLECTION_STRUCT(SPIRVDisassembler);
                                                                                            \
   CONFIG_SETTING_VAL(public, bool, bool, CheckUpdate_UpdateAvailable, false)               \
                                                                                            \
-  CONFIG_SETTING_VAL(public, QString, QString, CheckUpdate_UpdateResponse, QString())      \
+  CONFIG_SETTING_VAL(public, QString, rdcstr, CheckUpdate_UpdateResponse, "")              \
                                                                                            \
-  CONFIG_SETTING_VAL(public, QDateTime, QDateTime, CheckUpdate_LastUpdate,                 \
-                     QDateTime(QDate(2012, 06, 27), QTime(0, 0, 0)))                       \
+  CONFIG_SETTING_VAL(public, QDateTime, rdcdatetime, CheckUpdate_LastUpdate,               \
+                     rdcdatetime(2012, 06, 27))                                            \
                                                                                            \
-  CONFIG_SETTING_VAL(public, QDateTime, QDateTime, DegradedLog_LastUpdate,                 \
-                     QDateTime(QDate(2015, 01, 01), QTime(0, 0, 0)))                       \
+  CONFIG_SETTING_VAL(public, QDateTime, rdcdatetime, DegradedCapture_LastUpdate,           \
+                     rdcdatetime(2015, 01, 01))                                            \
                                                                                            \
   CONFIG_SETTING_VAL(public, bool, bool, Tips_HasSeenFirst, false)                         \
                                                                                            \
   CONFIG_SETTING_VAL(public, bool, bool, AllowGlobalHook, false)                           \
                                                                                            \
-  CONFIG_SETTING(public, QVariantList, QList<SPIRVDisassembler>, SPIRVDisassemblers)       \
+  CONFIG_SETTING(public, QVariantList, rdcarray<SPIRVDisassembler>, SPIRVDisassemblers)    \
                                                                                            \
-  CONFIG_SETTING(private, QVariantMap, QStringMap, ConfigSettings)                         \
+  CONFIG_SETTING_VAL(public, bool, bool, Analytics_TotalOptOut, false)                     \
                                                                                            \
-  CONFIG_SETTING(private, QVariantList, QList<RemoteHost>, RemoteHostList)
+  CONFIG_SETTING_VAL(public, bool, bool, Analytics_ManualCheck, false)                     \
+                                                                                           \
+  CONFIG_SETTING_VAL(public, bool, bool, CrashReport_EmailNagged, false)                   \
+                                                                                           \
+  CONFIG_SETTING_VAL(public, bool, bool, CrashReport_ShouldRememberEmail, true)            \
+                                                                                           \
+  CONFIG_SETTING_VAL(public, QString, rdcstr, CrashReport_EmailAddress, "")                \
+                                                                                           \
+  CONFIG_SETTING_VAL(public, QString, rdcstr, CrashReport_LastOpenedCapture, "")           \
+                                                                                           \
+  CONFIG_SETTING(public, QVariantList, rdcarray<BugReport>, CrashReport_ReportedBugs)      \
+                                                                                           \
+  CONFIG_SETTING(private, QVariantMap, rdcstrpairs, ConfigSettings)                        \
+                                                                                           \
+  CONFIG_SETTING(private, QVariantList, rdcarray<RemoteHost>, RemoteHostList)
 
 DOCUMENT(R"(The unit that GPU durations are displayed in.
 
@@ -167,19 +289,19 @@ DOCUMENT(R"(Gets the suffix for a time unit.
 :return: The one or two character suffix.
 :rtype: ``str``
 )");
-inline QString UnitSuffix(TimeUnit unit)
+inline rdcstr UnitSuffix(TimeUnit unit)
 {
   if(unit == TimeUnit::Seconds)
-    return lit("s");
+    return "s";
   else if(unit == TimeUnit::Milliseconds)
-    return lit("ms");
+    return "ms";
   else if(unit == TimeUnit::Microseconds)
     // without a BOM in the file, this will break using lit() in MSVC
-    return QString::fromUtf8("µs");
+    return "µs";
   else if(unit == TimeUnit::Nanoseconds)
-    return lit("ns");
+    return "ns";
 
-  return lit("s");
+  return "s";
 }
 
 DOCUMENT(R"(Checks if a given file is in a list. If it is, then it's shuffled to the end. If it's
@@ -192,7 +314,7 @@ As the name suggests, this is used for tracking a 'recent file' list.
 :param str file: The file to add to the list.
 :param int maxItems: The maximum allowed length of the list.
 )");
-void AddRecentFile(QList<QString> &recentList, const QString &file, int maxItems);
+void AddRecentFile(rdcarray<rdcstr> &recentList, const rdcstr &file, int maxItems);
 
 DOCUMENT2(R"(A persistant config file that is automatically loaded and saved, which contains any
 settings and information that needs to be preserved from one run to the next.
@@ -206,11 +328,11 @@ For more information about some of these settings that are user-facing see
   the closest of RDLight and RDDark will be chosen, based on the overall light-on-dark or
   dark-on-light theme of the application native style.
 
-.. data:: LastLogPath
+.. data:: LastCaptureFilePath
 
   The path to the last capture to be opened, which is useful as a default location for browsing.
 
-.. data:: RecentLogFiles
+.. data:: RecentCaptureFiles
 
   A ``list`` of ``str`` with the recently opened capture files.
 
@@ -301,18 +423,25 @@ For more information about some of these settings that are user-facing see
 
 .. data:: EventBrowser_ApplyColors
 
-  ``True`` if the :class:`EventBrowser` should apply any colours specified with API marker regions.
+  ``True`` if the :class:`EventBrowser` should apply any colors specified with API marker regions.
 
   Defaults to ``True``.
 
 .. data:: EventBrowser_ColorEventRow
 
-  ``True`` if when colouring marker regions in the :class:`EventBrowser`, the whole row should be
-  coloured instead of just a side-bar.
+  ``True`` if when coloring marker regions in the :class:`EventBrowser`, the whole row should be
+  colored instead of just a side-bar.
 
   Defaults to ``True``.
 )",
           R"(
+.. data:: Comments_ShowOnLoad
+
+  ``True`` if when loading a new capture that contains a comments section, the comment viewer will
+  be opened and focussed.
+
+  Defaults to ``False``.
+
 .. data:: Formatter_MinFigures
 
   The minimum number of significant figures to show in formatted floating point values.
@@ -348,9 +477,17 @@ For more information about some of these settings that are user-facing see
 
   Defaults to ``False``.
 
-.. data:: Android_AdbExecutablePath
+.. data:: Android_SDKPath
 
-  The path to the ``adb`` executable to use for Android interaction.
+  The path to the root of the android SDK, to locate android tools to use for android remote hosts.
+
+  Defaults to using the tools distributed with RenderDoc.
+
+.. data:: Android_JDKPath
+
+  The path to the root of the Java JDK, to locate java for running android java tools.
+
+  Defaults to using the JAVA_HOME environment variable, if set.
 
 .. data:: Android_MaxConnectTimeout
 
@@ -366,8 +503,8 @@ For more information about some of these settings that are user-facing see
 
 .. data:: CheckUpdate_AllowChecks
 
-  ``True`` if when colouring marker regions in the :class:`EventBrowser`, the whole row should be
-  coloured instead of just a side-bar.
+  ``True`` if when coloring marker regions in the :class:`EventBrowser`, the whole row should be
+  colored instead of just a side-bar.
 
   Defaults to ``True``.
 
@@ -386,7 +523,7 @@ For more information about some of these settings that are user-facing see
 
   A date containing the last time that update checks happened.
 
-.. data:: DegradedLog_LastUpdate
+.. data:: DegradedCapture_LastUpdate
 
   A date containing the last time that the user was warned about captures being loaded in degraded
   support. This prevents the user being spammed if their hardware is low spec.
@@ -410,19 +547,82 @@ For more information about some of these settings that are user-facing see
   A list of :class:`SPIRVDisassembler` detailing the potential disassembler programs. The first one
   in the list is the default.
 
-.. data:: RemoteHosts
+.. data:: Analytics_TotalOptOut
 
-  A ``list`` of :class:`RemoteHost` handles to the currently configured remote hosts.
+  ``True`` if the user has selected to completely opt-out from and disable all analytics collection
+  and reporting.
+
+  Defaults to ``False``.
+
+.. data:: Analytics_ManualCheck
+
+  ``True`` if the user has remained with analytics turned on, but has chosen to manually check each
+  report that is sent out.
+
+  Defaults to ``False``.
+
+.. data:: CrashReport_EmailNagged
+
+  ``True`` if the user has been prompted to enter their email address on a crash report. This really
+  helps find fixes for bugs, so we prompt the user once only if they didn't enter an email. Once the
+  prompt has happened, regardless of the answer this is set to true and remains there forever.
+
+  Defaults to ``False``.
+
+.. data:: CrashReport_ShouldRememberEmail
+
+  ``True`` if the email address entered in the crash reporter should be remembered for next time. If
+  no email is entered then nothing happens (any previous saved email is kept).
+
+  Defaults to ``True``.
+
+.. data:: CrashReport_EmailAddress
+
+  The saved email address for pre-filling out in crash reports.
+
+.. data:: CrashReport_LastOpenedCapture
+
+  The last opened capture, to send if any crash is encountered. This is different to the most recent
+  opened file, because it's set before any processing happens (recent files are only added to the
+  list when they successfully open), and it's cleared again when the capture is closed.
+
+.. data:: CrashReport_ReportedBugs
+
+  A list of :class:`BugReport` detailing previously submitted bugs that we're watching for updates.
+
 )");
 class PersistantConfig
 {
 public:
+// don't allow SWIG direct access to the RemoteHosts since they're an array of references and our
+// bindings can't handle that properly
+#if !defined(SWIG)
   // Runtime list of dynamically allocated hosts.
   // Saved to/from private RemoteHostList in CONFIG_SETTINGS()
   // This is documented above in the docstring, similar to the values in CONFIG_SETTINGS()
   DOCUMENT("");
-  QList<RemoteHost *> RemoteHosts;
+  rdcarray<RemoteHost *> RemoteHosts;
+#endif
 
+  DOCUMENT(R"(Returns the number of remote hosts currently registered.
+
+:return: The number of remote hosts.
+:rtype: ``int``
+)");
+  int RemoteHostCount();
+  DOCUMENT(R"(Returns a given remote host at an index.
+
+:param int index: The index of the remote host to retrieve
+:return: The remote host specified, or ``None`` if an invalid index was passed
+:rtype: ``RemoteHost``
+)");
+  RemoteHost *GetRemoteHost(int index);
+
+  DOCUMENT(R"(Adds a new remote host.
+
+:param RemoteHost host: The remote host to add.
+R)");
+  void AddRemoteHost(RemoteHost host);
   DOCUMENT("If configured, queries ``adb`` to add android hosts to :data:`RemoteHosts`.");
   void AddAndroidHosts();
 
@@ -433,12 +633,13 @@ public:
   ~PersistantConfig();
 
   DOCUMENT(R"(Loads the config from a given filename. This happens automatically on startup, so it's
-not recommended thattyou call this function manually.
+not recommended that you call this function manually.
 
+:param str filename: The filename to load from
 :return: A boolean status if the load was successful.
 :rtype: ``bool``
 )");
-  bool Load(const QString &filename);
+  bool Load(const rdcstr &filename);
 
   DOCUMENT(R"(Saves the config to disk. This can happen if you want to be sure a setting has been
 propagated and will not be forgotten in the case of crash or otherwise unexpected exit.
@@ -466,14 +667,14 @@ storing custom settings to be persisted without needing to modify code.
 :param str name: The name of the setting. Any existing setting will be overwritten.
 :param str value: The contents of the setting.
 )");
-  void SetConfigSetting(const QString &name, const QString &value);
+  void SetConfigSetting(const rdcstr &name, const rdcstr &value);
   DOCUMENT(R"(Retrieves an arbitrary dynamic setting. See :meth:`SetConfigSetting`.
 
 :param str name: The name of the setting.
 :return: The value of the setting, or the empty string if the setting did not exist.
 :rtype: ``str``
 )");
-  QString GetConfigSetting(const QString &name);
+  rdcstr GetConfigSetting(const rdcstr &name);
 
   DOCUMENT(R"(Sets the UI style to the value in :data:`UIStyle`.
 
@@ -488,10 +689,13 @@ sure the new style is applied, the application should be restarted.
   bool SetStyle();
 
 private:
-  bool Deserialize(const QString &filename);
-  bool Serialize(const QString &filename);
+  bool Deserialize(const rdcstr &filename);
+  bool Serialize(const rdcstr &filename);
+
+#if !defined(SWIG_GENERATED)
   QVariantMap storeValues() const;
   void applyValues(const QVariantMap &values);
+#endif
 
-  QString m_Filename;
+  rdcstr m_Filename;
 };

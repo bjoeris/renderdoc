@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -41,6 +41,9 @@ public:
                                  const QWidget *widget) const override;
   virtual int pixelMetric(PixelMetric metric, const QStyleOption *option = NULL,
                           const QWidget *widget = NULL) const override;
+  virtual int styleHint(StyleHint stylehint, const QStyleOption *opt = NULL,
+                        const QWidget *widget = NULL,
+                        QStyleHintReturn *returnData = NULL) const override;
   virtual QIcon standardIcon(StandardPixmap standardIcon, const QStyleOption *option = NULL,
                              const QWidget *widget = NULL) const override;
   virtual void drawComplexControl(ComplexControl control, const QStyleOptionComplex *option,

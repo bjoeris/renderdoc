@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,6 +28,7 @@
 #include <QSvgRenderer>
 #include <QXmlStreamWriter>
 #include "3rdparty/toolwindowmanager/ToolWindowManager.h"
+#include "Code/QRDUtils.h"
 #include "Code/Resources.h"
 #include "Widgets/Extended/RDLabel.h"
 #include "D3D11PipelineStateViewer.h"
@@ -50,7 +51,7 @@ PipelineStateViewer::PipelineStateViewer(ICaptureContext &ctx, QWidget *parent)
 
   setToD3D11();
 
-  m_Ctx.AddLogViewer(this);
+  m_Ctx.AddCaptureViewer(this);
 }
 
 PipelineStateViewer::~PipelineStateViewer()
@@ -58,12 +59,12 @@ PipelineStateViewer::~PipelineStateViewer()
   reset();
 
   m_Ctx.BuiltinWindowClosed(this);
-  m_Ctx.RemoveLogViewer(this);
+  m_Ctx.RemoveCaptureViewer(this);
 
   delete ui;
 }
 
-void PipelineStateViewer::OnLogfileLoaded()
+void PipelineStateViewer::OnCaptureLoaded()
 {
   if(m_Ctx.APIProps().pipelineType == GraphicsAPI::D3D11)
     setToD3D11();
@@ -75,22 +76,22 @@ void PipelineStateViewer::OnLogfileLoaded()
     setToVulkan();
 
   if(m_Current)
-    m_Current->OnLogfileLoaded();
+    m_Current->OnCaptureLoaded();
 }
 
-void PipelineStateViewer::OnLogfileClosed()
+void PipelineStateViewer::OnCaptureClosed()
 {
   if(m_Current)
-    m_Current->OnLogfileClosed();
+    m_Current->OnCaptureClosed();
 }
 
-void PipelineStateViewer::OnEventChanged(uint32_t eventID)
+void PipelineStateViewer::OnEventChanged(uint32_t eventId)
 {
-  if(m_Ctx.CurPipelineState().DefaultType != m_Ctx.APIProps().pipelineType)
-    OnLogfileLoaded();
+  if(m_Ctx.CurPipelineState().defaultType != m_Ctx.APIProps().pipelineType)
+    OnCaptureLoaded();
 
   if(m_Current)
-    m_Current->OnEventChanged(eventID);
+    m_Current->OnEventChanged(eventId);
 }
 
 QString PipelineStateViewer::GetCurrentAPI()
@@ -155,7 +156,7 @@ void PipelineStateViewer::setToD3D11()
   m_D3D11 = new D3D11PipelineStateViewer(m_Ctx, *this, this);
   ui->layout->addWidget(m_D3D11);
   m_Current = m_D3D11;
-  m_Ctx.CurPipelineState().DefaultType = GraphicsAPI::D3D11;
+  m_Ctx.CurPipelineState().defaultType = GraphicsAPI::D3D11;
 }
 
 void PipelineStateViewer::setToD3D12()
@@ -168,7 +169,7 @@ void PipelineStateViewer::setToD3D12()
   m_D3D12 = new D3D12PipelineStateViewer(m_Ctx, *this, this);
   ui->layout->addWidget(m_D3D12);
   m_Current = m_D3D12;
-  m_Ctx.CurPipelineState().DefaultType = GraphicsAPI::D3D12;
+  m_Ctx.CurPipelineState().defaultType = GraphicsAPI::D3D12;
 }
 
 void PipelineStateViewer::setToGL()
@@ -181,7 +182,7 @@ void PipelineStateViewer::setToGL()
   m_GL = new GLPipelineStateViewer(m_Ctx, *this, this);
   ui->layout->addWidget(m_GL);
   m_Current = m_GL;
-  m_Ctx.CurPipelineState().DefaultType = GraphicsAPI::OpenGL;
+  m_Ctx.CurPipelineState().defaultType = GraphicsAPI::OpenGL;
 }
 
 void PipelineStateViewer::setToVulkan()
@@ -194,7 +195,7 @@ void PipelineStateViewer::setToVulkan()
   m_Vulkan = new VulkanPipelineStateViewer(m_Ctx, *this, this);
   ui->layout->addWidget(m_Vulkan);
   m_Current = m_Vulkan;
-  m_Ctx.CurPipelineState().DefaultType = GraphicsAPI::Vulkan;
+  m_Ctx.CurPipelineState().defaultType = GraphicsAPI::Vulkan;
 }
 
 QXmlStreamWriter *PipelineStateViewer::beginHTMLExport()
@@ -204,6 +205,8 @@ QXmlStreamWriter *PipelineStateViewer::beginHTMLExport()
 
   if(!filename.isEmpty())
   {
+    ANALYTIC_SET(UIFeatures.Export.PipelineState, true);
+
     QDir dirinfo = QFileInfo(filename).dir();
     if(dirinfo.exists())
     {
@@ -223,7 +226,7 @@ QXmlStreamWriter *PipelineStateViewer::beginHTMLExport()
         xml.writeAttribute(lit("lang"), lit("en"));
 
         QString title = tr("%1 EID %2 - %3 Pipeline export")
-                            .arg(QFileInfo(m_Ctx.LogFilename()).fileName())
+                            .arg(QFileInfo(m_Ctx.GetCaptureFilename()).fileName())
                             .arg(m_Ctx.CurEvent())
                             .arg(GetCurrentAPI());
 
@@ -384,9 +387,7 @@ void PipelineStateViewer::exportHTMLTable(QXmlStreamWriter &xml, const QStringLi
         {
           xml.writeStartElement(lit("td"));
 
-          QMetaType::Type type = (QMetaType::Type)el.type();
-
-          if(type == QMetaType::Bool)
+          if(el.canConvert<bool>())
             xml.writeCharacters(el.toBool() ? tr("True") : tr("False"));
           else
             xml.writeCharacters(el.toString());
@@ -539,29 +540,26 @@ void PipelineStateViewer::setMeshViewPixmap(RDLabel *meshView)
 }
 
 bool PipelineStateViewer::PrepareShaderEditing(const ShaderReflection *shaderDetails,
-                                               QString &entryFunc, QStringMap &files,
-                                               QString &mainfile)
+                                               QString &entryFunc, rdcstrpairs &files)
 {
-  if(!shaderDetails->DebugInfo.files.empty())
+  if(!shaderDetails->debugInfo.files.empty())
   {
-    entryFunc = shaderDetails->EntryPoint;
+    entryFunc = shaderDetails->entryPoint;
 
     QStringList uniqueFiles;
 
-    for(auto &s : shaderDetails->DebugInfo.files)
+    for(const ShaderSourceFile &s : shaderDetails->debugInfo.files)
     {
-      QString filename = s.first;
+      QString filename = s.filename;
       if(uniqueFiles.contains(filename.toLower()))
       {
-        qWarning() << lit("Duplicate full filename") << QString(s.first);
+        qWarning() << lit("Duplicate full filename") << filename;
         continue;
       }
       uniqueFiles.push_back(filename.toLower());
 
-      files[filename] = s.second;
+      files.push_back(make_rdcpair(s.filename, s.contents));
     }
-
-    mainfile = shaderDetails->DebugInfo.files[0].first;
 
     return true;
   }
@@ -570,12 +568,12 @@ bool PipelineStateViewer::PrepareShaderEditing(const ShaderReflection *shaderDet
 }
 
 void PipelineStateViewer::MakeShaderVariablesHLSL(bool cbufferContents,
-                                                  const rdctype::array<ShaderConstant> &vars,
+                                                  const rdcarray<ShaderConstant> &vars,
                                                   QString &struct_contents, QString &struct_defs)
 {
   for(const ShaderConstant &v : vars)
   {
-    if(v.type.members.count > 0)
+    if(!v.type.members.isEmpty())
     {
       QString def = lit("struct %1 {\n").arg(v.type.descriptor.name);
 
@@ -612,13 +610,13 @@ QString PipelineStateViewer::GenerateHLSLStub(const ShaderReflection *shaderDeta
 {
   QString hlsl = lit("// No HLSL available - function stub generated\n\n");
 
-  const QString textureDim[ENUM_ARRAY_SIZE(TextureDim)] = {
+  const QString textureDim[ENUM_ARRAY_SIZE(TextureType)] = {
       lit("Unknown"),          lit("Buffer"),      lit("Texture1D"),      lit("Texture1DArray"),
       lit("Texture2D"),        lit("TextureRect"), lit("Texture2DArray"), lit("Texture2DMS"),
       lit("Texture2DMSArray"), lit("Texture3D"),   lit("TextureCube"),    lit("TextureCubeArray"),
   };
 
-  for(const ShaderSampler &samp : shaderDetails->Samplers)
+  for(const ShaderSampler &samp : shaderDetails->samplers)
   {
     hlsl += lit("//SamplerComparisonState %1 : register(s%2); // can't disambiguate\n"
                 "SamplerState %1 : register(s%2); // can't disambiguate\n")
@@ -628,8 +626,8 @@ QString PipelineStateViewer::GenerateHLSLStub(const ShaderReflection *shaderDeta
 
   for(int i = 0; i < 2; i++)
   {
-    const rdctype::array<ShaderResource> &resources =
-        (i == 0 ? shaderDetails->ReadOnlyResources : shaderDetails->ReadWriteResources);
+    const rdcarray<ShaderResource> &resources =
+        (i == 0 ? shaderDetails->readOnlyResources : shaderDetails->readWriteResources);
     for(const ShaderResource &res : resources)
     {
       char regChar = 't';
@@ -640,7 +638,7 @@ QString PipelineStateViewer::GenerateHLSLStub(const ShaderReflection *shaderDeta
         regChar = 'u';
       }
 
-      if(res.IsTexture)
+      if(res.isTexture)
       {
         hlsl += lit("%1<%2> %3 : register(%4%5);\n")
                     .arg(textureDim[(size_t)res.resType])
@@ -668,9 +666,9 @@ QString PipelineStateViewer::GenerateHLSLStub(const ShaderReflection *shaderDeta
   QString cbuffers;
 
   int cbufIdx = 0;
-  for(const ConstantBlock &cbuf : shaderDetails->ConstantBlocks)
+  for(const ConstantBlock &cbuf : shaderDetails->constantBlocks)
   {
-    if(cbuf.name.count > 0 && cbuf.variables.count > 0)
+    if(!cbuf.name.isEmpty() && !cbuf.variables.isEmpty())
     {
       QString cbufName = cbuf.name;
       if(cbufName == lit("$Globals"))
@@ -687,18 +685,18 @@ QString PipelineStateViewer::GenerateHLSLStub(const ShaderReflection *shaderDeta
   hlsl += lit("\n\n");
 
   hlsl += lit("struct InputStruct {\n");
-  for(const SigParameter &sig : shaderDetails->InputSig)
+  for(const SigParameter &sig : shaderDetails->inputSignature)
     hlsl += lit("\t%1 %2 : %3;\n")
                 .arg(TypeString(sig))
-                .arg(sig.varName.count > 0 ? sig.varName : lit("param%1").arg(sig.regIndex))
+                .arg(!sig.varName.isEmpty() ? QString(sig.varName) : lit("param%1").arg(sig.regIndex))
                 .arg(D3DSemanticString(sig));
   hlsl += lit("};\n\n");
 
   hlsl += lit("struct OutputStruct {\n");
-  for(const SigParameter &sig : shaderDetails->OutputSig)
+  for(const SigParameter &sig : shaderDetails->outputSignature)
     hlsl += lit("\t%1 %2 : %3;\n")
                 .arg(TypeString(sig))
-                .arg(sig.varName.count > 0 ? sig.varName : lit("param%1").arg(sig.regIndex))
+                .arg(!sig.varName.isEmpty() ? QString(sig.varName) : lit("param%1").arg(sig.regIndex))
                 .arg(D3DSemanticString(sig));
   hlsl += lit("};\n\n");
 
@@ -716,15 +714,17 @@ QString PipelineStateViewer::GenerateHLSLStub(const ShaderReflection *shaderDeta
 }
 
 void PipelineStateViewer::EditShader(ShaderStage shaderType, ResourceId id,
-                                     const ShaderReflection *shaderDetails, const QString &entryFunc,
-                                     const QStringMap &files, const QString &mainfile)
+                                     const ShaderReflection *shaderDetails,
+                                     const QString &entryFunc, const rdcstrpairs &files)
 {
+  ANALYTIC_SET(UIFeatures.ShaderEditing, true);
+
   IShaderViewer *sv = m_Ctx.EditShader(
       false, entryFunc, files,
       // save callback
-      [entryFunc, mainfile, shaderType, id, shaderDetails](
-          ICaptureContext *ctx, IShaderViewer *viewer, const QStringMap &updatedfiles) {
-        QString compileSource = updatedfiles[mainfile];
+      [entryFunc, shaderType, id, shaderDetails](ICaptureContext *ctx, IShaderViewer *viewer,
+                                                 const rdcstrpairs &updatedfiles) {
+        QString compileSource = updatedfiles[0].second;
 
         // try and match up #includes against the files that we have. This isn't always
         // possible as fxc only seems to include the source for files if something in
@@ -786,19 +786,25 @@ void PipelineStateViewer::EditShader(ShaderStage shaderType, ResourceId id,
           QString fileText;
 
           // look for exact match first
-          if(updatedfiles.contains(fname))
+          for(int i = 0; i < updatedfiles.count(); i++)
           {
-            fileText = updatedfiles[fname];
+            if(QString(updatedfiles[i].first) == fname)
+            {
+              fileText = updatedfiles[i].second;
+              break;
+            }
           }
-          else
+
+          if(fileText.isEmpty())
           {
             QString search = QFileInfo(fname).fileName();
+
             // if not, try and find the same filename (this is not proper include handling!)
-            for(const QString &k : updatedfiles.keys())
+            for(const rdcstrpair &kv : updatedfiles)
             {
-              if(QFileInfo(k).fileName().compare(search, Qt::CaseInsensitive) == 0)
+              if(QFileInfo(kv.first).fileName().compare(search, Qt::CaseInsensitive) == 0)
               {
-                fileText = updatedfiles[k];
+                fileText = kv.second;
                 break;
               }
             }
@@ -815,16 +821,19 @@ void PipelineStateViewer::EditShader(ShaderStage shaderType, ResourceId id,
           offs = compileSource.indexOf(lit("#include"));
         }
 
-        if(updatedfiles.contains(lit("@cmdline")))
-          compileSource = updatedfiles[lit("@cmdline")] + lit("\n\n") + compileSource;
+        for(const rdcstrpair &kv : updatedfiles)
+        {
+          if(kv.first == "@cmdline")
+            compileSource = QString(kv.second) + lit("\n\n") + compileSource;
+        }
 
-        // invoke off to the ReplayController to replace the log's shader
+        // invoke off to the ReplayController to replace the capture's shader
         // with our edited one
         ctx->Replay().AsyncInvoke([ctx, entryFunc, compileSource, shaderType, id, shaderDetails,
                                    viewer](IReplayController *r) {
-          rdctype::str errs;
+          rdcstr errs;
 
-          const ShaderCompileFlags &flags = shaderDetails->DebugInfo.compileFlags;
+          const ShaderCompileFlags &flags = shaderDetails->debugInfo.compileFlags;
 
           ResourceId from = id;
           ResourceId to;
@@ -866,15 +875,15 @@ bool PipelineStateViewer::SaveShaderFile(const ShaderReflection *shader)
 
   QString filter;
 
-  if(m_Ctx.CurPipelineState().IsLogD3D11() || m_Ctx.CurPipelineState().IsLogD3D12())
+  if(m_Ctx.CurPipelineState().IsCaptureD3D11() || m_Ctx.CurPipelineState().IsCaptureD3D12())
   {
     filter = tr("DXBC Shader files (*.dxbc)");
   }
-  else if(m_Ctx.CurPipelineState().IsLogGL())
+  else if(m_Ctx.CurPipelineState().IsCaptureGL())
   {
     filter = tr("GLSL files (*.glsl)");
   }
-  else if(m_Ctx.CurPipelineState().IsLogVK())
+  else if(m_Ctx.CurPipelineState().IsCaptureVK())
   {
     filter = tr("SPIR-V files (*.spv)");
   }
@@ -883,13 +892,15 @@ bool PipelineStateViewer::SaveShaderFile(const ShaderReflection *shader)
 
   if(!filename.isEmpty())
   {
+    ANALYTIC_SET(UIFeatures.Export.ShaderSave, true);
+
     QDir dirinfo = QFileInfo(filename).dir();
     if(dirinfo.exists())
     {
       QFile f(filename);
       if(f.open(QIODevice::WriteOnly | QIODevice::Truncate))
       {
-        f.write((const char *)shader->RawBytes.elems, (qint64)shader->RawBytes.count);
+        f.write((const char *)shader->rawBytes.data(), (qint64)shader->rawBytes.size());
       }
       else
       {

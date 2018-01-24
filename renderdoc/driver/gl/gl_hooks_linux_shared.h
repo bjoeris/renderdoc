@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -31,7 +31,7 @@ void CloneDisplay(Display *dpy);
 #endif
 
 void *SharedLookupFuncPtr(const char *func, void *realFunc);
-bool SharedPopulateHooks(void *(*lookupFunc)(const char *));
+bool SharedPopulateHooks(bool dlsymFirst, void *(*lookupFunc)(const char *));
 
 extern GLHookSet GL;
 extern WrappedOpenGL *m_GLDriver;

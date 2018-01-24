@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -108,8 +108,7 @@ void CriticalSection::Unlock()
 
 struct ThreadInitData
 {
-  ThreadEntry entryFunc;
-  void *userData;
+  std::function<void()> entryFunc;
 };
 
 static DWORD __stdcall sThreadInit(void *init)
@@ -120,7 +119,7 @@ static DWORD __stdcall sThreadInit(void *init)
   ThreadInitData local = *data;
   delete data;
 
-  local.entryFunc(local.userData);
+  local.entryFunc();
 
   return 0;
 }
@@ -205,11 +204,10 @@ void SetTLSValue(uint64_t slot, void *value)
   slots->data[(size_t)slot - 1] = value;
 }
 
-ThreadHandle CreateThread(ThreadEntry entryFunc, void *userData)
+ThreadHandle CreateThread(std::function<void()> entryFunc)
 {
   ThreadInitData *initData = new ThreadInitData;
   initData->entryFunc = entryFunc;
-  initData->userData = userData;
 
   HANDLE h = ::CreateThread(NULL, 0, &sThreadInit, (void *)initData, 0, NULL);
 

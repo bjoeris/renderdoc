@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +23,21 @@
  ******************************************************************************/
 
 #include "../vk_core.h"
+
+template <>
+VkFramebufferCreateInfo WrappedVulkan::UnwrapInfo(const VkFramebufferCreateInfo *info)
+{
+  VkFramebufferCreateInfo ret = *info;
+
+  VkImageView *unwrapped = GetTempArray<VkImageView>(info->attachmentCount);
+  for(uint32_t i = 0; i < info->attachmentCount; i++)
+    unwrapped[i] = Unwrap(info->pAttachments[i]);
+
+  ret.renderPass = Unwrap(ret.renderPass);
+  ret.pAttachments = unwrapped;
+
+  return ret;
+}
 
 void WrappedVulkan::MakeSubpassLoadRP(VkRenderPassCreateInfo &info,
                                       const VkRenderPassCreateInfo *origInfo, uint32_t s)
@@ -186,7 +201,7 @@ bool WrappedVulkan::ReleaseResource(WrappedVkRes *res)
   {
     case eResSurface:
     case eResSwapchain:
-      if(m_State >= WRITING)
+      if(IsCaptureMode(m_State))
         RDCERR("Swapchain/swapchain object is leaking");
       else
         RDCERR("Should be no swapchain/surface objects created on replay");
@@ -199,19 +214,19 @@ bool WrappedVulkan::ReleaseResource(WrappedVkRes *res)
       // to remove these with the parent object so do it here.
       // This ensures we clean up after ourselves with a well-
       // behaved application.
-      if(m_State < WRITING)
+      if(IsReplayMode(m_State))
         GetResourceManager()->ReleaseWrappedResource((VkCommandBuffer)res);
       break;
     case eResDescriptorSet:
-      if(m_State < WRITING)
+      if(IsReplayMode(m_State))
         GetResourceManager()->ReleaseWrappedResource(VkDescriptorSet(handle));
       break;
     case eResPhysicalDevice:
-      if(m_State < WRITING)
+      if(IsReplayMode(m_State))
         GetResourceManager()->ReleaseWrappedResource((VkPhysicalDevice)disp);
       break;
     case eResQueue:
-      if(m_State < WRITING)
+      if(IsReplayMode(m_State))
         GetResourceManager()->ReleaseWrappedResource((VkQueue)disp);
       break;
 
@@ -219,14 +234,14 @@ bool WrappedVulkan::ReleaseResource(WrappedVkRes *res)
       // these are explicitly released elsewhere, do not need to destroy
       // any API objects.
       // On replay though we do need to tidy up book-keeping for these.
-      if(m_State < WRITING)
+      if(IsReplayMode(m_State))
       {
         GetResourceManager()->ReleaseCurrentResource(disp->id);
         GetResourceManager()->RemoveWrapper(ToTypedHandle(disp->real.As<VkDevice>()));
       }
       break;
     case eResInstance:
-      if(m_State < WRITING)
+      if(IsReplayMode(m_State))
       {
         GetResourceManager()->ReleaseCurrentResource(disp->id);
         GetResourceManager()->RemoveWrapper(ToTypedHandle(disp->real.As<VkInstance>()));
@@ -373,25 +388,28 @@ bool WrappedVulkan::ReleaseResource(WrappedVkRes *res)
 
 // Sampler functions
 
-bool WrappedVulkan::Serialise_vkCreateSampler(Serialiser *localSerialiser, VkDevice device,
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkCreateSampler(SerialiserType &ser, VkDevice device,
                                               const VkSamplerCreateInfo *pCreateInfo,
                                               const VkAllocationCallbacks *pAllocator,
                                               VkSampler *pSampler)
 {
-  SERIALISE_ELEMENT(ResourceId, devId, GetResID(device));
-  SERIALISE_ELEMENT(VkSamplerCreateInfo, info, *pCreateInfo);
-  SERIALISE_ELEMENT(ResourceId, id, GetResID(*pSampler));
+  SERIALISE_ELEMENT(device);
+  SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
+  SERIALISE_ELEMENT_LOCAL(Sampler, GetResID(*pSampler));
 
-  if(m_State == READING)
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
   {
-    device = GetResourceManager()->GetLiveHandle<VkDevice>(devId);
     VkSampler samp = VK_NULL_HANDLE;
 
-    VkResult ret = ObjDisp(device)->CreateSampler(Unwrap(device), &info, NULL, &samp);
+    VkResult ret = ObjDisp(device)->CreateSampler(Unwrap(device), &CreateInfo, NULL, &samp);
 
     if(ret != VK_SUCCESS)
     {
-      RDCERR("Failed on resource serialise-creation, VkResult: 0x%08x", ret);
+      RDCERR("Failed on resource serialise-creation, VkResult: %s", ToStr(ret).c_str());
+      return false;
     }
     else
     {
@@ -406,16 +424,19 @@ bool WrappedVulkan::Serialise_vkCreateSampler(Serialiser *localSerialiser, VkDev
         ObjDisp(device)->DestroySampler(Unwrap(device), samp, NULL);
 
         // whenever the new ID is requested, return the old ID, via replacements.
-        GetResourceManager()->ReplaceResource(id, GetResourceManager()->GetOriginalID(live));
+        GetResourceManager()->ReplaceResource(Sampler, GetResourceManager()->GetOriginalID(live));
       }
       else
       {
         live = GetResourceManager()->WrapResource(Unwrap(device), samp);
-        GetResourceManager()->AddLiveResource(id, samp);
+        GetResourceManager()->AddLiveResource(Sampler, samp);
 
-        m_CreationInfo.m_Sampler[live].Init(GetResourceManager(), m_CreationInfo, &info);
+        m_CreationInfo.m_Sampler[live].Init(GetResourceManager(), m_CreationInfo, &CreateInfo);
       }
     }
+
+    AddResource(Sampler, ResourceType::Sampler, "Sampler");
+    DerivedResource(device, Sampler);
   }
 
   return true;
@@ -424,21 +445,23 @@ bool WrappedVulkan::Serialise_vkCreateSampler(Serialiser *localSerialiser, VkDev
 VkResult WrappedVulkan::vkCreateSampler(VkDevice device, const VkSamplerCreateInfo *pCreateInfo,
                                         const VkAllocationCallbacks *pAllocator, VkSampler *pSampler)
 {
-  VkResult ret = ObjDisp(device)->CreateSampler(Unwrap(device), pCreateInfo, pAllocator, pSampler);
+  VkResult ret;
+  SERIALISE_TIME_CALL(
+      ret = ObjDisp(device)->CreateSampler(Unwrap(device), pCreateInfo, pAllocator, pSampler));
 
   if(ret == VK_SUCCESS)
   {
     ResourceId id = GetResourceManager()->WrapResource(Unwrap(device), *pSampler);
 
-    if(m_State >= WRITING)
+    if(IsCaptureMode(m_State))
     {
       Chunk *chunk = NULL;
 
       {
         CACHE_THREAD_SERIALISER();
 
-        SCOPED_SERIALISE_CONTEXT(CREATE_SAMPLER);
-        Serialise_vkCreateSampler(localSerialiser, device, pCreateInfo, NULL, pSampler);
+        SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCreateSampler);
+        Serialise_vkCreateSampler(ser, device, pCreateInfo, NULL, pSampler);
 
         chunk = scope.Get();
       }
@@ -457,25 +480,29 @@ VkResult WrappedVulkan::vkCreateSampler(VkDevice device, const VkSamplerCreateIn
   return ret;
 }
 
-bool WrappedVulkan::Serialise_vkCreateFramebuffer(Serialiser *localSerialiser, VkDevice device,
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkCreateFramebuffer(SerialiserType &ser, VkDevice device,
                                                   const VkFramebufferCreateInfo *pCreateInfo,
                                                   const VkAllocationCallbacks *pAllocator,
                                                   VkFramebuffer *pFramebuffer)
 {
-  SERIALISE_ELEMENT(ResourceId, devId, GetResID(device));
-  SERIALISE_ELEMENT(VkFramebufferCreateInfo, info, *pCreateInfo);
-  SERIALISE_ELEMENT(ResourceId, id, GetResID(*pFramebuffer));
+  SERIALISE_ELEMENT(device);
+  SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
+  SERIALISE_ELEMENT_LOCAL(Framebuffer, GetResID(*pFramebuffer));
 
-  if(m_State == READING)
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
   {
-    device = GetResourceManager()->GetLiveHandle<VkDevice>(devId);
     VkFramebuffer fb = VK_NULL_HANDLE;
 
-    VkResult ret = ObjDisp(device)->CreateFramebuffer(Unwrap(device), &info, NULL, &fb);
+    VkFramebufferCreateInfo unwrapped = UnwrapInfo(&CreateInfo);
+    VkResult ret = ObjDisp(device)->CreateFramebuffer(Unwrap(device), &unwrapped, NULL, &fb);
 
     if(ret != VK_SUCCESS)
     {
-      RDCERR("Failed on resource serialise-creation, VkResult: 0x%08x", ret);
+      RDCERR("Failed on resource serialise-creation, VkResult: %s", ToStr(ret).c_str());
+      return false;
     }
     else
     {
@@ -490,27 +517,28 @@ bool WrappedVulkan::Serialise_vkCreateFramebuffer(Serialiser *localSerialiser, V
         ObjDisp(device)->DestroyFramebuffer(Unwrap(device), fb, NULL);
 
         // whenever the new ID is requested, return the old ID, via replacements.
-        GetResourceManager()->ReplaceResource(id, GetResourceManager()->GetOriginalID(live));
+        GetResourceManager()->ReplaceResource(Framebuffer, GetResourceManager()->GetOriginalID(live));
       }
       else
       {
         live = GetResourceManager()->WrapResource(Unwrap(device), fb);
-        GetResourceManager()->AddLiveResource(id, fb);
+        GetResourceManager()->AddLiveResource(Framebuffer, fb);
 
         VulkanCreationInfo::Framebuffer fbinfo;
-        fbinfo.Init(GetResourceManager(), m_CreationInfo, &info);
+        fbinfo.Init(GetResourceManager(), m_CreationInfo, &CreateInfo);
 
         const VulkanCreationInfo::RenderPass &rpinfo =
-            m_CreationInfo.m_RenderPass[GetResourceManager()->GetNonDispWrapper(info.renderPass)->id];
+            m_CreationInfo.m_RenderPass[GetResID(CreateInfo.renderPass)];
 
         fbinfo.loadFBs.resize(rpinfo.loadRPs.size());
 
         // create a render pass for each subpass that maintains attachment layouts
         for(size_t s = 0; s < fbinfo.loadFBs.size(); s++)
         {
-          info.renderPass = Unwrap(rpinfo.loadRPs[s]);
+          unwrapped.renderPass = Unwrap(rpinfo.loadRPs[s]);
 
-          ret = ObjDisp(device)->CreateFramebuffer(Unwrap(device), &info, NULL, &fbinfo.loadFBs[s]);
+          ret = ObjDisp(device)->CreateFramebuffer(Unwrap(device), &unwrapped, NULL,
+                                                   &fbinfo.loadFBs[s]);
           RDCASSERTEQUAL(ret, VK_SUCCESS);
 
           // handle the loadRP being a duplicate
@@ -539,6 +567,13 @@ bool WrappedVulkan::Serialise_vkCreateFramebuffer(Serialiser *localSerialiser, V
         m_CreationInfo.m_Framebuffer[live] = fbinfo;
       }
     }
+
+    AddResource(Framebuffer, ResourceType::RenderPass, "Framebuffer");
+    DerivedResource(device, Framebuffer);
+    DerivedResource(CreateInfo.renderPass, Framebuffer);
+
+    for(uint32_t i = 0; i < CreateInfo.attachmentCount; i++)
+      DerivedResource(CreateInfo.pAttachments[i], Framebuffer);
   }
 
   return true;
@@ -549,30 +584,24 @@ VkResult WrappedVulkan::vkCreateFramebuffer(VkDevice device,
                                             const VkAllocationCallbacks *pAllocator,
                                             VkFramebuffer *pFramebuffer)
 {
-  VkImageView *unwrapped = GetTempArray<VkImageView>(pCreateInfo->attachmentCount);
-  for(uint32_t i = 0; i < pCreateInfo->attachmentCount; i++)
-    unwrapped[i] = Unwrap(pCreateInfo->pAttachments[i]);
-
-  VkFramebufferCreateInfo unwrappedInfo = *pCreateInfo;
-  unwrappedInfo.renderPass = Unwrap(unwrappedInfo.renderPass);
-  unwrappedInfo.pAttachments = unwrapped;
-
-  VkResult ret =
-      ObjDisp(device)->CreateFramebuffer(Unwrap(device), &unwrappedInfo, pAllocator, pFramebuffer);
+  VkFramebufferCreateInfo unwrapped = UnwrapInfo(pCreateInfo);
+  VkResult ret;
+  SERIALISE_TIME_CALL(ret = ObjDisp(device)->CreateFramebuffer(Unwrap(device), &unwrapped,
+                                                               pAllocator, pFramebuffer));
 
   if(ret == VK_SUCCESS)
   {
     ResourceId id = GetResourceManager()->WrapResource(Unwrap(device), *pFramebuffer);
 
-    if(m_State >= WRITING)
+    if(IsCaptureMode(m_State))
     {
       Chunk *chunk = NULL;
 
       {
         CACHE_THREAD_SERIALISER();
 
-        SCOPED_SERIALISE_CONTEXT(CREATE_FRAMEBUFFER);
-        Serialise_vkCreateFramebuffer(localSerialiser, device, pCreateInfo, NULL, pFramebuffer);
+        SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCreateFramebuffer);
+        Serialise_vkCreateFramebuffer(ser, device, pCreateInfo, NULL, pFramebuffer);
 
         chunk = scope.Get();
       }
@@ -607,7 +636,7 @@ VkResult WrappedVulkan::vkCreateFramebuffer(VkDevice device,
       GetResourceManager()->AddLiveResource(id, *pFramebuffer);
 
       VulkanCreationInfo::Framebuffer fbinfo;
-      fbinfo.Init(GetResourceManager(), m_CreationInfo, &unwrappedInfo);
+      fbinfo.Init(GetResourceManager(), m_CreationInfo, pCreateInfo);
 
       const VulkanCreationInfo::RenderPass &rpinfo =
           m_CreationInfo.m_RenderPass[GetResID(pCreateInfo->renderPass)];
@@ -617,10 +646,10 @@ VkResult WrappedVulkan::vkCreateFramebuffer(VkDevice device,
       // create a render pass for each subpass that maintains attachment layouts
       for(size_t s = 0; s < fbinfo.loadFBs.size(); s++)
       {
-        unwrappedInfo.renderPass = Unwrap(rpinfo.loadRPs[s]);
+        unwrapped.renderPass = Unwrap(rpinfo.loadRPs[s]);
 
-        ret = ObjDisp(device)->CreateFramebuffer(Unwrap(device), &unwrappedInfo, NULL,
-                                                 &fbinfo.loadFBs[s]);
+        ret =
+            ObjDisp(device)->CreateFramebuffer(Unwrap(device), &unwrapped, NULL, &fbinfo.loadFBs[s]);
         RDCASSERTEQUAL(ret, VK_SUCCESS);
 
         ResourceId loadFBid = GetResourceManager()->WrapResource(Unwrap(device), fbinfo.loadFBs[s]);
@@ -636,30 +665,32 @@ VkResult WrappedVulkan::vkCreateFramebuffer(VkDevice device,
   return ret;
 }
 
-bool WrappedVulkan::Serialise_vkCreateRenderPass(Serialiser *localSerialiser, VkDevice device,
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkCreateRenderPass(SerialiserType &ser, VkDevice device,
                                                  const VkRenderPassCreateInfo *pCreateInfo,
                                                  const VkAllocationCallbacks *pAllocator,
                                                  VkRenderPass *pRenderPass)
 {
-  SERIALISE_ELEMENT(ResourceId, devId, GetResID(device));
-  SERIALISE_ELEMENT(VkRenderPassCreateInfo, info, *pCreateInfo);
-  SERIALISE_ELEMENT(ResourceId, id, GetResID(*pRenderPass));
+  SERIALISE_ELEMENT(device);
+  SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
+  SERIALISE_ELEMENT_LOCAL(RenderPass, GetResID(*pRenderPass));
 
-  if(m_State == READING)
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
   {
-    device = GetResourceManager()->GetLiveHandle<VkDevice>(devId);
     VkRenderPass rp = VK_NULL_HANDLE;
 
     VulkanCreationInfo::RenderPass rpinfo;
-    rpinfo.Init(GetResourceManager(), m_CreationInfo, &info);
+    rpinfo.Init(GetResourceManager(), m_CreationInfo, &CreateInfo);
 
     // we want to store off the data so we can display it after the pass.
     // override any user-specified DONT_CARE.
     // Likewise we don't want to throw away data before we're ready, so change
     // any load ops to LOAD instead of DONT_CARE (which is valid!). We of course
     // leave any LOAD_OP_CLEAR alone.
-    VkAttachmentDescription *att = (VkAttachmentDescription *)info.pAttachments;
-    for(uint32_t i = 0; i < info.attachmentCount; i++)
+    VkAttachmentDescription *att = (VkAttachmentDescription *)CreateInfo.pAttachments;
+    for(uint32_t i = 0; i < CreateInfo.attachmentCount; i++)
     {
       att[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
       att[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -674,11 +705,12 @@ bool WrappedVulkan::Serialise_vkCreateRenderPass(Serialiser *localSerialiser, Vk
       ReplacePresentableImageLayout(att[i].finalLayout);
     }
 
-    VkResult ret = ObjDisp(device)->CreateRenderPass(Unwrap(device), &info, NULL, &rp);
+    VkResult ret = ObjDisp(device)->CreateRenderPass(Unwrap(device), &CreateInfo, NULL, &rp);
 
     if(ret != VK_SUCCESS)
     {
-      RDCERR("Failed on resource serialise-creation, VkResult: 0x%08x", ret);
+      RDCERR("Failed on resource serialise-creation, VkResult: %s", ToStr(ret).c_str());
+      return false;
     }
     else
     {
@@ -693,30 +725,30 @@ bool WrappedVulkan::Serialise_vkCreateRenderPass(Serialiser *localSerialiser, Vk
         ObjDisp(device)->DestroyRenderPass(Unwrap(device), rp, NULL);
 
         // whenever the new ID is requested, return the old ID, via replacements.
-        GetResourceManager()->ReplaceResource(id, GetResourceManager()->GetOriginalID(live));
+        GetResourceManager()->ReplaceResource(RenderPass, GetResourceManager()->GetOriginalID(live));
       }
       else
       {
         live = GetResourceManager()->WrapResource(Unwrap(device), rp);
-        GetResourceManager()->AddLiveResource(id, rp);
+        GetResourceManager()->AddLiveResource(RenderPass, rp);
 
         // make a version of the render pass that loads from its attachments,
         // so it can be used for replaying a single draw after a render pass
         // without doing a clear or a DONT_CARE load.
-        for(uint32_t i = 0; i < info.attachmentCount; i++)
+        for(uint32_t i = 0; i < CreateInfo.attachmentCount; i++)
         {
           att[i].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
           att[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
         }
 
-        VkRenderPassCreateInfo loadInfo = info;
+        VkRenderPassCreateInfo loadInfo = CreateInfo;
 
-        rpinfo.loadRPs.resize(info.subpassCount);
+        rpinfo.loadRPs.resize(CreateInfo.subpassCount);
 
         // create a render pass for each subpass that maintains attachment layouts
-        for(uint32_t s = 0; s < info.subpassCount; s++)
+        for(uint32_t s = 0; s < CreateInfo.subpassCount; s++)
         {
-          MakeSubpassLoadRP(loadInfo, &info, s);
+          MakeSubpassLoadRP(loadInfo, &CreateInfo, s);
 
           ret =
               ObjDisp(device)->CreateRenderPass(Unwrap(device), &loadInfo, NULL, &rpinfo.loadRPs[s]);
@@ -748,6 +780,9 @@ bool WrappedVulkan::Serialise_vkCreateRenderPass(Serialiser *localSerialiser, Vk
         m_CreationInfo.m_RenderPass[live] = rpinfo;
       }
     }
+
+    AddResource(RenderPass, ResourceType::RenderPass, "Render Pass");
+    DerivedResource(device, RenderPass);
   }
 
   return true;
@@ -757,22 +792,23 @@ VkResult WrappedVulkan::vkCreateRenderPass(VkDevice device, const VkRenderPassCr
                                            const VkAllocationCallbacks *pAllocator,
                                            VkRenderPass *pRenderPass)
 {
-  VkResult ret =
-      ObjDisp(device)->CreateRenderPass(Unwrap(device), pCreateInfo, pAllocator, pRenderPass);
+  VkResult ret;
+  SERIALISE_TIME_CALL(ret = ObjDisp(device)->CreateRenderPass(Unwrap(device), pCreateInfo,
+                                                              pAllocator, pRenderPass));
 
   if(ret == VK_SUCCESS)
   {
     ResourceId id = GetResourceManager()->WrapResource(Unwrap(device), *pRenderPass);
 
-    if(m_State >= WRITING)
+    if(IsCaptureMode(m_State))
     {
       Chunk *chunk = NULL;
 
       {
         CACHE_THREAD_SERIALISER();
 
-        SCOPED_SERIALISE_CONTEXT(CREATE_RENDERPASS);
-        Serialise_vkCreateRenderPass(localSerialiser, device, pCreateInfo, NULL, pRenderPass);
+        SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCreateRenderPass);
+        Serialise_vkCreateRenderPass(ser, device, pCreateInfo, NULL, pRenderPass);
 
         chunk = scope.Get();
       }
@@ -841,31 +877,77 @@ VkResult WrappedVulkan::vkCreateRenderPass(VkDevice device, const VkRenderPassCr
   return ret;
 }
 
-bool WrappedVulkan::Serialise_vkCreateQueryPool(Serialiser *localSerialiser, VkDevice device,
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkCreateQueryPool(SerialiserType &ser, VkDevice device,
                                                 const VkQueryPoolCreateInfo *pCreateInfo,
                                                 const VkAllocationCallbacks *pAllocator,
                                                 VkQueryPool *pQueryPool)
 {
-  SERIALISE_ELEMENT(ResourceId, devId, GetResID(device));
-  SERIALISE_ELEMENT(VkQueryPoolCreateInfo, info, *pCreateInfo);
-  SERIALISE_ELEMENT(ResourceId, id, GetResID(*pQueryPool));
+  SERIALISE_ELEMENT(device);
+  SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
+  SERIALISE_ELEMENT_LOCAL(QueryPool, GetResID(*pQueryPool));
 
-  if(m_State == READING)
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
   {
-    device = GetResourceManager()->GetLiveHandle<VkDevice>(devId);
     VkQueryPool pool = VK_NULL_HANDLE;
 
-    VkResult ret = ObjDisp(device)->CreateQueryPool(Unwrap(device), &info, NULL, &pool);
+    VkResult ret = ObjDisp(device)->CreateQueryPool(Unwrap(device), &CreateInfo, NULL, &pool);
 
     if(ret != VK_SUCCESS)
     {
-      RDCERR("Failed on resource serialise-creation, VkResult: 0x%08x", ret);
+      RDCERR("Failed on resource serialise-creation, VkResult: %s", ToStr(ret).c_str());
+      return false;
     }
     else
     {
       ResourceId live = GetResourceManager()->WrapResource(Unwrap(device), pool);
-      GetResourceManager()->AddLiveResource(id, pool);
+      GetResourceManager()->AddLiveResource(QueryPool, pool);
+
+      // We fill the query pool with valid but empty data, just so that future copies of query
+      // results don't read from invalid data.
+
+      VkCommandBuffer cmd = GetNextCmd();
+
+      VkResult vkr = VK_SUCCESS;
+
+      VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
+                                            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+
+      vkr = ObjDisp(cmd)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      ObjDisp(cmd)->CmdResetQueryPool(Unwrap(cmd), Unwrap(pool), 0, CreateInfo.queryCount);
+
+      // Timestamps are easy - we can do these without needing to render
+      if(CreateInfo.queryType == VK_QUERY_TYPE_TIMESTAMP)
+      {
+        for(uint32_t i = 0; i < CreateInfo.queryCount; i++)
+          ObjDisp(cmd)->CmdWriteTimestamp(Unwrap(cmd), VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                          Unwrap(pool), i);
+      }
+      else
+      {
+        // we do batches, to balance too many queries at once
+        const uint32_t batchSize = 64;
+
+        for(uint32_t i = 0; i < CreateInfo.queryCount; i += batchSize)
+        {
+          for(uint32_t j = i; j < CreateInfo.queryCount && j < i + batchSize; j++)
+            ObjDisp(cmd)->CmdBeginQuery(Unwrap(cmd), Unwrap(pool), j, 0);
+
+          for(uint32_t j = i; j < CreateInfo.queryCount && j < i + batchSize; j++)
+            ObjDisp(cmd)->CmdEndQuery(Unwrap(cmd), Unwrap(pool), j);
+        }
+      }
+
+      vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
     }
+
+    AddResource(QueryPool, ResourceType::Query, "Query Pool");
+    DerivedResource(device, QueryPool);
   }
 
   return true;
@@ -875,22 +957,23 @@ VkResult WrappedVulkan::vkCreateQueryPool(VkDevice device, const VkQueryPoolCrea
                                           const VkAllocationCallbacks *pAllocator,
                                           VkQueryPool *pQueryPool)
 {
-  VkResult ret =
-      ObjDisp(device)->CreateQueryPool(Unwrap(device), pCreateInfo, pAllocator, pQueryPool);
+  VkResult ret;
+  SERIALISE_TIME_CALL(
+      ret = ObjDisp(device)->CreateQueryPool(Unwrap(device), pCreateInfo, pAllocator, pQueryPool));
 
   if(ret == VK_SUCCESS)
   {
     ResourceId id = GetResourceManager()->WrapResource(Unwrap(device), *pQueryPool);
 
-    if(m_State >= WRITING)
+    if(IsCaptureMode(m_State))
     {
       Chunk *chunk = NULL;
 
       {
         CACHE_THREAD_SERIALISER();
 
-        SCOPED_SERIALISE_CONTEXT(CREATE_QUERY_POOL);
-        Serialise_vkCreateQueryPool(localSerialiser, device, pCreateInfo, NULL, pQueryPool);
+        SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCreateQueryPool);
+        Serialise_vkCreateQueryPool(ser, device, pCreateInfo, NULL, pQueryPool);
 
         chunk = scope.Get();
       }
@@ -932,7 +1015,7 @@ VkBool32 VKAPI_PTR UserDebugCallback(VkDebugReportFlagsEXT flags,
 {
   UserDebugCallbackData *user = (UserDebugCallbackData *)pUserData;
 
-  if(RenderDoc::Inst().GetCaptureOptions().DebugOutputMute)
+  if(RenderDoc::Inst().GetCaptureOptions().debugOutputMute)
   {
     if(user->muteWarned)
       return false;
@@ -1060,31 +1143,39 @@ static VkResourceRecord *GetObjRecord(VkDebugReportObjectTypeEXT objType, uint64
     case VK_DEBUG_REPORT_OBJECT_TYPE_DEBUG_REPORT_EXT:
     case VK_DEBUG_REPORT_OBJECT_TYPE_RANGE_SIZE_EXT:
     case VK_DEBUG_REPORT_OBJECT_TYPE_OBJECT_TABLE_NVX_EXT:
+    case VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT:
     case VK_DEBUG_REPORT_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NVX_EXT:
     case VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_KHR_EXT:
+    case VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_KHR_EXT:
     case VK_DEBUG_REPORT_OBJECT_TYPE_MAX_ENUM_EXT: break;
   }
   return NULL;
 }
 
-bool WrappedVulkan::Serialise_SetShaderDebugPath(Serialiser *localSerialiser, VkDevice device,
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_SetShaderDebugPath(SerialiserType &ser, VkDevice device,
                                                  const VkDebugMarkerObjectTagInfoEXT *pTagInfo)
 {
-  SERIALISE_ELEMENT(ResourceId, id,
-                    GetObjRecord(pTagInfo->objectType, pTagInfo->object)->GetResourceID());
+  SERIALISE_ELEMENT_LOCAL(ShaderObject,
+                          GetObjRecord(pTagInfo->objectType, pTagInfo->object)->GetResourceID());
 
-  string path;
-  if(m_State >= WRITING)
+  std::string DebugPath;
+  if(IsCaptureMode(m_State))
   {
     char *tag = (char *)pTagInfo->pTag;
-    path = string(tag, tag + pTagInfo->tagSize);
+    DebugPath = std::string(tag, tag + pTagInfo->tagSize);
   }
 
-  localSerialiser->Serialise("path", path);
+  SERIALISE_ELEMENT(DebugPath);
 
-  if(m_State == READING)
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
   {
-    m_CreationInfo.m_ShaderModule[GetResourceManager()->GetLiveID(id)].unstrippedPath = path;
+    m_CreationInfo.m_ShaderModule[GetResourceManager()->GetLiveID(ShaderObject)].unstrippedPath =
+        DebugPath;
+
+    AddResourceCurChunk(ShaderObject);
   }
 
   return true;
@@ -1093,7 +1184,7 @@ bool WrappedVulkan::Serialise_SetShaderDebugPath(Serialiser *localSerialiser, Vk
 VkResult WrappedVulkan::vkDebugMarkerSetObjectTagEXT(VkDevice device,
                                                      const VkDebugMarkerObjectTagInfoEXT *pTagInfo)
 {
-  if(m_State >= WRITING && pTagInfo)
+  if(IsCaptureMode(m_State) && pTagInfo)
   {
     VkResourceRecord *record = GetObjRecord(pTagInfo->objectType, pTagInfo->object);
 
@@ -1108,8 +1199,8 @@ VkResult WrappedVulkan::vkDebugMarkerSetObjectTagEXT(VkDevice device,
     {
       CACHE_THREAD_SERIALISER();
 
-      SCOPED_SERIALISE_CONTEXT(SET_SHADER_DEBUG_PATH);
-      Serialise_SetShaderDebugPath(localSerialiser, device, pTagInfo);
+      SCOPED_SERIALISE_CHUNK(VulkanChunk::SetShaderDebugPath);
+      Serialise_SetShaderDebugPath(ser, device, pTagInfo);
       record->AddChunk(scope.Get());
     }
     else if(ObjDisp(device)->DebugMarkerSetObjectTagEXT)
@@ -1147,27 +1238,30 @@ VkResult WrappedVulkan::vkDebugMarkerSetObjectTagEXT(VkDevice device,
   return VK_SUCCESS;
 }
 
+template <typename SerialiserType>
 bool WrappedVulkan::Serialise_vkDebugMarkerSetObjectNameEXT(
-    Serialiser *localSerialiser, VkDevice device, const VkDebugMarkerObjectNameInfoEXT *pNameInfo)
+    SerialiserType &ser, VkDevice device, const VkDebugMarkerObjectNameInfoEXT *pNameInfo)
 {
-  SERIALISE_ELEMENT(ResourceId, id,
-                    GetObjRecord(pNameInfo->objectType, pNameInfo->object)->GetResourceID());
+  SERIALISE_ELEMENT_LOCAL(Object,
+                          GetObjRecord(pNameInfo->objectType, pNameInfo->object)->GetResourceID());
+  SERIALISE_ELEMENT_LOCAL(ObjectName, pNameInfo->pObjectName);
 
-  string name;
-  if(m_State >= WRITING)
-    name = pNameInfo->pObjectName;
+  SERIALISE_CHECK_READ_ERRORS();
 
-  localSerialiser->Serialise("name", name);
-
-  if(m_State == READING)
+  if(IsReplayingAndReading())
   {
     // if we don't have a live resource, this is probably a command buffer being named on the
     // virtual non-existant parent, not any of the baked IDs. Just save the name on the original ID
     // and we'll propagate it in Serialise_vkBeginCommandBuffer
-    if(!GetResourceManager()->HasLiveResource(id) || GetResourceManager()->HasReplacement(id))
-      m_CreationInfo.m_Names[id] = name;
+    if(!GetResourceManager()->HasLiveResource(Object) || GetResourceManager()->HasReplacement(Object))
+      m_CreationInfo.m_Names[Object] = ObjectName;
     else
-      m_CreationInfo.m_Names[GetResourceManager()->GetLiveID(id)] = name;
+      m_CreationInfo.m_Names[GetResourceManager()->GetLiveID(Object)] = ObjectName;
+
+    ResourceDescription &descr = GetReplay()->GetResourceDesc(Object);
+
+    AddResourceCurChunk(descr);
+    descr.SetCustomName(ObjectName);
   }
 
   return true;
@@ -1176,7 +1270,7 @@ bool WrappedVulkan::Serialise_vkDebugMarkerSetObjectNameEXT(
 VkResult WrappedVulkan::vkDebugMarkerSetObjectNameEXT(VkDevice device,
                                                       const VkDebugMarkerObjectNameInfoEXT *pNameInfo)
 {
-  if(m_State >= WRITING && pNameInfo)
+  if(IsCaptureMode(m_State) && pNameInfo)
   {
     Chunk *chunk = NULL;
 
@@ -1223,8 +1317,8 @@ VkResult WrappedVulkan::vkDebugMarkerSetObjectNameEXT(VkDevice device,
     {
       CACHE_THREAD_SERIALISER();
 
-      SCOPED_SERIALISE_CONTEXT(SET_NAME);
-      Serialise_vkDebugMarkerSetObjectNameEXT(localSerialiser, device, pNameInfo);
+      SCOPED_SERIALISE_CHUNK(VulkanChunk::vkDebugMarkerSetObjectNameEXT);
+      Serialise_vkDebugMarkerSetObjectNameEXT(ser, device, pNameInfo);
 
       chunk = scope.Get();
     }
@@ -1234,3 +1328,25 @@ VkResult WrappedVulkan::vkDebugMarkerSetObjectNameEXT(VkDevice device,
 
   return VK_SUCCESS;
 }
+
+INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateSampler, VkDevice device,
+                                const VkSamplerCreateInfo *pCreateInfo,
+                                const VkAllocationCallbacks *pAllocator, VkSampler *pSampler);
+
+INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateFramebuffer, VkDevice device,
+                                const VkFramebufferCreateInfo *pCreateInfo,
+                                const VkAllocationCallbacks *pAllocator, VkFramebuffer *pFramebuffer);
+
+INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateRenderPass, VkDevice device,
+                                const VkRenderPassCreateInfo *pCreateInfo,
+                                const VkAllocationCallbacks *pAllocator, VkRenderPass *pRenderPass);
+
+INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateQueryPool, VkDevice device,
+                                const VkQueryPoolCreateInfo *pCreateInfo,
+                                const VkAllocationCallbacks *pAllocator, VkQueryPool *pQueryPool);
+
+INSTANTIATE_FUNCTION_SERIALISED(void, SetShaderDebugPath, VkDevice device,
+                                const VkDebugMarkerObjectTagInfoEXT *pTagInfo);
+
+INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkDebugMarkerSetObjectNameEXT, VkDevice device,
+                                const VkDebugMarkerObjectNameInfoEXT *pNameInfo);

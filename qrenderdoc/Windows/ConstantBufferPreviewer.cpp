@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,7 @@
 
 #include "ConstantBufferPreviewer.h"
 #include <QFontDatabase>
+#include <QTextStream>
 #include "3rdparty/toolwindowmanager/ToolWindowManager.h"
 #include "ui_ConstantBufferPreviewer.h"
 
@@ -58,12 +59,12 @@ ConstantBufferPreviewer::ConstantBufferPreviewer(ICaptureContext &ctx, const Sha
   ui->variables->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
 
   m_Previews.push_back(this);
-  m_Ctx.AddLogViewer(this);
+  m_Ctx.AddCaptureViewer(this);
 }
 
 ConstantBufferPreviewer::~ConstantBufferPreviewer()
 {
-  m_Ctx.RemoveLogViewer(this);
+  m_Ctx.RemoveCaptureViewer(this);
   m_Previews.removeOne(this);
   delete ui;
 }
@@ -90,12 +91,12 @@ ConstantBufferPreviewer *ConstantBufferPreviewer::getOne()
   return NULL;
 }
 
-void ConstantBufferPreviewer::OnLogfileLoaded()
+void ConstantBufferPreviewer::OnCaptureLoaded()
 {
-  OnLogfileClosed();
+  OnCaptureClosed();
 }
 
-void ConstantBufferPreviewer::OnLogfileClosed()
+void ConstantBufferPreviewer::OnCaptureClosed()
 {
   ui->variables->clear();
 
@@ -104,12 +105,12 @@ void ConstantBufferPreviewer::OnLogfileClosed()
   ToolWindowManager::closeToolWindow(this);
 }
 
-void ConstantBufferPreviewer::OnEventChanged(uint32_t eventID)
+void ConstantBufferPreviewer::OnEventChanged(uint32_t eventId)
 {
   BoundCBuffer cb = m_Ctx.CurPipelineState().GetConstantBuffer(m_stage, m_slot, m_arrayIdx);
-  m_cbuffer = cb.Buffer;
-  uint64_t offs = cb.ByteOffset;
-  uint64_t size = cb.ByteSize;
+  m_cbuffer = cb.resourceId;
+  uint64_t offs = cb.byteOffset;
+  uint64_t size = cb.byteSize;
 
   m_shader = m_Ctx.CurPipelineState().GetShader(m_stage);
   QString entryPoint = m_Ctx.CurPipelineState().GetShaderEntryPoint(m_stage);
@@ -117,7 +118,7 @@ void ConstantBufferPreviewer::OnEventChanged(uint32_t eventID)
 
   updateLabels();
 
-  if(reflection == NULL || reflection->ConstantBlocks.count <= (int)m_slot)
+  if(reflection == NULL || m_slot >= reflection->constantBlocks.size())
   {
     setVariables({});
     return;
@@ -126,15 +127,15 @@ void ConstantBufferPreviewer::OnEventChanged(uint32_t eventID)
   if(!m_formatOverride.empty())
   {
     m_Ctx.Replay().AsyncInvoke([this, offs, size](IReplayController *r) {
-      rdctype::array<byte> data = r->GetBufferData(m_cbuffer, offs, size);
-      rdctype::array<ShaderVariable> vars = applyFormatOverride(data);
+      bytebuf data = r->GetBufferData(m_cbuffer, offs, size);
+      rdcarray<ShaderVariable> vars = applyFormatOverride(data);
       GUIInvoke::call([this, vars] { setVariables(vars); });
     });
   }
   else
   {
     m_Ctx.Replay().AsyncInvoke([this, entryPoint, offs](IReplayController *r) {
-      rdctype::array<ShaderVariable> vars = r->GetCBufferVariableContents(
+      rdcarray<ShaderVariable> vars = r->GetCBufferVariableContents(
           m_shader, entryPoint.toUtf8().data(), m_slot, m_cbuffer, offs);
       GUIInvoke::call([this, vars] { setVariables(vars); });
     });
@@ -156,6 +157,16 @@ void ConstantBufferPreviewer::on_setFormat_toggled(bool checked)
   ui->splitter->setCollapsible(1, false);
   ui->splitter->setSizes({1, 1});
   ui->splitter->handle(1)->setEnabled(true);
+}
+
+void ConstantBufferPreviewer::on_resourceDetails_clicked()
+{
+  if(!m_Ctx.HasResourceInspector())
+    m_Ctx.ShowResourceInspector();
+
+  m_Ctx.GetResourceInspector()->Inspect(m_cbuffer);
+
+  ToolWindowManager::raiseToolWindow(m_Ctx.GetResourceInspector()->Widget());
 }
 
 void ConstantBufferPreviewer::on_saveCSV_clicked()
@@ -226,7 +237,7 @@ void ConstantBufferPreviewer::processFormat(const QString &format)
 }
 
 void ConstantBufferPreviewer::addVariables(RDTreeWidgetItem *root,
-                                           const rdctype::array<ShaderVariable> &vars)
+                                           const rdcarray<ShaderVariable> &vars)
 {
   for(const ShaderVariable &v : vars)
   {
@@ -241,20 +252,20 @@ void ConstantBufferPreviewer::addVariables(RDTreeWidgetItem *root,
             {QFormatStr("%1.row%2").arg(v.name).arg(i), RowString(v, i), RowTypeString(v)}));
     }
 
-    if(v.members.count > 0)
+    if(!v.members.isEmpty())
       addVariables(n, v.members);
   }
 }
 
 bool ConstantBufferPreviewer::updateVariables(RDTreeWidgetItem *root,
-                                              const rdctype::array<ShaderVariable> &prevVars,
-                                              const rdctype::array<ShaderVariable> &newVars)
+                                              const rdcarray<ShaderVariable> &prevVars,
+                                              const rdcarray<ShaderVariable> &newVars)
 {
   // mismatched child count? can't update
-  if(prevVars.count != newVars.count)
+  if(prevVars.size() != newVars.size())
     return false;
 
-  for(int i = 0; i < prevVars.count; i++)
+  for(int i = 0; i < prevVars.count(); i++)
   {
     const ShaderVariable &a = prevVars[i];
     const ShaderVariable &b = newVars[i];
@@ -279,7 +290,7 @@ bool ConstantBufferPreviewer::updateVariables(RDTreeWidgetItem *root,
         node->child(r)->setText(1, RowString(b, r));
     }
 
-    if(a.members.count > 0)
+    if(!a.members.isEmpty())
     {
       // recurse to update child members. This handles a and b having different number of variables
       bool updated = updateVariables(node, a.members, b.members);
@@ -293,7 +304,7 @@ bool ConstantBufferPreviewer::updateVariables(RDTreeWidgetItem *root,
   return true;
 }
 
-void ConstantBufferPreviewer::setVariables(const rdctype::array<ShaderVariable> &vars)
+void ConstantBufferPreviewer::setVariables(const rdcarray<ShaderVariable> &vars)
 {
   ui->variables->beginUpdate();
 
@@ -316,7 +327,7 @@ void ConstantBufferPreviewer::setVariables(const rdctype::array<ShaderVariable> 
 
   ui->saveCSV->setEnabled(false);
 
-  if(vars.count > 0)
+  if(!vars.isEmpty())
   {
     addVariables(ui->variables->invisibleRootItem(), vars);
     ui->saveCSV->setEnabled(true);
@@ -327,25 +338,15 @@ void ConstantBufferPreviewer::setVariables(const rdctype::array<ShaderVariable> 
 
 void ConstantBufferPreviewer::updateLabels()
 {
-  QString bufName;
-
-  bool needName = true;
-
-  BufferDescription *buf = m_Ctx.GetBuffer(m_cbuffer);
-  if(buf)
-  {
-    bufName = buf->name;
-    if(buf->customName)
-      needName = false;
-  }
+  QString bufName = m_Ctx.GetResourceName(m_cbuffer);
 
   const ShaderReflection *reflection = m_Ctx.CurPipelineState().GetShaderReflection(m_stage);
 
   if(reflection != NULL)
   {
-    if(needName && (int)m_slot < reflection->ConstantBlocks.count &&
-       reflection->ConstantBlocks[m_slot].name.count > 0)
-      bufName = QFormatStr("<%1>").arg(reflection->ConstantBlocks[m_slot].name);
+    if(m_Ctx.IsAutogeneratedName(m_cbuffer) && m_slot < reflection->constantBlocks.size() &&
+       !reflection->constantBlocks[m_slot].name.isEmpty())
+      bufName = QFormatStr("<%1>").arg(reflection->constantBlocks[m_slot].name);
   }
 
   ui->nameLabel->setText(bufName);
@@ -364,8 +365,7 @@ void ConstantBufferPreviewer::updateLabels()
   setWindowTitle(title);
 }
 
-rdctype::array<ShaderVariable> ConstantBufferPreviewer::applyFormatOverride(
-    const rdctype::array<byte> &bytes)
+rdcarray<ShaderVariable> ConstantBufferPreviewer::applyFormatOverride(const bytebuf &bytes)
 {
   QVector<ShaderVariable> variables;
 
@@ -377,7 +377,7 @@ rdctype::array<ShaderVariable> ConstantBufferPreviewer::applyFormatOverride(
     variables[i] = m_formatOverride[i].GetShaderVar(b, bytes.end());
   }
 
-  rdctype::array<ShaderVariable> ret;
+  rdcarray<ShaderVariable> ret;
   ret = variables.toStdVector();
   return ret;
 }

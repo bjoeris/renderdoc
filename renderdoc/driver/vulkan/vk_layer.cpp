@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +30,7 @@
 #include "common/threading.h"
 #include "hooks/hooks.h"
 #include "os/os_specific.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 #include "vk_common.h"
 #include "vk_core.h"
 #include "vk_hookset_defs.h"
@@ -71,7 +71,7 @@ class VulkanHook : LibraryHook
 
   void OptionsUpdated(const char *libName)
   {
-    if(RenderDoc::Inst().GetCaptureOptions().APIValidation)
+    if(RenderDoc::Inst().GetCaptureOptions().apiValidation)
     {
       Process::RegisterEnvironmentModification(
           EnvironmentModification(EnvMod::Append, EnvSep::Platform, "VK_INSTANCE_LAYERS",
@@ -163,7 +163,7 @@ VkResult VKAPI_CALL hooked_vkCreateInstance(const VkInstanceCreateInfo *pCreateI
                                             const VkAllocationCallbacks *pAllocator,
                                             VkInstance *pInstance)
 {
-  WrappedVulkan *core = new WrappedVulkan("");
+  WrappedVulkan *core = new WrappedVulkan();
   return core->vkCreateInstance(pCreateInfo, pAllocator, pInstance);
 }
 
@@ -186,6 +186,9 @@ void VKAPI_CALL hooked_vkDestroyInstance(VkInstance instance, const VkAllocation
 #pragma comment( \
     linker,      \
     "/EXPORT:VK_LAYER_RENDERDOC_CaptureEnumerateDeviceExtensionProperties=_VK_LAYER_RENDERDOC_CaptureEnumerateDeviceExtensionProperties@16")
+#pragma comment( \
+    linker,      \
+    "/EXPORT:VK_LAYER_RENDERDOC_CaptureEnumerateInstanceExtensionProperties=_VK_LAYER_RENDERDOC_CaptureEnumerateInstanceExtensionProperties@16")
 #pragma comment( \
     linker,      \
     "/EXPORT:VK_LAYER_RENDERDOC_CaptureGetDeviceProcAddr=_VK_LAYER_RENDERDOC_CaptureGetDeviceProcAddr@8")
@@ -239,7 +242,18 @@ VK_LAYER_EXPORT VkResult VKAPI_CALL VK_LAYER_RENDERDOC_CaptureEnumerateDeviceExt
     return CoreDisp(physicalDevice)
         ->FilterDeviceExtensionProperties(physicalDevice, pPropertyCount, pProperties);
 
-  return WrappedVulkan::GetProvidedExtensionProperties(pPropertyCount, pProperties);
+  return WrappedVulkan::GetProvidedDeviceExtensionProperties(pPropertyCount, pProperties);
+}
+
+VK_LAYER_EXPORT VkResult VKAPI_CALL VK_LAYER_RENDERDOC_CaptureEnumerateInstanceExtensionProperties(
+    const VkEnumerateInstanceExtensionPropertiesChain *pChain, const char *pLayerName,
+    uint32_t *pPropertyCount, VkExtensionProperties *pProperties)
+{
+  if(pLayerName && !strcmp(pLayerName, RENDERDOC_LAYER_NAME))
+    return WrappedVulkan::GetProvidedInstanceExtensionProperties(pPropertyCount, pProperties);
+
+  return WrappedVulkan::FilterInstanceExtensionProperties(pChain, pLayerName, pPropertyCount,
+                                                          pProperties);
 }
 
 #undef HookInit
@@ -290,6 +304,8 @@ VK_LAYER_RENDERDOC_CaptureGetInstanceProcAddr(VkInstance instance, const char *p
     return (PFN_vkVoidFunction)&VK_LAYER_RENDERDOC_CaptureEnumerateDeviceLayerProperties;
   if(!strcmp("vkEnumerateDeviceExtensionProperties", pName))
     return (PFN_vkVoidFunction)&VK_LAYER_RENDERDOC_CaptureEnumerateDeviceExtensionProperties;
+  if(!strcmp("vkEnumerateInstanceExtensionProperties", pName))
+    return (PFN_vkVoidFunction)&VK_LAYER_RENDERDOC_CaptureEnumerateInstanceExtensionProperties;
   if(!strcmp("vkGetDeviceProcAddr", pName))
     return (PFN_vkVoidFunction)&VK_LAYER_RENDERDOC_CaptureGetDeviceProcAddr;
   if(!strcmp("vkCreateDevice", pName))

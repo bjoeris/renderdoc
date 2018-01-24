@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -73,7 +73,7 @@ bool D3D8DebugManager::InitFontRendering()
 
   if(FAILED(hr))
   {
-    RDCERR("Failed to create font texture %08x", hr);
+    RDCERR("Failed to create font texture HRESULT: %s", ToStr(hr).c_str());
   }
 
   D3DLOCKED_RECT lockedRegion;
@@ -81,7 +81,7 @@ bool D3D8DebugManager::InitFontRendering()
 
   if(FAILED(hr))
   {
-    RDCERR("Failed to lock font texture %08x", hr);
+    RDCERR("Failed to lock font texture HRESULT: %s", ToStr(hr).c_str());
   }
   else
   {
@@ -103,7 +103,7 @@ bool D3D8DebugManager::InitFontRendering()
     hr = fontTex->UnlockRect(0);
     if(hr != S_OK)
     {
-      RDCERR("Failed to unlock font texture %08x", hr);
+      RDCERR("Failed to unlock font texture HRESULT: %s", ToStr(hr).c_str());
     }
   }
 

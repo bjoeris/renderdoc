@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -48,6 +48,8 @@ void SetReplayResourceIDs()
         RDCMAX(int64_t(globalIDCounter), int64_t(globalIDCounter + 1000000000000000000LL));
 }
 };
+
+INSTANTIATE_SERIALISE_TYPE(ResourceManagerInternal::WrittenRecord);
 
 bool ResourceRecord::MarkResourceFrameReferenced(ResourceId id, FrameRefType refType)
 {

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -31,33 +31,15 @@
 #include <QToolTip>
 #include <QWheelEvent>
 
-RDTreeViewDelegate::RDTreeViewDelegate(RDTreeView *view) : QStyledItemDelegate(view), m_View(view)
+RDTreeViewDelegate::RDTreeViewDelegate(RDTreeView *view) : ForwardingDelegate(view), m_View(view)
 {
 }
 
 QSize RDTreeViewDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
-  QSize ret;
-
-  QVariant var = index.data(Qt::SizeHintRole);
-  if(var.canConvert<QSize>())
-  {
-    ret = var.value<QSize>();
-  }
-  else
-  {
-    QStyleOptionViewItem opt = option;
-    initStyleOption(&opt, index);
-
-    if(m_View->ignoreIconSize())
-    {
-      opt.icon = QIcon();
-      opt.features &= ~QStyleOptionViewItem::HasDecoration;
-      opt.decorationSize = QSize();
-    }
-
-    ret = m_View->style()->sizeFromContents(QStyle::CT_ItemViewItem, &opt, QSize(), m_View);
-  }
+  m_suppressIcon = m_View->ignoreIconSize();
+  QSize ret = ForwardingDelegate::sizeHint(option, index);
+  m_suppressIcon = false;
 
   // expand a pixel for the grid lines
   if(m_View->visibleGridLines())
@@ -71,6 +53,18 @@ QSize RDTreeViewDelegate::sizeHint(const QStyleOptionViewItem &option, const QMo
   ret.setHeight(qMax(ret.height(), option.fontMetrics.height() + m_View->verticalItemMargin()));
 
   return ret;
+}
+
+void RDTreeViewDelegate::initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const
+{
+  QStyledItemDelegate::initStyleOption(option, index);
+
+  if(m_suppressIcon)
+  {
+    option->icon = QIcon();
+    option->features &= ~QStyleOptionViewItem::HasDecoration;
+    option->decorationSize = QSize();
+  }
 }
 
 RDTipLabel::RDTipLabel() : QLabel(NULL)
@@ -115,7 +109,8 @@ RDTreeView::RDTreeView(QWidget *parent) : QTreeView(parent)
 {
   setMouseTracking(true);
 
-  setItemDelegate(new RDTreeViewDelegate(this));
+  m_delegate = new RDTreeViewDelegate(this);
+  QTreeView::setItemDelegate(m_delegate);
 
   m_ElidedTooltip = new RDTipLabel();
   m_ElidedTooltip->hide();
@@ -147,7 +142,17 @@ void RDTreeView::leaveEvent(QEvent *e)
     m_ElidedTooltip->hide();
 
   m_currentHoverIndex = QModelIndex();
+
+  emit leave(e);
+
   QTreeView::leaveEvent(e);
+}
+
+void RDTreeView::keyPressEvent(QKeyEvent *e)
+{
+  emit(keyPress(e));
+
+  QTreeView::keyPressEvent(e);
 }
 
 bool RDTreeView::viewportEvent(QEvent *event)
@@ -157,7 +162,11 @@ bool RDTreeView::viewportEvent(QEvent *event)
     QHelpEvent *he = (QHelpEvent *)event;
     QModelIndex index = indexAt(he->pos());
 
-    QAbstractItemDelegate *delegate = itemDelegate(index);
+    QAbstractItemDelegate *delegate = m_userDelegate;
+
+    if(!delegate)
+      delegate = QTreeView::itemDelegate(index);
+
     if(delegate)
     {
       QStyleOptionViewItem option;
@@ -188,6 +197,17 @@ bool RDTreeView::viewportEvent(QEvent *event)
   }
 
   return QTreeView::viewportEvent(event);
+}
+
+void RDTreeView::setItemDelegate(QAbstractItemDelegate *delegate)
+{
+  m_userDelegate = delegate;
+  m_delegate->setForwardDelegate(m_userDelegate);
+}
+
+QAbstractItemDelegate *RDTreeView::itemDelegate() const
+{
+  return m_userDelegate;
 }
 
 void RDTreeView::rowsAboutToBeRemoved(const QModelIndex &parent, int start, int end)

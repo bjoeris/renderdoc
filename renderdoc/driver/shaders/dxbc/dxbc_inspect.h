@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -156,19 +156,7 @@ struct ShaderInputBind
   uint32_t bindCount;
 
   uint32_t flags;
-
-  enum RetType
-  {
-    RETTYPE_UNKNOWN = 0,
-    RETTYPE_UNORM = 1,
-    RETTYPE_SNORM,
-    RETTYPE_SINT,
-    RETTYPE_UINT,
-    RETTYPE_FLOAT,
-    RETTYPE_MIXED,
-    RETTYPE_DOUBLE,
-    RETTYPE_CONTINUED,
-  } retType;
+  ResourceRetType retType;
 
   enum Dimension
   {

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,7 +24,7 @@
  ******************************************************************************/
 
 // currently breakpad crash-handler is only available on windows
-#if ENABLED(RDOC_RELEASE) && RENDERDOC_OFFICIAL_BUILD && ENABLED(RDOC_WIN32)
+#if ENABLED(RDOC_RELEASE) && ENABLED(RDOC_WIN32) && RENDERDOC_OFFICIAL_BUILD
 
 #define RDOC_CRASH_HANDLER OPTION_ON
 
@@ -107,13 +107,15 @@ public:
         google_breakpad::CustomInfoEntry(L"version", L""),
         google_breakpad::CustomInfoEntry(L"logpath", L""),
         google_breakpad::CustomInfoEntry(L"gitcommit", L""),
+        google_breakpad::CustomInfoEntry(L"replaycrash",
+                                         RenderDoc::Inst().IsReplayApp() ? L"1" : L"0"),
     };
 
-    wstring wideStr = StringFormat::UTF82Wide(string(MAJOR_MINOR_VERSION_STRING));
+    wstring wideStr = StringFormat::UTF82Wide(string(FULL_VERSION_STRING));
     breakpadCustomInfo[0].set_value(wideStr.c_str());
     wideStr = StringFormat::UTF82Wide(string(RDCGETLOGFILE()));
     breakpadCustomInfo[1].set_value(wideStr.c_str());
-    wideStr = StringFormat::UTF82Wide(string(GIT_COMMIT_HASH));
+    wideStr = StringFormat::UTF82Wide(string(GitVersionHash));
     breakpadCustomInfo[2].set_value(wideStr.c_str());
 
     google_breakpad::CustomClientInfo custom = {&breakpadCustomInfo[0],

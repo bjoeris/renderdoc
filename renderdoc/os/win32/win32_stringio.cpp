@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,6 +23,7 @@
  * THE SOFTWARE.
  ******************************************************************************/
 
+#include <io.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <stdio.h>
@@ -32,7 +33,7 @@
 #include <set>
 #include "api/app/renderdoc_app.h"
 #include "os/os_specific.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 
 using std::set;
 using std::wstring;
@@ -40,7 +41,7 @@ using std::wstring;
 // gives us an address to identify this dll with
 static int dllLocator = 0;
 
-string GetEmbeddedResourceWin32(int resource)
+std::string GetDynamicEmbeddedResource(int resource)
 {
   HMODULE mod = NULL;
   GetModuleHandleExA(
@@ -394,12 +395,28 @@ uint64_t GetModifiedTimestamp(const string &filename)
   return 0;
 }
 
-void Copy(const char *from, const char *to, bool allowOverwrite)
+bool Copy(const char *from, const char *to, bool allowOverwrite)
 {
   wstring wfrom = StringFormat::UTF82Wide(string(from));
   wstring wto = StringFormat::UTF82Wide(string(to));
 
-  ::CopyFileW(wfrom.c_str(), wto.c_str(), allowOverwrite == false);
+  return ::CopyFileW(wfrom.c_str(), wto.c_str(), allowOverwrite == false) != 0;
+}
+
+bool Move(const char *from, const char *to, bool allowOverwrite)
+{
+  wstring wfrom = StringFormat::UTF82Wide(string(from));
+  wstring wto = StringFormat::UTF82Wide(string(to));
+
+  if(exists(to))
+  {
+    if(allowOverwrite)
+      Delete(to);
+    else
+      return false;
+  }
+
+  return ::MoveFileW(wfrom.c_str(), wto.c_str()) != 0;
 }
 
 void Delete(const char *path)
@@ -591,6 +608,18 @@ bool feof(FILE *f)
   return ::feof(f) != 0;
 }
 
+void ftruncateat(FILE *f, uint64_t length)
+{
+  ::fflush(f);
+  int fd = ::_fileno(f);
+  ::_chsize_s(fd, (int64_t)length);
+}
+
+bool fflush(FILE *f)
+{
+  return ::fflush(f) == 0;
+}
+
 int fclose(FILE *f)
 {
   return ::fclose(f);
@@ -605,6 +634,30 @@ bool logfile_open(const char *filename)
                           OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
   return logHandle != NULL;
+}
+
+std::string logfile_readall(const char *filename)
+{
+  wstring wfn = StringFormat::UTF82Wide(string(filename));
+  HANDLE h = CreateFileW(wfn.c_str(), FILE_READ_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                         OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+  std::string ret;
+
+  if(h != NULL)
+  {
+    DWORD len = GetFileSize(h, NULL);
+
+    ret.resize(len);
+
+    DWORD dummy = len;
+
+    ReadFile(h, &ret[0], len, &dummy, NULL);
+
+    CloseHandle(h);
+  }
+
+  return ret;
 }
 
 void logfile_append(const char *msg, size_t length)
@@ -657,6 +710,10 @@ void sntimef(char *str, size_t bufSize, const char *format)
     memcpy(str, result.c_str(), result.length());
     str[result.length()] = 0;
   }
+}
+
+void Shutdown()
+{
 }
 
 string Wide2UTF8(const wstring &s)

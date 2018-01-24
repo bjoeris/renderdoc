@@ -4,13 +4,13 @@
 #
 #-------------------------------------------------
 
-QT       += core gui widgets svg
+QT       += core gui widgets svg network
 
 CONFIG   += silent
 
-lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5")
+lessThan(QT_MAJOR_VERSION, 5): error("requires Qt 5.6; found $$[QT_VERSION]")
 
-equals(QT_MAJOR_VERSION, 5): lessThan(QT_MINOR_VERSION, 6): error("requires Qt 5.6")
+equals(QT_MAJOR_VERSION, 5): lessThan(QT_MINOR_VERSION, 6): error("requires Qt 5.6; found $$[QT_VERSION]")
 
 TARGET = qrenderdoc
 TEMPLATE = app
@@ -67,10 +67,6 @@ win32 {
 	SWIGSOURCES += Code/pyrenderdoc/renderdoc.i
 	SWIGSOURCES += Code/pyrenderdoc/qrenderdoc.i
 
-	# Embed renderdoc.py and qrenderdoc.py
-	RC_DEFINES = RENDERDOC_PY_PATH=renderdoc.py
-	RC_DEFINES += QRENDERDOC_PY_PATH=qrenderdoc.py
-
 	# Include and link against python
 	INCLUDEPATH += $$_PRO_FILE_PWD_/3rdparty/python/include
 	!contains(QMAKE_TARGET.arch, x86_64) {
@@ -95,6 +91,9 @@ win32 {
 	# Link against the core library
 	LIBS += $$DESTDIR/renderdoc.lib
 
+	# Link against the version library
+	LIBS += $$DESTDIR/version.lib
+
 	QMAKE_CXXFLAGS_WARN_ON -= -w34100 
 	DEFINES += RENDERDOC_PLATFORM_WIN32
 
@@ -115,13 +114,15 @@ win32 {
 
 	# Link against the core library
 	LIBS += -lrenderdoc
-	QMAKE_LFLAGS += '-Wl,-rpath,\'\$$ORIGIN\',-rpath,\'\$$ORIGIN/../lib\''
+	QMAKE_LFLAGS += '-Wl,-rpath,\'\$$ORIGIN\',-rpath,\'\$$ORIGIN/../lib'$$LIB_SUFFIX'/'$$LIB_SUBFOLDER_TRAIL_SLASH'\''
 
 	# Add the SWIG files that were generated in cmake
 	SOURCES += $$CMAKE_DIR/qrenderdoc/renderdoc_python.cxx
 	SOURCES += $$CMAKE_DIR/qrenderdoc/renderdoc.py.c
 	SOURCES += $$CMAKE_DIR/qrenderdoc/qrenderdoc_python.cxx
 	SOURCES += $$CMAKE_DIR/qrenderdoc/qrenderdoc.py.c
+
+	SOURCES += $$_PRO_FILE_PWD_/../renderdoc/api/replay/version.cpp
 
 	CONFIG += warn_off
 	CONFIG += c++14
@@ -163,13 +164,17 @@ SOURCES += Code/qrenderdoc.cpp \
     Code/Resources.cpp \
     Code/pyrenderdoc/PythonContext.cpp \
     Code/Interface/QRDInterface.cpp \
+    Code/Interface/Analytics.cpp \
     Code/Interface/CommonPipelineState.cpp \
+    Code/Interface/SPIRVDisassembler.cpp \
     Code/Interface/PersistantConfig.cpp \
     Code/Interface/RemoteHost.cpp \
     Styles/StyleData.cpp \
     Styles/RDStyle/RDStyle.cpp \
     Styles/RDTweakedNativeStyle/RDTweakedNativeStyle.cpp \
     Windows/Dialogs/AboutDialog.cpp \
+    Windows/Dialogs/CrashDialog.cpp \
+    Windows/Dialogs/UpdateDialog.cpp \
     Windows/MainWindow.cpp \
     Windows/EventBrowser.cpp \
     Windows/TextureViewer.cpp \
@@ -202,10 +207,11 @@ SOURCES += Code/qrenderdoc.cpp \
     Windows/BufferViewer.cpp \
     Widgets/Extended/RDTableView.cpp \
     Windows/DebugMessageView.cpp \
+    Windows/CommentView.cpp \
     Windows/StatisticsViewer.cpp \
     Windows/TimelineBar.cpp \
     Windows/Dialogs/SettingsDialog.cpp \
-    Windows/Dialogs/OrderedListEditor.cpp \
+    Widgets/OrderedListEditor.cpp \
     Widgets/Extended/RDTableWidget.cpp \
     Windows/Dialogs/SuggestRemoteDialog.cpp \
     Windows/Dialogs/VirtualFileDialog.cpp \
@@ -218,7 +224,10 @@ SOURCES += Code/qrenderdoc.cpp \
     Windows/Dialogs/TipsDialog.cpp \
     Windows/PythonShell.cpp \
     Windows/Dialogs/PerformanceCounterSelection.cpp \
-    Windows/PerformanceCounterViewer.cpp
+    Windows/PerformanceCounterViewer.cpp \
+    Windows/ResourceInspector.cpp \
+    Windows/Dialogs/AnalyticsConfirmDialog.cpp \
+    Windows/Dialogs/AnalyticsPromptDialog.cpp
 HEADERS += Code/CaptureContext.h \
     Code/qprocessinfo.h \
     Code/ReplayManager.h \
@@ -227,8 +236,9 @@ HEADERS += Code/CaptureContext.h \
     Code/Resources.h \
     Code/pyrenderdoc/PythonContext.h \
     Code/pyrenderdoc/pyconversion.h \
-    Code/pyrenderdoc/document_check.h \
+    Code/pyrenderdoc/interface_check.h \
     Code/Interface/QRDInterface.h \
+    Code/Interface/Analytics.h \
     Code/Interface/CommonPipelineState.h \
     Code/Interface/PersistantConfig.h \
     Code/Interface/RemoteHost.h \
@@ -236,6 +246,8 @@ HEADERS += Code/CaptureContext.h \
     Styles/RDStyle/RDStyle.h \
     Styles/RDTweakedNativeStyle/RDTweakedNativeStyle.h \
     Windows/Dialogs/AboutDialog.h \
+    Windows/Dialogs/CrashDialog.h \
+    Windows/Dialogs/UpdateDialog.h \
     Windows/MainWindow.h \
     Windows/EventBrowser.h \
     Windows/TextureViewer.h \
@@ -268,10 +280,11 @@ HEADERS += Code/CaptureContext.h \
     Windows/BufferViewer.h \
     Widgets/Extended/RDTableView.h \
     Windows/DebugMessageView.h \
+    Windows/CommentView.h \
     Windows/StatisticsViewer.h \
     Windows/TimelineBar.h \
     Windows/Dialogs/SettingsDialog.h \
-    Windows/Dialogs/OrderedListEditor.h \
+    Widgets/OrderedListEditor.h \
     Widgets/Extended/RDTableWidget.h \
     Windows/Dialogs/SuggestRemoteDialog.h \
     Windows/Dialogs/VirtualFileDialog.h \
@@ -284,8 +297,13 @@ HEADERS += Code/CaptureContext.h \
     Windows/Dialogs/TipsDialog.h \
     Windows/PythonShell.h \
     Windows/Dialogs/PerformanceCounterSelection.h \
-    Windows/PerformanceCounterViewer.h
+    Windows/PerformanceCounterViewer.h \
+    Windows/ResourceInspector.h \
+    Windows/Dialogs/AnalyticsConfirmDialog.h \
+    Windows/Dialogs/AnalyticsPromptDialog.h
 FORMS    += Windows/Dialogs/AboutDialog.ui \
+    Windows/Dialogs/CrashDialog.ui \
+    Windows/Dialogs/UpdateDialog.ui \
     Windows/MainWindow.ui \
     Windows/EventBrowser.ui \
     Windows/TextureViewer.ui \
@@ -305,9 +323,9 @@ FORMS    += Windows/Dialogs/AboutDialog.ui \
     Windows/BufferViewer.ui \
     Windows/ShaderViewer.ui \
     Windows/DebugMessageView.ui \
+    Windows/CommentView.ui \
     Windows/StatisticsViewer.ui \
     Windows/Dialogs/SettingsDialog.ui \
-    Windows/Dialogs/OrderedListEditor.ui \
     Windows/Dialogs/SuggestRemoteDialog.ui \
     Windows/Dialogs/VirtualFileDialog.ui \
     Windows/Dialogs/RemoteManager.ui \
@@ -317,7 +335,10 @@ FORMS    += Windows/Dialogs/AboutDialog.ui \
     Windows/Dialogs/TipsDialog.ui \
     Windows/PythonShell.ui \
     Windows/Dialogs/PerformanceCounterSelection.ui \
-    Windows/PerformanceCounterViewer.ui
+    Windows/PerformanceCounterViewer.ui \
+    Windows/ResourceInspector.ui \
+    Windows/Dialogs/AnalyticsConfirmDialog.ui \
+    Windows/Dialogs/AnalyticsPromptDialog.ui
 
 RESOURCES += Resources/resources.qrc
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -34,27 +34,29 @@
 #include "driver/dxgi/dxgi_wrapped.h"
 #include "replay/replay_driver.h"
 #include "d3d12_common.h"
-#include "d3d12_debug.h"
 #include "d3d12_manager.h"
 #include "d3d12_replay.h"
 
 struct IAmdExtD3DFactory;
 
-struct D3D12InitParams : public RDCInitParams
+struct D3D12InitParams
 {
   D3D12InitParams();
-  ReplayStatus Serialise();
 
   D3D_FEATURE_LEVEL MinimumFeatureLevel;
 
-  static const uint32_t D3D12_SERIALISE_VERSION = 0x0000001;
-
-  // version number internal to d3d12 stream
-  uint32_t SerialiseVersion;
+  // check if a frame capture section version is supported
+  static const uint64_t CurrentVersion = 0x3;
+  static bool IsSupportedVersion(uint64_t ver);
 };
+
+DECLARE_REFLECTION_STRUCT(D3D12InitParams);
 
 class WrappedID3D12Device;
 class WrappedID3D12Resource;
+
+class D3D12TextRenderer;
+class D3D12ShaderCache;
 
 // give every impression of working but do nothing.
 // Just allow the user to call functions so that they don't
@@ -219,7 +221,8 @@ class WrappedID3D12CommandQueue;
 
 #define IMPLEMENT_FUNCTION_THREAD_SERIALISED(ret, func, ...) \
   ret func(__VA_ARGS__);                                     \
-  bool CONCAT(Serialise_, func(Serialiser *localSerialiser, __VA_ARGS__));
+  template <typename SerialiserType>                         \
+  bool CONCAT(Serialise_, func(SerialiserType &ser, __VA_ARGS__));
 
 class WrappedID3D12Device : public IFrameCapturer, public ID3DDevice, public ID3D12Device1
 {
@@ -234,11 +237,18 @@ private:
   // the queue we use for all internal work, the first DIRECT queue
   WrappedID3D12CommandQueue *m_Queue;
 
-  ID3D12CommandAllocator *m_Alloc, *m_DataUploadAlloc;
-  ID3D12GraphicsCommandList *m_List, *m_DataUploadList;
+  ID3D12CommandAllocator *m_Alloc = NULL, *m_DataUploadAlloc = NULL;
+  ID3D12GraphicsCommandList *m_List = NULL, *m_DataUploadList = NULL;
+  ID3D12DescriptorHeap *m_RTVHeap = NULL;
   ID3D12Fence *m_GPUSyncFence;
   HANDLE m_GPUSyncHandle;
   UINT64 m_GPUSyncCounter;
+
+  D3D12_CPU_DESCRIPTOR_HANDLE AllocRTV();
+  void FreeRTV(D3D12_CPU_DESCRIPTOR_HANDLE handle);
+
+  std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> m_FreeRTVs;
+  std::vector<D3D12_CPU_DESCRIPTOR_HANDLE> m_UsedRTVs;
 
   void CreateInternalResources();
   void DestroyInternalResources();
@@ -251,7 +261,8 @@ private:
   WrappedID3D12DebugDevice m_WrappedDebug;
 
   D3D12Replay m_Replay;
-  D3D12DebugManager *m_DebugManager;
+  D3D12ShaderCache *m_ShaderCache = NULL;
+  D3D12TextRenderer *m_TextRenderer = NULL;
 
   set<ResourceId> m_UploadResourceIds;
   map<uint64_t, ID3D12Resource *> m_UploadBuffers;
@@ -259,7 +270,7 @@ private:
   Threading::CriticalSection m_MapsLock;
   vector<MapState> m_Maps;
 
-  void ProcessChunk(uint64_t offset, D3D12ChunkType context);
+  bool ProcessChunk(ReadSerialiser &ser, D3D12Chunk context);
 
   unsigned int m_InternalRefcount;
   RefCounter12<ID3D12Device> m_RefCounter;
@@ -269,7 +280,7 @@ private:
   uint64_t threadSerialiserTLSSlot;
 
   Threading::CriticalSection m_ThreadSerialisersLock;
-  vector<Serialiser *> m_ThreadSerialisers;
+  std::vector<WriteSerialiser *> m_ThreadSerialisers;
 
   uint64_t tempMemoryTLSSlot;
   struct TempMem
@@ -281,26 +292,33 @@ private:
   Threading::CriticalSection m_ThreadTempMemLock;
   vector<TempMem *> m_ThreadTempMem;
 
-  Serialiser *GetThreadSerialiser();
-
   vector<DebugMessage> m_DebugMessages;
+
+  SDFile *m_StructuredFile = NULL;
+  SDFile m_StoredStructuredData;
 
   uint32_t m_FrameCounter;
   vector<FrameDescription> m_CapturedFrames;
   FrameRecord m_FrameRecord;
   vector<DrawcallDescription *> m_Drawcalls;
 
-  Serialiser *m_pSerialiser;
+  ReplayStatus m_FailedReplayStatus = ReplayStatus::APIReplayFailed;
+
   bool m_AppControlledCapture;
 
   Threading::CriticalSection m_CapTransitionLock;
-  LogState m_State;
+  CaptureState m_State;
+
+  uint32_t m_SubmitCounter = 0;
 
   D3D12InitParams m_InitParams;
+  uint64_t m_SectionVersion;
   ID3D12InfoQueue *m_pInfoQueue;
 
   D3D12ResourceRecord *m_FrameCaptureRecord;
   Chunk *m_HeaderChunk;
+
+  std::set<std::string> m_StringDB;
 
   ResourceId m_ResourceID;
   D3D12ResourceRecord *m_DeviceRecord;
@@ -340,7 +358,8 @@ private:
   D3D12_FEATURE_DATA_D3D12_OPTIONS m_D3D12Opts;
   UINT m_DescriptorIncrements[D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES];
 
-  void Serialise_CaptureScope(uint64_t offset);
+  template <typename SerialiserType>
+  bool Serialise_CaptureScope(SerialiserType &ser);
   void EndCaptureFrame(ID3D12Resource *presentImage);
 
 public:
@@ -358,22 +377,31 @@ public:
   ////////////////////////////////////////////////////////////////
   // non wrapping interface
 
+  APIProperties APIProps;
+
+  WriteSerialiser &GetThreadSerialiser();
+
   ID3D12Device *GetReal() { return m_pDevice; }
-  static const char *GetChunkName(uint32_t idx);
+  static std::string GetChunkName(uint32_t idx);
   D3D12ResourceManager *GetResourceManager() { return m_ResourceManager; }
-  D3D12DebugManager *GetDebugManager() { return m_DebugManager; }
-  Serialiser *GetMainSerialiser() { return m_pSerialiser; }
+  D3D12ShaderCache *GetShaderCache() { return m_ShaderCache; }
   ResourceId GetResourceID() { return m_ResourceID; }
   Threading::CriticalSection &GetCapTransitionLock() { return m_CapTransitionLock; }
   void ReleaseSwapchainResources(IDXGISwapChain *swap, IUnknown **backbuffers, int numBackbuffers);
   void FirstFrame(WrappedIDXGISwapChain4 *swap);
   FrameRecord &GetFrameRecord() { return m_FrameRecord; }
-  const DrawcallDescription *GetDrawcall(uint32_t eventID);
+  const DrawcallDescription *GetDrawcall(uint32_t eventId);
 
   ResourceId GetFrameCaptureResourceId() { return m_FrameCaptureRecord->GetResourceID(); }
   void AddDebugMessage(MessageCategory c, MessageSeverity sv, MessageSource src, std::string d);
-  void AddDebugMessage(const DebugMessage &msg) { m_DebugMessages.push_back(msg); }
+  void AddDebugMessage(const DebugMessage &msg);
   vector<DebugMessage> GetDebugMessages();
+
+  void AddResource(ResourceId id, ResourceType type, const char *defaultNamePrefix);
+  void DerivedResource(ResourceId parent, ResourceId child);
+  void DerivedResource(ID3D12DeviceChild *parent, ResourceId child);
+  void AddResourceCurChunk(ResourceDescription &descr);
+  void AddResourceCurChunk(ResourceId id);
 
   const string &GetResourceName(ResourceId id) { return m_ResourceNames[id]; }
   vector<D3D12_RESOURCE_STATES> &GetSubresourceStates(ResourceId id)
@@ -383,7 +411,11 @@ public:
   const map<ResourceId, SubresourceStateVector> &GetSubresourceStates() { return m_ResourceStates; }
   const map<ResourceId, DXGI_FORMAT> &GetBackbufferFormats() { return m_BackbufferFormat; }
   void SetLogFile(const char *logfile);
-  void SetLogVersion(uint32_t fileversion) { m_InitParams.SerialiseVersion = fileversion; }
+  void SetInitParams(const D3D12InitParams &params, uint64_t sectionVersion)
+  {
+    m_InitParams = params;
+    m_SectionVersion = sectionVersion;
+  }
   D3D12Replay *GetReplay() { return &m_Replay; }
   WrappedID3D12CommandQueue *GetQueue() { return m_Queue; }
   ID3D12CommandAllocator *GetAlloc() { return m_Alloc; }
@@ -438,6 +470,8 @@ public:
   ID3D12Resource *GetUploadBuffer(uint64_t chunkOffset, uint64_t byteSize);
   void ApplyInitialContents();
 
+  void AddCaptureSubmission();
+
   void ExecuteList(ID3D12GraphicsCommandList *list, ID3D12CommandQueue *queue = NULL);
   void ExecuteLists(ID3D12CommandQueue *queue = NULL);
   void FlushLists(bool forceSync = false, ID3D12CommandQueue *queue = NULL);
@@ -448,16 +482,24 @@ public:
   void StartFrameCapture(void *dev, void *wnd);
   bool EndFrameCapture(void *dev, void *wnd);
 
-  bool Serialise_BeginCaptureFrame(bool applyInitialState);
+  template <typename SerialiserType>
+  bool Serialise_BeginCaptureFrame(SerialiserType &ser);
 
-  bool Serialise_DynamicDescriptorWrite(Serialiser *localSerialiser,
-                                        const DynamicDescriptorWrite *write);
-  bool Serialise_DynamicDescriptorCopies(Serialiser *localSerialiser,
-                                         const std::vector<DynamicDescriptorCopy> *copies);
+  template <typename SerialiserType>
+  bool Serialise_DynamicDescriptorWrite(SerialiserType &ser, const DynamicDescriptorWrite *write);
+  template <typename SerialiserType>
+  bool Serialise_DynamicDescriptorCopies(SerialiserType &ser,
+                                         const std::vector<DynamicDescriptorCopy> &DescriptorCopies);
 
-  void ReadLogInitialisation();
+  ReplayStatus ReadLogInitialisation(RDCFile *rdc, bool storeStructuredBuffers);
   void ReplayLog(uint32_t startEventID, uint32_t endEventID, ReplayLogType replayType);
 
+  void SetStructuredExport(uint64_t sectionVersion)
+  {
+    m_SectionVersion = sectionVersion;
+    m_State = CaptureState::StructuredExport;
+  }
+  SDFile &GetStructuredFile() { return *m_StructuredFile; }
   // interface for DXGI
   virtual IUnknown *GetRealIUnknown() { return GetReal(); }
   virtual IID GetBackbufferUUID() { return __uuidof(ID3D12Resource); }
@@ -467,7 +509,7 @@ public:
     if(iid == __uuidof(ID3D12Device))
       return (ID3D12Device *)this;
 
-    RDCERR("Requested unknown device interface %s", ToStr::Get(iid).c_str());
+    RDCERR("Requested unknown device interface %s", ToStr(iid).c_str());
 
     return NULL;
   }
@@ -481,13 +523,13 @@ public:
   void ReleaseSwapchainResources(WrappedIDXGISwapChain4 *swap, UINT QueueCount,
                                  IUnknown *const *ppPresentQueue, IUnknown **unwrappedQueues);
 
-  void Map(WrappedID3D12Resource *Resource, UINT Subresource);
-  void Unmap(WrappedID3D12Resource *Resource, UINT Subresource, byte *mapPtr,
+  void Map(ID3D12Resource *Resource, UINT Subresource);
+  void Unmap(ID3D12Resource *Resource, UINT Subresource, byte *mapPtr,
              const D3D12_RANGE *pWrittenRange);
 
-  IMPLEMENT_FUNCTION_THREAD_SERIALISED(void, MapDataWrite, WrappedID3D12Resource *Resource,
+  IMPLEMENT_FUNCTION_THREAD_SERIALISED(void, MapDataWrite, ID3D12Resource *Resource,
                                        UINT Subresource, byte *mapPtr, D3D12_RANGE range);
-  IMPLEMENT_FUNCTION_THREAD_SERIALISED(void, WriteToSubresource, WrappedID3D12Resource *Resource,
+  IMPLEMENT_FUNCTION_THREAD_SERIALISED(void, WriteToSubresource, ID3D12Resource *Resource,
                                        UINT Subresource, const D3D12_BOX *pDstBox,
                                        const void *pSrcData, UINT SrcRowPitch, UINT SrcDepthPitch);
 
@@ -511,12 +553,12 @@ public:
   }
   void CheckForDeath();
 
+  void ReleaseResource(ID3D12DeviceChild *pResource);
+
   // Resource
-  IMPLEMENT_FUNCTION_THREAD_SERIALISED(void, SetResourceName, ID3D12DeviceChild *res,
-                                       const char *name);
-  IMPLEMENT_FUNCTION_THREAD_SERIALISED(HRESULT, SetShaderDebugPath, ID3D12DeviceChild *res,
-                                       const char *name);
-  IMPLEMENT_FUNCTION_THREAD_SERIALISED(void, ReleaseResource, ID3D12DeviceChild *res);
+  IMPLEMENT_FUNCTION_THREAD_SERIALISED(void, SetName, ID3D12DeviceChild *pResource, const char *Name);
+  IMPLEMENT_FUNCTION_THREAD_SERIALISED(HRESULT, SetShaderDebugPath, ID3D12DeviceChild *pResource,
+                                       const char *Path);
 
   //////////////////////////////
   // implement IUnknown

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -36,6 +36,7 @@
   RESOURCE_DEF(arrow_right, "arrow_right.png")                          \
   RESOURCE_DEF(arrow_undo, "arrow_undo.png")                            \
   RESOURCE_DEF(asterisk_orange, "asterisk_orange.png")                  \
+  RESOURCE_DEF(bug, "bug.png")                                          \
   RESOURCE_DEF(chart_curve, "chart_curve.png")                          \
   RESOURCE_DEF(cog, "cog.png")                                          \
   RESOURCE_DEF(color_wheel, "color_wheel.png")                          \
@@ -61,17 +62,21 @@
   RESOURCE_DEF(hourglass, "hourglass.png")                              \
   RESOURCE_DEF(house, "house.png")                                      \
   RESOURCE_DEF(information, "information.png")                          \
+  RESOURCE_DEF(link, "link.png")                                        \
+  RESOURCE_DEF(page_go, "page_go.png")                                  \
   RESOURCE_DEF(page_white_code, "page_white_code.png")                  \
   RESOURCE_DEF(page_white_database, "page_white_database.png")          \
   RESOURCE_DEF(page_white_delete, "page_white_delete.png")              \
   RESOURCE_DEF(page_white_edit, "page_white_edit.png")                  \
   RESOURCE_DEF(page_white_link, "page_white_link.png")                  \
+  RESOURCE_DEF(page_white_stack, "page_white_stack.png")                \
   RESOURCE_DEF(plugin_add, "plugin_add.png")                            \
   RESOURCE_DEF(save, "save.png")                                        \
   RESOURCE_DEF(tick, "tick.png")                                        \
   RESOURCE_DEF(time, "time.png")                                        \
   RESOURCE_DEF(timeline_marker, "timeline_marker.png")                  \
   RESOURCE_DEF(upfolder, "upfolder.png")                                \
+  RESOURCE_DEF(update, "update.png")                                    \
   RESOURCE_DEF(wand, "wand.png")                                        \
   RESOURCE_DEF(wireframe_mesh, "wireframe_mesh.png")                    \
   RESOURCE_DEF(wrench, "wrench.png")                                    \

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -140,8 +140,8 @@ struct VulkanRegisterCommand : public Command
 void VerifyVulkanLayer(const GlobalEnvironment &env, int argc, char *argv[])
 {
   VulkanLayerFlags flags = VulkanLayerFlags::NoFlags;
-  rdctype::array<rdctype::str> myJSONs;
-  rdctype::array<rdctype::str> otherJSONs;
+  rdcarray<rdcstr> myJSONs;
+  rdcarray<rdcstr> otherJSONs;
 
   char* home_path = getenv("HOME");
   // YETI: Only use the ignore vulkan layer file if the HOME env is set.
@@ -176,20 +176,20 @@ void VerifyVulkanLayer(const GlobalEnvironment &env, int argc, char *argv[])
   const bool registerAll = bool(flags & VulkanLayerFlags::RegisterAll);
   const bool updateAllowed = bool(flags & VulkanLayerFlags::UpdateAllowed);
 
-  for(const rdctype::str &j : otherJSONs)
+  for(const rdcstr &j : otherJSONs)
     std::cerr << (updateAllowed ? "Unregister/update: " : "Unregister: ") << j.c_str() << std::endl;
 
   if(!(flags & VulkanLayerFlags::ThisInstallRegistered))
   {
     if(registerAll)
   {
-      for(const rdctype::str &j : myJSONs)
+      for(const rdcstr &j : myJSONs)
         std::cerr << (updateAllowed ? "Register/update: " : "Register: ") << j.c_str() << std::endl;
     }
     else
     {
       std::cerr << (updateAllowed ? "Register one of:" : "Register/update one of:") << std::endl;
-      for(const rdctype::str &j : myJSONs)
+      for(const rdcstr &j : myJSONs)
         std::cerr << "  -- " << j.c_str() << "\n";
     }
   }
@@ -240,6 +240,120 @@ void VerifyVulkanLayer(const GlobalEnvironment &env, int argc, char *argv[])
 
 static Display *display = NULL;
 
+WindowingData DisplayRemoteServerPreview(bool active, const rdcarray<WindowingSystem> &systems)
+{
+  static WindowingData remoteServerPreview = {WindowingSystem::Unknown};
+
+// we only have the preview implemented for platforms that have xlib & xcb. It's unlikely
+// a meaningful platform exists with only one, and at the time of writing no other windowing
+// systems are supported on linux for the replay
+#if defined(RENDERDOC_WINDOWING_XLIB) && defined(RENDERDOC_WINDOWING_XCB)
+  if(active)
+  {
+    if(remoteServerPreview.system == WindowingSystem::Unknown)
+    {
+      // if we're first initialising, create the window
+      if(display == NULL)
+        return remoteServerPreview;
+
+      int scr = DefaultScreen(display);
+
+      xcb_connection_t *connection = XGetXCBConnection(display);
+
+      if(connection == NULL)
+      {
+        std::cerr << "Couldn't get XCB connection from Xlib Display" << std::endl;
+        return remoteServerPreview;
+      }
+
+      XSetEventQueueOwner(display, XCBOwnsEventQueue);
+
+      const xcb_setup_t *setup = xcb_get_setup(connection);
+      xcb_screen_iterator_t iter = xcb_setup_roots_iterator(setup);
+      while(scr-- > 0)
+        xcb_screen_next(&iter);
+
+      xcb_screen_t *screen = iter.data;
+
+      uint32_t value_mask, value_list[32];
+
+      xcb_window_t window = xcb_generate_id(connection);
+
+      value_mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;
+      value_list[0] = screen->black_pixel;
+      value_list[1] =
+          XCB_EVENT_MASK_KEY_RELEASE | XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY;
+
+      xcb_create_window(connection, XCB_COPY_FROM_PARENT, window, screen->root, 0, 0, 1280, 720, 0,
+                        XCB_WINDOW_CLASS_INPUT_OUTPUT, screen->root_visual, value_mask, value_list);
+
+      /* Magic code that will send notification when window is destroyed */
+      xcb_intern_atom_cookie_t cookie = xcb_intern_atom(connection, 1, 12, "WM_PROTOCOLS");
+      xcb_intern_atom_reply_t *reply = xcb_intern_atom_reply(connection, cookie, 0);
+
+      xcb_intern_atom_cookie_t cookie2 = xcb_intern_atom(connection, 0, 16, "WM_DELETE_WINDOW");
+      xcb_intern_atom_reply_t *atom_wm_delete_window = xcb_intern_atom_reply(connection, cookie2, 0);
+
+      xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, XCB_ATOM_WM_NAME,
+                          XCB_ATOM_STRING, 8, sizeof("Remote Server Preview") - 1,
+                          "Remote Server Preview");
+
+      xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window, (*reply).atom, 4, 32, 1,
+                          &(*atom_wm_delete_window).atom);
+      free(reply);
+
+      xcb_map_window(connection, window);
+
+      bool xcb = false, xlib = false;
+
+      for(size_t i = 0; i < systems.size(); i++)
+      {
+        if(systems[i] == WindowingSystem::Xlib)
+          xlib = true;
+        if(systems[i] == WindowingSystem::XCB)
+          xcb = true;
+      }
+
+      // prefer xcb
+      if(xcb)
+        remoteServerPreview = CreateXCBWindowingData(connection, window);
+      else if(xlib)
+        remoteServerPreview = CreateXlibWindowingData(display, (Drawable)window);
+
+      xcb_flush(connection);
+    }
+    else
+    {
+      // otherwise, we can pump messages here, but we don't actually care to process any. Just clear
+      // the queue
+      xcb_generic_event_t *event = NULL;
+
+      xcb_connection_t *connection = remoteServerPreview.xcb.connection;
+
+      if(remoteServerPreview.system == WindowingSystem::Xlib)
+        connection = XGetXCBConnection(remoteServerPreview.xlib.display);
+
+      if(connection)
+      {
+        do
+        {
+          event = xcb_poll_for_event(connection);
+          if(event)
+            free(event);
+        } while(event);
+      }
+    }
+  }
+  else
+  {
+    // reset the windowing data to 'no window'
+    remoteServerPreview = {WindowingSystem::Unknown};
+  }
+#endif
+
+  return remoteServerPreview;
+}
+
 void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &displayCfg, uint32_t width,
                             uint32_t height)
 {
@@ -262,7 +376,6 @@ void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &display
 
   if(connection == NULL)
   {
-    XCloseDisplay(display);
     std::cerr << "Couldn't get XCB connection from Xlib Display" << std::endl;
     return;
   }
@@ -304,11 +417,11 @@ void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &display
 
   xcb_map_window(connection, window);
 
-  rdctype::array<WindowingSystem> systems = renderer->GetSupportedWindowSystems();
+  rdcarray<WindowingSystem> systems = renderer->GetSupportedWindowSystems();
 
   bool xcb = false, xlib = false;
 
-  for(int32_t i = 0; i < systems.count; i++)
+  for(size_t i = 0; i < systems.size(); i++)
   {
     if(systems[i] == WindowingSystem::Xlib)
       xlib = true;
@@ -321,25 +434,19 @@ void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &display
   // prefer xcb
   if(xcb)
   {
-    XCBWindowData windowData;
-    windowData.connection = connection;
-    windowData.window = window;
-
-    out = renderer->CreateOutput(WindowingSystem::XCB, &windowData, ReplayOutputType::Texture);
+    out = renderer->CreateOutput(CreateXCBWindowingData(connection, window),
+                                 ReplayOutputType::Texture);
   }
   else if(xlib)
   {
-    XlibWindowData windowData;
-    windowData.display = display;
-    windowData.window = (Drawable)window;    // safe to cast types
-
-    out = renderer->CreateOutput(WindowingSystem::Xlib, &windowData, ReplayOutputType::Texture);
+    out = renderer->CreateOutput(CreateXlibWindowingData(display, (Drawable)window),
+                                 ReplayOutputType::Texture);
   }
   else
   {
     std::cerr << "Neither XCB nor XLib are supported, can't create window." << std::endl;
     std::cerr << "Supported systems: ";
-    for(int32_t i = 0; i < systems.count; i++)
+    for(size_t i = 0; i < systems.size(); i++)
       std::cerr << (uint32_t)systems[i] << std::endl;
     std::cerr << std::endl;
     return;
@@ -490,5 +597,12 @@ int main(int argc, char *argv[])
     add_version_line(support);
   }
 
-  return renderdoccmd(env, argc, argv);
+  int ret = renderdoccmd(env, argc, argv);
+
+#if defined(RENDERDOC_WINDOWING_XLIB) || defined(RENDERDOC_WINDOWING_XCB)
+  if(display)
+    XCloseDisplay(display);
+#endif
+
+  return ret;
 }

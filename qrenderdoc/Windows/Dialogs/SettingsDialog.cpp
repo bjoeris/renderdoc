@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,13 +23,68 @@
  ******************************************************************************/
 
 #include "SettingsDialog.h"
-#include "Code/CaptureContext.h"
+#include <QKeyEvent>
 #include "Code/Interface/QRDInterface.h"
 #include "Code/QRDUtils.h"
 #include "Styles/StyleData.h"
-#include "Windows/Dialogs/OrderedListEditor.h"
+#include "Widgets/OrderedListEditor.h"
 #include "CaptureDialog.h"
 #include "ui_SettingsDialog.h"
+
+class KnownSPIRVToolDelegate : public QStyledItemDelegate
+{
+public:
+  explicit KnownSPIRVToolDelegate(QWidget *parent = NULL) : QStyledItemDelegate(parent) {}
+  QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
+                        const QModelIndex &index) const override
+  {
+    QComboBox *editor = new QComboBox(parent);
+
+    editor->setEditable(true);
+    editor->setInsertPolicy(QComboBox::NoInsert);
+
+    QStringList items;
+    for(KnownSPIRVTool tool : values<KnownSPIRVTool>())
+      items << ToQStr(tool);
+    editor->addItems(items);
+
+    return editor;
+  }
+
+  void setEditorData(QWidget *editor, const QModelIndex &index) const override
+  {
+    QComboBox *comboEditor = qobject_cast<QComboBox *>(editor);
+    if(comboEditor)
+    {
+      QString editData = index.data(Qt::EditRole).toString();
+
+      int idx = comboEditor->findText(editData);
+
+      if(idx >= 0)
+        comboEditor->setCurrentIndex(idx);
+      else
+        comboEditor->setCurrentText(index.data(Qt::EditRole).toString());
+
+      return;
+    }
+
+    QStyledItemDelegate::setEditorData(editor, index);
+  }
+
+  void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const override
+  {
+    QComboBox *comboEditor = qobject_cast<QComboBox *>(editor);
+    if(comboEditor)
+    {
+      model->setData(index, comboEditor->currentText(), Qt::EditRole);
+      return;
+    }
+
+    QStyledItemDelegate::setModelData(editor, model, index);
+  }
+
+private slots:
+};
 
 SettingsDialog::SettingsDialog(ICaptureContext &ctx, QWidget *parent)
     : QDialog(parent), ui(new Ui::SettingsDialog), m_Ctx(ctx)
@@ -65,6 +120,9 @@ SettingsDialog::SettingsDialog(ICaptureContext &ctx, QWidget *parent)
   ui->pages->setItemSelected(ui->pages->item(0), true);
   ui->tabWidget->setCurrentIndex(0);
 
+  ui->pages->setMinimumWidth(ui->pages->sizeHintForColumn(0));
+  ui->pages->adjustSize();
+
   for(int i = 0; i < StyleData::numAvailable; i++)
   {
     if(StyleData::availStyles[i].styleID == m_Ctx.Config().UIStyle)
@@ -77,12 +135,28 @@ SettingsDialog::SettingsDialog(ICaptureContext &ctx, QWidget *parent)
   ui->saveDirectory->setText(m_Ctx.Config().DefaultCaptureSaveDirectory);
   ui->tempDirectory->setText(m_Ctx.Config().TemporaryCaptureDirectory);
 
-  if(!m_Ctx.Config().SPIRVDisassemblers.isEmpty())
-  {
-    ui->externalDisassemblerArgs->setText(m_Ctx.Config().SPIRVDisassemblers[0].args);
-    ui->externalDisassemblePath->setText(m_Ctx.Config().SPIRVDisassemblers[0].executable);
-  }
-  ui->Android_AdbExecutablePath->setText(m_Ctx.Config().Android_AdbExecutablePath);
+  ui->disassemblers->setColumnCount(3);
+  ui->disassemblers->setHorizontalHeaderLabels(QStringList() << tr("Tool") << tr("Executable")
+                                                             << tr("Arguments"));
+
+  ui->disassemblers->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
+  ui->disassemblers->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
+  ui->disassemblers->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+
+  for(const SPIRVDisassembler &disasm : m_Ctx.Config().SPIRVDisassemblers)
+    addDisassembler(disasm);
+
+  ui->disassemblers->horizontalHeader()->resizeSection(0, 100);
+
+  ui->disassemblers->verticalHeader()->setSectionsMovable(true);
+  ui->disassemblers->verticalHeader()->setMinimumWidth(20);
+
+  ui->disassemblers->setItemDelegateForColumn(0, new KnownSPIRVToolDelegate(this));
+
+  ui->deleteDisasm->setEnabled(false);
+
+  ui->Android_SDKPath->setText(m_Ctx.Config().Android_SDKPath);
+  ui->Android_JDKPath->setText(m_Ctx.Config().Android_JDKPath);
   ui->Android_MaxConnectTimeout->setValue(m_Ctx.Config().Android_MaxConnectTimeout);
   ui->Android_AutoPushLayerToApp->setChecked(m_Ctx.Config().Android_AutoPushLayerToApp);
 
@@ -106,6 +180,8 @@ SettingsDialog::SettingsDialog(ICaptureContext &ctx, QWidget *parent)
   // disable sub-checkbox
   ui->EventBrowser_ColorEventRow->setEnabled(ui->EventBrowser_ApplyColors->isChecked());
 
+  ui->Comments_ShowOnLoad->setChecked(m_Ctx.Config().Comments_ShowOnLoad);
+
   ui->Formatter_MinFigures->setValue(m_Ctx.Config().Formatter_MinFigures);
   ui->Formatter_MaxFigures->setValue(m_Ctx.Config().Formatter_MaxFigures);
   ui->Formatter_NegExp->setValue(m_Ctx.Config().Formatter_NegExp);
@@ -122,6 +198,8 @@ SettingsDialog::SettingsDialog(ICaptureContext &ctx, QWidget *parent)
 
   m_Init = false;
 
+  QObject::connect(ui->disassemblers->verticalHeader(), &QHeaderView::sectionMoved, this,
+                   &SettingsDialog::disassemblers_rowMoved);
   QObject::connect(ui->Formatter_MinFigures, OverloadedSlot<int>::of(&QSpinBox::valueChanged), this,
                    &SettingsDialog::formatter_valueChanged);
   QObject::connect(ui->Formatter_MaxFigures, OverloadedSlot<int>::of(&QSpinBox::valueChanged), this,
@@ -195,7 +273,10 @@ void SettingsDialog::on_browseSaveCaptureDirectory_clicked()
                                      m_Ctx.Config().DefaultCaptureSaveDirectory);
 
   if(!dir.isEmpty())
+  {
     m_Ctx.Config().DefaultCaptureSaveDirectory = dir;
+    ui->saveDirectory->setText(dir);
+  }
 
   m_Ctx.Config().Save();
 }
@@ -213,6 +294,12 @@ void SettingsDialog::on_AllowGlobalHook_toggled(bool checked)
 void SettingsDialog::on_CheckUpdate_AllowChecks_toggled(bool checked)
 {
   m_Ctx.Config().CheckUpdate_AllowChecks = ui->CheckUpdate_AllowChecks->isChecked();
+
+  if(!m_Ctx.Config().CheckUpdate_AllowChecks)
+  {
+    m_Ctx.Config().CheckUpdate_UpdateAvailable = false;
+    m_Ctx.Config().CheckUpdate_UpdateResponse = "";
+  }
 
   m_Ctx.Config().Save();
 }
@@ -236,18 +323,33 @@ void SettingsDialog::on_AlwaysReplayLocally_toggled(bool checked)
 // core
 void SettingsDialog::on_chooseSearchPaths_clicked()
 {
-  OrderedListEditor listEd(tr("Shader debug info search paths"), tr("Search Path"),
-                           BrowseMode::Folder, this);
+  QDialog listEditor;
 
-  listEd.setItems(m_Ctx.Config()
-                      .GetConfigSetting(lit("shader.debug.searchPaths"))
-                      .split(QLatin1Char(';'), QString::SkipEmptyParts));
+  listEditor.setWindowTitle(tr("Shader debug info search paths"));
+  listEditor.setWindowFlags(listEditor.windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
-  int res = RDDialog::show(&listEd);
+  OrderedListEditor list(tr("Search Path"), BrowseMode::Folder);
+
+  QVBoxLayout layout;
+  QDialogButtonBox okCancel;
+  okCancel.setStandardButtons(QDialogButtonBox::Cancel | QDialogButtonBox::Ok);
+  layout.addWidget(&list);
+  layout.addWidget(&okCancel);
+
+  QObject::connect(&okCancel, &QDialogButtonBox::accepted, &listEditor, &QDialog::accept);
+  QObject::connect(&okCancel, &QDialogButtonBox::rejected, &listEditor, &QDialog::reject);
+
+  listEditor.setLayout(&layout);
+
+  QString setting = m_Ctx.Config().GetConfigSetting("shader.debug.searchPaths");
+
+  list.setItems(setting.split(QLatin1Char(';'), QString::SkipEmptyParts));
+
+  int res = RDDialog::show(&listEditor);
 
   if(res)
     m_Ctx.Config().SetConfigSetting(lit("shader.debug.searchPaths"),
-                                    listEd.getItems().join(QLatin1Char(';')));
+                                    list.getItems().join(QLatin1Char(';')));
 }
 
 // texture viewer
@@ -273,39 +375,144 @@ void SettingsDialog::on_ShaderViewer_FriendlyNaming_toggled(bool checked)
   m_Ctx.Config().Save();
 }
 
-void SettingsDialog::on_browseExtDisasemble_clicked()
+void SettingsDialog::addDisassembler(const SPIRVDisassembler &disasm)
 {
-  QString filePath = RDDialog::getExecutableFileName(this, tr("Locate SPIR-V disassembler"));
+  // prevent calling cellChanged
+  m_AddingDisassembler = true;
 
-  if(!filePath.isEmpty())
+  int row = ui->disassemblers->rowCount();
+  ui->disassemblers->insertRow(row);
+
+  ui->disassemblers->setVerticalHeaderItem(row, new QTableWidgetItem(QString()));
+
+  ui->disassemblers->setItem(row, 0, new QTableWidgetItem(disasm.name));
+  ui->disassemblers->setItem(row, 1, new QTableWidgetItem(disasm.executable));
+
+  QTableWidgetItem *item = new QTableWidgetItem(
+      disasm.tool == KnownSPIRVTool::Unknown ? QString(disasm.args) : tr("Automatic"));
+  ui->disassemblers->setItem(row, 2, item);
+
+  // make arguments non-editable for built-in tools
+  if(disasm.tool != KnownSPIRVTool::Unknown)
   {
-    ui->externalDisassemblePath->setText(filePath);
-    on_externalDisassemblePath_textEdited(filePath);
+    Qt::ItemFlags flags = item->flags() & ~Qt::ItemIsEditable;
+    item->setFlags(flags);
   }
+
+  m_AddingDisassembler = false;
 }
 
-void SettingsDialog::on_externalDisassemblePath_textEdited(const QString &path)
+void SettingsDialog::on_addDisasm_clicked()
 {
-  if(m_Ctx.Config().SPIRVDisassemblers.isEmpty())
-  {
-    m_Ctx.Config().SPIRVDisassemblers.push_back(SPIRVDisassembler());
-    m_Ctx.Config().SPIRVDisassemblers.back().name = lit("Unknown");
-  }
+  SPIRVDisassembler disasm;
+  disasm.name = tr("Custom Tool");
+  disasm.executable = lit("path/to/executable");
+  disasm.args = lit("--input {spv_bin} --output {spv_disasm}");
+  m_Ctx.Config().SPIRVDisassemblers.push_back(disasm);
 
-  m_Ctx.Config().SPIRVDisassemblers.back().executable = path;
+  addDisassembler(disasm);
 
   m_Ctx.Config().Save();
 }
 
-void SettingsDialog::on_externalDisassemblerArgs_textEdited(const QString &args)
+void SettingsDialog::on_deleteDisasm_clicked()
 {
-  if(m_Ctx.Config().SPIRVDisassemblers.isEmpty())
+  int row = -1;
+
+  QModelIndexList selected = ui->disassemblers->selectionModel()->selectedRows();
+
+  if(!selected.isEmpty())
+    row = selected[0].row();
+
+  if(row < 0 || row >= m_Ctx.Config().SPIRVDisassemblers.count())
+    return;
+
+  const SPIRVDisassembler &disasm = m_Ctx.Config().SPIRVDisassemblers[row];
+
+  QMessageBox::StandardButton res = RDDialog::question(
+      this, tr("Are you sure?"), tr("Are you sure you want to delete '%1'?").arg(disasm.name),
+      QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+
+  if(res == QMessageBox::Yes)
   {
-    m_Ctx.Config().SPIRVDisassemblers.push_back(SPIRVDisassembler());
-    m_Ctx.Config().SPIRVDisassemblers.back().name = lit("Unknown");
+    ui->disassemblers->removeRow(row);
+    m_Ctx.Config().SPIRVDisassemblers.erase(row);
+
+    m_Ctx.Config().Save();
+  }
+}
+
+void SettingsDialog::on_disassemblers_itemSelectionChanged()
+{
+  ui->deleteDisasm->setEnabled(!ui->disassemblers->selectionModel()->selectedIndexes().empty());
+}
+
+void SettingsDialog::on_disassemblers_cellChanged(int row, int column)
+{
+  if(m_AddingDisassembler || row < 0 || row >= m_Ctx.Config().SPIRVDisassemblers.count())
+    return;
+
+  SPIRVDisassembler &disasm = m_Ctx.Config().SPIRVDisassemblers[row];
+
+  QString cellData = ui->disassemblers->item(row, column)->text();
+
+  if(column == 0)
+  {
+    bool found = false;
+
+    for(KnownSPIRVTool tool : values<KnownSPIRVTool>())
+    {
+      if(ToQStr(tool) == cellData)
+      {
+        disasm.tool = tool;
+        disasm.name = cellData;
+        found = true;
+
+        // make arguments non-editable
+        Qt::ItemFlags flags = ui->disassemblers->item(row, 2)->flags() & ~Qt::ItemIsEditable;
+        ui->disassemblers->item(row, 2)->setFlags(flags);
+      }
+    }
+
+    if(!found)
+    {
+      disasm.tool = KnownSPIRVTool::Unknown;
+      disasm.name = cellData;
+
+      // make arguments editable
+      Qt::ItemFlags flags = ui->disassemblers->item(row, 2)->flags() | Qt::ItemIsEditable;
+      ui->disassemblers->item(row, 2)->setFlags(flags);
+    }
+  }
+  else if(column == 1)
+  {
+    disasm.executable = cellData;
+  }
+  else if(column == 2)
+  {
+    disasm.args = cellData;
   }
 
-  m_Ctx.Config().SPIRVDisassemblers.back().args = args;
+  m_Ctx.Config().Save();
+}
+
+void SettingsDialog::on_disassemblers_keyPress(QKeyEvent *event)
+{
+  if(event->key() == Qt::Key_Delete)
+  {
+    ui->deleteDisasm->click();
+  }
+}
+
+void SettingsDialog::disassemblers_rowMoved(int logicalIndex, int oldVisualIndex, int newVisualIndex)
+{
+  if(oldVisualIndex < 0 || oldVisualIndex >= m_Ctx.Config().SPIRVDisassemblers.count() ||
+     newVisualIndex < 0 || newVisualIndex >= m_Ctx.Config().SPIRVDisassemblers.count())
+    return;
+
+  SPIRVDisassembler disasm = m_Ctx.Config().SPIRVDisassemblers.at(oldVisualIndex);
+  m_Ctx.Config().SPIRVDisassemblers.erase(oldVisualIndex);
+  m_Ctx.Config().SPIRVDisassemblers.insert(newVisualIndex, disasm);
 
   m_Ctx.Config().Save();
 }
@@ -316,7 +523,7 @@ void SettingsDialog::on_EventBrowser_TimeUnit_currentIndexChanged(int index)
   if(m_Init)
     return;
 
-  m_Ctx.Config().EventBrowser_TimeUnit = (TimeUnit)ui->EventBrowser_TimeUnit->currentIndex();
+  m_Ctx.Config().EventBrowser_TimeUnit = (TimeUnit)qMax(0, ui->EventBrowser_TimeUnit->currentIndex());
 
   if(m_Ctx.HasEventBrowser())
     m_Ctx.GetEventBrowser()->UpdateDurationColumn();
@@ -359,6 +566,13 @@ void SettingsDialog::on_EventBrowser_ColorEventRow_toggled(bool checked)
   m_Ctx.Config().Save();
 }
 
+void SettingsDialog::on_Comments_ShowOnLoad_toggled(bool checked)
+{
+  m_Ctx.Config().Comments_ShowOnLoad = ui->Comments_ShowOnLoad->isChecked();
+
+  m_Ctx.Config().Save();
+}
+
 // android
 void SettingsDialog::on_browseTempCaptureDirectory_clicked()
 {
@@ -366,22 +580,56 @@ void SettingsDialog::on_browseTempCaptureDirectory_clicked()
                                                m_Ctx.Config().TemporaryCaptureDirectory);
 
   if(!dir.isEmpty())
+  {
     m_Ctx.Config().TemporaryCaptureDirectory = dir;
+    ui->tempDirectory->setText(dir);
+  }
 
   m_Ctx.Config().Save();
 }
 
-void SettingsDialog::on_browseAdbPath_clicked()
+void SettingsDialog::on_browseAndroidSDKPath_clicked()
 {
-  QString adb = RDDialog::getExecutableFileName(
-      this, tr("Locate adb executable"),
-      QFileInfo(m_Ctx.Config().Android_AdbExecutablePath).absoluteDir().path());
+  QString adb = RDDialog::getExistingDirectory(
+      this, tr("Locate SDK root folder (containing build-tools, platform-tools)"),
+      QFileInfo(m_Ctx.Config().Android_SDKPath).absoluteDir().path());
 
   if(!adb.isEmpty())
   {
-    ui->Android_AdbExecutablePath->setText(adb);
-    m_Ctx.Config().Android_AdbExecutablePath = adb;
+    ui->Android_SDKPath->setText(adb);
+    m_Ctx.Config().Android_SDKPath = adb;
   }
+
+  m_Ctx.Config().Save();
+}
+
+void SettingsDialog::on_Android_SDKPath_textEdited(const QString &adb)
+{
+  if(QFileInfo::exists(adb) || adb.isEmpty())
+    m_Ctx.Config().Android_SDKPath = adb;
+
+  m_Ctx.Config().Save();
+}
+
+void SettingsDialog::on_browseAndroidJDKPath_clicked()
+{
+  QString adb =
+      RDDialog::getExistingDirectory(this, tr("Locate JDK root folder (containing bin, jre, lib)"),
+                                     QFileInfo(m_Ctx.Config().Android_JDKPath).absoluteDir().path());
+
+  if(!adb.isEmpty())
+  {
+    ui->Android_JDKPath->setText(adb);
+    m_Ctx.Config().Android_JDKPath = adb;
+  }
+
+  m_Ctx.Config().Save();
+}
+
+void SettingsDialog::on_Android_JDKPath_textEdited(const QString &adb)
+{
+  if(QFileInfo::exists(adb) || adb.isEmpty())
+    m_Ctx.Config().Android_JDKPath = adb;
 
   m_Ctx.Config().Save();
 }
@@ -389,14 +637,6 @@ void SettingsDialog::on_browseAdbPath_clicked()
 void SettingsDialog::on_Android_MaxConnectTimeout_valueChanged(double timeout)
 {
   m_Ctx.Config().Android_MaxConnectTimeout = ui->Android_MaxConnectTimeout->value();
-
-  m_Ctx.Config().Save();
-}
-
-void SettingsDialog::on_Android_AdbExecutablePath_textEdited(const QString &adb)
-{
-  if(QFileInfo::exists(adb) || adb.isEmpty())
-    m_Ctx.Config().Android_AdbExecutablePath = adb;
 
   m_Ctx.Config().Save();
 }

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +29,6 @@
 #include <QShortcut>
 #include <QTimer>
 #include "3rdparty/flowlayout/FlowLayout.h"
-#include "Code/CaptureContext.h"
 #include "Code/QRDUtils.h"
 #include "Code/Resources.h"
 #include "Widgets/Extended/RDHeaderView.h"
@@ -39,8 +38,8 @@
 struct EventItemTag
 {
   EventItemTag() = default;
-  EventItemTag(uint32_t eventID) : EID(eventID), lastEID(eventID) {}
-  EventItemTag(uint32_t eventID, uint32_t lastEventID) : EID(eventID), lastEID(lastEventID) {}
+  EventItemTag(uint32_t eventId) : EID(eventId), lastEID(eventId) {}
+  EventItemTag(uint32_t eventId, uint32_t lastEventID) : EID(eventId), lastEID(lastEventID) {}
   uint32_t EID = 0;
   uint32_t lastEID = 0;
   double duration = -1.0;
@@ -83,6 +82,8 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
   ui->events->header()->setSectionResizeMode(COL_EID, QHeaderView::Interactive);
   ui->events->header()->setSectionResizeMode(COL_DRAW, QHeaderView::Interactive);
   ui->events->header()->setSectionResizeMode(COL_DURATION, QHeaderView::Interactive);
+
+  ui->events->setColumnAlignment(COL_DURATION, Qt::AlignRight | Qt::AlignCenter);
 
   ui->events->header()->setMinimumSectionSize(40);
 
@@ -154,27 +155,45 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
   QObject::connect(ui->events->header(), &QHeaderView::customContextMenuRequested, this,
                    &EventBrowser::events_contextMenu);
 
-  OnLogfileClosed();
+  OnCaptureClosed();
 
   m_redPalette = palette();
   m_redPalette.setColor(QPalette::Base, Qt::red);
 
-  m_Ctx.AddLogViewer(this);
+  m_Ctx.AddCaptureViewer(this);
 }
 
 EventBrowser::~EventBrowser()
 {
+  // unregister any shortcuts we registered
+  Qt::Key keys[] = {
+      Qt::Key_1, Qt::Key_2, Qt::Key_3, Qt::Key_4, Qt::Key_5,
+      Qt::Key_6, Qt::Key_7, Qt::Key_8, Qt::Key_9, Qt::Key_0,
+  };
+  for(int i = 0; i < 10; i++)
+  {
+    m_Ctx.GetMainWindow()->UnregisterShortcut(
+        QKeySequence(keys[i] | Qt::ControlModifier).toString(), NULL);
+  }
+
+  m_Ctx.GetMainWindow()->UnregisterShortcut(
+      QKeySequence(Qt::Key_Left | Qt::ControlModifier).toString(), NULL);
+
+  m_Ctx.GetMainWindow()->UnregisterShortcut(
+      QKeySequence(Qt::Key_Right | Qt::ControlModifier).toString(), NULL);
+
+  m_Ctx.GetMainWindow()->UnregisterShortcut(QString(), ui->findStrip);
+  m_Ctx.GetMainWindow()->UnregisterShortcut(QString(), ui->jumpStrip);
+
   m_Ctx.BuiltinWindowClosed(this);
-  m_Ctx.RemoveLogViewer(this);
+  m_Ctx.RemoveCaptureViewer(this);
   delete ui;
 }
 
-void EventBrowser::OnLogfileLoaded()
+void EventBrowser::OnCaptureLoaded()
 {
   RDTreeWidgetItem *frame = new RDTreeWidgetItem(
       {QFormatStr("Frame #%1").arg(m_Ctx.FrameInfo().frameNumber), QString(), QString(), QString()});
-
-  clearBookmarks();
 
   RDTreeWidgetItem *framestart =
       new RDTreeWidgetItem({tr("Frame Start"), lit("0"), lit("0"), QString()});
@@ -189,6 +208,9 @@ void EventBrowser::OnLogfileLoaded()
 
   ui->events->expandItem(frame);
 
+  clearBookmarks();
+  repopulateBookmarks();
+
   ui->find->setEnabled(true);
   ui->gotoEID->setEnabled(true);
   ui->timeDraws->setEnabled(true);
@@ -200,7 +222,7 @@ void EventBrowser::OnLogfileLoaded()
   m_Ctx.SetEventID({this}, lastEIDDraw.first, lastEIDDraw.first);
 }
 
-void EventBrowser::OnLogfileClosed()
+void EventBrowser::OnCaptureClosed()
 {
   clearBookmarks();
 
@@ -215,44 +237,45 @@ void EventBrowser::OnLogfileClosed()
   ui->stepNext->setEnabled(false);
 }
 
-void EventBrowser::OnEventChanged(uint32_t eventID)
+void EventBrowser::OnEventChanged(uint32_t eventId)
 {
-  SelectEvent(eventID);
+  SelectEvent(eventId);
+  repopulateBookmarks();
   highlightBookmarks();
 }
 
 QPair<uint32_t, uint32_t> EventBrowser::AddDrawcalls(RDTreeWidgetItem *parent,
-                                                     const rdctype::array<DrawcallDescription> &draws)
+                                                     const rdcarray<DrawcallDescription> &draws)
 {
   uint lastEID = 0, lastDraw = 0;
 
-  for(int32_t i = 0; i < draws.count; i++)
+  for(int32_t i = 0; i < draws.count(); i++)
   {
     const DrawcallDescription &d = draws[i];
 
     RDTreeWidgetItem *child = new RDTreeWidgetItem(
-        {d.name, QString::number(d.eventID), QString::number(d.drawcallID), lit("---")});
+        {d.name, QString::number(d.eventId), QString::number(d.drawcallId), lit("---")});
 
     QPair<uint32_t, uint32_t> last = AddDrawcalls(child, d.children);
     lastEID = last.first;
     lastDraw = last.second;
 
-    if(lastEID > d.eventID)
+    if(lastEID > d.eventId)
     {
-      child->setText(COL_EID, QFormatStr("%1-%2").arg(d.eventID).arg(lastEID));
-      child->setText(COL_DRAW, QFormatStr("%1-%2").arg(d.drawcallID).arg(lastDraw));
+      child->setText(COL_EID, QFormatStr("%1-%2").arg(d.eventId).arg(lastEID));
+      child->setText(COL_DRAW, QFormatStr("%1-%2").arg(d.drawcallId).arg(lastDraw));
     }
 
     if(lastEID == 0)
     {
-      lastEID = d.eventID;
-      lastDraw = d.drawcallID;
+      lastEID = d.eventId;
+      lastDraw = d.drawcallId;
 
-      if((draws[i].flags & DrawFlags::SetMarker) && i + 1 < draws.count)
-        lastEID = draws[i + 1].eventID;
+      if((draws[i].flags & DrawFlags::SetMarker) && i + 1 < draws.count())
+        lastEID = draws[i + 1].eventId;
     }
 
-    child->setTag(QVariant::fromValue(EventItemTag(draws[i].eventID, lastEID)));
+    child->setTag(QVariant::fromValue(EventItemTag(draws[i].eventId, lastEID)));
 
     if(m_Ctx.Config().EventBrowser_ApplyColors)
     {
@@ -280,8 +303,7 @@ QPair<uint32_t, uint32_t> EventBrowser::AddDrawcalls(RDTreeWidgetItem *parent,
   return qMakePair(lastEID, lastDraw);
 }
 
-void EventBrowser::SetDrawcallTimes(RDTreeWidgetItem *node,
-                                    const rdctype::array<CounterResult> &results)
+void EventBrowser::SetDrawcallTimes(RDTreeWidgetItem *node, const rdcarray<CounterResult> &results)
 {
   if(node == NULL)
     return;
@@ -298,7 +320,7 @@ void EventBrowser::SetDrawcallTimes(RDTreeWidgetItem *node,
 
     for(const CounterResult &r : results)
     {
-      if(r.eventID == eid)
+      if(r.eventId == eid)
         duration = r.value.d;
     }
 
@@ -311,7 +333,7 @@ void EventBrowser::SetDrawcallTimes(RDTreeWidgetItem *node,
     else if(m_TimeUnit == TimeUnit::Nanoseconds)
       secs *= 1000000000.0;
 
-    node->setText(COL_DURATION, duration < 0.0f ? QString() : QString::number(secs));
+    node->setText(COL_DURATION, duration < 0.0f ? QString() : Formatter::Format(secs));
     EventItemTag tag = node->tag().value<EventItemTag>();
     tag.duration = duration;
     node->setTag(QVariant::fromValue(tag));
@@ -338,7 +360,7 @@ void EventBrowser::SetDrawcallTimes(RDTreeWidgetItem *node,
   else if(m_TimeUnit == TimeUnit::Nanoseconds)
     secs *= 1000000000.0;
 
-  node->setText(COL_DURATION, duration < 0.0f ? QString() : QString::number(secs));
+  node->setText(COL_DURATION, duration < 0.0f ? QString() : Formatter::Format(secs));
   EventItemTag tag = node->tag().value<EventItemTag>();
   tag.duration = duration;
   node->setTag(QVariant::fromValue(tag));
@@ -368,6 +390,8 @@ void EventBrowser::on_bookmark_clicked()
 
 void EventBrowser::on_timeDraws_clicked()
 {
+  ANALYTIC_SET(UIFeatures.DrawcallTimes, true);
+
   ui->events->header()->showSection(COL_DURATION);
 
   m_Ctx.Replay().AsyncInvoke([this](IReplayController *r) {
@@ -411,7 +435,7 @@ void EventBrowser::on_events_currentItemChanged(RDTreeWidgetItem *current, RDTre
     ui->stepNext->setEnabled(true);
 
   // special case for the first 'virtual' draw at EID 0
-  if(m_Ctx.GetFirstDrawcall() && tag.lastEID == m_Ctx.GetFirstDrawcall()->eventID)
+  if(m_Ctx.GetFirstDrawcall() && tag.lastEID == m_Ctx.GetFirstDrawcall()->eventId)
     ui->stepPrev->setEnabled(true);
 
   highlightBookmarks();
@@ -506,7 +530,7 @@ void EventBrowser::on_findPrev_clicked()
 
 void EventBrowser::on_stepNext_clicked()
 {
-  if(!m_Ctx.LogLoaded() || !ui->stepNext->isEnabled())
+  if(!m_Ctx.IsCaptureLoaded() || !ui->stepNext->isEnabled())
     return;
 
   const DrawcallDescription *draw = m_Ctx.CurDrawcall();
@@ -516,12 +540,12 @@ void EventBrowser::on_stepNext_clicked()
 
   // special case for the first 'virtual' draw at EID 0
   if(m_Ctx.CurEvent() == 0)
-    SelectEvent(m_Ctx.GetFirstDrawcall()->eventID);
+    SelectEvent(m_Ctx.GetFirstDrawcall()->eventId);
 }
 
 void EventBrowser::on_stepPrev_clicked()
 {
-  if(!m_Ctx.LogLoaded() || !ui->stepPrev->isEnabled())
+  if(!m_Ctx.IsCaptureLoaded() || !ui->stepPrev->isEnabled())
     return;
 
   const DrawcallDescription *draw = m_Ctx.CurDrawcall();
@@ -530,7 +554,7 @@ void EventBrowser::on_stepPrev_clicked()
     SelectEvent(draw->previous);
 
   // special case for the first 'virtual' draw at EID 0
-  if(m_Ctx.CurEvent() == m_Ctx.GetFirstDrawcall()->eventID)
+  if(m_Ctx.CurEvent() == m_Ctx.GetFirstDrawcall()->eventId)
     SelectEvent(0);
 }
 
@@ -541,6 +565,8 @@ void EventBrowser::on_exportDraws_clicked()
 
   if(!filename.isEmpty())
   {
+    ANALYTIC_SET(UIFeatures.Export.EventBrowser, true);
+
     QDir dirinfo = QFileInfo(filename).dir();
     if(dirinfo.exists())
     {
@@ -549,7 +575,9 @@ void EventBrowser::on_exportDraws_clicked()
       {
         QTextStream stream(&f);
 
-        stream << tr("%1 - Frame #%2\n\n").arg(m_Ctx.LogFilename()).arg(m_Ctx.FrameInfo().frameNumber);
+        stream << tr("%1 - Frame #%2\n\n")
+                      .arg(m_Ctx.GetCaptureFilename())
+                      .arg(m_Ctx.FrameInfo().frameNumber);
 
         int maxNameLength = 0;
 
@@ -687,7 +715,7 @@ double EventBrowser::GetDrawTime(const DrawcallDescription &drawcall)
 
   for(const CounterResult &r : m_Times)
   {
-    if(r.eventID == drawcall.eventID)
+    if(r.eventId == drawcall.eventId)
       return r.value.d;
   }
 
@@ -713,14 +741,14 @@ void EventBrowser::GetMaxNameLength(int &maxNameLength, int indent, bool firstch
 void EventBrowser::ExportDrawcall(QTextStream &writer, int maxNameLength, int indent,
                                   bool firstchild, const DrawcallDescription &drawcall)
 {
-  QString eidString = drawcall.children.empty() ? QString::number(drawcall.eventID) : QString();
+  QString eidString = drawcall.children.empty() ? QString::number(drawcall.eventId) : QString();
 
   QString nameString = GetExportDrawcallString(indent, firstchild, drawcall);
 
   QString line = QFormatStr("%1 | %2 | %3")
                      .arg(eidString, -5)
                      .arg(nameString, -maxNameLength)
-                     .arg(drawcall.drawcallID, -6);
+                     .arg(drawcall.drawcallId, -6);
 
   if(!m_Times.empty())
   {
@@ -816,7 +844,7 @@ void EventBrowser::setPersistData(const QVariant &persistData)
 
 void EventBrowser::events_keyPress(QKeyEvent *event)
 {
-  if(!m_Ctx.LogLoaded())
+  if(!m_Ctx.IsCaptureLoaded())
     return;
 
   if(event->key() == Qt::Key_F3)
@@ -889,84 +917,107 @@ void EventBrowser::clearBookmarks()
   for(QToolButton *b : m_BookmarkButtons)
     delete b;
 
-  m_Bookmarks.clear();
   m_BookmarkButtons.clear();
 
   ui->bookmarkStrip->setVisible(false);
 }
 
+void EventBrowser::repopulateBookmarks()
+{
+  const rdcarray<EventBookmark> bookmarks = m_Ctx.GetBookmarks();
+
+  // add any bookmark markers that we don't have
+  for(const EventBookmark &mark : bookmarks)
+  {
+    if(!m_BookmarkButtons.contains(mark.eventId))
+    {
+      uint32_t EID = mark.eventId;
+
+      QToolButton *but = new QToolButton(this);
+
+      but->setText(QString::number(EID));
+      but->setCheckable(true);
+      but->setAutoRaise(true);
+      but->setProperty("eid", EID);
+      QObject::connect(but, &QToolButton::clicked, [this, but, EID]() {
+        but->setChecked(true);
+        SelectEvent(EID);
+        highlightBookmarks();
+      });
+
+      m_BookmarkButtons[EID] = but;
+
+      highlightBookmarks();
+
+      RDTreeWidgetItem *found = NULL;
+      FindEventNode(found, ui->events->topLevelItem(0), EID);
+
+      if(found)
+      {
+        EventItemTag tag = found->tag().value<EventItemTag>();
+        tag.bookmark = true;
+        found->setTag(QVariant::fromValue(tag));
+        RefreshIcon(found, tag);
+      }
+
+      m_BookmarkStripLayout->removeItem(m_BookmarkSpacer);
+      m_BookmarkStripLayout->addWidget(but);
+      m_BookmarkStripLayout->addItem(m_BookmarkSpacer);
+    }
+  }
+
+  // remove any bookmark markers we shouldn't have
+  for(uint32_t EID : m_BookmarkButtons.keys())
+  {
+    if(!bookmarks.contains(EventBookmark(EID)))
+    {
+      delete m_BookmarkButtons[EID];
+      m_BookmarkButtons.remove(EID);
+
+      RDTreeWidgetItem *found = NULL;
+      FindEventNode(found, ui->events->topLevelItem(0), EID);
+
+      if(found)
+      {
+        EventItemTag tag = found->tag().value<EventItemTag>();
+        tag.bookmark = false;
+        found->setTag(QVariant::fromValue(tag));
+        RefreshIcon(found, tag);
+      }
+    }
+  }
+
+  ui->bookmarkStrip->setVisible(!bookmarks.isEmpty());
+}
+
 void EventBrowser::toggleBookmark(uint32_t EID)
 {
-  int index = m_Bookmarks.indexOf(EID);
+  EventBookmark mark(EID);
 
-  RDTreeWidgetItem *found = NULL;
-  FindEventNode(found, ui->events->topLevelItem(0), EID);
-
-  if(index >= 0)
-  {
-    delete m_BookmarkButtons.takeAt(index);
-    m_Bookmarks.removeAt(index);
-
-    if(found)
-    {
-      EventItemTag tag = found->tag().value<EventItemTag>();
-      tag.bookmark = false;
-      found->setTag(QVariant::fromValue(tag));
-      RefreshIcon(found, tag);
-    }
-  }
+  if(m_Ctx.GetBookmarks().contains(mark))
+    m_Ctx.RemoveBookmark(EID);
   else
-  {
-    QToolButton *but = new QToolButton(this);
-
-    but->setText(QString::number(EID));
-    but->setCheckable(true);
-    but->setAutoRaise(true);
-    but->setProperty("eid", EID);
-    QObject::connect(but, &QToolButton::clicked, [this, but, EID]() {
-      but->setChecked(true);
-      SelectEvent(EID);
-      highlightBookmarks();
-    });
-
-    m_BookmarkButtons.push_back(but);
-    m_Bookmarks.push_back(EID);
-
-    highlightBookmarks();
-
-    if(found)
-    {
-      EventItemTag tag = found->tag().value<EventItemTag>();
-      tag.bookmark = true;
-      found->setTag(QVariant::fromValue(tag));
-      RefreshIcon(found, tag);
-    }
-
-    m_BookmarkStripLayout->removeItem(m_BookmarkSpacer);
-    m_BookmarkStripLayout->addWidget(but);
-    m_BookmarkStripLayout->addItem(m_BookmarkSpacer);
-  }
-
-  ui->bookmarkStrip->setVisible(!m_BookmarkButtons.isEmpty());
+    m_Ctx.SetBookmark(mark);
 }
 
 void EventBrowser::jumpToBookmark(int idx)
 {
-  if(idx < 0 || idx >= m_Bookmarks.count() || !m_Ctx.LogLoaded())
+  const rdcarray<EventBookmark> bookmarks = m_Ctx.GetBookmarks();
+  if(idx < 0 || idx >= bookmarks.count() || !m_Ctx.IsCaptureLoaded())
     return;
 
   // don't exclude ourselves, so we're updated as normal
-  SelectEvent(m_Bookmarks[idx]);
+  SelectEvent(bookmarks[idx].eventId);
 }
 
 void EventBrowser::highlightBookmarks()
 {
-  for(QToolButton *b : m_BookmarkButtons)
+  for(uint32_t eid : m_BookmarkButtons.keys())
   {
-    if(b->property("eid").toUInt() == m_Ctx.CurEvent())
-      b->setChecked(true);
+    if(eid == m_Ctx.CurEvent())
+      m_BookmarkButtons[eid]->setChecked(true);
     else
-      b->setChecked(false);
+      m_BookmarkButtons[eid]->setChecked(false);
   }
 }
 
@@ -980,7 +1031,7 @@ bool EventBrowser::hasBookmark(RDTreeWidgetItem *node)
 
 bool EventBrowser::hasBookmark(uint32_t EID)
 {
-  return m_Bookmarks.contains(EID);
+  return m_Ctx.GetBookmarks().contains(EventBookmark(EID));
 }
 
 void EventBrowser::RefreshIcon(RDTreeWidgetItem *item, EventItemTag tag)
@@ -995,7 +1046,7 @@ void EventBrowser::RefreshIcon(RDTreeWidgetItem *item, EventItemTag tag)
     item->setIcon(COL_NAME, QIcon());
 }
 
-bool EventBrowser::FindEventNode(RDTreeWidgetItem *&found, RDTreeWidgetItem *parent, uint32_t eventID)
+bool EventBrowser::FindEventNode(RDTreeWidgetItem *&found, RDTreeWidgetItem *parent, uint32_t eventId)
 {
   // do a reverse search to find the last match (in case of 'set' markers that
   // inherit the event of the next real draw).
@@ -1006,15 +1057,15 @@ bool EventBrowser::FindEventNode(RDTreeWidgetItem *&found, RDTreeWidgetItem *par
     uint nEID = n->tag().value<EventItemTag>().lastEID;
     uint fEID = found ? found->tag().value<EventItemTag>().lastEID : 0;
 
-    if(nEID >= eventID && (found == NULL || nEID <= fEID))
+    if(nEID >= eventId && (found == NULL || nEID <= fEID))
       found = n;
 
-    if(nEID == eventID && n->childCount() == 0)
+    if(nEID == eventId && n->childCount() == 0)
       return true;
 
     if(n->childCount() > 0)
     {
-      bool exact = FindEventNode(found, n, eventID);
+      bool exact = FindEventNode(found, n, eventId);
       if(exact)
         return true;
     }
@@ -1036,13 +1087,13 @@ void EventBrowser::ExpandNode(RDTreeWidgetItem *node)
     ui->events->scrollToItem(n);
 }
 
-bool EventBrowser::SelectEvent(uint32_t eventID)
+bool EventBrowser::SelectEvent(uint32_t eventId)
 {
-  if(!m_Ctx.LogLoaded())
+  if(!m_Ctx.IsCaptureLoaded())
     return false;
 
   RDTreeWidgetItem *found = NULL;
-  FindEventNode(found, ui->events->topLevelItem(0), eventID);
+  FindEventNode(found, ui->events->topLevelItem(0), eventId);
   if(found != NULL)
   {
     ui->events->setCurrentItem(found);
@@ -1073,7 +1124,7 @@ void EventBrowser::ClearFindIcons(RDTreeWidgetItem *parent)
 
 void EventBrowser::ClearFindIcons()
 {
-  if(m_Ctx.LogLoaded())
+  if(m_Ctx.IsCaptureLoaded())
     ClearFindIcons(ui->events->topLevelItem(0));
 }
 
@@ -1169,7 +1220,7 @@ int EventBrowser::FindEvent(RDTreeWidgetItem *parent, QString filter, uint32_t a
 
 int EventBrowser::FindEvent(QString filter, uint32_t after, bool forward)
 {
-  if(!m_Ctx.LogLoaded())
+  if(!m_Ctx.IsCaptureLoaded())
     return 0;
 
   return FindEvent(ui->events->topLevelItem(0), filter, after, forward);

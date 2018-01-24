@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,8 @@
 #pragma once
 
 #include <QFrame>
-#include "Code/CaptureContext.h"
+#include <QLabel>
+#include "Code/Interface/QRDInterface.h"
 
 namespace Ui
 {
@@ -41,7 +42,7 @@ class D3D12PipelineStateViewer;
 class GLPipelineStateViewer;
 class VulkanPipelineStateViewer;
 
-class PipelineStateViewer : public QFrame, public IPipelineStateViewer, public ILogViewer
+class PipelineStateViewer : public QFrame, public IPipelineStateViewer, public ICaptureViewer
 {
   Q_OBJECT
 
@@ -55,21 +56,21 @@ public:
   QWidget *Widget() override { return this; }
   bool SaveShaderFile(const ShaderReflection *shader) override;
 
-  // ILogViewerForm
-  void OnLogfileLoaded() override;
-  void OnLogfileClosed() override;
-  void OnSelectedEventChanged(uint32_t eventID) override {}
-  void OnEventChanged(uint32_t eventID) override;
+  // ICaptureViewer
+  void OnCaptureLoaded() override;
+  void OnCaptureClosed() override;
+  void OnSelectedEventChanged(uint32_t eventId) override {}
+  void OnEventChanged(uint32_t eventId) override;
 
   QVariant persistData();
 
   void setPersistData(const QVariant &persistData);
 
   bool PrepareShaderEditing(const ShaderReflection *shaderDetails, QString &entryFunc,
-                            QStringMap &files, QString &mainfile);
+                            rdcstrpairs &files);
   QString GenerateHLSLStub(const ShaderReflection *shaderDetails, const QString &entryFunc);
   void EditShader(ShaderStage shaderType, ResourceId id, const ShaderReflection *shaderDetails,
-                  const QString &entryFunc, const QStringMap &files, const QString &mainfile);
+                  const QString &entryFunc, const rdcstrpairs &files);
 
   void setTopologyDiagram(QLabel *diagram, Topology topo);
   void setMeshViewPixmap(RDLabel *meshView);
@@ -84,7 +85,7 @@ private:
   Ui::PipelineStateViewer *ui;
   ICaptureContext &m_Ctx;
 
-  void MakeShaderVariablesHLSL(bool cbufferContents, const rdctype::array<ShaderConstant> &vars,
+  void MakeShaderVariablesHLSL(bool cbufferContents, const rdcarray<ShaderConstant> &vars,
                                QString &struct_contents, QString &struct_defs);
 
   QPixmap m_TopoPixmaps[(int)Topology::PatchList + 1];
@@ -101,5 +102,5 @@ private:
   D3D12PipelineStateViewer *m_D3D12;
   GLPipelineStateViewer *m_GL;
   VulkanPipelineStateViewer *m_Vulkan;
-  ILogViewer *m_Current;
+  ICaptureViewer *m_Current;
 };

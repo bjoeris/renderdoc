@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,10 +33,10 @@
 #include <QJsonDocument>
 #include <QMenu>
 #include <QPainter>
+#include <QPointer>
 #include <QStyledItemDelegate>
 #include "3rdparty/flowlayout/FlowLayout.h"
 #include "3rdparty/toolwindowmanager/ToolWindowManagerArea.h"
-#include "Code/CaptureContext.h"
 #include "Code/QRDUtils.h"
 #include "Code/Resources.h"
 #include "Dialogs/TextureSaveDialog.h"
@@ -55,7 +55,6 @@ float aspect(const QSizeF &s)
 }
 
 Q_DECLARE_METATYPE(Following);
-Q_DECLARE_METATYPE(ResourceId);
 
 const Following Following::Default = Following();
 
@@ -96,12 +95,12 @@ void Following::GetDrawContext(ICaptureContext &ctx, bool &copy, bool &clear, bo
 
 int Following::GetHighestMip(ICaptureContext &ctx)
 {
-  return GetBoundResource(ctx, arrayEl).HighestMip;
+  return GetBoundResource(ctx, arrayEl).firstMip;
 }
 
 int Following::GetFirstArraySlice(ICaptureContext &ctx)
 {
-  return GetBoundResource(ctx, arrayEl).FirstSlice;
+  return GetBoundResource(ctx, arrayEl).firstSlice;
 }
 
 CompType Following::GetTypeHint(ICaptureContext &ctx)
@@ -111,7 +110,7 @@ CompType Following::GetTypeHint(ICaptureContext &ctx)
 
 ResourceId Following::GetResourceId(ICaptureContext &ctx)
 {
-  return GetBoundResource(ctx, arrayEl).Id;
+  return GetBoundResource(ctx, arrayEl).resourceId;
 }
 
 BoundResource Following::GetBoundResource(ICaptureContext &ctx, int arrayIdx)
@@ -120,9 +119,9 @@ BoundResource Following::GetBoundResource(ICaptureContext &ctx, int arrayIdx)
 
   if(Type == FollowType::OutputColour)
   {
-    auto outputs = GetOutputTargets(ctx);
+    rdcarray<BoundResource> outputs = GetOutputTargets(ctx);
 
-    if(index < outputs.size())
+    if(index < outputs.count())
       ret = outputs[index];
   }
   else if(Type == FollowType::OutputDepth)
@@ -131,37 +130,39 @@ BoundResource Following::GetBoundResource(ICaptureContext &ctx, int arrayIdx)
   }
   else if(Type == FollowType::ReadWrite)
   {
-    auto rw = GetReadWriteResources(ctx);
+    rdcarray<BoundResourceArray> rw = GetReadWriteResources(ctx);
 
     ShaderBindpointMapping mapping = GetMapping(ctx);
 
-    if(index < mapping.ReadWriteResources.count)
+    if(index < mapping.readWriteResources.count())
     {
-      BindpointMap &key = mapping.ReadWriteResources[index];
+      Bindpoint &key = mapping.readWriteResources[index];
 
-      if(rw.contains(key))
-        ret = rw[key][arrayIdx];
+      int residx = rw.indexOf(key);
+      if(residx >= 0)
+        ret = rw[residx].resources[arrayIdx];
     }
   }
   else if(Type == FollowType::ReadOnly)
   {
-    auto ro = GetReadOnlyResources(ctx);
+    rdcarray<BoundResourceArray> ro = GetReadOnlyResources(ctx);
 
     ShaderBindpointMapping mapping = GetMapping(ctx);
 
-    if(index < mapping.ReadOnlyResources.count)
+    if(index < mapping.readOnlyResources.count())
     {
-      BindpointMap &key = mapping.ReadOnlyResources[index];
+      Bindpoint &key = mapping.readOnlyResources[index];
 
-      if(ro.contains(key))
-        ret = ro[key][arrayIdx];
+      int residx = ro.indexOf(key);
+      if(residx >= 0)
+        ret = ro[residx].resources[arrayIdx];
     }
   }
 
   return ret;
 }
 
-QVector<BoundResource> Following::GetOutputTargets(ICaptureContext &ctx)
+rdcarray<BoundResource> Following::GetOutputTargets(ICaptureContext &ctx)
 {
   const DrawcallDescription *curDraw = ctx.CurDrawcall();
   bool copy = false, clear = false, compute = false;
@@ -177,7 +178,7 @@ QVector<BoundResource> Following::GetOutputTargets(ICaptureContext &ctx)
   }
   else
   {
-    QVector<BoundResource> ret = ctx.CurPipelineState().GetOutputTargets();
+    rdcarray<BoundResource> ret = ctx.CurPipelineState().GetOutputTargets();
 
     if(ret.isEmpty() && curDraw != NULL && (curDraw->flags & DrawFlags::Present))
     {
@@ -187,7 +188,7 @@ QVector<BoundResource> Following::GetOutputTargets(ICaptureContext &ctx)
       for(const TextureDescription &tex : ctx.GetTextures())
       {
         if(tex.creationFlags & TextureCategory::SwapBuffer)
-          return {BoundResource(tex.ID)};
+          return {BoundResource(tex.resourceId)};
       }
     }
 
@@ -206,15 +207,14 @@ BoundResource Following::GetDepthTarget(ICaptureContext &ctx)
     return ctx.CurPipelineState().GetDepthTarget();
 }
 
-QMap<BindpointMap, QVector<BoundResource>> Following::GetReadWriteResources(ICaptureContext &ctx,
-                                                                            ShaderStage stage)
+rdcarray<BoundResourceArray> Following::GetReadWriteResources(ICaptureContext &ctx, ShaderStage stage)
 {
   bool copy = false, clear = false, compute = false;
   GetDrawContext(ctx, copy, clear, compute);
 
   if(copy || clear)
   {
-    return QMap<BindpointMap, QVector<BoundResource>>();
+    return rdcarray<BoundResourceArray>();
   }
   else if(compute)
   {
@@ -222,7 +222,7 @@ QMap<BindpointMap, QVector<BoundResource>> Following::GetReadWriteResources(ICap
     if(stage == ShaderStage::Pixel || stage == ShaderStage::Compute)
       return ctx.CurPipelineState().GetReadWriteResources(ShaderStage::Compute);
     else
-      return QMap<BindpointMap, QVector<BoundResource>>();
+      return rdcarray<BoundResourceArray>();
   }
   else
   {
@@ -230,13 +230,12 @@ QMap<BindpointMap, QVector<BoundResource>> Following::GetReadWriteResources(ICap
   }
 }
 
-QMap<BindpointMap, QVector<BoundResource>> Following::GetReadWriteResources(ICaptureContext &ctx)
+rdcarray<BoundResourceArray> Following::GetReadWriteResources(ICaptureContext &ctx)
 {
   return GetReadWriteResources(ctx, Stage);
 }
 
-QMap<BindpointMap, QVector<BoundResource>> Following::GetReadOnlyResources(ICaptureContext &ctx,
-                                                                           ShaderStage stage)
+rdcarray<BoundResourceArray> Following::GetReadOnlyResources(ICaptureContext &ctx, ShaderStage stage)
 {
   const DrawcallDescription *curDraw = ctx.CurDrawcall();
   bool copy = false, clear = false, compute = false;
@@ -244,11 +243,11 @@ QMap<BindpointMap, QVector<BoundResource>> Following::GetReadOnlyResources(ICapt
 
   if(copy || clear)
   {
-    QMap<BindpointMap, QVector<BoundResource>> ret;
+    rdcarray<BoundResourceArray> ret;
 
     // only return copy source for one stage
     if(copy && stage == ShaderStage::Pixel)
-      ret[BindpointMap(0, 0)] = {BoundResource(curDraw->copySource)};
+      ret.push_back(BoundResourceArray(Bindpoint(0, 0), {BoundResource(curDraw->copySource)}));
 
     return ret;
   }
@@ -258,7 +257,7 @@ QMap<BindpointMap, QVector<BoundResource>> Following::GetReadOnlyResources(ICapt
     if(stage == ShaderStage::Pixel || stage == ShaderStage::Compute)
       return ctx.CurPipelineState().GetReadOnlyResources(ShaderStage::Compute);
     else
-      return QMap<BindpointMap, QVector<BoundResource>>();
+      return rdcarray<BoundResourceArray>();
   }
   else
   {
@@ -266,7 +265,7 @@ QMap<BindpointMap, QVector<BoundResource>> Following::GetReadOnlyResources(ICapt
   }
 }
 
-QMap<BindpointMap, QVector<BoundResource>> Following::GetReadOnlyResources(ICaptureContext &ctx)
+rdcarray<BoundResourceArray> Following::GetReadOnlyResources(ICaptureContext &ctx)
 {
   return GetReadOnlyResources(ctx, Stage);
 }
@@ -300,9 +299,9 @@ const ShaderBindpointMapping &Following::GetMapping(ICaptureContext &ctx, Shader
 
     // for PS only add a single mapping to get the copy source
     if(copy && stage == ShaderStage::Pixel)
-      mapping.ReadOnlyResources = {BindpointMap(0, 0)};
+      mapping.readOnlyResources = {Bindpoint(0, 0)};
     else
-      mapping.ReadOnlyResources.clear();
+      mapping.readOnlyResources.clear();
 
     return mapping;
   }
@@ -331,17 +330,18 @@ public:
     String
   };
 
-  TextureListItemModel(QWidget *parent) : QAbstractItemModel(parent)
+  TextureListItemModel(ICaptureContext &ctx, QWidget *parent)
+      : QAbstractItemModel(parent), m_Ctx(ctx)
   {
     goArrow.addPixmap(Pixmaps::action(parent), QIcon::Normal, QIcon::Off);
     goArrow.addPixmap(Pixmaps::action_hover(parent), QIcon::Normal, QIcon::Off);
   }
-  void reset(FilterType type, const QString &filter, ICaptureContext &ctx)
+  void reset(FilterType type, const QString &filter)
   {
-    const rdctype::array<TextureDescription> src = ctx.GetTextures();
+    const rdcarray<TextureDescription> src = m_Ctx.GetTextures();
 
     texs.clear();
-    texs.reserve(src.count);
+    texs.reserve(src.count());
 
     emit beginResetModel();
 
@@ -363,7 +363,7 @@ public:
       {
         if(filter.isEmpty())
           texs.push_back(t);
-        else if(QString(t.name).contains(filter, Qt::CaseInsensitive))
+        else if(QString(m_Ctx.GetResourceName(t.resourceId)).contains(filter, Qt::CaseInsensitive))
           texs.push_back(t);
       }
     }
@@ -397,12 +397,12 @@ public:
       if(role == Qt::DisplayRole)
       {
         if(index.row() >= 0 && index.row() < texs.count())
-          return texs[index.row()].name;
+          return m_Ctx.GetResourceName(texs[index.row()].resourceId);
       }
 
       if(role == Qt::UserRole)
       {
-        return QVariant::fromValue(texs[index.row()].ID);
+        return QVariant::fromValue(texs[index.row()].resourceId);
       }
 
       if(role == Qt::DecorationRole)
@@ -415,6 +415,7 @@ public:
   }
 
 private:
+  ICaptureContext &m_Ctx;
   QVector<TextureDescription> texs;
   QIcon goArrow;
 };
@@ -462,7 +463,7 @@ TextureDescription *TextureViewer::GetCurrentTexture()
 
 void TextureViewer::UI_UpdateCachedTexture()
 {
-  if(!m_Ctx.LogLoaded())
+  if(!m_Ctx.IsCaptureLoaded())
   {
     m_CachedTexture = NULL;
     return;
@@ -473,7 +474,7 @@ void TextureViewer::UI_UpdateCachedTexture()
     id = m_Following.GetResourceId(m_Ctx);
 
   if(id == ResourceId())
-    id = m_TexDisplay.texid;
+    id = m_TexDisplay.resourceId;
 
   m_CachedTexture = m_Ctx.GetTexture(id);
 }
@@ -638,22 +639,25 @@ TextureViewer::TextureViewer(ICaptureContext &ctx, QWidget *parent)
 
   ui->textureListFilter->addItems({QString(), tr("Textures"), tr("Render Targets")});
 
-  ui->textureList->setModel(new TextureListItemModel(this));
+  ui->textureList->setModel(new TextureListItemModel(m_Ctx, this));
   ui->textureList->setItemDelegate(new TextureListItemDelegate(ui->textureList));
   ui->textureList->viewport()->setAttribute(Qt::WA_Hover);
 
   ui->zoomOption->setCurrentText(QString());
   ui->fitToWindow->toggle();
 
-  m_Ctx.AddLogViewer(this);
+  m_Ctx.AddCaptureViewer(this);
 
   SetupTextureTabs();
 }
 
 TextureViewer::~TextureViewer()
 {
+  if(m_Output)
+    m_Output->Shutdown();
+
   m_Ctx.BuiltinWindowClosed(this);
-  m_Ctx.RemoveLogViewer(this);
+  m_Ctx.RemoveCaptureViewer(this);
   delete ui;
 }
 
@@ -665,20 +669,23 @@ void TextureViewer::RT_FetchCurrentPixel(uint32_t x, uint32_t y, PixelValue &pic
   if(texptr == NULL)
     return;
 
-  if(m_TexDisplay.FlipY)
+  if(m_TexDisplay.flipY)
     y = (texptr->height - 1) - y;
 
-  pickValue = m_Output->PickPixel(m_TexDisplay.texid, true, x, y, m_TexDisplay.sliceFace,
+  pickValue = m_Output->PickPixel(m_TexDisplay.resourceId, true, x, y, m_TexDisplay.sliceFace,
                                   m_TexDisplay.mip, m_TexDisplay.sampleIdx);
 
-  if(m_TexDisplay.CustomShader != ResourceId())
-    realValue = m_Output->PickPixel(m_TexDisplay.texid, false, x, y, m_TexDisplay.sliceFace,
+  if(m_TexDisplay.customShaderId != ResourceId())
+    realValue = m_Output->PickPixel(m_TexDisplay.resourceId, false, x, y, m_TexDisplay.sliceFace,
                                     m_TexDisplay.mip, m_TexDisplay.sampleIdx);
 }
 
 void TextureViewer::RT_PickPixelsAndUpdate(IReplayController *)
 {
   PixelValue pickValue, realValue;
+
+  if(m_PickedPoint.x() < 0 || m_PickedPoint.y() < 0)
+    return;
 
   uint32_t x = (uint32_t)m_PickedPoint.x();
   uint32_t y = (uint32_t)m_PickedPoint.y();
@@ -726,22 +733,22 @@ void TextureViewer::RT_UpdateVisualRange(IReplayController *)
 
   ResourceFormat fmt = texptr->format;
 
-  if(m_TexDisplay.CustomShader != ResourceId())
+  if(m_TexDisplay.customShaderId != ResourceId())
     fmt.compCount = 4;
 
   bool channels[] = {
-      m_TexDisplay.Red ? true : false, m_TexDisplay.Green && fmt.compCount > 1,
-      m_TexDisplay.Blue && fmt.compCount > 2, m_TexDisplay.Alpha && fmt.compCount > 3,
+      m_TexDisplay.red ? true : false, m_TexDisplay.green && fmt.compCount > 1,
+      m_TexDisplay.blue && fmt.compCount > 2, m_TexDisplay.alpha && fmt.compCount > 3,
   };
 
-  rdctype::array<uint32_t> histogram = m_Output->GetHistogram(
-      ui->rangeHistogram->rangeMin(), ui->rangeHistogram->rangeMax(), channels);
+  rdcarray<uint32_t> histogram = m_Output->GetHistogram(ui->rangeHistogram->rangeMin(),
+                                                        ui->rangeHistogram->rangeMax(), channels);
 
   if(!histogram.empty())
   {
-    QVector<uint32_t> histogramVec(histogram.count);
-    if(histogram.count > 0)
-      memcpy(histogramVec.data(), histogram.elems, histogram.count * sizeof(uint32_t));
+    QVector<uint32_t> histogramVec(histogram.count());
+    if(!histogram.isEmpty())
+      memcpy(histogramVec.data(), histogram.data(), histogram.byteSize());
 
     GUIInvoke::call([this, histogramVec]() {
       ui->rangeHistogram->setHistogramRange(ui->rangeHistogram->rangeMin(),
@@ -780,9 +787,9 @@ void TextureViewer::UI_UpdateStatusText()
   }
   else
   {
-    float r = qBound(0.0f, m_CurHoverValue.value_f[0], 1.0f);
-    float g = qBound(0.0f, m_CurHoverValue.value_f[1], 1.0f);
-    float b = qBound(0.0f, m_CurHoverValue.value_f[2], 1.0f);
+    float r = qBound(0.0f, m_CurHoverValue.floatValue[0], 1.0f);
+    float g = qBound(0.0f, m_CurHoverValue.floatValue[1], 1.0f);
+    float b = qBound(0.0f, m_CurHoverValue.floatValue[2], 1.0f);
 
     if(tex.format.srgbCorrected || (tex.creationFlags & TextureCategory::SwapBuffer))
     {
@@ -810,14 +817,14 @@ void TextureViewer::UI_UpdateStatusText()
 
   if(m_Ctx.APIProps().pipelineType == GraphicsAPI::OpenGL)
     y = (int)(mipHeight - 1) - y;
-  if(m_TexDisplay.FlipY)
+  if(m_TexDisplay.flipY)
     y = (int)(mipHeight - 1) - y;
 
   y = qMax(0, y);
 
   int x = m_CurHoverPixel.x() >> (int)m_TexDisplay.mip;
-  float invWidth = mipWidth > 0 ? 1.0f / mipWidth : 0.0f;
-  float invHeight = mipHeight > 0 ? 1.0f / mipHeight : 0.0f;
+  float invWidth = 1.0f / mipWidth;
+  float invHeight = 1.0f / mipHeight;
 
   QString hoverCoords = QFormatStr("%1, %2 (%3, %4)")
                             .arg(x, 4)
@@ -839,7 +846,7 @@ void TextureViewer::UI_UpdateStatusText()
     y = m_PickedPoint.y() >> (int)m_TexDisplay.mip;
     if(m_Ctx.APIProps().pipelineType == GraphicsAPI::OpenGL)
       y = (int)(mipHeight - 1) - y;
-    if(m_TexDisplay.FlipY)
+    if(m_TexDisplay.flipY)
       y = (int)(mipHeight - 1) - y;
 
     y = qMax(0, y);
@@ -848,13 +855,13 @@ void TextureViewer::UI_UpdateStatusText()
 
     PixelValue val = m_CurPixelValue;
 
-    if(m_TexDisplay.CustomShader != ResourceId())
+    if(m_TexDisplay.customShaderId != ResourceId())
     {
       statusText += QFormatStr("%1, %2, %3, %4")
-                        .arg(Formatter::Format(val.value_f[0]))
-                        .arg(Formatter::Format(val.value_f[1]))
-                        .arg(Formatter::Format(val.value_f[2]))
-                        .arg(Formatter::Format(val.value_f[3]));
+                        .arg(Formatter::Format(val.floatValue[0]))
+                        .arg(Formatter::Format(val.floatValue[1]))
+                        .arg(Formatter::Format(val.floatValue[2]))
+                        .arg(Formatter::Format(val.floatValue[3]));
 
       val = m_CurRealValue;
 
@@ -866,17 +873,14 @@ void TextureViewer::UI_UpdateStatusText()
       statusText += tr("Depth ");
       if(uintTex)
       {
-        if(tex.format.compByteWidth == 2)
-          statusText += Formatter::Format(val.value_u16[0]);
-        else
-          statusText += Formatter::Format(val.value_u[0]);
+        statusText += Formatter::Format(val.uintValue[0]);
       }
       else
       {
-        statusText += Formatter::Format(val.value_f[0]);
+        statusText += Formatter::Format(val.floatValue[0]);
       }
 
-      int stencil = (int)(255.0f * val.value_f[1]);
+      int stencil = (int)(255.0f * val.floatValue[1]);
 
       statusText +=
           tr(", Stencil %1 / 0x%2").arg(stencil).arg(Formatter::Format(uint8_t(stencil & 0xff), true));
@@ -886,30 +890,30 @@ void TextureViewer::UI_UpdateStatusText()
       if(uintTex)
       {
         statusText += QFormatStr("%1, %2, %3, %4")
-                          .arg(Formatter::Format(val.value_u[0]))
-                          .arg(Formatter::Format(val.value_u[1]))
-                          .arg(Formatter::Format(val.value_u[2]))
-                          .arg(Formatter::Format(val.value_u[3]));
+                          .arg(Formatter::Format(val.uintValue[0]))
+                          .arg(Formatter::Format(val.uintValue[1]))
+                          .arg(Formatter::Format(val.uintValue[2]))
+                          .arg(Formatter::Format(val.uintValue[3]));
       }
       else if(sintTex)
       {
         statusText += QFormatStr("%1, %2, %3, %4")
-                          .arg(Formatter::Format(val.value_i[0]))
-                          .arg(Formatter::Format(val.value_i[1]))
-                          .arg(Formatter::Format(val.value_i[2]))
-                          .arg(Formatter::Format(val.value_i[3]));
+                          .arg(Formatter::Format(val.intValue[0]))
+                          .arg(Formatter::Format(val.intValue[1]))
+                          .arg(Formatter::Format(val.intValue[2]))
+                          .arg(Formatter::Format(val.intValue[3]));
       }
       else
       {
         statusText += QFormatStr("%1, %2, %3, %4")
-                          .arg(Formatter::Format(val.value_f[0]))
-                          .arg(Formatter::Format(val.value_f[1]))
-                          .arg(Formatter::Format(val.value_f[2]))
-                          .arg(Formatter::Format(val.value_f[3]));
+                          .arg(Formatter::Format(val.floatValue[0]))
+                          .arg(Formatter::Format(val.floatValue[1]))
+                          .arg(Formatter::Format(val.floatValue[2]))
+                          .arg(Formatter::Format(val.floatValue[3]));
       }
     }
 
-    if(m_TexDisplay.CustomShader != ResourceId())
+    if(m_TexDisplay.customShaderId != ResourceId())
       statusText += lit(")");
 
     // PixelPicked = true;
@@ -968,12 +972,7 @@ void TextureViewer::UI_UpdateTextureDetails()
     }
     else if(followtex || followbuf)
     {
-      QString name;
-
-      if(followtex)
-        name = followtex->name;
-      else
-        name = followbuf->name;
+      QString name = m_Ctx.GetResourceName(followID);
 
       switch(m_Following.Type)
       {
@@ -1009,7 +1008,7 @@ void TextureViewer::UI_UpdateTextureDetails()
     ui->renderContainer->setWindowTitle(title);
   }
 
-  status = current.name + lit(" - ");
+  status = m_Ctx.GetResourceName(followID) + lit(" - ");
 
   if(current.dimension >= 1)
     status += QString::number(current.width);
@@ -1048,32 +1047,32 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
 
   TextureDescription &tex = *texptr;
 
-  bool newtex = (m_TexDisplay.texid != tex.ID);
+  bool newtex = (m_TexDisplay.resourceId != tex.resourceId);
 
   // save settings for this current texture
   if(m_Ctx.Config().TextureViewer_PerTexSettings)
   {
-    m_TextureSettings[m_TexDisplay.texid].r = ui->channelRed->isChecked();
-    m_TextureSettings[m_TexDisplay.texid].g = ui->channelGreen->isChecked();
-    m_TextureSettings[m_TexDisplay.texid].b = ui->channelBlue->isChecked();
-    m_TextureSettings[m_TexDisplay.texid].a = ui->channelAlpha->isChecked();
+    m_TextureSettings[m_TexDisplay.resourceId].r = ui->channelRed->isChecked();
+    m_TextureSettings[m_TexDisplay.resourceId].g = ui->channelGreen->isChecked();
+    m_TextureSettings[m_TexDisplay.resourceId].b = ui->channelBlue->isChecked();
+    m_TextureSettings[m_TexDisplay.resourceId].a = ui->channelAlpha->isChecked();
 
-    m_TextureSettings[m_TexDisplay.texid].displayType = ui->channels->currentIndex();
-    m_TextureSettings[m_TexDisplay.texid].customShader = ui->customShader->currentText();
+    m_TextureSettings[m_TexDisplay.resourceId].displayType = qMax(0, ui->channels->currentIndex());
+    m_TextureSettings[m_TexDisplay.resourceId].customShader = ui->customShader->currentText();
 
-    m_TextureSettings[m_TexDisplay.texid].depth = ui->depthDisplay->isChecked();
-    m_TextureSettings[m_TexDisplay.texid].stencil = ui->stencilDisplay->isChecked();
+    m_TextureSettings[m_TexDisplay.resourceId].depth = ui->depthDisplay->isChecked();
+    m_TextureSettings[m_TexDisplay.resourceId].stencil = ui->stencilDisplay->isChecked();
 
-    m_TextureSettings[m_TexDisplay.texid].mip = ui->mipLevel->currentIndex();
-    m_TextureSettings[m_TexDisplay.texid].slice = ui->sliceFace->currentIndex();
+    m_TextureSettings[m_TexDisplay.resourceId].mip = qMax(0, ui->mipLevel->currentIndex());
+    m_TextureSettings[m_TexDisplay.resourceId].slice = qMax(0, ui->sliceFace->currentIndex());
 
-    m_TextureSettings[m_TexDisplay.texid].minrange = ui->rangeHistogram->blackPoint();
-    m_TextureSettings[m_TexDisplay.texid].maxrange = ui->rangeHistogram->whitePoint();
+    m_TextureSettings[m_TexDisplay.resourceId].minrange = ui->rangeHistogram->blackPoint();
+    m_TextureSettings[m_TexDisplay.resourceId].maxrange = ui->rangeHistogram->whitePoint();
 
-    m_TextureSettings[m_TexDisplay.texid].typeHint = m_Following.GetTypeHint(m_Ctx);
+    m_TextureSettings[m_TexDisplay.resourceId].typeHint = m_Following.GetTypeHint(m_Ctx);
   }
 
-  m_TexDisplay.texid = tex.ID;
+  m_TexDisplay.resourceId = tex.resourceId;
 
   // interpret the texture according to the currently following type.
   if(!currentTextureIsLocked())
@@ -1082,8 +1081,9 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
     m_TexDisplay.typeHint = CompType::Typeless;
 
   // if there is no such type or it isn't being followed, use the last seen interpretation
-  if(m_TexDisplay.typeHint == CompType::Typeless && m_TextureSettings.contains(m_TexDisplay.texid))
-    m_TexDisplay.typeHint = m_TextureSettings[m_TexDisplay.texid].typeHint;
+  if(m_TexDisplay.typeHint == CompType::Typeless &&
+     m_TextureSettings.contains(m_TexDisplay.resourceId))
+    m_TexDisplay.typeHint = m_TextureSettings[m_TexDisplay.resourceId].typeHint;
 
   // try to maintain the pan in the new texture. If the new texture
   // is approx an integer multiple of the old texture, just changing
@@ -1097,8 +1097,8 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
 
   if(prevArea > 0.0f)
   {
-    float prevX = m_TexDisplay.offx;
-    float prevY = m_TexDisplay.offy;
+    float prevX = m_TexDisplay.xOffset;
+    float prevY = m_TexDisplay.yOffset;
 
     // allow slight difference in aspect ratio for rounding errors
     // in downscales (e.g. 1680x1050 -> 840x525 -> 420x262 in the
@@ -1115,8 +1115,8 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
       // similar ish
       float scaleFactor = (float)(sqrt(curArea) / sqrt(prevArea));
 
-      m_TexDisplay.offx = prevX * scaleFactor;
-      m_TexDisplay.offy = prevY * scaleFactor;
+      m_TexDisplay.xOffset = prevX * scaleFactor;
+      m_TexDisplay.yOffset = prevY * scaleFactor;
     }
   }
 
@@ -1126,6 +1126,10 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
   setScrollPosition(getScrollPosition());
 
   UI_UpdateStatusText();
+
+  // block signals for mipLevel and sliceFace comboboxes while editing them
+  ui->mipLevel->blockSignals(true);
+  ui->sliceFace->blockSignals(true);
 
   ui->mipLevel->clear();
 
@@ -1239,40 +1243,44 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
     m_PrevFirstArraySlice = firstArraySlice;
   }
 
+  // enable signals for mipLevel and sliceFace
+  ui->mipLevel->blockSignals(false);
+  ui->sliceFace->blockSignals(false);
+
   // because slice and mip are specially set above, we restore any per-tex settings to apply
   // even if we don't switch to a new texture.
   // Note that if the slice or mip was changed because that slice or mip is the selected one
   // at the API level, we leave this alone.
-  if(m_Ctx.Config().TextureViewer_PerTexSettings && m_TextureSettings.contains(tex.ID))
+  if(m_Ctx.Config().TextureViewer_PerTexSettings && m_TextureSettings.contains(tex.resourceId))
   {
     if(usemipsettings)
-      ui->mipLevel->setCurrentIndex(m_TextureSettings[tex.ID].mip);
+      ui->mipLevel->setCurrentIndex(m_TextureSettings[tex.resourceId].mip);
 
     if(useslicesettings)
-      ui->sliceFace->setCurrentIndex(m_TextureSettings[tex.ID].slice);
+      ui->sliceFace->setCurrentIndex(m_TextureSettings[tex.resourceId].slice);
   }
 
   // handling for if we've switched to a new texture
   if(newtex)
   {
     // if we save certain settings per-texture, restore them (if we have any)
-    if(m_Ctx.Config().TextureViewer_PerTexSettings && m_TextureSettings.contains(tex.ID))
+    if(m_Ctx.Config().TextureViewer_PerTexSettings && m_TextureSettings.contains(tex.resourceId))
     {
-      ui->channels->setCurrentIndex(m_TextureSettings[tex.ID].displayType);
+      ui->channels->setCurrentIndex(m_TextureSettings[tex.resourceId].displayType);
 
-      ui->customShader->setCurrentText(m_TextureSettings[tex.ID].customShader);
+      ui->customShader->setCurrentText(m_TextureSettings[tex.resourceId].customShader);
 
-      ui->channelRed->setChecked(m_TextureSettings[tex.ID].r);
-      ui->channelGreen->setChecked(m_TextureSettings[tex.ID].g);
-      ui->channelBlue->setChecked(m_TextureSettings[tex.ID].b);
-      ui->channelAlpha->setChecked(m_TextureSettings[tex.ID].a);
+      ui->channelRed->setChecked(m_TextureSettings[tex.resourceId].r);
+      ui->channelGreen->setChecked(m_TextureSettings[tex.resourceId].g);
+      ui->channelBlue->setChecked(m_TextureSettings[tex.resourceId].b);
+      ui->channelAlpha->setChecked(m_TextureSettings[tex.resourceId].a);
 
-      ui->depthDisplay->setChecked(m_TextureSettings[tex.ID].depth);
-      ui->stencilDisplay->setChecked(m_TextureSettings[tex.ID].stencil);
+      ui->depthDisplay->setChecked(m_TextureSettings[tex.resourceId].depth);
+      ui->stencilDisplay->setChecked(m_TextureSettings[tex.resourceId].stencil);
 
       m_NoRangePaint = true;
-      ui->rangeHistogram->setRange(m_TextureSettings[m_TexDisplay.texid].minrange,
-                                   m_TextureSettings[m_TexDisplay.texid].maxrange);
+      ui->rangeHistogram->setRange(m_TextureSettings[m_TexDisplay.resourceId].minrange,
+                                   m_TextureSettings[m_TexDisplay.resourceId].maxrange);
       m_NoRangePaint = false;
     }
     else if(m_Ctx.Config().TextureViewer_PerTexSettings)
@@ -1319,7 +1327,7 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
   });
 
   if(m_Ctx.HasTimelineBar())
-    m_Ctx.GetTimelineBar()->HighlightResourceUsage(texptr->ID);
+    m_Ctx.GetTimelineBar()->HighlightResourceUsage(texptr->resourceId);
 }
 
 void TextureViewer::UI_SetHistogramRange(const TextureDescription *tex, CompType typeHint)
@@ -1386,27 +1394,27 @@ void TextureViewer::UI_UpdateChannels()
     SHOW(ui->depthDisplay);
     SHOW(ui->stencilDisplay);
 
-    m_TexDisplay.Red = ui->depthDisplay->isChecked();
-    m_TexDisplay.Green = ui->stencilDisplay->isChecked();
-    m_TexDisplay.Blue = false;
-    m_TexDisplay.Alpha = false;
+    m_TexDisplay.red = ui->depthDisplay->isChecked();
+    m_TexDisplay.green = ui->stencilDisplay->isChecked();
+    m_TexDisplay.blue = false;
+    m_TexDisplay.alpha = false;
 
-    if(m_TexDisplay.Red == m_TexDisplay.Green && !m_TexDisplay.Red)
+    if(m_TexDisplay.red == m_TexDisplay.green && !m_TexDisplay.red)
     {
-      m_TexDisplay.Red = true;
+      m_TexDisplay.red = true;
       ui->depthDisplay->setChecked(true);
     }
 
-    m_TexDisplay.HDRMul = -1.0f;
-    if(m_TexDisplay.CustomShader != ResourceId())
+    m_TexDisplay.hdrMultiplier = -1.0f;
+    if(m_TexDisplay.customShaderId != ResourceId())
     {
-      memset(m_CurPixelValue.value_f, 0, sizeof(float) * 4);
-      memset(m_CurRealValue.value_f, 0, sizeof(float) * 4);
+      memset(m_CurPixelValue.floatValue, 0, sizeof(float) * 4);
+      memset(m_CurRealValue.floatValue, 0, sizeof(float) * 4);
       UI_UpdateStatusText();
     }
-    m_TexDisplay.CustomShader = ResourceId();
+    m_TexDisplay.customShaderId = ResourceId();
   }
-  else if(ui->channels->currentIndex() == 0 || !m_Ctx.LogLoaded())
+  else if(ui->channels->currentIndex() == 0 || !m_Ctx.IsCaptureLoaded())
   {
     // RGBA
     SHOW(ui->channelRed);
@@ -1423,19 +1431,19 @@ void TextureViewer::UI_UpdateChannels()
     HIDE(ui->depthDisplay);
     HIDE(ui->stencilDisplay);
 
-    m_TexDisplay.Red = ui->channelRed->isChecked();
-    m_TexDisplay.Green = ui->channelGreen->isChecked();
-    m_TexDisplay.Blue = ui->channelBlue->isChecked();
-    m_TexDisplay.Alpha = ui->channelAlpha->isChecked();
+    m_TexDisplay.red = ui->channelRed->isChecked();
+    m_TexDisplay.green = ui->channelGreen->isChecked();
+    m_TexDisplay.blue = ui->channelBlue->isChecked();
+    m_TexDisplay.alpha = ui->channelAlpha->isChecked();
 
-    m_TexDisplay.HDRMul = -1.0f;
-    if(m_TexDisplay.CustomShader != ResourceId())
+    m_TexDisplay.hdrMultiplier = -1.0f;
+    if(m_TexDisplay.customShaderId != ResourceId())
     {
-      memset(m_CurPixelValue.value_f, 0, sizeof(float) * 4);
-      memset(m_CurRealValue.value_f, 0, sizeof(float) * 4);
+      memset(m_CurPixelValue.floatValue, 0, sizeof(float) * 4);
+      memset(m_CurRealValue.floatValue, 0, sizeof(float) * 4);
       UI_UpdateStatusText();
     }
-    m_TexDisplay.CustomShader = ResourceId();
+    m_TexDisplay.customShaderId = ResourceId();
   }
   else if(ui->channels->currentIndex() == 1)
   {
@@ -1454,10 +1462,10 @@ void TextureViewer::UI_UpdateChannels()
     HIDE(ui->depthDisplay);
     HIDE(ui->stencilDisplay);
 
-    m_TexDisplay.Red = ui->channelRed->isChecked();
-    m_TexDisplay.Green = ui->channelGreen->isChecked();
-    m_TexDisplay.Blue = ui->channelBlue->isChecked();
-    m_TexDisplay.Alpha = false;
+    m_TexDisplay.red = ui->channelRed->isChecked();
+    m_TexDisplay.green = ui->channelGreen->isChecked();
+    m_TexDisplay.blue = ui->channelBlue->isChecked();
+    m_TexDisplay.alpha = false;
 
     bool ok = false;
     float mul = ui->hdrMul->currentText().toFloat(&ok);
@@ -1468,14 +1476,14 @@ void TextureViewer::UI_UpdateChannels()
       ui->hdrMul->setCurrentText(lit("32"));
     }
 
-    m_TexDisplay.HDRMul = mul;
-    if(m_TexDisplay.CustomShader != ResourceId())
+    m_TexDisplay.hdrMultiplier = mul;
+    if(m_TexDisplay.customShaderId != ResourceId())
     {
-      memset(m_CurPixelValue.value_f, 0, sizeof(float) * 4);
-      memset(m_CurRealValue.value_f, 0, sizeof(float) * 4);
+      memset(m_CurPixelValue.floatValue, 0, sizeof(float) * 4);
+      memset(m_CurRealValue.floatValue, 0, sizeof(float) * 4);
       UI_UpdateStatusText();
     }
-    m_TexDisplay.CustomShader = ResourceId();
+    m_TexDisplay.customShaderId = ResourceId();
   }
   else if(ui->channels->currentIndex() == 2)
   {
@@ -1494,26 +1502,26 @@ void TextureViewer::UI_UpdateChannels()
     HIDE(ui->depthDisplay);
     HIDE(ui->stencilDisplay);
 
-    m_TexDisplay.Red = ui->channelRed->isChecked();
-    m_TexDisplay.Green = ui->channelGreen->isChecked();
-    m_TexDisplay.Blue = ui->channelBlue->isChecked();
-    m_TexDisplay.Alpha = ui->channelAlpha->isChecked();
+    m_TexDisplay.red = ui->channelRed->isChecked();
+    m_TexDisplay.green = ui->channelGreen->isChecked();
+    m_TexDisplay.blue = ui->channelBlue->isChecked();
+    m_TexDisplay.alpha = ui->channelAlpha->isChecked();
 
-    m_TexDisplay.HDRMul = -1.0f;
+    m_TexDisplay.hdrMultiplier = -1.0f;
 
-    m_TexDisplay.CustomShader = ResourceId();
+    m_TexDisplay.customShaderId = ResourceId();
 
     QString shaderName = ui->customShader->currentText().toUpper();
 
     if(m_CustomShaders.contains(shaderName))
     {
-      if(m_TexDisplay.CustomShader == ResourceId())
+      if(m_TexDisplay.customShaderId == ResourceId())
       {
-        memset(m_CurPixelValue.value_f, 0, sizeof(float) * 4);
-        memset(m_CurRealValue.value_f, 0, sizeof(float) * 4);
+        memset(m_CurPixelValue.floatValue, 0, sizeof(float) * 4);
+        memset(m_CurRealValue.floatValue, 0, sizeof(float) * 4);
         UI_UpdateStatusText();
       }
-      m_TexDisplay.CustomShader = m_CustomShaders[shaderName];
+      m_TexDisplay.customShaderId = m_CustomShaders[shaderName];
       ui->customDelete->setEnabled(true);
       ui->customEdit->setEnabled(true);
     }
@@ -1529,7 +1537,7 @@ void TextureViewer::UI_UpdateChannels()
 #undef ENABLE
 #undef DISABLE
 
-  m_TexDisplay.FlipY = ui->flip_y->isChecked();
+  m_TexDisplay.flipY = ui->flip_y->isChecked();
 
   INVOKE_MEMFN(RT_UpdateAndDisplay);
   INVOKE_MEMFN(RT_UpdateVisualRange);
@@ -1644,7 +1652,7 @@ void TextureViewer::UI_CreateThumbnails()
 
 void TextureViewer::GotoLocation(int x, int y)
 {
-  if(!m_Ctx.LogLoaded())
+  if(!m_Ctx.IsCaptureLoaded())
     return;
 
   TextureDescription *tex = GetCurrentTexture();
@@ -1657,7 +1665,7 @@ void TextureViewer::GotoLocation(int x, int y)
   uint32_t mipHeight = qMax(1U, tex->height >> (int)m_TexDisplay.mip);
   if(m_Ctx.APIProps().pipelineType == GraphicsAPI::OpenGL)
     m_PickedPoint.setY((int)(mipHeight - 1) - m_PickedPoint.y());
-  if(m_TexDisplay.FlipY)
+  if(m_TexDisplay.flipY)
     m_PickedPoint.setY((int)(mipHeight - 1) - m_PickedPoint.x());
 
   if(m_Output != NULL)
@@ -1696,7 +1704,7 @@ void TextureViewer::ViewTexture(ResourceId ID, bool focus)
   if(tex)
   {
     QWidget *lockedContainer = new QWidget(this);
-    lockedContainer->setWindowTitle(tex->name);
+    lockedContainer->setWindowTitle(m_Ctx.GetResourceName(ID));
     lockedContainer->setProperty("id", QVariant::fromValue(ID));
 
     ToolWindowManagerArea *textureTabs = ui->dockarea->areaOf(ui->renderContainer);
@@ -1713,7 +1721,7 @@ void TextureViewer::ViewTexture(ResourceId ID, bool focus)
     int idx = textureTabs->indexOf(lockedContainer);
 
     if(idx >= 0)
-      textureTabs->setTabIcon(idx, Icons::page_white_link());
+      textureTabs->setTabIcon(idx, Icons::page_go());
     else
       qCritical() << "Couldn't get tab index of new tab to set icon";
 
@@ -1760,7 +1768,7 @@ void TextureViewer::showDisabled_triggered()
 {
   m_ShowDisabled = !m_ShowDisabled;
 
-  if(m_Ctx.LogLoaded())
+  if(m_Ctx.IsCaptureLoaded())
     m_Ctx.RefreshStatus();
 }
 
@@ -1768,7 +1776,7 @@ void TextureViewer::showEmpty_triggered()
 {
   m_ShowEmpty = !m_ShowEmpty;
 
-  if(m_Ctx.LogLoaded())
+  if(m_Ctx.IsCaptureLoaded())
     m_Ctx.RefreshStatus();
 }
 
@@ -1791,7 +1799,7 @@ void TextureViewer::AddResourceUsageEntry(QMenu &menu, uint32_t start, uint32_t 
   menu.addAction(item);
 }
 
-void TextureViewer::OpenResourceContextMenu(ResourceId id, const rdctype::array<EventUsage> &usage)
+void TextureViewer::OpenResourceContextMenu(ResourceId id, const rdcarray<EventUsage> &usage)
 {
   QMenu contextMenu(this);
 
@@ -1831,66 +1839,10 @@ void TextureViewer::OpenResourceContextMenu(ResourceId id, const rdctype::array<
     QObject::connect(&openLockedTab, &QAction::triggered, this,
                      &TextureViewer::texContextItem_triggered);
 
-    uint32_t start = 0;
-    uint32_t end = 0;
-    ResourceUsage us = ResourceUsage::IndexBuffer;
-
-    for(const EventUsage u : usage)
-    {
-      if(start == 0)
-      {
-        start = end = u.eventID;
-        us = u.usage;
-        continue;
-      }
-
-      const DrawcallDescription *curDraw = m_Ctx.GetDrawcall(u.eventID);
-
-      bool distinct = false;
-
-      // if the usage is different from the last, add a new entry,
-      // or if the previous draw link is broken.
-      if(u.usage != us || curDraw == NULL || curDraw->previous == 0)
-      {
-        distinct = true;
-      }
-      else
-      {
-        // otherwise search back through real draws, to see if the
-        // last event was where we were - otherwise it's a new
-        // distinct set of drawcalls and should have a separate
-        // entry in the context menu
-        const DrawcallDescription *prev = m_Ctx.GetDrawcall(curDraw->previous);
-
-        while(prev != NULL && prev->eventID > end)
-        {
-          if(!(prev->flags & (DrawFlags::Dispatch | DrawFlags::Drawcall | DrawFlags::CmdList)))
-          {
-            prev = m_Ctx.GetDrawcall(prev->previous);
-          }
-          else
-          {
-            distinct = true;
-            break;
-          }
-
-          if(prev == NULL)
-            distinct = true;
-        }
-      }
-
-      if(distinct)
-      {
-        AddResourceUsageEntry(contextMenu, start, end, us);
-        start = end = u.eventID;
-        us = u.usage;
-      }
-
-      end = u.eventID;
-    }
-
-    if(start != 0)
-      AddResourceUsageEntry(contextMenu, start, end, us);
+    CombineUsageEvents(m_Ctx, usage,
+                       [this, &contextMenu](uint32_t start, uint32_t end, ResourceUsage use) {
+                         AddResourceUsageEntry(contextMenu, start, end, use);
+                       });
 
     RDDialog::show(&contextMenu, QCursor::pos());
   }
@@ -1906,54 +1858,30 @@ void TextureViewer::InitResourcePreview(ResourcePreview *prev, ResourceId id, Co
 {
   if(id != ResourceId() || force)
   {
-    TextureDescription *texptr = m_Ctx.GetTexture(id);
-    BufferDescription *bufptr = m_Ctx.GetBuffer(id);
-
-    if(texptr != NULL)
+    QString fullname = bindName;
+    if(!m_Ctx.IsAutogeneratedName(id))
     {
-      QString fullname = bindName;
-      if(texptr->customName)
-      {
-        if(!fullname.isEmpty())
-          fullname += lit(" = ");
-        fullname += texptr->name;
-      }
-      if(fullname.isEmpty())
-        fullname = texptr->name;
-
-      prev->setResourceName(fullname);
-      WId handle = prev->thumbWinId();
-      m_Ctx.Replay().AsyncInvoke([this, handle, id, typeHint](IReplayController *) {
-        m_Output->AddThumbnail(m_Ctx.CurWindowingSystem(), m_Ctx.FillWindowingData(handle), id,
-                               typeHint);
-      });
+      if(!fullname.isEmpty())
+        fullname += lit(" = ");
+      fullname += m_Ctx.GetResourceName(id);
     }
-    else if(bufptr != NULL)
-    {
-      QString fullname = bindName;
-      if(bufptr->customName)
-      {
-        if(!fullname.isEmpty())
-          fullname += lit(" = ");
-        fullname += bufptr->name;
-      }
-      if(fullname.isEmpty())
-        fullname = bufptr->name;
+    if(fullname.isEmpty())
+      fullname = m_Ctx.GetResourceName(id);
 
-      prev->setResourceName(fullname);
-      WId handle = prev->thumbWinId();
-      m_Ctx.Replay().AsyncInvoke([this, handle](IReplayController *) {
-        m_Output->AddThumbnail(m_Ctx.CurWindowingSystem(), m_Ctx.FillWindowingData(handle),
-                               ResourceId(), CompType::Typeless);
+    prev->setResourceName(fullname);
+
+    WId handle = prev->thumbWinId();
+
+    if(m_Ctx.GetTexture(id))
+    {
+      m_Ctx.Replay().AsyncInvoke([this, handle, id, typeHint](IReplayController *) {
+        m_Output->AddThumbnail(m_Ctx.CreateWindowingData(handle), id, typeHint);
       });
     }
     else
     {
-      prev->setResourceName(QString());
-      WId handle = prev->thumbWinId();
       m_Ctx.Replay().AsyncInvoke([this, handle](IReplayController *) {
-        m_Output->AddThumbnail(m_Ctx.CurWindowingSystem(), m_Ctx.FillWindowingData(handle),
-                               ResourceId(), CompType::Typeless);
+        m_Output->AddThumbnail(m_Ctx.CreateWindowingData(handle), ResourceId(), CompType::Typeless);
       });
     }
 
@@ -1970,8 +1898,7 @@ void TextureViewer::InitResourcePreview(ResourcePreview *prev, ResourceId id, Co
 
     WId handle = prev->thumbWinId();
     m_Ctx.Replay().AsyncInvoke([this, handle](IReplayController *) {
-      m_Output->AddThumbnail(m_Ctx.CurWindowingSystem(), m_Ctx.FillWindowingData(handle),
-                             ResourceId(), CompType::Typeless);
+      m_Output->AddThumbnail(m_Ctx.CreateWindowingData(handle), ResourceId(), CompType::Typeless);
     });
   }
   else
@@ -1983,26 +1910,27 @@ void TextureViewer::InitResourcePreview(ResourcePreview *prev, ResourceId id, Co
 }
 
 void TextureViewer::InitStageResourcePreviews(ShaderStage stage,
-                                              const rdctype::array<ShaderResource> &resourceDetails,
-                                              const rdctype::array<BindpointMap> &mapping,
-                                              QMap<BindpointMap, QVector<BoundResource>> &ResList,
+                                              const rdcarray<ShaderResource> &resourceDetails,
+                                              const rdcarray<Bindpoint> &mapping,
+                                              rdcarray<BoundResourceArray> &ResList,
                                               ThumbnailStrip *prevs, int &prevIndex, bool copy,
                                               bool rw)
 {
-  for(int idx = 0; idx < mapping.count; idx++)
+  for(int idx = 0; idx < mapping.count(); idx++)
   {
-    const BindpointMap &key = mapping[idx];
+    const Bindpoint &key = mapping[idx];
 
-    const QVector<BoundResource> *resArray = NULL;
+    const rdcarray<BoundResource> *resArray = NULL;
 
-    if(ResList.contains(key))
-      resArray = &ResList[key];
+    int residx = ResList.indexOf(key);
+    if(residx >= 0)
+      resArray = &ResList[residx].resources;
 
-    int arrayLen = resArray != NULL ? resArray->size() : 1;
+    int arrayLen = resArray != NULL ? resArray->count() : 1;
 
     for(int arrayIdx = 0; arrayIdx < arrayLen; arrayIdx++)
     {
-      ResourceId id = resArray != NULL ? resArray->at(arrayIdx).Id : ResourceId();
+      ResourceId id = resArray != NULL ? resArray->at(arrayIdx).resourceId : ResourceId();
       CompType typeHint = resArray != NULL ? resArray->at(arrayIdx).typeHint : CompType::Typeless;
 
       bool used = key.used;
@@ -2122,9 +2050,9 @@ void TextureViewer::thumb_clicked(QMouseEvent *e)
     ResourceId id = follow.GetResourceId(m_Ctx);
 
     if(id == ResourceId() && follow == m_Following)
-      id = m_TexDisplay.texid;
+      id = m_TexDisplay.resourceId;
 
-    rdctype::array<EventUsage> empty;
+    rdcarray<EventUsage> empty;
 
     if(id == ResourceId())
     {
@@ -2133,7 +2061,7 @@ void TextureViewer::thumb_clicked(QMouseEvent *e)
     else
     {
       m_Ctx.Replay().AsyncInvoke([this, id](IReplayController *r) {
-        rdctype::array<EventUsage> usage = r->GetUsage(id);
+        rdcarray<EventUsage> usage = r->GetUsage(id);
 
         GUIInvoke::call([this, id, usage]() { OpenResourceContextMenu(id, usage); });
       });
@@ -2160,12 +2088,12 @@ void TextureViewer::render_mouseMove(QMouseEvent *e)
   if(m_Output == NULL)
     return;
 
-  m_CurHoverPixel.setX(int((float(e->x() * ui->render->devicePixelRatio()) - m_TexDisplay.offx) /
+  m_CurHoverPixel.setX(int((float(e->x() * ui->render->devicePixelRatio()) - m_TexDisplay.xOffset) /
                            m_TexDisplay.scale));
-  m_CurHoverPixel.setY(int((float(e->y() * ui->render->devicePixelRatio()) - m_TexDisplay.offy) /
+  m_CurHoverPixel.setY(int((float(e->y() * ui->render->devicePixelRatio()) - m_TexDisplay.yOffset) /
                            m_TexDisplay.scale));
 
-  if(m_TexDisplay.texid != ResourceId())
+  if(m_TexDisplay.resourceId != ResourceId())
   {
     TextureDescription *texptr = GetCurrentTexture();
 
@@ -2250,7 +2178,7 @@ void TextureViewer::render_keyPress(QKeyEvent *e)
     clipboard->setText(ui->texStatusDim->text() + lit(" | ") + ui->statusText->text());
   }
 
-  if(!m_Ctx.LogLoaded())
+  if(!m_Ctx.IsCaptureLoaded())
     return;
 
   if((e->modifiers() & Qt::ControlModifier) && e->key() == Qt::Key_G)
@@ -2324,26 +2252,26 @@ float TextureViewer::CurMaxScrollY()
 
 QPoint TextureViewer::getScrollPosition()
 {
-  return QPoint((int)m_TexDisplay.offx, m_TexDisplay.offy);
+  return QPoint((int)m_TexDisplay.xOffset, m_TexDisplay.yOffset);
 }
 
 void TextureViewer::setScrollPosition(const QPoint &pos)
 {
-  m_TexDisplay.offx = qMax(CurMaxScrollX(), (float)pos.x());
-  m_TexDisplay.offy = qMax(CurMaxScrollY(), (float)pos.y());
+  m_TexDisplay.xOffset = qMax(CurMaxScrollX(), (float)pos.x());
+  m_TexDisplay.yOffset = qMax(CurMaxScrollY(), (float)pos.y());
 
-  m_TexDisplay.offx = qMin(0.0f, m_TexDisplay.offx);
-  m_TexDisplay.offy = qMin(0.0f, m_TexDisplay.offy);
+  m_TexDisplay.xOffset = qMin(0.0f, m_TexDisplay.xOffset);
+  m_TexDisplay.yOffset = qMin(0.0f, m_TexDisplay.yOffset);
 
   if(ScrollUpdateScrollbars)
   {
     ScrollUpdateScrollbars = false;
 
     if(ui->renderHScroll->isEnabled())
-      ui->renderHScroll->setValue(qBound(0, -int(m_TexDisplay.offx), ui->renderHScroll->maximum()));
+      ui->renderHScroll->setValue(qBound(0, -int(m_TexDisplay.xOffset), ui->renderHScroll->maximum()));
 
     if(ui->renderVScroll->isEnabled())
-      ui->renderVScroll->setValue(qBound(0, -int(m_TexDisplay.offy), ui->renderVScroll->maximum()));
+      ui->renderVScroll->setValue(qBound(0, -int(m_TexDisplay.yOffset), ui->renderVScroll->maximum()));
 
     ScrollUpdateScrollbars = true;
   }
@@ -2423,8 +2351,8 @@ void TextureViewer::UI_RecreatePanels()
 {
   ICaptureContext *ctx = &m_Ctx;
 
-  // while a log is loaded, pass NULL into the widget
-  if(!m_Ctx.LogLoaded())
+  // while a capture is loaded, pass NULL into the widget
+  if(!m_Ctx.IsCaptureLoaded())
     ctx = NULL;
 
   {
@@ -2472,7 +2400,7 @@ void TextureViewer::updateBackgroundColors()
   }
 }
 
-void TextureViewer::OnLogfileLoaded()
+void TextureViewer::OnCaptureLoaded()
 {
   Reset();
 
@@ -2483,19 +2411,40 @@ void TextureViewer::OnLogfileLoaded()
   ui->locationGoto->setEnabled(true);
   ui->viewTexBuffer->setEnabled(true);
 
+  if(m_Ctx.CurPipelineState().IsCaptureD3D11())
+  {
+    ui->pixelHistory->setEnabled(true);
+    ui->pixelHistory->setToolTip(QString());
+  }
+  else
+  {
+    ui->pixelHistory->setEnabled(false);
+    ui->pixelHistory->setToolTip(tr("Pixel History not implemented on this API"));
+  }
+
+  if(m_Ctx.CurPipelineState().IsCaptureD3D11())
+  {
+    ui->debugPixelContext->setEnabled(true);
+    ui->debugPixelContext->setToolTip(QString());
+  }
+  else
+  {
+    ui->debugPixelContext->setEnabled(false);
+    ui->debugPixelContext->setToolTip(tr("Shader Debugging not implemented on this API"));
+  }
+
   TextureListItemModel *model = (TextureListItemModel *)ui->textureList->model();
 
-  model->reset(TextureListItemModel::String, QString(), m_Ctx);
+  model->reset(TextureListItemModel::String, QString());
 
   m_TexDisplay.backgroundColor =
       backCol.isValid() ? FloatVector(backCol.redF(), backCol.greenF(), backCol.blueF(), 1.0f)
                         : FloatVector();
 
   m_Ctx.Replay().BlockInvoke([renderID, contextID, this](IReplayController *r) {
-    m_Output = r->CreateOutput(m_Ctx.CurWindowingSystem(), m_Ctx.FillWindowingData(renderID),
-                               ReplayOutputType::Texture);
+    m_Output = r->CreateOutput(m_Ctx.CreateWindowingData(renderID), ReplayOutputType::Texture);
 
-    m_Output->SetPixelContext(m_Ctx.CurWindowingSystem(), m_Ctx.FillWindowingData(contextID));
+    m_Output->SetPixelContext(m_Ctx.CreateWindowingData(contextID));
 
     ui->render->setOutput(m_Output);
     ui->pixelContext->setOutput(m_Output);
@@ -2505,7 +2454,7 @@ void TextureViewer::OnLogfileLoaded()
     GUIInvoke::call([this]() { OnEventChanged(m_Ctx.CurEvent()); });
   });
 
-  m_Watcher = new QFileSystemWatcher({ConfigFilePath(QString())}, this);
+  m_Watcher = new QFileSystemWatcher({configFilePath(QString())}, this);
 
   QObject::connect(m_Watcher, &QFileSystemWatcher::fileChanged, this,
                    &TextureViewer::customShaderModified);
@@ -2517,6 +2466,9 @@ void TextureViewer::OnLogfileLoaded()
 void TextureViewer::Reset()
 {
   m_CachedTexture = NULL;
+
+  m_PickedPoint.setX(-1);
+  m_PickedPoint.setY(-1);
 
   memset(&m_TexDisplay, 0, sizeof(m_TexDisplay));
   m_TexDisplay.backgroundColor =
@@ -2537,7 +2489,10 @@ void TextureViewer::Reset()
   ui->renderHScroll->setEnabled(false);
   ui->renderVScroll->setEnabled(false);
 
-  // PixelPicked = false;
+  ui->pixelHistory->setEnabled(false);
+  ui->pixelHistory->setToolTip(QString());
+  ui->debugPixelContext->setEnabled(false);
+  ui->debugPixelContext->setToolTip(QString());
 
   ui->statusText->setText(QString());
   ui->renderContainer->setWindowTitle(tr("Current"));
@@ -2568,9 +2523,11 @@ void TextureViewer::Reset()
   UI_UpdateChannels();
 }
 
-void TextureViewer::OnLogfileClosed()
+void TextureViewer::OnCaptureClosed()
 {
   Reset();
+
+  refreshTextureList();
 
   delete m_Watcher;
   m_Watcher = NULL;
@@ -2585,14 +2542,14 @@ void TextureViewer::OnLogfileClosed()
   ui->viewTexBuffer->setEnabled(false);
 }
 
-void TextureViewer::OnEventChanged(uint32_t eventID)
+void TextureViewer::OnEventChanged(uint32_t eventId)
 {
   UI_UpdateCachedTexture();
 
   TextureDescription *CurrentTexture = GetCurrentTexture();
 
   if(!currentTextureIsLocked() ||
-     (CurrentTexture != NULL && m_TexDisplay.texid != CurrentTexture->ID))
+     (CurrentTexture != NULL && m_TexDisplay.resourceId != CurrentTexture->resourceId))
     UI_OnTextureSelectionChanged(true);
 
   if(m_Output == NULL)
@@ -2600,7 +2557,17 @@ void TextureViewer::OnEventChanged(uint32_t eventID)
 
   UI_CreateThumbnails();
 
-  QVector<BoundResource> RTs = Following::GetOutputTargets(m_Ctx);
+  UI_UpdateTextureDetails();
+  refreshTextureList();
+
+  // iterate over locked tabs, and update the name if it's changed
+  for(QWidget *w : m_LockedTabs.values())
+  {
+    ResourceId id = w->property("id").value<ResourceId>();
+    w->setWindowTitle(m_Ctx.GetResourceName(id));
+  }
+
+  rdcarray<BoundResource> RTs = Following::GetOutputTargets(m_Ctx);
   BoundResource Depth = Following::GetDepthTarget(m_Ctx);
 
   int outIndex = 0;
@@ -2609,7 +2576,7 @@ void TextureViewer::OnEventChanged(uint32_t eventID)
   bool copy = false, clear = false, compute = false;
   Following::GetDrawContext(m_Ctx, copy, clear, compute);
 
-  for(int rt = 0; rt < RTs.size(); rt++)
+  for(int rt = 0; rt < RTs.count(); rt++)
   {
     ResourcePreview *prev;
 
@@ -2626,7 +2593,8 @@ void TextureViewer::OnEventChanged(uint32_t eventID)
                            ? tr("DST")
                            : (m_Ctx.CurPipelineState().OutputAbbrev() + QString::number(rt));
 
-    InitResourcePreview(prev, RTs[rt].Id, RTs[rt].typeHint, false, follow, bindName, slotName);
+    InitResourcePreview(prev, RTs[rt].resourceId, RTs[rt].typeHint, false, follow, bindName,
+                        slotName);
   }
 
   // depth
@@ -2642,7 +2610,7 @@ void TextureViewer::OnEventChanged(uint32_t eventID)
 
     Following follow(FollowType::OutputDepth, ShaderStage::Pixel, 0, 0);
 
-    InitResourcePreview(prev, Depth.Id, Depth.typeHint, false, follow, QString(), tr("DS"));
+    InitResourcePreview(prev, Depth.resourceId, Depth.typeHint, false, follow, QString(), tr("DS"));
   }
 
   ShaderStage stages[] = {ShaderStage::Vertex, ShaderStage::Hull, ShaderStage::Domain,
@@ -2656,25 +2624,25 @@ void TextureViewer::OnEventChanged(uint32_t eventID)
     count = 1;
   }
 
-  const rdctype::array<ShaderResource> empty;
+  const rdcarray<ShaderResource> empty;
 
   // display resources used for all stages
   for(int i = 0; i < count; i++)
   {
     ShaderStage stage = stages[i];
 
-    QMap<BindpointMap, QVector<BoundResource>> RWs = Following::GetReadWriteResources(m_Ctx, stage);
-    QMap<BindpointMap, QVector<BoundResource>> ROs = Following::GetReadOnlyResources(m_Ctx, stage);
+    rdcarray<BoundResourceArray> RWs = Following::GetReadWriteResources(m_Ctx, stage);
+    rdcarray<BoundResourceArray> ROs = Following::GetReadOnlyResources(m_Ctx, stage);
 
     const ShaderReflection *details = Following::GetReflection(m_Ctx, stage);
     const ShaderBindpointMapping &mapping = Following::GetMapping(m_Ctx, stage);
 
-    InitStageResourcePreviews(stage, details != NULL ? details->ReadWriteResources : empty,
-                              mapping.ReadWriteResources, RWs, ui->outputThumbs, outIndex, copy,
+    InitStageResourcePreviews(stage, details != NULL ? details->readWriteResources : empty,
+                              mapping.readWriteResources, RWs, ui->outputThumbs, outIndex, copy,
                               true);
 
-    InitStageResourcePreviews(stage, details != NULL ? details->ReadOnlyResources : empty,
-                              mapping.ReadOnlyResources, ROs, ui->inputThumbs, inIndex, copy, false);
+    InitStageResourcePreviews(stage, details != NULL ? details->readOnlyResources : empty,
+                              mapping.readOnlyResources, ROs, ui->inputThumbs, inIndex, copy, false);
   }
 
   // hide others
@@ -2871,7 +2839,35 @@ void TextureViewer::on_overlay_currentIndexChanged(int index)
   if(ui->overlay->currentIndex() > 0)
     m_TexDisplay.overlay = (DebugOverlay)ui->overlay->currentIndex();
 
+#define ANALYTICS_OVERLAY(name) \
+  case DebugOverlay::name: ANALYTIC_SET(UIFeatures.TextureDebugOverlays.name, true); break;
+
+  switch(m_TexDisplay.overlay)
+  {
+    ANALYTICS_OVERLAY(Drawcall);
+    ANALYTICS_OVERLAY(Wireframe);
+    ANALYTICS_OVERLAY(Depth);
+    ANALYTICS_OVERLAY(Stencil);
+    ANALYTICS_OVERLAY(BackfaceCull);
+    ANALYTICS_OVERLAY(ViewportScissor);
+    ANALYTICS_OVERLAY(NaN);
+    ANALYTICS_OVERLAY(Clipping);
+    ANALYTICS_OVERLAY(ClearBeforePass);
+    ANALYTICS_OVERLAY(ClearBeforeDraw);
+    ANALYTICS_OVERLAY(QuadOverdrawPass);
+    ANALYTICS_OVERLAY(QuadOverdrawDraw);
+    ANALYTICS_OVERLAY(TriangleSizePass);
+    ANALYTICS_OVERLAY(TriangleSizeDraw);
+    default: break;
+  }
+
+#undef ANALYTICS_OVERLAY
+
   INVOKE_MEMFN(RT_UpdateAndDisplay);
+  if(m_Output != NULL && m_PickedPoint.x() >= 0 && m_PickedPoint.y() >= 0)
+  {
+    INVOKE_MEMFN(RT_PickPixelsAndUpdate);
+  }
 }
 
 void TextureViewer::channelsWidget_mouseClicked(QMouseEvent *event)
@@ -2902,11 +2898,11 @@ void TextureViewer::channelsWidget_mouseClicked(QMouseEvent *event)
 
 void TextureViewer::range_rangeUpdated()
 {
-  m_TexDisplay.rangemin = ui->rangeHistogram->blackPoint();
-  m_TexDisplay.rangemax = ui->rangeHistogram->whitePoint();
+  m_TexDisplay.rangeMin = ui->rangeHistogram->blackPoint();
+  m_TexDisplay.rangeMax = ui->rangeHistogram->whitePoint();
 
-  ui->rangeBlack->setText(Formatter::Format(m_TexDisplay.rangemin));
-  ui->rangeWhite->setText(Formatter::Format(m_TexDisplay.rangemax));
+  ui->rangeBlack->setText(Formatter::Format(m_TexDisplay.rangeMin));
+  ui->rangeWhite->setText(Formatter::Format(m_TexDisplay.rangeMax));
 
   if(m_NoRangePaint)
     return;
@@ -3016,8 +3012,8 @@ void TextureViewer::on_visualiseRange_clicked()
 
 void TextureViewer::AutoFitRange()
 {
-  // no log loaded or buffer/empty texture currently being viewed - don't autofit
-  if(!m_Ctx.LogLoaded() || GetCurrentTexture() == NULL || m_Output == NULL)
+  // no capture loaded or buffer/empty texture currently being viewed - don't autofit
+  if(!m_Ctx.IsCaptureLoaded() || GetCurrentTexture() == NULL || m_Output == NULL)
     return;
 
   m_Ctx.Replay().AsyncInvoke([this](IReplayController *r) {
@@ -3032,7 +3028,7 @@ void TextureViewer::AutoFitRange()
 
       ResourceFormat fmt = GetCurrentTexture()->format;
 
-      if(m_TexDisplay.CustomShader != ResourceId())
+      if(m_TexDisplay.customShaderId != ResourceId())
       {
         fmt.compType = CompType::Float;
       }
@@ -3041,38 +3037,38 @@ void TextureViewer::AutoFitRange()
       {
         if(fmt.compType == CompType::UInt)
         {
-          min.value_f[i] = min.value_u[i];
-          max.value_f[i] = max.value_u[i];
+          min.floatValue[i] = min.uintValue[i];
+          max.floatValue[i] = max.uintValue[i];
         }
         else if(fmt.compType == CompType::SInt)
         {
-          min.value_f[i] = min.value_i[i];
-          max.value_f[i] = max.value_i[i];
+          min.floatValue[i] = min.intValue[i];
+          max.floatValue[i] = max.intValue[i];
         }
       }
 
-      if(m_TexDisplay.Red)
+      if(m_TexDisplay.red)
       {
-        minval = qMin(minval, min.value_f[0]);
-        maxval = qMax(maxval, max.value_f[0]);
+        minval = qMin(minval, min.floatValue[0]);
+        maxval = qMax(maxval, max.floatValue[0]);
         changeRange = true;
       }
-      if(m_TexDisplay.Green && fmt.compCount > 1)
+      if(m_TexDisplay.green && fmt.compCount > 1)
       {
-        minval = qMin(minval, min.value_f[1]);
-        maxval = qMax(maxval, max.value_f[1]);
+        minval = qMin(minval, min.floatValue[1]);
+        maxval = qMax(maxval, max.floatValue[1]);
         changeRange = true;
       }
-      if(m_TexDisplay.Blue && fmt.compCount > 2)
+      if(m_TexDisplay.blue && fmt.compCount > 2)
       {
-        minval = qMin(minval, min.value_f[2]);
-        maxval = qMax(maxval, max.value_f[2]);
+        minval = qMin(minval, min.floatValue[2]);
+        maxval = qMax(maxval, max.floatValue[2]);
         changeRange = true;
       }
-      if(m_TexDisplay.Alpha && fmt.compCount > 3)
+      if(m_TexDisplay.alpha && fmt.compCount > 3)
       {
-        minval = qMin(minval, min.value_f[3]);
-        maxval = qMax(maxval, max.value_f[3]);
+        minval = qMin(minval, min.floatValue[3]);
+        maxval = qMax(maxval, max.floatValue[3]);
         changeRange = true;
       }
 
@@ -3145,13 +3141,13 @@ void TextureViewer::on_mipLevel_currentIndexChanged(int index)
 
   if(tex.mips > 1)
   {
-    m_TexDisplay.mip = (uint32_t)index;
+    m_TexDisplay.mip = (uint32_t)qMax(0, index);
     m_TexDisplay.sampleIdx = 0;
   }
   else
   {
     m_TexDisplay.mip = 0;
-    m_TexDisplay.sampleIdx = (uint32_t)index;
+    m_TexDisplay.sampleIdx = (uint32_t)qMax(0, index);
     if(m_TexDisplay.sampleIdx == tex.msSamp)
       m_TexDisplay.sampleIdx = ~0U;
   }
@@ -3191,10 +3187,10 @@ void TextureViewer::on_sliceFace_currentIndexChanged(int index)
     return;
 
   TextureDescription &tex = *texptr;
-  m_TexDisplay.sliceFace = (uint32_t)index;
+  m_TexDisplay.sliceFace = (uint32_t)qMax(0, index);
 
   if(tex.depth > 1)
-    m_TexDisplay.sliceFace = (uint32_t)(index << (int)m_TexDisplay.mip);
+    m_TexDisplay.sliceFace = (uint32_t)(qMax(0, index) << (int)m_TexDisplay.mip);
 
   INVOKE_MEMFN(RT_UpdateVisualRange);
 
@@ -3223,7 +3219,7 @@ void TextureViewer::ShowGotoPopup()
 
     if(m_Ctx.APIProps().pipelineType == GraphicsAPI::OpenGL)
       p.setY((int)(mipHeight - 1) - p.y());
-    if(m_TexDisplay.FlipY)
+    if(m_TexDisplay.flipY)
       p.setY((int)(mipHeight - 1) - p.y());
 
     m_Goto->show(ui->render, p);
@@ -3254,6 +3250,7 @@ void TextureViewer::on_viewTexBuffer_clicked()
       case ResourceFormatType::ETC2:
       case ResourceFormatType::EAC:
       case ResourceFormatType::ASTC:
+      case ResourceFormatType::PVRTC:
         varName = lit("block");
         // display a 4x4 block at a time
         w /= 4;
@@ -3280,6 +3277,7 @@ void TextureViewer::on_viewTexBuffer_clicked()
       case ResourceFormatType::BC4:
       case ResourceFormatType::ETC2:
       case ResourceFormatType::EAC:
+      case ResourceFormatType::PVRTC:
         baseType = lit("row_major xint2x1");
         break;
       // 4x4 byte block, for 128-bit block formats
@@ -3306,10 +3304,25 @@ void TextureViewer::on_viewTexBuffer_clicked()
 
     QString format = QFormatStr("%1 %2[%3];").arg(baseType).arg(varName).arg(w);
 
-    IBufferViewer *viewer =
-        m_Ctx.ViewTextureAsBuffer(m_TexDisplay.sliceFace, m_TexDisplay.mip, texptr->ID, format);
+    IBufferViewer *viewer = m_Ctx.ViewTextureAsBuffer(m_TexDisplay.sliceFace, m_TexDisplay.mip,
+                                                      texptr->resourceId, format);
 
     m_Ctx.AddDockWindow(viewer->Widget(), DockReference::AddTo, this);
+  }
+}
+
+void TextureViewer::on_resourceDetails_clicked()
+{
+  TextureDescription *texptr = GetCurrentTexture();
+
+  if(texptr)
+  {
+    if(!m_Ctx.HasResourceInspector())
+      m_Ctx.ShowResourceInspector();
+
+    m_Ctx.GetResourceInspector()->Inspect(texptr->resourceId);
+
+    ToolWindowManager::raiseToolWindow(m_Ctx.GetResourceInspector()->Widget());
   }
 }
 
@@ -3324,7 +3337,7 @@ void TextureViewer::on_saveTex_clicked()
   memset(&config, 0, sizeof(config));
   config.jpegQuality = 90;
 
-  config.id = m_TexDisplay.texid;
+  config.id = m_TexDisplay.resourceId;
   config.typeHint = m_TexDisplay.typeHint;
   config.slice.sliceIndex = (int)m_TexDisplay.sliceFace;
   config.mip = (int)m_TexDisplay.mip;
@@ -3333,23 +3346,23 @@ void TextureViewer::on_saveTex_clicked()
     config.slice.sliceIndex = (int)m_TexDisplay.sliceFace >> (int)m_TexDisplay.mip;
 
   config.channelExtract = -1;
-  if(m_TexDisplay.Red && !m_TexDisplay.Green && !m_TexDisplay.Blue && !m_TexDisplay.Alpha)
+  if(m_TexDisplay.red && !m_TexDisplay.green && !m_TexDisplay.blue && !m_TexDisplay.alpha)
     config.channelExtract = 0;
-  if(!m_TexDisplay.Red && m_TexDisplay.Green && !m_TexDisplay.Blue && !m_TexDisplay.Alpha)
+  if(!m_TexDisplay.red && m_TexDisplay.green && !m_TexDisplay.blue && !m_TexDisplay.alpha)
     config.channelExtract = 1;
-  if(!m_TexDisplay.Red && !m_TexDisplay.Green && m_TexDisplay.Blue && !m_TexDisplay.Alpha)
+  if(!m_TexDisplay.red && !m_TexDisplay.green && m_TexDisplay.blue && !m_TexDisplay.alpha)
     config.channelExtract = 2;
-  if(!m_TexDisplay.Red && !m_TexDisplay.Green && !m_TexDisplay.Blue && m_TexDisplay.Alpha)
+  if(!m_TexDisplay.red && !m_TexDisplay.green && !m_TexDisplay.blue && m_TexDisplay.alpha)
     config.channelExtract = 3;
 
-  config.comp.blackPoint = m_TexDisplay.rangemin;
-  config.comp.whitePoint = m_TexDisplay.rangemax;
+  config.comp.blackPoint = m_TexDisplay.rangeMin;
+  config.comp.whitePoint = m_TexDisplay.rangeMax;
   config.alphaCol = m_TexDisplay.backgroundColor;
-  config.alpha = m_TexDisplay.Alpha ? AlphaMapping::BlendToCheckerboard : AlphaMapping::Discard;
-  if(m_TexDisplay.Alpha && !ui->checkerBack->isChecked())
+  config.alpha = m_TexDisplay.alpha ? AlphaMapping::BlendToCheckerboard : AlphaMapping::Discard;
+  if(m_TexDisplay.alpha && !ui->checkerBack->isChecked())
     config.alpha = AlphaMapping::BlendToColor;
 
-  if(m_TexDisplay.CustomShader != ResourceId())
+  if(m_TexDisplay.customShaderId != ResourceId())
   {
     ResourceId id;
     m_Ctx.Replay().BlockInvoke(
@@ -3359,13 +3372,23 @@ void TextureViewer::on_saveTex_clicked()
       config.id = id;
   }
 
-  TextureSaveDialog saveDialog(*texptr, config, this);
+  const ResourceId overlayTexID = m_Output->GetDebugOverlayTexID();
+  const bool hasSelectedOverlay = (m_TexDisplay.overlay != DebugOverlay::NoOverlay);
+  const bool hasOverlay = (hasSelectedOverlay && overlayTexID != ResourceId());
+  TextureSaveDialog saveDialog(*texptr, hasOverlay, config, this);
   int res = RDDialog::show(&saveDialog);
 
   config = saveDialog.config();
 
+  if(saveDialog.saveOverlayInstead())
+  {
+    config.id = overlayTexID;
+  }
+
   if(res)
   {
+    ANALYTIC_SET(UIFeatures.Export.TextureSave, true);
+
     bool ret = false;
     QString fn = saveDialog.filename();
 
@@ -3390,10 +3413,17 @@ void TextureViewer::on_debugPixelContext_clicked()
   int x = m_PickedPoint.x() >> (int)m_TexDisplay.mip;
   int y = m_PickedPoint.y() >> (int)m_TexDisplay.mip;
 
+  TextureDescription *texptr = GetCurrentTexture();
+
+  uint32_t mipHeight = qMax(1U, texptr->height >> (int)m_TexDisplay.mip);
+
+  if(m_TexDisplay.flipY)
+    y = (int)(mipHeight - 1) - y;
+
   m_Ctx.Replay().AsyncInvoke([this, x, y](IReplayController *r) {
     ShaderDebugTrace *trace = r->DebugPixel((uint32_t)x, (uint32_t)y, m_TexDisplay.sampleIdx, ~0U);
 
-    if(trace->states.count == 0)
+    if(trace->states.isEmpty())
     {
       r->FreeTrace(trace);
 
@@ -3409,10 +3439,11 @@ void TextureViewer::on_debugPixelContext_clicked()
           m_Ctx.CurPipelineState().GetShaderReflection(ShaderStage::Pixel);
       const ShaderBindpointMapping &bindMapping =
           m_Ctx.CurPipelineState().GetBindpointMapping(ShaderStage::Pixel);
+      ResourceId pipeline = m_Ctx.CurPipelineState().GetGraphicsPipelineObject();
 
       // viewer takes ownership of the trace
       IShaderViewer *s =
-          m_Ctx.DebugShader(&bindMapping, shaderDetails, ShaderStage::Pixel, trace, debugContext);
+          m_Ctx.DebugShader(&bindMapping, shaderDetails, pipeline, trace, debugContext);
 
       m_Ctx.AddDockWindow(s->Widget(), DockReference::AddTo, this);
     });
@@ -3426,23 +3457,37 @@ void TextureViewer::on_pixelHistory_clicked()
   if(!texptr || !m_Output)
     return;
 
+  ANALYTIC_SET(UIFeatures.PixelHistory, true);
+
   int x = m_PickedPoint.x() >> (int)m_TexDisplay.mip;
   int y = m_PickedPoint.y() >> (int)m_TexDisplay.mip;
 
-  IPixelHistoryView *hist = m_Ctx.ViewPixelHistory(texptr->ID, x, y, m_TexDisplay);
+  uint32_t mipHeight = qMax(1U, texptr->height >> (int)m_TexDisplay.mip);
 
-  m_Ctx.AddDockWindow(hist->Widget(), DockReference::RightOf, this, 0.2f);
+  if(m_TexDisplay.flipY)
+    y = (int)(mipHeight - 1) - y;
+
+  IPixelHistoryView *hist = m_Ctx.ViewPixelHistory(texptr->resourceId, x, y, m_TexDisplay);
+
+  m_Ctx.AddDockWindow(hist->Widget(), DockReference::RightOf, this, 0.3f);
+
+  // we use this pointer to ensure that the history viewer is still visible (and hasn't been closed)
+  // by the time we want to set the results.
+  QPointer<QWidget> histWidget = hist->Widget();
 
   // add a short delay so that controls repainting after a new panel appears can get at the
   // render thread before we insert the long blocking pixel history task
-  LambdaThread *thread = new LambdaThread([this, texptr, x, y, hist]() {
+  LambdaThread *thread = new LambdaThread([this, texptr, x, y, hist, histWidget]() {
     QThread::msleep(150);
-    m_Ctx.Replay().AsyncInvoke([this, texptr, x, y, hist](IReplayController *r) {
-      rdctype::array<PixelModification> history =
-          r->PixelHistory(texptr->ID, (uint32_t)x, (int32_t)y, m_TexDisplay.sliceFace,
+    m_Ctx.Replay().AsyncInvoke([this, texptr, x, y, hist, histWidget](IReplayController *r) {
+      rdcarray<PixelModification> history =
+          r->PixelHistory(texptr->resourceId, (uint32_t)x, (int32_t)y, m_TexDisplay.sliceFace,
                           m_TexDisplay.mip, m_TexDisplay.sampleIdx, m_TexDisplay.typeHint);
 
-      GUIInvoke::call([hist, history] { hist->SetHistory(history); });
+      GUIInvoke::call([hist, histWidget, history] {
+        if(histWidget)
+          hist->SetHistory(history);
+      });
     });
   });
   thread->selfDelete(true);
@@ -3478,10 +3523,15 @@ void TextureViewer::on_textureListFilter_editTextChanged(const QString &text)
   if(model == NULL)
     return;
 
-  model->reset(TextureListItemModel::String, text, m_Ctx);
+  model->reset(TextureListItemModel::String, text);
 }
 
 void TextureViewer::on_textureListFilter_currentIndexChanged(int index)
+{
+  refreshTextureList();
+}
+
+void TextureViewer::refreshTextureList()
 {
   TextureListItemModel *model = (TextureListItemModel *)ui->textureList->model();
 
@@ -3489,11 +3539,11 @@ void TextureViewer::on_textureListFilter_currentIndexChanged(int index)
     return;
 
   if(ui->textureListFilter->currentIndex() == 1)
-    model->reset(TextureListItemModel::Textures, QString(), m_Ctx);
+    model->reset(TextureListItemModel::Textures, QString());
   else if(ui->textureListFilter->currentIndex() == 2)
-    model->reset(TextureListItemModel::RenderTargets, QString(), m_Ctx);
+    model->reset(TextureListItemModel::RenderTargets, QString());
   else
-    model->reset(TextureListItemModel::String, ui->textureListFilter->currentText(), m_Ctx);
+    model->reset(TextureListItemModel::String, ui->textureListFilter->currentText());
 }
 
 void TextureViewer::on_textureList_clicked(const QModelIndex &index)
@@ -3504,7 +3554,7 @@ void TextureViewer::on_textureList_clicked(const QModelIndex &index)
 
 void TextureViewer::reloadCustomShaders(const QString &filter)
 {
-  if(!m_Ctx.LogLoaded())
+  if(!m_Ctx.IsCaptureLoaded())
     return;
 
   if(filter.isEmpty())
@@ -3554,7 +3604,7 @@ void TextureViewer::reloadCustomShaders(const QString &filter)
   }
 
   QStringList files =
-      QDir(ConfigFilePath(QString()))
+      QDir(configFilePath(QString()))
           .entryList({QFormatStr("*.%1").arg(m_Ctx.CurPipelineState().GetShaderExtension())},
                      QDir::Files | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
 
@@ -3567,22 +3617,24 @@ void TextureViewer::reloadCustomShaders(const QString &filter)
     QString fn = QFileInfo(f).baseName();
     QString key = fn.toUpper();
 
-    m_Watcher->addPath(ConfigFilePath(f));
+    m_Watcher->addPath(configFilePath(f));
 
     if(!m_CustomShaders.contains(key) && !m_CustomShadersBusy.contains(key))
     {
-      QFile fileHandle(ConfigFilePath(f));
+      QFile fileHandle(configFilePath(f));
       if(fileHandle.open(QFile::ReadOnly | QFile::Text))
       {
         QTextStream stream(&fileHandle);
         QString source = stream.readAll();
+
+        ANALYTIC_SET(UIFeatures.CustomTextureVisualise, true);
 
         fileHandle.close();
 
         m_CustomShaders[key] = ResourceId();
         m_CustomShadersBusy.push_back(key);
         m_Ctx.Replay().AsyncInvoke([this, fn, key, source](IReplayController *r) {
-          rdctype::str errors;
+          rdcstr errors;
 
           ResourceId id;
           std::tie(id, errors) = r->BuildCustomShader("main", source.toUtf8().data(),
@@ -3630,7 +3682,7 @@ void TextureViewer::on_customCreate_clicked()
     return;
   }
 
-  QString path = ConfigFilePath(filename + lit(".") + m_Ctx.CurPipelineState().GetShaderExtension());
+  QString path = configFilePath(filename + lit(".") + m_Ctx.CurPipelineState().GetShaderExtension());
 
   QString src;
 
@@ -3685,7 +3737,7 @@ void TextureViewer::on_customEdit_clicked()
     return;
   }
 
-  QString path = ConfigFilePath(filename + lit(".") + m_Ctx.CurPipelineState().GetShaderExtension());
+  QString path = configFilePath(filename + lit(".") + m_Ctx.CurPipelineState().GetShaderExtension());
 
   QString src;
 
@@ -3704,19 +3756,19 @@ void TextureViewer::on_customEdit_clicked()
     return;
   }
 
-  QStringMap files;
-  files[filename] = src;
+  rdcstrpairs files;
+  files.push_back(make_rdcpair<rdcstr, rdcstr>(filename, src));
 
   IShaderViewer *s = m_Ctx.EditShader(
       true, lit("main"), files,
       // Save Callback
       [this, key, filename, path](ICaptureContext *ctx, IShaderViewer *viewer,
-                                  const QStringMap &updatedfiles) {
+                                  const rdcstrpairs &updatedfiles) {
         {
           QFile fileHandle(path);
           if(fileHandle.open(QFile::WriteOnly | QIODevice::Truncate | QIODevice::Text))
           {
-            fileHandle.write(updatedfiles[filename].toUtf8());
+            fileHandle.write(updatedfiles[0].second.c_str());
             fileHandle.close();
 
             // watcher doesn't trigger on internal modifications
@@ -3764,7 +3816,7 @@ void TextureViewer::on_customDelete_clicked()
   if(res == QMessageBox::Yes)
   {
     QString path =
-        ConfigFilePath(shaderName + lit(".") + m_Ctx.CurPipelineState().GetShaderExtension());
+        configFilePath(shaderName + lit(".") + m_Ctx.CurPipelineState().GetShaderExtension());
     if(!QFileInfo::exists(path))
     {
       RDDialog::critical(

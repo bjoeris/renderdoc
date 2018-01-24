@@ -144,6 +144,8 @@
     <ClCompile Include="precompiled.cpp">
       <Filter>PCH</Filter>
     </ClCompile>
+    <ClCompile Include="spirv_stringise.cpp" />
+    <ClCompile Include="spirv_editor.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\3rdparty\glslang\OGLCompilersDLL\InitializeDll.h">
@@ -300,5 +302,6 @@
     <ClInclude Include="precompiled.h">
       <Filter>PCH</Filter>
     </ClInclude>
+    <ClInclude Include="spirv_editor.h" />
   </ItemGroup>
 </Project>

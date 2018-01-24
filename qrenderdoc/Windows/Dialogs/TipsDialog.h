@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,12 +28,12 @@
 #include <QString>
 #include <QVector>
 
-#include "Code/CaptureContext.h"
-
 namespace Ui
 {
 class TipsDialog;
 }
+
+struct ICaptureContext;
 
 class TipsDialog : public QDialog
 {

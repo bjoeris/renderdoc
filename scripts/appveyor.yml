@@ -16,7 +16,7 @@ platform:
   - x86
   - x64
 
-clone_depth: 1
+clone_depth: 50
 
 environment:
   coverity_token:
@@ -64,8 +64,6 @@ build_script:
     {
       return
     }
-
-    sh -c ./scripts/hash_version.sh
 
     msbuild renderdoc.sln /v:m "/p:Configuration=$env:CONFIGURATION" "/p:Platform=$env:PLATFORM" /p:PlatformToolset=v140
 

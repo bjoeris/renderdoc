@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -104,9 +104,15 @@ bool D3D11ResourceManager::Prepare_InitialState(ID3D11DeviceChild *res)
   return m_Device->Prepare_InitialState(res);
 }
 
-bool D3D11ResourceManager::Serialise_InitialState(ResourceId id, ID3D11DeviceChild *res)
+uint32_t D3D11ResourceManager::GetSize_InitialState(ResourceId id, ID3D11DeviceChild *res)
 {
-  return m_Device->Serialise_InitialState(id, res);
+  return m_Device->GetSize_InitialState(id, res);
+}
+
+bool D3D11ResourceManager::Serialise_InitialState(WriteSerialiser &ser, ResourceId id,
+                                                  ID3D11DeviceChild *res)
+{
+  return m_Device->Serialise_InitialState(ser, id, res);
 }
 
 void D3D11ResourceManager::Create_InitialState(ResourceId id, ID3D11DeviceChild *live, bool hasData)

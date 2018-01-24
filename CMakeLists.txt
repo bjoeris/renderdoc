@@ -7,6 +7,8 @@ if(BUILD_ANDROID)
         CACHE STRING
         "The Android toolchain file")
 
+    option(STRIP_ANDROID_LIBRARY "Strip the resulting android library" OFF)
+
     # Set same default API level for ANDROID_ABI=armeabi-v7a as for arm64-v8a.
     set( ANDROID_DEFAULT_NDK_API_LEVEL_arm 21 )
 
@@ -31,7 +33,7 @@ endif()
 
 # version setting variables. See renderdoc/api/replay/version.h
 
-set(BUILD_VERSION_HASH "" CACHE STRING "The current git commit hash. See GIT_COMMIT_HASH in renderdoc/api/replay/version.h")
+set(BUILD_VERSION_HASH "" CACHE STRING "The current git commit hash. See GIT_COMMIT_HASH in renderdoc/api/replay/version.cpp")
 option(BUILD_VERSION_STABLE "If this is a stable build. See RENDERDOC_STABLE_BUILD in renderdoc/api/replay/version.h" OFF)
 set(BUILD_VERSION_DIST_NAME "" CACHE STRING "The name of the distribution. See DISTRIBUTION_NAME in renderdoc/api/replay/version.h")
 set(BUILD_VERSION_DIST_VER "" CACHE STRING "The distribution-specific version number. See DISTRIBUTION_VERSION in renderdoc/api/replay/version.h")
@@ -39,6 +41,20 @@ set(BUILD_VERSION_DIST_CONTACT "" CACHE STRING "The URL or email to contact with
 set(RENDERDOC_PLUGINS_PATH "" CACHE STRING "Path to RenderDoc plugins folder after installation of RenderDoc (either absolute or relative to binary)")
 set(RENDERDOC_APK_PATH "" CACHE STRING "Path to RenderDocCmd.apk after installation of RenderDoc on host (either absolute or relative to binary)")
 set(RENDERDOC_LAYER_PATH "" CACHE STRING "Path to ABI directories (i.e. lib in lib/armeabi-v7a/libVkLayer_GLES_RenderDoc.so) after installation of RenderDoc on host (either absolute or relative to dir)")
+
+set(LIB_SUFFIX "" CACHE STRING "Suffix for 'lib' folder in target directory structure. E.g. set to '64' to use /usr/local/lib64 instead of /usr/local/lib.")
+set(LIB_SUBFOLDER "" CACHE STRING "Subfolder under the 'lib' folder in target directory structure. E.g. set to 'renderdoc' to use /usr/local/lib/renderdoc instead of /usr/local/lib.")
+
+if(NOT LIB_SUFFIX STREQUAL "")
+    add_definitions(-DRENDERDOC_LIB_SUFFIX=${LIB_SUFFIX})
+endif()
+
+set(LIB_SUBFOLDER_TRAIL_SLASH "")
+
+if(NOT LIB_SUBFOLDER STREQUAL "")
+    add_definitions(-DRENDERDOC_LIB_SUBFOLDER=${LIB_SUBFOLDER})
+    set(LIB_SUBFOLDER_TRAIL_SLASH "${LIB_SUBFOLDER}/")
+endif()
 
 if(BUILD_VERSION_STABLE)
     add_definitions(-DRENDERDOC_STABLE_BUILD=1)
@@ -101,6 +117,7 @@ option(ENABLE_GLES "Enable GL ES driver" OFF)
 option(ENABLE_VULKAN "Enable Vulkan driver" ON)
 option(ENABLE_RENDERDOCCMD "Enable renderdoccmd" ON)
 option(ENABLE_QRENDERDOC "Enable qrenderdoc" ON)
+option(ENABLE_PYRENDERDOC "Enable renderdoc python modules" ON)
 
 option(ENABLE_XLIB "Enable xlib windowing support" ON)
 option(ENABLE_XCB "Enable xcb windowing support" ON)
@@ -146,6 +163,10 @@ if(ANDROID)
     # Android doesn't support the Qt UI for obvious reasons
     message(STATUS "Disabling qrenderdoc for android build")
     set(ENABLE_QRENDERDOC OFF CACHE BOOL "" FORCE)
+
+    # Android also doesn't support the python modules
+    message(STATUS "Disabling renderdoc python modules for android build")
+    set(ENABLE_PYRENDERDOC OFF CACHE BOOL "" FORCE)
 
     message(STATUS "Using Android ABI ${ANDROID_ABI}")
     message(STATUS "Using Android native API level ${ANDROID_NATIVE_API_LEVEL}")
@@ -200,13 +221,17 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         -Wno-unknown-pragmas
         -Wno-reorder)
     if(CMAKE_COMPILER_IS_GNUCXX)
-        list(APPEND warning_flags -Wno-unused-but-set-variable)
+        list(APPEND warning_flags -Wno-unused-but-set-variable -Wno-maybe-uninitialized)
 
         # We keep the implicit fallthrough warning for now, but allow more
         # comments to silence it.
         if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
             list(APPEND warning_flags -Wimplicit-fallthrough=2)
         endif()
+    endif()
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.0 AND NOT APPLE)
+        list(APPEND warning_flags -Wno-unused-lambda-capture)
     endif()
 
     if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -244,7 +269,10 @@ if(ENABLE_RENDERDOCCMD)
     add_subdirectory(renderdoccmd)
 endif()
 
-if(ENABLE_QRENDERDOC)
+# these variables are handled within the CMakeLists.txt in qrenderdoc,
+# but we need to add it if either is enabled since the swig bindings
+# are handled in common
+if(ENABLE_QRENDERDOC OR ENABLE_PYRENDERDOC)
     add_subdirectory(qrenderdoc)
 endif()
 

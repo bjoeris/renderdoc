@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +27,7 @@
 #include "catch.hpp"
 #include "api/replay/renderdoc_replay.h"
 #include "serialise/serialiser.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 
 struct AppVeyorListener : Catch::TestEventListenerBase
 {
@@ -275,8 +275,8 @@ std::ostream &clog()
 }
 }
 
-extern "C" RENDERDOC_API int RENDERDOC_CC
-RENDERDOC_RunUnitTests(const rdctype::str &command, const rdctype::array<rdctype::str> &args)
+extern "C" RENDERDOC_API int RENDERDOC_CC RENDERDOC_RunUnitTests(const rdcstr &command,
+                                                                 const rdcarray<rdcstr> &args)
 {
   LogOutputter logbuf;
   std::ostream logstream(&logbuf);
@@ -287,12 +287,12 @@ RENDERDOC_RunUnitTests(const rdctype::str &command, const rdctype::array<rdctype
   session.configData().name = "RenderDoc";
   session.configData().shouldDebugBreak = OSUtility::DebuggerPresent();
 
-  const char **argv = new const char *[args.count + 1];
+  const char **argv = new const char *[args.size() + 1];
   argv[0] = command.c_str();
-  for(int i = 0; i < args.count; i++)
-    argv[i + 1] = args.elems[i].c_str();
+  for(size_t i = 0; i < args.size(); i++)
+    argv[i + 1] = args[i].c_str();
 
-  int ret = session.applyCommandLine(args.count + 1, argv);
+  int ret = session.applyCommandLine(args.count() + 1, argv);
 
   delete[] argv;
 

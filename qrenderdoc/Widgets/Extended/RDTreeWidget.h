@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -103,6 +103,7 @@ public:
     }
 
     m_text[column] = value;
+    checkForResourceId(column);
     dataChanged(column, Qt::DisplayRole);
   }
   inline void setToolTip(const QString &value)
@@ -122,8 +123,11 @@ public:
   }
 
 private:
+  void checkForResourceId(int column);
+
   friend class RDTreeWidget;
   friend class RDTreeWidgetModel;
+  friend class RDTreeWidgetDelegate;
 
   void setWidget(RDTreeWidget *widget);
   RDTreeWidget *m_widget = NULL;
@@ -190,6 +194,26 @@ private:
   RDTreeWidgetItem *m_Current;
 };
 
+class RDTreeWidgetDelegate : public RDTreeViewDelegate
+{
+  Q_OBJECT
+public:
+  explicit RDTreeWidgetDelegate(RDTreeWidget *parent);
+  ~RDTreeWidgetDelegate();
+
+  void paint(QPainter *painter, const QStyleOptionViewItem &option,
+             const QModelIndex &index) const override;
+  QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+
+  bool editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option,
+                   const QModelIndex &index) override;
+
+  bool linkHover(QMouseEvent *e, const QModelIndex &index);
+
+private:
+  RDTreeWidget *m_widget;
+};
+
 class RDTreeWidget : public RDTreeView
 {
   Q_OBJECT
@@ -223,6 +247,10 @@ public:
   int topLevelItemCount() const { return m_root->childCount(); }
   void beginUpdate();
   void endUpdate();
+  void setColumnAlignment(int column, Qt::Alignment align);
+
+  void setItemDelegate(QAbstractItemDelegate *delegate);
+  QAbstractItemDelegate *itemDelegate() const;
 
   void setColumns(const QStringList &columns);
   QString headerText(int column) const { return m_headers[column]; }
@@ -244,8 +272,6 @@ public:
 
 signals:
   void mouseMove(QMouseEvent *e);
-  void leave(QEvent *e);
-  void keyPress(QKeyEvent *e);
   void itemClicked(RDTreeWidgetItem *item, int column);
   void itemChanged(RDTreeWidgetItem *item, int column);
   void itemDoubleClicked(RDTreeWidgetItem *item, int column);
@@ -274,11 +300,15 @@ private:
 
   friend class RDTreeWidgetModel;
   friend class RDTreeWidgetItem;
+  friend class RDTreeWidgetDelegate;
 
   // invisible root item, used to simplify recursion by even top-level items having a parent
   RDTreeWidgetItem *m_root;
 
   RDTreeWidgetModel *m_model;
+
+  QAbstractItemDelegate *m_userDelegate = NULL;
+  RDTreeWidgetDelegate *m_delegate;
 
   bool m_clearing = false;
 
@@ -291,6 +321,8 @@ private:
   QPair<int, int> m_highestIndex;
   uint64_t m_queuedRoles = 0;
   bool m_queuedChildren = false;
+
+  QVector<Qt::Alignment> m_alignments;
 
   bool m_instantTooltips = false;
   bool m_customCopyPaste = false;

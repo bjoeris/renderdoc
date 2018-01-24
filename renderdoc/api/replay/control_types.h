@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -35,36 +35,36 @@ struct MeshFormat
 {
   MeshFormat()
   {
-    idxoffs = 0;
-    idxByteWidth = 0;
+    indexByteOffset = 0;
+    indexByteStride = 0;
     baseVertex = 0;
-    offset = 0;
-    stride = 0;
+    vertexByteOffset = 0;
+    vertexByteStride = 0;
     showAlpha = false;
-    topo = Topology::Unknown;
-    numVerts = 0;
+    topology = Topology::Unknown;
+    numIndices = 0;
     unproject = false;
     nearPlane = farPlane = 0.0f;
   }
 
   DOCUMENT("The :class:`ResourceId` of the index buffer that goes with this mesh element.");
-  ResourceId idxbuf;
+  ResourceId indexResourceId;
   DOCUMENT("The offset in bytes where the indices start in idxbuf.");
-  uint64_t idxoffs;
+  uint64_t indexByteOffset;
   DOCUMENT("The width in bytes of each index. Valid values are 1 (depending on API), 2 or 4.");
-  uint32_t idxByteWidth;
+  uint32_t indexByteStride;
   DOCUMENT("For indexed meshes, a value added to each index before using it to read the vertex.");
   int32_t baseVertex;
 
   DOCUMENT("The :class:`ResourceId` of the vertex buffer containing this mesh element.");
-  ResourceId buf;
+  ResourceId vertexResourceId;
   DOCUMENT("The offset in bytes to the start of the vertex data.");
-  uint64_t offset;
+  uint64_t vertexByteOffset;
   DOCUMENT("The stride in bytes between the start of one vertex and the start of another.");
-  uint32_t stride;
+  uint32_t vertexByteStride;
 
   DOCUMENT("The :class:`ResourceFormat` describing this mesh component.");
-  ResourceFormat fmt;
+  ResourceFormat format;
 
   DOCUMENT(
       "The color to use for rendering the wireframe of this mesh element, as a "
@@ -72,9 +72,9 @@ struct MeshFormat
   FloatVector meshColor;
 
   DOCUMENT("The :class:`Topology` that describes the primitives in this mesh.");
-  Topology topo;
+  Topology topology;
   DOCUMENT("The number of vertices in the mesh.");
-  uint32_t numVerts;
+  uint32_t numIndices;
 
   DOCUMENT("The near plane for the projection matrix.");
   float nearPlane;
@@ -165,16 +165,16 @@ particular subresource (such as array slice, mip or multi-sampled sample).
 struct TextureDisplay
 {
   DOCUMENT("The :class:`ResourceId` of the texture to display.");
-  ResourceId texid;
+  ResourceId resourceId;
 
   DOCUMENT("An optional :class:`CompType` hint to use when displaying a typeless texture.");
   CompType typeHint;
 
   DOCUMENT("The value in each channel to map to the black point.");
-  float rangemin;
+  float rangeMin;
 
   DOCUMENT("The value in each channel to map to the white point.");
-  float rangemax;
+  float rangeMax;
 
   DOCUMENT(R"(The scale to apply to the texture when rendering as a floating point value.
 
@@ -186,32 +186,32 @@ struct TextureDisplay
 
 If only one channel is selected, it will be rendered in grayscale
 )");
-  bool Red;
+  bool red;
 
   DOCUMENT(R"(``True`` if the green channel should be visible.
 
 If only one channel is selected, it will be rendered in grayscale
 )");
-  bool Green;
+  bool green;
 
   DOCUMENT(R"(``True`` if the blue channel should be visible.
 
 If only one channel is selected, it will be rendered in grayscale
 )");
-  bool Blue;
+  bool blue;
 
   DOCUMENT(R"(``True`` if the alpha channel should be visible. If enabled with any of RGB, the
 texture will be blended to the background color or checkerboard.
 
 If only one channel is selected, it will be rendered in grayscale
 )");
-  bool Alpha;
+  bool alpha;
 
   DOCUMENT("``True`` if the texture should be flipped vertically when rendering.");
-  bool FlipY;
+  bool flipY;
 
   DOCUMENT("If ``>= 0.0`` the RGBA values will be viewed as HDRM with this as the multiplier.");
-  float HDRMul;
+  float hdrMultiplier;
 
   DOCUMENT(R"(``True`` if the texture should be interpreted as gamma.
 
@@ -223,7 +223,7 @@ See :ref:`the FAQ entry <gamma-linear-display>`.
 
 See :meth:`ReplayController.BuildCustomShader` for creating an appropriate custom shader.
 )");
-  ResourceId CustomShader;
+  ResourceId customShaderId;
 
   DOCUMENT("Select the mip of the texture to display.");
   uint32_t mip;
@@ -243,15 +243,15 @@ samples.
 This is primarily useful when rendering to a floating point target for retrieving pixel data from
 the input texture in cases where it isn't easy to directly fetch the input texture data.
 )");
-  bool rawoutput;
+  bool rawOutput;
 
   DOCUMENT("The offset to pan in the X axis.");
-  float offx;
+  float xOffset;
 
   DOCUMENT("The offset to pan in the Y axis.");
-  float offy;
+  float yOffset;
 
-  DOCUMENT(R"(The background colour to use behind the texture display.
+  DOCUMENT(R"(The background color to use behind the texture display.
 
 If set to (0, 0, 0, 0) the global checkerboard colors are used.
 )");
@@ -373,7 +373,7 @@ written
   int32_t mip;
 
   DOCUMENT(R"(Controls black/white point mapping for output formats that are normal
-:data:`8-bit SRGB <CompType.UNorm>`, values are
+:attr:`8-bit SRGB <CompType.UNorm>`, values are
 )");
   TextureComponentMapping comp;
 
@@ -396,7 +396,7 @@ It is an :class:`AlphaMapping` that controls what behaviour to use.
 )");
   AlphaMapping alpha;
 
-  DOCUMENT("The background color if :data:`alpha` is set to :data:`AlphaMapping.BlendToColor`");
+  DOCUMENT("The background color if :data:`alpha` is set to :attr:`AlphaMapping.BlendToColor`");
   FloatVector alphaCol;
 
   DOCUMENT("The quality to use when saving to a ``JPG`` file. Valid values are between 1 and 100.");
@@ -410,37 +410,43 @@ DOCUMENT("Information about the a new capture created by the target.");
 struct NewCaptureData
 {
   DOCUMENT("An identifier to use to refer to this capture.");
-  uint32_t ID;
+  uint32_t captureId = 0;
   DOCUMENT("The time the capture was created, as a unix timestamp in UTC.");
-  uint64_t timestamp;
+  uint64_t timestamp = 0;
   DOCUMENT("The raw bytes that contain the capture thumbnail, as RGB8 data.");
-  rdctype::array<byte> thumbnail;
+  bytebuf thumbnail;
   DOCUMENT("The width of the image contained in :data:`thumbnail`.");
-  int32_t thumbWidth;
+  int32_t thumbWidth = 0;
   DOCUMENT("The height of the image contained in :data:`thumbnail`.");
-  int32_t thumbHeight;
+  int32_t thumbHeight = 0;
   DOCUMENT("The local path on the target system where the capture is saved.");
-  rdctype::str path;
+  rdcstr path;
   DOCUMENT("``True`` if the target is running on the local system.");
-  bool local;
+  bool local = true;
 };
 
 DECLARE_REFLECTION_STRUCT(NewCaptureData);
 
-DOCUMENT("Information about the API that the target has begun using.");
-struct RegisterAPIData
+DOCUMENT("Information about the API that the target is using.");
+struct APIUseData
 {
-  DOCUMENT("The name of the new API.");
-  rdctype::str APIName;
+  DOCUMENT("The name of the API.");
+  rdcstr name;
+
+  DOCUMENT("``True`` if the API is presenting to a swapchain");
+  bool presenting = false;
+
+  DOCUMENT("``True`` if the API can be captured.");
+  bool supported = false;
 };
 
-DECLARE_REFLECTION_STRUCT(RegisterAPIData);
+DECLARE_REFLECTION_STRUCT(APIUseData);
 
 DOCUMENT("Information about why the target is busy.");
 struct BusyData
 {
   DOCUMENT("The name of the client currently connected to the target.");
-  rdctype::str ClientName;
+  rdcstr clientName;
 };
 
 DECLARE_REFLECTION_STRUCT(BusyData);
@@ -449,9 +455,9 @@ DOCUMENT("Information about a new child process spawned by the target.");
 struct NewChildData
 {
   DOCUMENT("The PID (Process ID) of the new child.");
-  uint32_t PID;
+  uint32_t processId = 0;
   DOCUMENT("The ident where the new child's target control is active.");
-  uint32_t ident;
+  uint32_t ident = 0;
 };
 
 DECLARE_REFLECTION_STRUCT(NewChildData);
@@ -459,18 +465,23 @@ DECLARE_REFLECTION_STRUCT(NewChildData);
 DOCUMENT("A message from a target control connection.");
 struct TargetControlMessage
 {
-  TargetControlMessage() {}
   DOCUMENT("The :class:`type <TargetControlMessageType>` of message received");
-  TargetControlMessageType Type;
+  TargetControlMessageType type = TargetControlMessageType::Unknown;
 
   DOCUMENT("The :class:`new capture data <NewCaptureData>`.");
-  NewCaptureData NewCapture;
-  DOCUMENT("The :class:`API registration data <RegisterAPIData>`.");
-  RegisterAPIData RegisterAPI;
+  NewCaptureData newCapture;
+  DOCUMENT("The :class:`API use data <APIUseData>`.");
+  APIUseData apiUse;
   DOCUMENT("The :class:`busy signal data <BusyData>`.");
-  BusyData Busy;
-  DOCUMENT("The :class:`new child process data <NewChild>`.");
-  NewChildData NewChild;
+  BusyData busy;
+  DOCUMENT("The :class:`new child process data <NewChildData>`.");
+  NewChildData newChild;
+  DOCUMENT(R"(The progress of an on-going capture.
+
+When valid, will be in the range of 0.0 to 1.0 (0 - 100%). If not valid when a capture isn't going
+or has finished, it will be -1.0
+)");
+  float capProgress = -1.0f;
 };
 
 DECLARE_REFLECTION_STRUCT(TargetControlMessage);
@@ -483,14 +494,69 @@ struct EnvironmentModification
       : mod(m), sep(s), name(n), value(v)
   {
   }
+  DOCUMENT("");
+  bool operator==(const EnvironmentModification &o) const
+  {
+    return mod == o.mod && sep == o.sep && name == o.name && value == o.value;
+  }
+  bool operator<(const EnvironmentModification &o) const
+  {
+    if(!(mod == o.mod))
+      return mod < o.mod;
+    if(!(sep == o.sep))
+      return sep < o.sep;
+    if(!(name == o.name))
+      return name < o.name;
+    if(!(value == o.value))
+      return value < o.value;
+    return false;
+  }
   DOCUMENT("The :class:`modification <EnvMod>` to use.");
   EnvMod mod;
   DOCUMENT("The :class:`separator <EnvSep>` to use if needed.");
   EnvSep sep;
   DOCUMENT("The name of the environment variable.");
-  rdctype::str name;
+  rdcstr name;
   DOCUMENT("The value to use with the modification specified in :data:`mod`.");
-  rdctype::str value;
+  rdcstr value;
 };
 
 DECLARE_REFLECTION_STRUCT(EnvironmentModification);
+
+DOCUMENT("The format for a capture file either supported to read from, or export to");
+struct CaptureFileFormat
+{
+  DOCUMENT("");
+  bool operator==(const CaptureFileFormat &o) const
+  {
+    return name == o.name && description == o.description && openSupported == o.openSupported &&
+           convertSupported == o.convertSupported;
+  }
+  bool operator<(const CaptureFileFormat &o) const
+  {
+    if(!(name == o.name))
+      return name < o.name;
+    if(!(description == o.description))
+      return description < o.description;
+    if(!(openSupported == o.openSupported))
+      return openSupported < o.openSupported;
+    if(!(convertSupported == o.convertSupported))
+      return convertSupported < o.convertSupported;
+    return false;
+  }
+  DOCUMENT("The name of the format as a single minimal string, e.g. ``rdc``.");
+  rdcstr name;
+
+  DOCUMENT("A human readable description of the file format, e.g. ``RenderDoc native capture``.");
+  rdcstr description;
+
+  DOCUMENT(R"(Indicates whether or not files in this format can be opened and processed as
+structured data.
+)");
+  bool openSupported = false;
+
+  DOCUMENT("Indicates whether captures or structured data can be saved out in this format.");
+  bool convertSupported = true;
+};
+
+DECLARE_REFLECTION_STRUCT(CaptureFileFormat);

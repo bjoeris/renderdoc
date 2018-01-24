@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -34,6 +34,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -59,7 +60,7 @@ bool StartGlobalHook(const char *pathmatch, const char *logfile, const CaptureOp
 bool IsGlobalHookActive();
 void StopGlobalHook();
 
-uint32_t InjectIntoProcess(uint32_t pid, const rdctype::array<EnvironmentModification> &env,
+uint32_t InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
                            const char *logfile, const CaptureOptions &opts, bool waitForExit);
 struct ProcessResult
 {
@@ -71,9 +72,8 @@ uint32_t LaunchProcess(const char *app, const char *workingDir, const char *cmdL
 uint32_t LaunchScript(const char *script, const char *workingDir, const char *args,
                       ProcessResult *result = NULL);
 uint32_t LaunchAndInjectIntoProcess(const char *app, const char *workingDir, const char *cmdLine,
-                                    const rdctype::array<EnvironmentModification> &env,
-                                    const char *logfile, const CaptureOptions &opts,
-                                    bool waitForExit);
+                                    const rdcarray<EnvironmentModification> &env, const char *logfile,
+                                    const CaptureOptions &opts, bool waitForExit);
 void *LoadModule(const char *module);
 void *GetFunctionAddress(void *module, const char *function);
 uint32_t GetCurrentPID();
@@ -115,9 +115,8 @@ void SetTLSValue(uint64_t slot, void *value);
 
 // must typedef CriticalSectionTemplate<X> CriticalSection
 
-typedef void (*ThreadEntry)(void *);
 typedef uint64_t ThreadHandle;
-ThreadHandle CreateThread(ThreadEntry entryFunc, void *userData);
+ThreadHandle CreateThread(std::function<void()> entryFunc);
 uint64_t GetCurrentID();
 void JoinThread(ThreadHandle handle);
 void CloseThread(ThreadHandle handle);
@@ -134,12 +133,14 @@ namespace Network
 class Socket
 {
 public:
-  Socket(ptrdiff_t s) : socket(s) {}
+  Socket(ptrdiff_t s) : socket(s), timeoutMS(5000) {}
   ~Socket();
   void Shutdown();
 
   bool Connected() const;
 
+  uint32_t GetTimeout() const { return timeoutMS; }
+  void SetTimeout(uint32_t milliseconds) { timeoutMS = milliseconds; }
   Socket *AcceptClient(bool wait);
 
   uint32_t GetRemoteIP() const;
@@ -148,9 +149,11 @@ public:
 
   bool SendDataBlocking(const void *buf, uint32_t length);
   bool RecvDataBlocking(void *data, uint32_t length);
+  bool RecvDataNonBlocking(void *data, uint32_t &length);
 
 private:
   ptrdiff_t socket;
+  uint32_t timeoutMS;
 };
 
 Socket *CreateServerSocket(const char *addr, uint16_t port, int queuesize);
@@ -229,10 +232,9 @@ void Init();
 Stackwalk *Collect();
 Stackwalk *Create();
 
-StackResolver *MakeResolver(char *moduleDB, size_t DBSize, string pdbSearchPaths,
-                            volatile bool *killSignal);
+StackResolver *MakeResolver(byte *moduleDB, size_t DBSize, RENDERDOC_ProgressCallback);
 
-bool GetLoadedModules(char *&buf, size_t &size);
+bool GetLoadedModules(byte *buf, size_t &size);
 };    // namespace Callstack
 
 namespace FileIO
@@ -254,7 +256,8 @@ void GetExecutableFilename(string &selfName);
 
 uint64_t GetModifiedTimestamp(const string &filename);
 
-void Copy(const char *from, const char *to, bool allowOverwrite);
+bool Copy(const char *from, const char *to, bool allowOverwrite);
+bool Move(const char *from, const char *to, bool allowOverwrite);
 void Delete(const char *path);
 std::vector<PathEntry> GetFilesInDirectory(const char *path);
 
@@ -272,6 +275,10 @@ std::string getline(FILE *f);
 uint64_t ftell64(FILE *f);
 void fseek64(FILE *f, uint64_t offset, int origin);
 
+void ftruncateat(FILE *f, uint64_t length);
+
+bool fflush(FILE *f);
+
 bool feof(FILE *f);
 
 int fclose(FILE *f);
@@ -281,6 +288,10 @@ int fclose(FILE *f);
 bool logfile_open(const char *filename);
 void logfile_append(const char *msg, size_t length);
 void logfile_close(const char *filename);
+
+// read the whole logfile into memory. This may race with processes writing, but it will read the
+// whole of the file at some point. Useful since normal file reading may fail on the shared logfile
+std::string logfile_readall(const char *filename);
 
 // utility functions
 inline bool dump(const char *filename, const void *buffer, size_t size)
@@ -331,6 +342,8 @@ namespace StringFormat
 void sntimef(char *str, size_t bufSize, const char *format);
 
 string Wide2UTF8(const std::wstring &s);
+
+void Shutdown();
 };
 
 // utility functions, implemented in os_specific.cpp, not per-platform (assuming standard stdarg.h)

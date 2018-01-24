@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -319,7 +319,8 @@
   CheckExt(VK_KHR_external_semaphore);       \
   CheckExt(VK_KHR_external_semaphore_win32); \
   CheckExt(VK_KHR_external_semaphore_fd);    \
-  CheckExt(VK_KHR_get_memory_requirements2);
+  CheckExt(VK_KHR_get_memory_requirements2); \
+  CheckExt(VK_AMD_shader_info);
 
 #define HookInitVulkanInstanceExts()                                             \
   HookInitExtension(VK_KHR_surface, DestroySurfaceKHR);                          \
@@ -381,6 +382,7 @@
   HookInitExtension(VK_KHR_get_memory_requirements2, GetBufferMemoryRequirements2KHR);      \
   HookInitExtension(VK_KHR_get_memory_requirements2, GetImageMemoryRequirements2KHR);       \
   HookInitExtension(VK_KHR_get_memory_requirements2, GetImageSparseMemoryRequirements2KHR); \
+  HookInitExtension(VK_AMD_shader_info, GetShaderInfoAMD);                                  \
   HookInitDevice_PlatformSpecific()
 
 #define DefineHooks()                                                                                \
@@ -791,6 +793,9 @@
               const VkImageSparseMemoryRequirementsInfo2KHR *, pInfo, uint32_t *,                    \
               pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2KHR *,                  \
               pSparseMemoryRequirements);                                                            \
+  HookDefine6(VkResult, vkGetShaderInfoAMD, VkDevice, device, VkPipeline, pipeline,                  \
+              VkShaderStageFlagBits, shaderStage, VkShaderInfoTypeAMD, infoType, size_t *,           \
+              pInfoSize, void *, pInfo);                                                             \
   HookDefine_PlatformSpecific()
 
 struct VkLayerInstanceDispatchTableExtended : VkLayerInstanceDispatchTable

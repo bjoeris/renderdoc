@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,7 @@
 #pragma once
 
 #include <QFrame>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
 namespace Ui
 {
@@ -34,7 +34,7 @@ class PerformanceCounterViewer;
 
 class QTableWidgetItem;
 
-class PerformanceCounterViewer : public QFrame, public IPerformanceCounterViewer, public ILogViewer
+class PerformanceCounterViewer : public QFrame, public IPerformanceCounterViewer, public ICaptureViewer
 {
   Q_OBJECT
 
@@ -44,11 +44,11 @@ public:
 
   // IStatisticsViewer
   QWidget *Widget() override { return this; }
-  // ILogViewerForm
-  void OnLogfileLoaded() override;
-  void OnLogfileClosed() override;
-  void OnSelectedEventChanged(uint32_t eventID) override {}
-  void OnEventChanged(uint32_t eventID) override {}
+  // ICaptureViewer
+  void OnCaptureLoaded() override;
+  void OnCaptureClosed() override;
+  void OnSelectedEventChanged(uint32_t eventId) override {}
+  void OnEventChanged(uint32_t eventId) override {}
 private slots:
   // automatic slots
   void on_counterResults_doubleClicked(const QModelIndex &index);

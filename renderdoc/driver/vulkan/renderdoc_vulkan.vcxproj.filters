@@ -97,6 +97,39 @@
     <ClCompile Include="precompiled.cpp">
       <Filter>PCH</Filter>
     </ClCompile>
+    <ClCompile Include="vk_stringise.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_serialise.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_sparse_initstate.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_postvs.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_overlay.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_outputwindow.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_rendermesh.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_msaa_array_conv.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_rendertexture.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_shader_cache.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_rendertext.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="vk_replay.h">
@@ -140,6 +173,12 @@
     </ClInclude>
     <ClInclude Include="precompiled.h">
       <Filter>PCH</Filter>
+    </ClInclude>
+    <ClInclude Include="vk_shader_cache.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="vk_rendertext.h">
+      <Filter>Util</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

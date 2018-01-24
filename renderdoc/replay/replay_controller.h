@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -31,40 +31,40 @@
 #include "common/common.h"
 #include "core/core.h"
 #include "replay/replay_driver.h"
-#include "type_helpers.h"
 
 struct ReplayController;
 
 struct ReplayOutput : public IReplayOutput
 {
 public:
+  void Shutdown();
   void SetTextureDisplay(const TextureDisplay &o);
   void SetMeshDisplay(const MeshDisplay &o);
 
   void ClearThumbnails();
-  bool AddThumbnail(WindowingSystem system, void *data, ResourceId texID, CompType typeHint);
+  bool AddThumbnail(WindowingData window, ResourceId texID, CompType typeHint);
 
   void Display();
 
   ReplayOutputType GetType() { return m_Type; }
-  bool SetPixelContext(WindowingSystem system, void *data);
+  bool SetPixelContext(WindowingData window);
   void SetPixelContextLocation(uint32_t x, uint32_t y);
   void DisablePixelContext();
 
-  rdctype::pair<PixelValue, PixelValue> GetMinMax();
-  rdctype::array<uint32_t> GetHistogram(float minval, float maxval, bool channels[4]);
+  rdcpair<PixelValue, PixelValue> GetMinMax();
+  rdcarray<uint32_t> GetHistogram(float minval, float maxval, bool channels[4]);
 
   ResourceId GetCustomShaderTexID() { return m_CustomShaderResourceId; }
   ResourceId GetDebugOverlayTexID() { return m_OverlayResourceId; }
   PixelValue PickPixel(ResourceId texID, bool customShader, uint32_t x, uint32_t y,
                        uint32_t sliceFace, uint32_t mip, uint32_t sample);
-  rdctype::pair<uint32_t, uint32_t> PickVertex(uint32_t eventID, uint32_t x, uint32_t y);
+  rdcpair<uint32_t, uint32_t> PickVertex(uint32_t eventId, uint32_t x, uint32_t y);
 
 private:
-  ReplayOutput(ReplayController *parent, WindowingSystem system, void *data, ReplayOutputType type);
+  ReplayOutput(ReplayController *parent, WindowingData window, ReplayOutputType type);
   virtual ~ReplayOutput();
 
-  void SetFrameEvent(int eventID);
+  void SetFrameEvent(int eventId);
 
   void RefreshOverlay();
 
@@ -127,15 +127,12 @@ public:
 
   APIProperties GetAPIProperties();
 
-  ReplayStatus CreateDevice(const char *logfile);
+  ReplayStatus CreateDevice(RDCFile *rdc);
   ReplayStatus SetDevice(IReplayDriver *device);
 
   void FileChanged();
 
-  bool HasCallstacks();
-  bool InitResolver();
-
-  void SetFrameEvent(uint32_t eventID, bool force);
+  void SetFrameEvent(uint32_t eventId, bool force);
 
   void FetchPipelineState();
 
@@ -144,34 +141,37 @@ public:
   const GLPipe::State &GetGLPipelineState();
   const VKPipe::State &GetVulkanPipelineState();
 
-  rdctype::array<rdctype::str> GetDisassemblyTargets();
-  rdctype::str DisassembleShader(const ShaderReflection *refl, const char *target);
+  rdcarray<rdcstr> GetDisassemblyTargets();
+  rdcstr DisassembleShader(ResourceId pipeline, const ShaderReflection *refl, const char *target);
 
-  rdctype::pair<ResourceId, rdctype::str> BuildCustomShader(const char *entry, const char *source,
-                                                            const ShaderCompileFlags &compileFlags,
-                                                            ShaderStage type);
+  rdcpair<ResourceId, rdcstr> BuildCustomShader(const char *entry, const char *source,
+                                                const ShaderCompileFlags &compileFlags,
+                                                ShaderStage type);
   void FreeCustomShader(ResourceId id);
 
-  rdctype::pair<ResourceId, rdctype::str> BuildTargetShader(const char *entry, const char *source,
-                                                            const ShaderCompileFlags &compileFlags,
-                                                            ShaderStage type);
+  rdcpair<ResourceId, rdcstr> BuildTargetShader(const char *entry, const char *source,
+                                                const ShaderCompileFlags &compileFlags,
+                                                ShaderStage type);
   void ReplaceResource(ResourceId from, ResourceId to);
   void RemoveReplacement(ResourceId id);
   void FreeTargetResource(ResourceId id);
 
   FrameDescription GetFrameInfo();
-  rdctype::array<DrawcallDescription> GetDrawcalls();
-  rdctype::array<CounterResult> FetchCounters(const rdctype::array<GPUCounter> &counters);
-  rdctype::array<GPUCounter> EnumerateCounters();
+  const SDFile &GetStructuredFile();
+  rdcarray<DrawcallDescription> GetDrawcalls();
+  rdcarray<CounterResult> FetchCounters(const rdcarray<GPUCounter> &counters);
+  rdcarray<GPUCounter> EnumerateCounters();
   CounterDescription DescribeCounter(GPUCounter counterID);
-  rdctype::array<TextureDescription> GetTextures();
-  rdctype::array<BufferDescription> GetBuffers();
-  rdctype::array<rdctype::str> GetResolve(const rdctype::array<uint64_t> &callstack);
-  rdctype::array<DebugMessage> GetDebugMessages();
+  const rdcarray<TextureDescription> &GetTextures();
+  const rdcarray<BufferDescription> &GetBuffers();
+  const rdcarray<ResourceDescription> &GetResources();
+  rdcarray<DebugMessage> GetDebugMessages();
 
-  rdctype::array<PixelModification> PixelHistory(ResourceId target, uint32_t x, uint32_t y,
-                                                 uint32_t slice, uint32_t mip, uint32_t sampleIdx,
-                                                 CompType typeHint);
+  rdcarray<ShaderEntryPoint> GetShaderEntryPoints(ResourceId shader);
+  ShaderReflection *GetShader(ResourceId shader, ShaderEntryPoint entry);
+
+  rdcarray<PixelModification> PixelHistory(ResourceId target, uint32_t x, uint32_t y, uint32_t slice,
+                                           uint32_t mip, uint32_t sampleIdx, CompType typeHint);
   ShaderDebugTrace *DebugVertex(uint32_t vertid, uint32_t instid, uint32_t idx, uint32_t instOffset,
                                 uint32_t vertOffset);
   ShaderDebugTrace *DebugPixel(uint32_t x, uint32_t y, uint32_t sample, uint32_t primitive);
@@ -180,35 +180,38 @@ public:
 
   MeshFormat GetPostVSData(uint32_t instID, MeshDataStage stage);
 
-  rdctype::array<EventUsage> GetUsage(ResourceId id);
+  rdcarray<EventUsage> GetUsage(ResourceId id);
 
-  rdctype::array<byte> GetBufferData(ResourceId buff, uint64_t offset, uint64_t len);
-  rdctype::array<byte> GetTextureData(ResourceId buff, uint32_t arrayIdx, uint32_t mip);
+  bytebuf GetBufferData(ResourceId buff, uint64_t offset, uint64_t len);
+  bytebuf GetTextureData(ResourceId buff, uint32_t arrayIdx, uint32_t mip);
 
   bool SaveTexture(const TextureSave &saveData, const char *path);
 
-  rdctype::array<ShaderVariable> GetCBufferVariableContents(ResourceId shader, const char *entryPoint,
-                                                            uint32_t cbufslot, ResourceId buffer,
-                                                            uint64_t offs);
+  rdcarray<ShaderVariable> GetCBufferVariableContents(ResourceId shader, const char *entryPoint,
+                                                      uint32_t cbufslot, ResourceId buffer,
+                                                      uint64_t offs);
 
-  rdctype::array<WindowingSystem> GetSupportedWindowSystems();
+  rdcarray<WindowingSystem> GetSupportedWindowSystems();
 
-  void ReplayLoop(WindowingSystem system, void *data, ResourceId texid);
+  void ReplayLoop(WindowingData window, ResourceId texid);
   void CancelReplayLoop();
 
-  ReplayOutput *CreateOutput(WindowingSystem, void *data, ReplayOutputType type);
+  ReplayOutput *CreateOutput(WindowingData window, ReplayOutputType type);
 
   void ShutdownOutput(IReplayOutput *output);
   void Shutdown();
 
 private:
-  ReplayStatus PostCreateInit(IReplayDriver *device);
+  ReplayStatus PostCreateInit(IReplayDriver *device, RDCFile *rdc);
 
-  DrawcallDescription *GetDrawcallByEID(uint32_t eventID);
+  DrawcallDescription *GetDrawcallByEID(uint32_t eventId);
 
   IReplayDriver *GetDevice() { return m_pDevice; }
   FrameRecord m_FrameRecord;
   vector<DrawcallDescription *> m_Drawcalls;
+
+  APIProperties m_APIProps;
+  std::vector<std::string> m_GCNTargets;
 
   volatile int32_t m_ReplayLoopCancel = 0;
   volatile int32_t m_ReplayLoopFinished = 0;
@@ -222,8 +225,9 @@ private:
 
   std::vector<ReplayOutput *> m_Outputs;
 
-  std::vector<BufferDescription> m_Buffers;
-  std::vector<TextureDescription> m_Textures;
+  rdcarray<ResourceDescription> m_Resources;
+  rdcarray<BufferDescription> m_Buffers;
+  rdcarray<TextureDescription> m_Textures;
 
   IReplayDriver *m_pDevice;
 

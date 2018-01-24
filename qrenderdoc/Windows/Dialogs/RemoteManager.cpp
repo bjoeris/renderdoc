@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -74,6 +74,12 @@ static RemoteHost *getRemoteHost(RDTreeWidgetItem *item)
   return (RemoteHost *)item->tag().value<uintptr_t>();
 }
 
+void deleteItemAndHost(RDTreeWidgetItem *item)
+{
+  delete getRemoteHost(item);
+  delete item;
+}
+
 RemoteManager::RemoteManager(ICaptureContext &ctx, MainWindow *main)
     : QDialog(NULL), ui(new Ui::RemoteManager), m_Ctx(ctx), m_Main(main)
 {
@@ -119,7 +125,7 @@ RemoteManager::RemoteManager(ICaptureContext &ctx, MainWindow *main)
 RemoteManager::~RemoteManager()
 {
   for(RDTreeWidgetItem *item : m_QueuedDeletes)
-    delete item;
+    deleteItemAndHost(item);
   delete ui;
 }
 
@@ -136,10 +142,10 @@ void RemoteManager::setRemoteServerLive(RDTreeWidgetItem *node, bool live, bool 
   if(!host)
     return;
 
-  host->ServerRunning = live;
-  host->Busy = busy;
+  host->serverRunning = live;
+  host->busy = busy;
 
-  if(host->Hostname == lit("localhost"))
+  if(host->IsLocalhost())
   {
     node->setIcon(0, QIcon());
     node->setText(1, QString());
@@ -148,11 +154,11 @@ void RemoteManager::setRemoteServerLive(RDTreeWidgetItem *node, bool live, bool 
   {
     QString text = live ? tr("Remote server running") : tr("No remote server");
 
-    if(host->Connected)
+    if(host->connected)
       text += tr(" (Active Context)");
-    else if(host->VersionMismatch)
+    else if(host->versionMismatch)
       text += tr(" (Version Mismatch)");
-    else if(host->Busy)
+    else if(host->busy)
       text += tr(" (Busy)");
 
     node->setText(1, text);
@@ -164,7 +170,7 @@ void RemoteManager::setRemoteServerLive(RDTreeWidgetItem *node, bool live, bool 
 bool RemoteManager::isRemoteServerLive(RDTreeWidgetItem *node)
 {
   RemoteHost *host = getRemoteHost(node);
-  return host && host->ServerRunning;
+  return host && host->serverRunning;
 }
 
 void RemoteManager::addHost(RemoteHost *host)
@@ -222,9 +228,7 @@ void RemoteManager::refreshHost(RDTreeWidgetItem *node)
     host->CheckStatus();
 
     GUIInvoke::call(
-        [this, node, host]() { setRemoteServerLive(node, host->ServerRunning, host->Busy); });
-
-    QByteArray hostnameBytes = host->Hostname.toUtf8();
+        [this, node, host]() { setRemoteServerLive(node, host->serverRunning, host->busy); });
 
     uint32_t nextIdent = 0;
 
@@ -233,13 +237,13 @@ void RemoteManager::refreshHost(RDTreeWidgetItem *node)
       // just a sanity check to make sure we don't hit some unexpected case and infinite loop
       uint32_t prevIdent = nextIdent;
 
-      nextIdent = RENDERDOC_EnumerateRemoteTargets(hostnameBytes.data(), nextIdent);
+      nextIdent = RENDERDOC_EnumerateRemoteTargets(host->hostname.c_str(), nextIdent);
 
       if(nextIdent == 0 || prevIdent >= nextIdent)
         break;
 
       ITargetControl *conn =
-          RENDERDOC_CreateTargetControl(hostnameBytes.data(), nextIdent, username.data(), false);
+          RENDERDOC_CreateTargetControl(host->hostname.c_str(), nextIdent, username.data(), false);
 
       if(conn)
       {
@@ -254,7 +258,7 @@ void RemoteManager::refreshHost(RDTreeWidgetItem *node)
         else
           running = tr("Running %1").arg(api);
 
-        RemoteConnect tag(host->Hostname, host->Name(), nextIdent);
+        RemoteConnect tag(host->hostname, host->Name(), nextIdent);
 
         GUIInvoke::call([this, node, target, running, tag]() {
           RDTreeWidgetItem *child = new RDTreeWidgetItem({target, running});
@@ -287,7 +291,7 @@ void RemoteManager::updateStatus()
     ui->refreshAll->setEnabled(true);
 
     for(RDTreeWidgetItem *item : m_QueuedDeletes)
-      delete item;
+      deleteItemAndHost(item);
     m_QueuedDeletes.clear();
 
     // if the external ref is gone now, we can delete ourselves
@@ -331,23 +335,23 @@ void RemoteManager::updateConnectButton()
 
     if(host)
     {
-      if(host->Hostname == lit("localhost"))
+      if(host->IsLocalhost())
       {
         ui->connect->setText(tr("Run Server"));
         ui->connect->setEnabled(false);
       }
-      else if(host->ServerRunning)
+      else if(host->serverRunning)
       {
         ui->connect->setText(tr("Shutdown"));
 
-        if(host->Busy && !host->Connected)
+        if(host->busy && !host->connected)
           ui->connect->setEnabled(false);
       }
       else
       {
         ui->connect->setText(tr("Run Server"));
 
-        if(host->RunCommand.isEmpty())
+        if(host->runCommand.isEmpty())
           ui->connect->setEnabled(false);
       }
     }
@@ -367,7 +371,8 @@ void RemoteManager::addNewHost()
 
     for(int i = 0; i < m_Ctx.Config().RemoteHosts.count(); i++)
     {
-      if(m_Ctx.Config().RemoteHosts[i]->Hostname.compare(host, Qt::CaseInsensitive) == 0)
+      QString hostname = m_Ctx.Config().RemoteHosts[i]->hostname;
+      if(hostname.compare(host, Qt::CaseInsensitive) == 0)
       {
         found = true;
         break;
@@ -377,8 +382,8 @@ void RemoteManager::addNewHost()
     if(!found)
     {
       RemoteHost *h = new RemoteHost();
-      h->Hostname = host;
-      h->RunCommand = ui->runCommand->text().trimmed();
+      h->hostname = host;
+      h->runCommand = ui->runCommand->text().trimmed();
 
       m_Ctx.Config().RemoteHosts.push_back(h);
       m_Ctx.Config().Save();
@@ -401,7 +406,7 @@ void RemoteManager::setRunCommand()
 
   if(h)
   {
-    h->RunCommand = ui->runCommand->text().trimmed();
+    h->runCommand = ui->runCommand->text().trimmed();
     m_Ctx.Config().Save();
   }
 }
@@ -410,9 +415,13 @@ void RemoteManager::queueDelete(RDTreeWidgetItem *item)
 {
   // if there are refreshes pending, queue it for deletion when they complete.
   if(m_Lookups.available() > 0)
+  {
     m_QueuedDeletes.push_back(item);
+  }
   else
-    delete item;
+  {
+    deleteItemAndHost(item);
+  }
 }
 
 void RemoteManager::on_hosts_itemActivated(RDTreeWidgetItem *item, int column)
@@ -442,12 +451,12 @@ void RemoteManager::on_hosts_itemSelectionChanged()
     if(ui->refreshAll->isEnabled())
       ui->refreshOne->setEnabled(true);
 
-    ui->runCommand->setText(host->RunCommand);
+    ui->runCommand->setText(host->runCommand);
     ui->hostname->setText(host->Name());
 
     ui->addUpdateHost->setText(tr("Update"));
 
-    if(host->Hostname == lit("localhost") || host->IsHostADB())
+    if(host->IsLocalhost() || host->IsADB())
     {
       // localhost and android hosts cannot be updated or have their run command changed
       ui->addUpdateHost->setEnabled(false);
@@ -582,7 +591,7 @@ void RemoteManager::on_connect_clicked()
   }
   else if(host)
   {
-    if(host->ServerRunning)
+    if(host->serverRunning)
     {
       QMessageBox::StandardButton res = RDDialog::question(
           this, tr("Remote server shutdown"),
@@ -593,7 +602,7 @@ void RemoteManager::on_connect_clicked()
         return;
 
       // shut down
-      if(host->Connected)
+      if(host->connected)
       {
         m_Ctx.Replay().ShutdownServer();
         setRemoteServerLive(node, false, false);
@@ -602,7 +611,7 @@ void RemoteManager::on_connect_clicked()
       {
         IRemoteServer *server = NULL;
         ReplayStatus status =
-            RENDERDOC_CreateRemoteServerConnection(host->Hostname.toUtf8().data(), 0, &server);
+            RENDERDOC_CreateRemoteServerConnection(host->hostname.c_str(), 0, &server);
         if(server)
           server->ShutdownServerAndConnection();
         setRemoteServerLive(node, false, false);
@@ -640,8 +649,10 @@ void RemoteManager::on_deleteHost_clicked()
 
   RemoteHost *host = getRemoteHost(item);
 
+  int itemIdx = ui->hosts->indexOfTopLevelItem(item);
+
   // don't delete running instances on a host
-  if(item->parent() != ui->hosts->invisibleRootItem() || !host)
+  if(item->parent() != ui->hosts->invisibleRootItem() || itemIdx < 0 || !host)
     return;
 
   QString hostname = item->text(0);
@@ -658,13 +669,17 @@ void RemoteManager::on_deleteHost_clicked()
 
   if(res == QMessageBox::Yes)
   {
-    int idx = m_Ctx.Config().RemoteHosts.indexOf(host);
-    delete m_Ctx.Config().RemoteHosts.takeAt(idx);
+    int32_t idx = m_Ctx.Config().RemoteHosts.indexOf(host);
+    if(idx < 0)
+      return;
+
+    // the host will be removed in queueDelete.
+    m_Ctx.Config().RemoteHosts.erase(idx);
     m_Ctx.Config().Save();
 
     item->clear();
 
-    queueDelete(ui->hosts->takeTopLevelItem(ui->hosts->indexOfTopLevelItem(item)));
+    queueDelete(ui->hosts->takeTopLevelItem(itemIdx));
 
     ui->hosts->clearSelection();
 

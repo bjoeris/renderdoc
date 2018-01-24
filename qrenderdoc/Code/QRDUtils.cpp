@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,7 +23,9 @@
  ******************************************************************************/
 
 #include "QRDUtils.h"
+#include <QAbstractTextDocumentLayout>
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QElapsedTimer>
 #include <QFileSystemModel>
 #include <QFontDatabase>
@@ -34,10 +36,328 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMetaMethod>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QProcess>
+#include <QProgressBar>
 #include <QProgressDialog>
+#include <QRegularExpression>
+#include <QRegularExpressionMatch>
 #include <QStandardPaths>
+#include <QTextBlock>
+#include <QTextDocument>
 #include <QtMath>
+#include "Widgets/Extended/RDTreeWidget.h"
+
+// normally this is in the renderdoc core library, but it's needed for the 'unknown enum' path,
+// so we implement it here using QString. It's inefficient, but this is a very uncommon path -
+// either for invalid values or for when a new enum is added and the code isn't updated
+template <>
+std::string DoStringise(const uint32_t &el)
+{
+  return QString::number(el).toStdString();
+}
+
+// this one we do by hand as it requires formatting
+template <>
+std::string DoStringise(const ResourceId &el)
+{
+  uint64_t num;
+  memcpy(&num, &el, sizeof(num));
+  return lit("resourceid::%1").arg(num).toStdString();
+}
+
+struct RichResourceText
+{
+  QVector<QVariant> fragments;
+
+  // cached formatted document. We use cacheId to check if it needs to be updated
+  QTextDocument doc;
+  int cacheId = 0;
+
+  // a plain-text version of the document, suitable for e.g. copy-paste
+  QString text;
+
+  // the ideal width for the document
+  int idealWidth = 0;
+
+  // cache the context once we've obtained it.
+  ICaptureContext *ctxptr = NULL;
+
+  void cacheDocument(const QWidget *widget)
+  {
+    if(!ctxptr)
+      ctxptr = getCaptureContext(widget);
+
+    if(!ctxptr)
+      return;
+
+    ICaptureContext &ctx = *(ICaptureContext *)ctxptr;
+
+    int refCache = ctx.ResourceNameCacheID();
+
+    if(cacheId == refCache)
+      return;
+
+    cacheId = refCache;
+
+    // use a table to ensure images don't screw up the baseline for text. DON'T JUDGE ME.
+    QString html = lit("<table><tr>");
+
+    int i = 0;
+
+    QVector<int> fragmentIndexFromBlockIndex;
+
+    // there's an empty block at the start.
+    fragmentIndexFromBlockIndex.push_back(-1);
+
+    text.clear();
+
+    for(const QVariant &v : fragments)
+    {
+      if(v.userType() == qMetaTypeId<ResourceId>())
+      {
+        QString resname = ctx.GetResourceName(v.value<ResourceId>());
+        html += lit("<td><b>%1</b></td><td><img src=':/link.png'></td>").arg(resname);
+        text += resname;
+
+        // these generate two blocks (one for each cell)
+        fragmentIndexFromBlockIndex.push_back(i);
+        fragmentIndexFromBlockIndex.push_back(i);
+      }
+      else
+      {
+        html += lit("<td>%1</td>").arg(v.toString());
+        text += v.toString();
+
+        // this only generates one block
+        fragmentIndexFromBlockIndex.push_back(i);
+      }
+
+      i++;
+    }
+
+    // there's another empty block at the end
+    fragmentIndexFromBlockIndex.push_back(-1);
+
+    html += lit("</tr></table>");
+
+    doc.setDocumentMargin(0);
+    doc.setHtml(html);
+
+    if(doc.blockCount() != fragmentIndexFromBlockIndex.count())
+    {
+      qCritical() << "Block count is not what's expected!" << doc.blockCount()
+                  << fragmentIndexFromBlockIndex.count();
+
+      for(i = 0; i < doc.blockCount(); i++)
+        doc.findBlockByNumber(i).setUserState(-1);
+
+      return;
+    }
+
+    for(i = 0; i < doc.blockCount(); i++)
+      doc.findBlockByNumber(i).setUserState(fragmentIndexFromBlockIndex[i]);
+
+    qreal old = doc.textWidth();
+    doc.setTextWidth(-1);
+    idealWidth = doc.idealWidth();
+    doc.setTextWidth(old);
+  }
+};
+
+Q_DECLARE_METATYPE(RichResourceTextPtr);
+
+QString ResIdTextToString(RichResourceTextPtr ptr)
+{
+  return ptr->text;
+}
+
+void RegisterMetatypeConversions()
+{
+  QMetaType::registerConverter<RichResourceTextPtr, QString>(&ResIdTextToString);
+}
+
+void RichResourceTextInitialise(QVariant &var)
+{
+  static QRegularExpression re(lit("(resourceid::)([0-9]*)"));
+
+  if(var.userType() == qMetaTypeId<ResourceId>() || re.match(var.toString()).hasMatch())
+  {
+    QString text;
+    if(var.userType() == qMetaTypeId<ResourceId>())
+      text = ToQStr(var.value<ResourceId>());
+    else
+      text = var.toString();
+
+    RichResourceTextPtr linkedText(new RichResourceText);
+
+    // use regexp to split up into fragments of text and resourceid. The resourceid is then
+    // formatted on the fly in RichResourceText::cacheDocument
+    QRegularExpressionMatch match = re.match(text);
+    while(match.hasMatch())
+    {
+      qulonglong idnum = match.captured(2).toULongLong();
+      ResourceId id;
+      memcpy(&id, &idnum, sizeof(id));
+
+      // push any text that preceeded the ResourceId.
+      if(match.capturedStart(1) > 0)
+        linkedText->fragments.push_back(text.left(match.capturedStart(1)));
+
+      text.remove(0, match.capturedEnd(2));
+
+      linkedText->fragments.push_back(id);
+
+      match = re.match(text);
+    }
+
+    if(!text.isEmpty())
+      linkedText->fragments.push_back(text);
+
+    linkedText->doc.setHtml(text);
+
+    var = QVariant::fromValue(linkedText);
+  }
+}
+
+bool RichResourceTextCheck(const QVariant &var)
+{
+  return var.userType() == qMetaTypeId<RichResourceTextPtr>();
+}
+
+void RichResourceTextPaint(const QWidget *owner, QPainter *painter, QRect rect, QFont font,
+                           QPalette palette, bool mouseOver, QPoint mousePos, const QVariant &var)
+{
+  RichResourceTextPtr linkedText = var.value<RichResourceTextPtr>();
+
+  linkedText->cacheDocument(owner);
+
+  painter->translate(rect.left(), rect.top());
+
+  linkedText->doc.setTextWidth(10000);
+  linkedText->doc.setDefaultFont(font);
+
+  // vertical align to the centre, if there's spare room.
+  int diff = rect.height() - linkedText->doc.size().height();
+
+  if(diff > 0)
+    painter->translate(0, diff / 2);
+
+  linkedText->doc.drawContents(painter, QRectF(0, 0, rect.width(), rect.height()));
+
+  if(mouseOver)
+  {
+    painter->setPen(QPen(palette.brush(QPalette::WindowText), 1.0));
+
+    QAbstractTextDocumentLayout *layout = linkedText->doc.documentLayout();
+
+    QPoint p = mousePos - rect.topLeft();
+    if(diff > 0)
+      p -= QPoint(0, diff / 2);
+
+    int pos = layout->hitTest(p, Qt::FuzzyHit);
+
+    if(pos >= 0)
+    {
+      QTextBlock block = linkedText->doc.findBlock(pos);
+
+      int frag = block.userState();
+      if(frag >= 0)
+      {
+        QVariant v = linkedText->fragments[frag];
+        if(v.userType() == qMetaTypeId<ResourceId>() && v.value<ResourceId>() != ResourceId())
+        {
+          layout->blockBoundingRect(block);
+          QRectF blockrect = layout->blockBoundingRect(block);
+
+          if(block.previous().userState() == frag)
+          {
+            blockrect = blockrect.united(layout->blockBoundingRect(block.previous()));
+          }
+
+          if(block.next().userState() == frag)
+          {
+            blockrect = blockrect.united(layout->blockBoundingRect(block.next()));
+          }
+
+          blockrect.translate(0.0, -2.0);
+
+          painter->drawLine(blockrect.bottomLeft(), blockrect.bottomRight());
+        }
+      }
+    }
+  }
+}
+
+int RichResourceTextWidthHint(const QWidget *owner, const QVariant &var)
+{
+  RichResourceTextPtr linkedText = var.value<RichResourceTextPtr>();
+
+  linkedText->cacheDocument(owner);
+
+  return linkedText->idealWidth;
+}
+
+bool RichResourceTextMouseEvent(const QWidget *owner, const QVariant &var, QRect rect,
+                                QMouseEvent *event)
+{
+  // only process clicks or moves
+  if(event->type() != QEvent::MouseButtonRelease && event->type() != QEvent::MouseMove)
+    return false;
+
+  RichResourceTextPtr linkedText = var.value<RichResourceTextPtr>();
+
+  linkedText->cacheDocument(owner);
+
+  QAbstractTextDocumentLayout *layout = linkedText->doc.documentLayout();
+
+  QPoint p = event->pos() - rect.topLeft();
+
+  // vertical align to the centre, if there's spare room.
+  int diff = rect.height() - linkedText->doc.size().height();
+
+  if(diff > 0)
+    p -= QPoint(0, diff / 2);
+
+  int pos = layout->hitTest(p, Qt::FuzzyHit);
+
+  if(pos >= 0)
+  {
+    QTextBlock block = linkedText->doc.findBlock(pos);
+
+    int frag = block.userState();
+    if(frag >= 0)
+    {
+      QVariant v = linkedText->fragments[frag];
+      if(v.userType() == qMetaTypeId<ResourceId>())
+      {
+        // empty resource ids are not clickable or hover-highlighted.
+        ResourceId res = v.value<ResourceId>();
+        if(res == ResourceId())
+          return false;
+
+        if(event->type() == QEvent::MouseButtonRelease && linkedText->ctxptr)
+        {
+          ICaptureContext &ctx = *(ICaptureContext *)linkedText->ctxptr;
+
+          if(!ctx.HasResourceInspector())
+            ctx.ShowResourceInspector();
+
+          ctx.GetResourceInspector()->Inspect(v.value<ResourceId>());
+
+          ctx.RaiseDockWindow(ctx.GetResourceInspector()->Widget());
+        }
+
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+#include "renderdoc_tostr.inl"
 
 QString ToQStr(const ResourceUsage usage, const GraphicsAPI apitype)
 {
@@ -273,10 +593,146 @@ QString GetComponentString(byte mask)
   return ret;
 }
 
+void CombineUsageEvents(ICaptureContext &ctx, const rdcarray<EventUsage> &usage,
+                        std::function<void(uint32_t startEID, uint32_t endEID, ResourceUsage use)> callback)
+{
+  uint32_t start = 0;
+  uint32_t end = 0;
+  ResourceUsage us = ResourceUsage::IndexBuffer;
+
+  for(const EventUsage u : usage)
+  {
+    if(start == 0)
+    {
+      start = end = u.eventId;
+      us = u.usage;
+      continue;
+    }
+
+    const DrawcallDescription *draw = ctx.GetDrawcall(u.eventId);
+
+    bool distinct = false;
+
+    // if the usage is different from the last, add a new entry,
+    // or if the previous draw link is broken.
+    if(u.usage != us || draw == NULL || draw->previous == 0)
+    {
+      distinct = true;
+    }
+    else
+    {
+      // otherwise search back through real draws, to see if the
+      // last event was where we were - otherwise it's a new
+      // distinct set of drawcalls and should have a separate
+      // entry in the context menu
+      const DrawcallDescription *prev = ctx.GetDrawcall(draw->previous);
+
+      while(prev != NULL && prev->eventId > end)
+      {
+        if(!(prev->flags & (DrawFlags::Dispatch | DrawFlags::Drawcall | DrawFlags::CmdList)))
+        {
+          prev = ctx.GetDrawcall(prev->previous);
+        }
+        else
+        {
+          distinct = true;
+          break;
+        }
+
+        if(prev == NULL)
+          distinct = true;
+      }
+    }
+
+    if(distinct)
+    {
+      callback(start, end, us);
+      start = end = u.eventId;
+      us = u.usage;
+    }
+
+    end = u.eventId;
+  }
+
+  if(start != 0)
+    callback(start, end, us);
+}
+
+void addStructuredObjects(RDTreeWidgetItem *parent, const StructuredObjectList &objs,
+                          bool parentIsArray)
+{
+  for(const SDObject *obj : objs)
+  {
+    if(obj->type.flags & SDTypeFlags::Hidden)
+      continue;
+
+    QVariant param;
+
+    if(parentIsArray)
+      param = QFormatStr("[%1]").arg(parent->childCount());
+    else
+      param = obj->name;
+
+    RDTreeWidgetItem *item = new RDTreeWidgetItem({param, QString()});
+
+    // we don't identify via the type name as many types could be serialised as a ResourceId -
+    // e.g. ID3D11Resource* or ID3D11Buffer* which would be the actual typename. We want to preserve
+    // that for the best raw structured data representation instead of flattening those out to just
+    // "ResourceId", and we also don't want to store two types ('fake' and 'real'), so instead we
+    // check the custom string.
+    if((obj->type.flags & SDTypeFlags::HasCustomString) &&
+       !strncmp(obj->data.str.c_str(), "ResourceId", 10))
+    {
+      ResourceId id;
+      static_assert(sizeof(id) == sizeof(obj->data.basic.u), "ResourceId is no longer uint64_t!");
+      memcpy(&id, &obj->data.basic.u, sizeof(id));
+
+      param = id;
+    }
+    else if(obj->type.flags & SDTypeFlags::NullString)
+    {
+      param = lit("NULL");
+    }
+    else if(obj->type.flags & SDTypeFlags::HasCustomString)
+    {
+      param = obj->data.str;
+    }
+    else
+    {
+      switch(obj->type.basetype)
+      {
+        case SDBasic::Chunk:
+        case SDBasic::Struct:
+          param = QFormatStr("%1()").arg(obj->type.name);
+          addStructuredObjects(item, obj->data.children, false);
+          break;
+        case SDBasic::Array:
+          param = QFormatStr("%1[]").arg(obj->type.name);
+          addStructuredObjects(item, obj->data.children, true);
+          break;
+        case SDBasic::Null: param = lit("NULL"); break;
+        case SDBasic::Buffer: param = lit("(%1 bytes)").arg(obj->type.byteSize); break;
+        case SDBasic::String: param = obj->data.str; break;
+        case SDBasic::Enum:
+        case SDBasic::UnsignedInteger: param = Formatter::Format(obj->data.basic.u); break;
+        case SDBasic::SignedInteger: param = Formatter::Format(obj->data.basic.i); break;
+        case SDBasic::Float: param = Formatter::Format(obj->data.basic.d); break;
+        case SDBasic::Boolean: param = (obj->data.basic.b ? lit("True") : lit("False")); break;
+        case SDBasic::Character: param = QString(QLatin1Char(obj->data.basic.c)); break;
+      }
+    }
+
+    item->setText(1, param);
+
+    parent->addChild(item);
+  }
+}
+
 bool SaveToJSON(QVariantMap &data, QIODevice &f, const char *magicIdentifier, uint32_t magicVersion)
 {
   // marker that this data is valid
-  data[QString::fromLatin1(magicIdentifier)] = magicVersion;
+  if(magicIdentifier)
+    data[QString::fromLatin1(magicIdentifier)] = magicVersion;
 
   QJsonDocument doc = QJsonDocument::fromVariant(data);
 
@@ -336,6 +792,16 @@ bool LoadFromJSON(QVariantMap &data, QIODevice &f, const char *magicIdentifier, 
   return true;
 }
 
+QString VariantToJSON(const QVariantMap &data)
+{
+  return QString::fromUtf8(QJsonDocument::fromVariant(data).toJson(QJsonDocument::Indented));
+}
+
+QVariantMap JSONToVariant(const QString &json)
+{
+  return QJsonDocument::fromJson(json.toUtf8()).toVariant().toMap();
+}
+
 int GUIInvoke::methodIndex = -1;
 
 void GUIInvoke::init()
@@ -352,6 +818,11 @@ void GUIInvoke::call(const std::function<void()> &f)
     return;
   }
 
+  defer(f);
+}
+
+void GUIInvoke::defer(const std::function<void()> &f)
+{
   GUIInvoke *invoke = new GUIInvoke(f);
   invoke->moveToThread(qApp->thread());
   invoke->metaObject()->method(methodIndex).invoke(invoke, Qt::QueuedConnection);
@@ -512,7 +983,7 @@ QString RDDialog::getExecutableFileName(QWidget *parent, const QString &caption,
 
 #if defined(Q_OS_WIN32)
   // can't filter by executable bit on windows, but we have extensions
-  filter = QApplication::translate("RDDialog", "Executables (*.exe);;All Files (*.*)");
+  filter = QApplication::translate("RDDialog", "Executables (*.exe);;All Files (*)");
 #endif
 
   QFileDialog fd(parent, caption, dir, filter);
@@ -536,6 +1007,19 @@ QString RDDialog::getExecutableFileName(QWidget *parent, const QString &caption,
   return QString();
 }
 
+static QStringList getDefaultSuffixesFromFilter(const QString &filter)
+{
+  // capture the first suffix found and discard the rest
+  static const QRegularExpression regex(lit("\\*\\.([\\w.]+).*"));
+
+  QStringList suffixes;
+  for(const QString &s : filter.split(lit(";;")))
+  {
+    suffixes << regex.match(s).captured(1);
+  }
+  return suffixes;
+}
+
 QString RDDialog::getSaveFileName(QWidget *parent, const QString &caption, const QString &dir,
                                   const QString &filter, QString *selectedFilter,
                                   QFileDialog::Options options)
@@ -543,6 +1027,13 @@ QString RDDialog::getSaveFileName(QWidget *parent, const QString &caption, const
   QFileDialog fd(parent, caption, dir, filter);
   fd.setAcceptMode(QFileDialog::AcceptSave);
   fd.setOptions(options);
+  const QStringList &defaultSuffixes = getDefaultSuffixesFromFilter(filter);
+  if(!defaultSuffixes.isEmpty())
+    fd.setDefaultSuffix(defaultSuffixes.first());
+  QObject::connect(&fd, &QFileDialog::filterSelected, [&](const QString &filter) {
+    int i = fd.nameFilters().indexOf(filter);
+    fd.setDefaultSuffix(defaultSuffixes.value(i));
+  });
   show(&fd);
 
   if(fd.result() == QFileDialog::Accepted)
@@ -811,7 +1302,7 @@ bool RunProcessAsAdmin(const QString &fullExecutablePath, const QStringList &par
 {
 #if defined(Q_OS_WIN32)
 
-  std::wstring wideExe = fullExecutablePath.toStdWString();
+  std::wstring wideExe = QDir::toNativeSeparators(fullExecutablePath).toStdWString();
   std::wstring wideParams = params.join(QLatin1Char(' ')).toStdWString();
 
   SHELLEXECUTEINFOW info = {};
@@ -1067,6 +1558,75 @@ void ShowProgressDialog(QWidget *window, const QString &labelText, ProgressFinis
   // to clean itself up
   tickerSemaphore.tryAcquire();
   progressTickerThread.wait();
+}
+
+void UpdateTransferProgress(qint64 xfer, qint64 total, QElapsedTimer *timer,
+                            QProgressBar *progressBar, QLabel *progressLabel, QString progressText)
+{
+  if(xfer >= total)
+  {
+    progressBar->setMaximum(10000);
+    progressBar->setValue(10000);
+    return;
+  }
+
+  if(total <= 0)
+  {
+    progressBar->setMaximum(10000);
+    progressBar->setValue(0);
+    return;
+  }
+
+  progressBar->setMaximum(10000);
+  progressBar->setValue(int(10000.0 * (double(xfer) / double(total))));
+
+  double xferMB = double(xfer) / 1000000.0;
+  double totalMB = double(total) / 1000000.0;
+
+  double secondsElapsed = double(timer->nsecsElapsed()) * 1.0e-9;
+
+  double speedMBS = xferMB / secondsElapsed;
+
+  qulonglong secondsRemaining = qulonglong(double(totalMB - xferMB) / speedMBS);
+
+  if(secondsElapsed > 1.0)
+  {
+    QString remainString;
+
+    qulonglong minutesRemaining = (secondsRemaining / 60) % 60;
+    qulonglong hoursRemaining = (secondsRemaining / 3600);
+    secondsRemaining %= 60;
+
+    if(hoursRemaining > 0)
+      remainString = QFormatStr("%1:%2:%3")
+                         .arg(hoursRemaining, 2, 10, QLatin1Char('0'))
+                         .arg(minutesRemaining, 2, 10, QLatin1Char('0'))
+                         .arg(secondsRemaining, 2, 10, QLatin1Char('0'));
+    else if(minutesRemaining > 0)
+      remainString = QFormatStr("%1:%2")
+                         .arg(minutesRemaining, 2, 10, QLatin1Char('0'))
+                         .arg(secondsRemaining, 2, 10, QLatin1Char('0'));
+    else
+      remainString = QApplication::translate("qrenderdoc", "%1 seconds").arg(secondsRemaining);
+
+    double speed = speedMBS;
+
+    bool MBs = true;
+    if(speedMBS < 1)
+    {
+      MBs = false;
+      speed *= 1000;
+    }
+
+    progressLabel->setText(
+        QApplication::translate("qrenderdoc", "%1\n%2 MB / %3 MB. %4 remaining (%5 %6)")
+            .arg(progressText)
+            .arg(xferMB, 0, 'f', 2)
+            .arg(totalMB, 0, 'f', 2)
+            .arg(remainString)
+            .arg(speed, 0, 'f', 2)
+            .arg(MBs ? lit("MB/s") : lit("KB/s")));
+  }
 }
 
 void setEnabledMultiple(const QList<QWidget *> &widgets, bool enabled)

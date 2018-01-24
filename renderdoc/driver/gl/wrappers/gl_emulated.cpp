@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -61,6 +61,7 @@ struct PushPop
   {
     vao = bindFunc;
     other = NULL;
+    t = eGL_NONE;
     hookset->glGetIntegerv(eGL_VERTEX_ARRAY_BINDING, (GLint *)&o);
   }
 
@@ -157,11 +158,11 @@ void APIENTRY _glClearNamedFramebufferfv(GLuint framebuffer, GLenum buffer, GLin
   hookset->glClearBufferfv(buffer, drawbuffer, value);
 }
 
-void APIENTRY _glClearNamedFramebufferfi(GLuint framebuffer, GLenum buffer, const GLfloat depth,
-                                         GLint stencil)
+void APIENTRY _glClearNamedFramebufferfi(GLuint framebuffer, GLenum buffer, int drawbuffer,
+                                         const GLfloat depth, GLint stencil)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glClearBufferfi(buffer, 0, depth, stencil);
+  hookset->glClearBufferfi(buffer, drawbuffer, depth, stencil);
 }
 
 void APIENTRY _glBlitNamedFramebuffer(GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0,
@@ -219,6 +220,11 @@ void EmulateUnsupportedFunctions(GLHookSet *hooks)
   //
   // NOTE: Vendor Checks aren't initialised by this point, so we have to do this unconditionally
   // We include it just for searching: VendorCheck[VendorCheck_NV_ClearNamedFramebufferfiBugs]
+  //
+  // Update 2018-Jan - this might be the problem with the registry having the wrong signature for
+  // glClearNamedFramebufferfi - if the arguments were mismatched it would explain both invalid
+  // argument errors and ABI problems. For now though (and since as mentioned above it's cheap to
+  // emulate) we leave it on. See issue #842
   hooks->glClearNamedFramebufferfi = &_glClearNamedFramebufferfi;
 
   // workaround for AMD bug or weird behaviour. glVertexArrayElementBuffer doesn't update the
@@ -379,7 +385,15 @@ void *APIENTRY _glMapNamedBufferEXT(GLuint buffer, GLenum access)
   PushPopBuffer(eGL_COPY_READ_BUFFER, buffer);
   GLint size;
   hookset->glGetBufferParameteriv(eGL_COPY_READ_BUFFER, eGL_BUFFER_SIZE, &size);
-  return hookset->glMapBufferRange(eGL_COPY_READ_BUFFER, 0, size, eGL_MAP_READ_BIT);
+
+  GLbitfield accessBits = eGL_MAP_READ_BIT | eGL_MAP_WRITE_BIT;
+
+  if(access == eGL_READ_ONLY)
+    accessBits = eGL_MAP_READ_BIT;
+  else if(access == eGL_WRITE_ONLY)
+    accessBits = eGL_MAP_WRITE_BIT;
+
+  return hookset->glMapBufferRange(eGL_COPY_READ_BUFFER, 0, size, accessBits);
 }
 
 void *APIENTRY _glMapNamedBufferRangeEXT(GLuint buffer, GLintptr offset, GLsizeiptr length,
@@ -1041,7 +1055,7 @@ void APIENTRY _glGetInternalformativ(GLenum target, GLenum internalformat, GLenu
   if(data == NULL)
   {
     RDCERR("Format %s not supported by internal glGetInternalformativ, update database",
-           ToStr::Get(internalformat).c_str());
+           ToStr(internalformat).c_str());
     return;
   }
 
@@ -1083,7 +1097,7 @@ void APIENTRY _glGetInternalformativ(GLenum target, GLenum internalformat, GLenu
     case eGL_INTERNALFORMAT_DEPTH_SIZE: *params = data->depthBits; break;
     case eGL_INTERNALFORMAT_STENCIL_SIZE: *params = data->stencilBits; break;
     default:
-      RDCERR("pname %s not supported by internal glGetInternalformativ", ToStr::Get(pname).c_str());
+      RDCERR("pname %s not supported by internal glGetInternalformativ", ToStr(pname).c_str());
       break;
   }
 }
@@ -1311,7 +1325,7 @@ void APIENTRY _glClearBufferSubData(GLenum target, GLenum internalformat, GLintp
       case GL_RGBA_INTEGER: compCount = 4; break;
       default:
         RDCERR("Unexpected format %s, not doing conversion. Update _glClearBufferSubData emulation",
-               ToStr::Get(format).c_str());
+               ToStr(format).c_str());
     }
 
     uint32_t compByteWidth = 1;
@@ -1326,7 +1340,7 @@ void APIENTRY _glClearBufferSubData(GLenum target, GLenum internalformat, GLintp
       case eGL_FLOAT: compByteWidth = 4; break;
       default:
         RDCERR("Unexpected type %s, not doing conversion. Update _glClearBufferSubData emulation",
-               ToStr::Get(type).c_str());
+               ToStr(type).c_str());
     }
 
     CompType compType = CompType::UInt;
@@ -1438,6 +1452,16 @@ void APIENTRY _glGetTexImage(GLenum target, GLint level, GLenum format, GLenum t
 
   size_t sliceSize = GetByteSize(width, height, 1, format, type);
 
+  bool fixBGRA = false;
+  if(!HasExt[EXT_read_format_bgra] && format == eGL_BGRA)
+  {
+    if(type == eGL_UNSIGNED_BYTE)
+      fixBGRA = true;
+    else
+      RDCERR("Can't read back texture without EXT_read_format_bgra extension (data type: %s)",
+             ToStr(type).c_str());
+  }
+
   for(GLint d = 0; d < depth; ++d)
   {
     switch(target)
@@ -1464,7 +1488,16 @@ void APIENTRY _glGetTexImage(GLenum target, GLint level, GLenum format, GLenum t
     }
 
     byte *dst = (byte *)pixels + d * sliceSize;
-    hookset->glReadPixels(0, 0, width, height, format, type, (void *)dst);
+    GLenum readFormat = fixBGRA ? eGL_RGBA : format;
+    hookset->glReadPixels(0, 0, width, height, readFormat, type, (void *)dst);
+
+    if(fixBGRA)
+    {
+      // since we read back the texture with RGBA format, we have to flip the R and B components
+      byte *b = dst;
+      for(GLint i = 0, n = width * height; i < n; ++i, b += 4)
+        std::swap(*b, *(b + 2));
+    }
   }
 
   hookset->glDeleteFramebuffers(1, &fbo);

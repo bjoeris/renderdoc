@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -299,7 +299,7 @@ struct GeneratorID
 template <typename EnumType>
 static string OptionalFlagString(EnumType e)
 {
-  return (int)e ? " [" + ToStr::Get(e) + "]" : "";
+  return (int)e ? " [" + ToStr(e) + "]" : "";
 }
 
 static string DefaultIDName(uint32_t ID)
@@ -350,7 +350,7 @@ struct SPVDecoration
       case spv::DecorationAliased:
       case spv::DecorationCoherent:
       case spv::DecorationNonWritable:
-      case spv::DecorationNonReadable: return ToStr::Get(decoration);
+      case spv::DecorationNonReadable: return ToStr(decoration);
       case spv::DecorationUniform: return StringFormat::Fmt("DynamicallyUniform", val);
       case spv::DecorationLocation: return StringFormat::Fmt("Location=%u", val);
       case spv::DecorationComponent: return StringFormat::Fmt("Location=%u", val);
@@ -359,7 +359,7 @@ struct SPVDecoration
       case spv::DecorationStream: return StringFormat::Fmt("Stream=%u", val);
       case spv::DecorationDescriptorSet: return StringFormat::Fmt("DescSet=%u", val);
       case spv::DecorationBuiltIn:
-        return StringFormat::Fmt("Builtin %s", ToStr::Get((spv::BuiltIn)val).c_str());
+        return StringFormat::Fmt("Builtin %s", ToStr((spv::BuiltIn)val).c_str());
       case spv::DecorationSpecId:
         return "";    // handled elsewhere
 
@@ -376,7 +376,7 @@ struct SPVDecoration
       default: break;
     }
 
-    return StringFormat::Fmt("%s=%u", ToStr::Get(decoration).c_str(), val);
+    return StringFormat::Fmt("%s=%u", ToStr(decoration).c_str(), val);
   }
 };
 
@@ -497,7 +497,7 @@ struct SPVTypeData
     }
 
     if(builtin)
-      ret += " = " + ToStr::Get((spv::BuiltIn)builtin->val);
+      ret += " = " + ToStr((spv::BuiltIn)builtin->val);
 
     return ret;
   }
@@ -550,11 +550,10 @@ struct SPVTypeData
       {
         string typestring = baseType->GetName();
         if(imgformat != spv::ImageFormatUnknown)
-          typestring += ", " + ToStr::Get(imgformat);
+          typestring += ", " + ToStr(imgformat);
 
-        name = StringFormat::Fmt("%sImage%s%s%s<%s>", depth ? "Depth" : "",
-                                 multisampled ? "MS" : "", arrayed ? "Array" : "",
-                                 ToStr::Get(texdim).c_str(), typestring.c_str());
+        name = StringFormat::Fmt("%sImage%s%s%s<%s>", depth ? "Depth" : "", multisampled ? "MS" : "",
+                                 arrayed ? "Array" : "", ToStr(texdim).c_str(), typestring.c_str());
       }
       else if(type == eSampledImage)
       {
@@ -937,7 +936,7 @@ struct SPVInstruction
       case spv::OpSpecConstantComposite: return GetIDName();
       case spv::OpSpecConstantOp:
       {
-        string ret = StringFormat::Fmt("SpecOp%s(", ToStr::Get(constant->specOp).c_str());
+        string ret = StringFormat::Fmt("SpecOp%s(", ToStr(constant->specOp).c_str());
 
         for(size_t i = 0; i < constant->children.size(); i++)
         {
@@ -1606,7 +1605,7 @@ struct SPVInstruction
         }
         else
         {
-          ret += ToStr::Get(opcode) + "(";
+          ret += ToStr(opcode) + "(";
         }
 
         for(size_t i = 0; i < numArgs; i++)
@@ -1656,13 +1655,13 @@ struct SPVInstruction
           case spv::OpAtomicAnd:
           case spv::OpAtomicOr:
           case spv::OpAtomicXor:
-            ret += StringFormat::Fmt(", Scope=%s, Semantics=%s", ToStr::Get(op->scope).c_str(),
-                                     ToStr::Get(op->semantics).c_str());
+            ret += StringFormat::Fmt(", Scope=%s, Semantics=%s", ToStr(op->scope).c_str(),
+                                     ToStr(op->semantics).c_str());
             break;
           case spv::OpAtomicCompareExchange:
-            ret += StringFormat::Fmt(
-                ", Scope=%s, Semantics=(equal: %s unequal: %s)", ToStr::Get(op->scope).c_str(),
-                ToStr::Get(op->semantics).c_str(), ToStr::Get(op->semanticsUnequal).c_str());
+            ret += StringFormat::Fmt(", Scope=%s, Semantics=(equal: %s unequal: %s)",
+                                     ToStr(op->scope).c_str(), ToStr(op->semantics).c_str(),
+                                     ToStr(op->semanticsUnequal).c_str());
             break;
           default: break;
         }
@@ -1674,19 +1673,18 @@ struct SPVInstruction
       case spv::OpEmitVertex:
       case spv::OpEmitStreamVertex:
       case spv::OpEndPrimitive:
-      case spv::OpEndStreamPrimitive: { return ToStr::Get(opcode) + "()";
+      case spv::OpEndStreamPrimitive: { return ToStr(opcode) + "()";
       }
       case spv::OpControlBarrier:
       {
         return StringFormat::Fmt("%s(Execution Scope=%s, Memory Scope=%s, Semantics=%s)",
-                                 ToStr::Get(opcode).c_str(), ToStr::Get(op->scope).c_str(),
-                                 ToStr::Get(op->scopeMemory).c_str(),
-                                 ToStr::Get(op->semantics).c_str());
+                                 ToStr(opcode).c_str(), ToStr(op->scope).c_str(),
+                                 ToStr(op->scopeMemory).c_str(), ToStr(op->semantics).c_str());
       }
       case spv::OpMemoryBarrier:
       {
-        return StringFormat::Fmt("%s(Scope=%s, Semantics=%s)", ToStr::Get(opcode).c_str(),
-                                 ToStr::Get(op->scope).c_str(), ToStr::Get(op->semantics).c_str());
+        return StringFormat::Fmt("%s(Scope=%s, Semantics=%s)", ToStr(opcode).c_str(),
+                                 ToStr(op->scope).c_str(), ToStr(op->semantics).c_str());
       }
       case spv::OpVectorShuffle:
       {
@@ -1974,11 +1972,10 @@ struct SPVInstruction
         op->GetArg(ids, 1, b, false);
 
         if(inlineOp)
-          return StringFormat::Fmt("%s(%s, %s)", ToStr::Get(opcode).c_str(), a.c_str(), b.c_str());
+          return StringFormat::Fmt("%s(%s, %s)", ToStr(opcode).c_str(), a.c_str(), b.c_str());
 
         return StringFormat::Fmt("%s %s = %s(%s, %s)", op->type->GetName().c_str(),
-                                 GetIDName().c_str(), ToStr::Get(opcode).c_str(), a.c_str(),
-                                 b.c_str());
+                                 GetIDName().c_str(), ToStr(opcode).c_str(), a.c_str(), b.c_str());
       }
       case spv::OpSelect:
       {
@@ -2010,7 +2007,7 @@ struct SPVInstruction
     if(!str.empty() || id != 0)
       ret += GetIDName() + " <= ";
 
-    ret = ToStr::Get(opcode) + "(";
+    ret = ToStr(opcode) + "(";
     for(size_t a = 0; op && a < op->arguments.size(); a++)
     {
       ret += op->arguments[a]->GetIDName();
@@ -2209,7 +2206,7 @@ string SPVModule::Disassemble(const string &entryPoint)
 
   retDisasm += "\n";
 
-  retDisasm += StringFormat::Fmt("Source is %s %u\n", ToStr::Get(sourceLang).c_str(), sourceVer);
+  retDisasm += StringFormat::Fmt("Source is %s %u\n", ToStr(sourceLang).c_str(), sourceVer);
   for(size_t s = 0; s < sourceexts.size(); s++)
     retDisasm += StringFormat::Fmt(" + %s\n", sourceexts[s]->str.c_str());
 
@@ -2225,7 +2222,7 @@ string SPVModule::Disassemble(const string &entryPoint)
 
   retDisasm += "Capabilities:";
   for(size_t c = 0; c < capabilities.size(); c++)
-    retDisasm += StringFormat::Fmt(" %s", ToStr::Get(capabilities[c]).c_str());
+    retDisasm += StringFormat::Fmt(" %s", ToStr(capabilities[c]).c_str());
   retDisasm += "\n";
 
   for(size_t i = 0; i < entries.size(); i++)
@@ -2234,12 +2231,12 @@ string SPVModule::Disassemble(const string &entryPoint)
     uint32_t func = entries[i]->entry->func;
     RDCASSERT(ids[func]);
     retDisasm += StringFormat::Fmt("Entry point '%s' (%s)\n", ids[func]->str.c_str(),
-                                   ToStr::Get(entries[i]->entry->model).c_str());
+                                   ToStr(entries[i]->entry->model).c_str());
 
     for(size_t m = 0; m < entries[i]->entry->modes.size(); m++)
     {
       SPVExecutionMode &mode = entries[i]->entry->modes[m];
-      retDisasm += StringFormat::Fmt("            %s", ToStr::Get(mode.mode).c_str());
+      retDisasm += StringFormat::Fmt("            %s", ToStr(mode.mode).c_str());
       if(mode.mode == spv::ExecutionModeInvocations || mode.mode == spv::ExecutionModeOutputVertices)
         retDisasm += StringFormat::Fmt(" = %u", mode.x);
       if(mode.mode == spv::ExecutionModeLocalSize || mode.mode == spv::ExecutionModeLocalSizeHint)
@@ -2328,7 +2325,7 @@ string SPVModule::Disassemble(const string &entryPoint)
 
     string varName = globals[i]->str;
     retDisasm += StringFormat::Fmt(
-        "%s %s;\n", ToStr::Get(globals[i]->var->storage).c_str(),
+        "%s %s;\n", ToStr(globals[i]->var->storage).c_str(),
         globals[i]->var->type->DeclareVariable(globals[i]->decorations, varName).c_str());
   }
 
@@ -2400,7 +2397,7 @@ string SPVModule::Disassemble(const string &entryPoint)
       if(b > 0)
         funcops.push_back(block);    // OpLabel
 
-      set<SPVInstruction *> ignore_items;
+      std::set<SPVInstruction *> ignore_items;
 
       for(size_t i = 0; i < block->block->instructions.size(); i++)
       {
@@ -3464,7 +3461,7 @@ string SPVModule::Disassemble(const string &entryPoint)
   return retDisasm;
 }
 
-void MakeConstantBlockVariables(SPVTypeData *structType, rdctype::array<ShaderConstant> &cblock);
+void MakeConstantBlockVariables(SPVTypeData *structType, rdcarray<ShaderConstant> &cblock);
 
 void MakeConstantBlockVariable(ShaderConstant &outConst, SPVTypeData *type, const std::string &name,
                                const std::vector<SPVDecoration> &decorations)
@@ -3487,7 +3484,7 @@ void MakeConstantBlockVariable(ShaderConstant &outConst, SPVTypeData *type, cons
   }
 
   outConst.type.descriptor.elements = 1;
-  outConst.type.descriptor.arrayStride = 0;
+  outConst.type.descriptor.arrayByteStride = 0;
 
   if(type->type == SPVTypeData::eArray)
   {
@@ -3506,7 +3503,7 @@ void MakeConstantBlockVariable(ShaderConstant &outConst, SPVTypeData *type, cons
     {
       if(decorations[d].decoration == spv::DecorationArrayStride)
       {
-        outConst.type.descriptor.arrayStride = decorations[d].val;
+        outConst.type.descriptor.arrayByteStride = decorations[d].val;
         foundArrayStride = true;
         break;
       }
@@ -3516,7 +3513,7 @@ void MakeConstantBlockVariable(ShaderConstant &outConst, SPVTypeData *type, cons
     {
       if((*type->decorations)[d].decoration == spv::DecorationArrayStride)
       {
-        outConst.type.descriptor.arrayStride = (*type->decorations)[d].val;
+        outConst.type.descriptor.arrayByteStride = (*type->decorations)[d].val;
         break;
       }
     }
@@ -3549,12 +3546,12 @@ void MakeConstantBlockVariable(ShaderConstant &outConst, SPVTypeData *type, cons
     if(type->type == SPVTypeData::eMatrix)
     {
       outConst.type.descriptor.rows = (uint8_t)type->vectorSize;
-      outConst.type.descriptor.cols = (uint8_t)type->matrixSize;
+      outConst.type.descriptor.columns = (uint8_t)type->matrixSize;
     }
     else
     {
       outConst.type.descriptor.rows = 1;
-      outConst.type.descriptor.cols = (uint8_t)type->vectorSize;
+      outConst.type.descriptor.columns = (uint8_t)type->vectorSize;
     }
 
     outConst.type.descriptor.name = type->GetName();
@@ -3572,7 +3569,7 @@ void MakeConstantBlockVariable(ShaderConstant &outConst, SPVTypeData *type, cons
 
     outConst.type.descriptor.rowMajorStorage = false;
     outConst.type.descriptor.rows = 1;
-    outConst.type.descriptor.cols = 1;
+    outConst.type.descriptor.columns = 1;
 
     outConst.type.descriptor.name = type->GetName();
   }
@@ -3581,7 +3578,7 @@ void MakeConstantBlockVariable(ShaderConstant &outConst, SPVTypeData *type, cons
     outConst.type.descriptor.type = VarType::Float;
     outConst.type.descriptor.rowMajorStorage = false;
     outConst.type.descriptor.rows = 0;
-    outConst.type.descriptor.cols = 0;
+    outConst.type.descriptor.columns = 0;
 
     outConst.type.descriptor.name = type->GetName();
 
@@ -3589,35 +3586,35 @@ void MakeConstantBlockVariable(ShaderConstant &outConst, SPVTypeData *type, cons
   }
 }
 
-void MakeConstantBlockVariables(SPVTypeData *structType, rdctype::array<ShaderConstant> &cblock)
+void MakeConstantBlockVariables(SPVTypeData *structType, rdcarray<ShaderConstant> &cblock)
 {
   if(structType->children.empty())
     return;
 
-  create_array_uninit(cblock, structType->children.size());
+  cblock.resize(structType->children.size());
   for(size_t i = 0; i < structType->children.size(); i++)
     MakeConstantBlockVariable(cblock[i], structType->children[i].first,
                               structType->children[i].second, structType->childDecorations[i]);
 }
 
-uint32_t CalculateMinimumByteSize(const rdctype::array<ShaderConstant> &variables)
+uint32_t CalculateMinimumByteSize(const rdcarray<ShaderConstant> &variables)
 {
-  if(variables.count == 0)
+  if(variables.empty())
   {
     RDCERR("Unexpectedly empty array of shader constants!");
     return 0;
   }
 
-  const ShaderConstant &last = variables[variables.count - 1];
+  const ShaderConstant &last = variables.back();
 
   // find its offset
   uint32_t byteOffset = last.reg.vec * sizeof(Vec4f) + last.reg.comp * sizeof(float);
 
   // arrays are easy
-  if(last.type.descriptor.arrayStride > 0)
-    return byteOffset + last.type.descriptor.arrayStride * last.type.descriptor.elements;
+  if(last.type.descriptor.arrayByteStride > 0)
+    return byteOffset + last.type.descriptor.arrayByteStride * last.type.descriptor.elements;
 
-  if(last.type.members.count == 0)
+  if(last.type.members.empty())
   {
     // this is the last basic member
     // now calculate its size and return offset + size
@@ -3629,7 +3626,7 @@ uint32_t CalculateMinimumByteSize(const rdctype::array<ShaderConstant> &variable
       basicTypeSize = 8;
 
     uint32_t rows = last.type.descriptor.rows;
-    uint32_t cols = last.type.descriptor.cols;
+    uint32_t cols = last.type.descriptor.columns;
 
     // vectors are also easy
     if(rows == 1)
@@ -3688,10 +3685,9 @@ ShaderBuiltin BuiltInToSystemAttribute(ShaderStage stage, const spv::BuiltIn el)
     case spv::BuiltInSampleId: return ShaderBuiltin::MSAASampleIndex;
     case spv::BuiltInSamplePosition: return ShaderBuiltin::MSAASamplePosition;
     case spv::BuiltInSampleMask: return ShaderBuiltin::MSAACoverage;
-    case spv::BuiltInFragDepth:
-      return ShaderBuiltin::DepthOutput;
-    // case spv::BuiltInVertexIndex:                      return ShaderBuiltin::Vertex0Index;
-    // case spv::BuiltInInstanceIndex:                    return ShaderBuiltin::Instance0Index;
+    case spv::BuiltInFragDepth: return ShaderBuiltin::DepthOutput;
+    case spv::BuiltInVertexIndex: return ShaderBuiltin::VertexIndex;
+    case spv::BuiltInInstanceIndex: return ShaderBuiltin::InstanceIndex;
     default: break;
   }
 
@@ -3701,10 +3697,10 @@ ShaderBuiltin BuiltInToSystemAttribute(ShaderStage stage, const spv::BuiltIn el)
 template <typename T>
 struct bindpair
 {
-  BindpointMap map;
+  Bindpoint map;
   T bindres;
 
-  bindpair(const BindpointMap &m, const T &res) : map(m), bindres(res) {}
+  bindpair(const Bindpoint &m, const T &res) : map(m), bindres(res) {}
   bool operator<(const bindpair &o) const
   {
     if(map.bindset != o.map.bindset)
@@ -3725,7 +3721,7 @@ struct bindpair
 typedef bindpair<ConstantBlock> cblockpair;
 typedef bindpair<ShaderResource> shaderrespair;
 
-void AddSignatureParameter(bool isInput, ShaderStage stage, uint32_t id,
+void AddSignatureParameter(bool isInput, ShaderStage stage, uint32_t id, uint32_t &regIndex,
                            std::vector<uint32_t> accessChain, string varName, SPVTypeData *type,
                            const vector<SPVDecoration> &decorations, vector<SigParameter> &sigarray,
                            SPIRVPatchData &patchData)
@@ -3740,7 +3736,7 @@ void AddSignatureParameter(bool isInput, ShaderStage stage, uint32_t id,
 
   bool rowmajor = true;
 
-  sig.regIndex = 0;
+  sig.regIndex = regIndex;
   for(size_t d = 0; d < decorations.size(); d++)
   {
     if(decorations[d].decoration == spv::DecorationLocation)
@@ -3817,7 +3813,7 @@ void AddSignatureParameter(bool isInput, ShaderStage stage, uint32_t id,
 
         string baseName = isArray ? StringFormat::Fmt("%s[%u]", varName.c_str(), a) : varName;
 
-        AddSignatureParameter(isInput, stage, id, patch.accessChain,
+        AddSignatureParameter(isInput, stage, id, regIndex, patch.accessChain,
                               baseName + "." + type->children[c].second, type->children[c].first,
                               type->childDecorations[c], sigarray, patchData);
 
@@ -3865,11 +3861,17 @@ void AddSignatureParameter(bool isInput, ShaderStage stage, uint32_t id,
     {
       sigarray.push_back(sig);
 
+      regIndex++;
+
       if(!isInput)
         patchData.outputs.push_back(patch);
     }
     else
     {
+      // use an extra access chain to get each vector out of the matrix.
+      patch.accessChain.push_back(0);
+      patch.isMatrix = true;
+
       for(uint32_t m = 0; m < type->matrixSize; m++)
       {
         SigParameter s = sig;
@@ -3882,13 +3884,31 @@ void AddSignatureParameter(bool isInput, ShaderStage stage, uint32_t id,
 
         if(!isInput)
           patchData.outputs.push_back(patch);
+
+        regIndex++;
+
+        patch.accessChain.back()++;
       }
+
+      patch.isMatrix = false;
+      patch.accessChain.pop_back();
     }
 
     sig.regIndex += RDCMAX(1U, type->matrixSize);
     if(isArray)
       patch.accessChain.back()++;
   }
+}
+
+std::vector<std::string> SPVModule::EntryPoints() const
+{
+  std::vector<std::string> ret;
+
+  for(SPVInstruction *inst : entries)
+    if(inst->entry)
+      ret.push_back(inst->entry->name);
+
+  return ret;
 }
 
 ShaderStage SPVModule::StageForEntry(const string &entryPoint) const
@@ -3924,23 +3944,25 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
   vector<shaderrespair> samplers, roresources, rwresources;
 
   // VKTODOLOW filter to only functions/resources used by entryPoint
+  reflection.entryPoint = entryPoint;
+  reflection.stage = stage;
 
   // TODO sort these so that the entry point is in the first file
   if(!sourceFiles.empty())
   {
-    create_array_uninit(reflection.DebugInfo.files, sourceFiles.size());
+    reflection.debugInfo.files.resize(sourceFiles.size());
 
     for(size_t i = 0; i < sourceFiles.size(); i++)
     {
-      reflection.DebugInfo.files[i].first = sourceFiles[i].first;
-      reflection.DebugInfo.files[i].second = sourceFiles[i].second;
+      reflection.debugInfo.files[i].filename = sourceFiles[i].first;
+      reflection.debugInfo.files[i].contents = sourceFiles[i].second;
     }
   }
 
   // TODO need to fetch these
-  reflection.DispatchThreadsDimension[0] = 0;
-  reflection.DispatchThreadsDimension[1] = 0;
-  reflection.DispatchThreadsDimension[2] = 0;
+  reflection.dispatchThreadsDimension[0] = 0;
+  reflection.dispatchThreadsDimension[1] = 0;
+  reflection.dispatchThreadsDimension[2] = 0;
 
   for(size_t i = 0; i < globals.size(); i++)
   {
@@ -3962,8 +3984,9 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
       else
         nm = StringFormat::Fmt("sig%u", inst->id);
 
-      AddSignatureParameter(isInput, stage, inst->id, std::vector<uint32_t>(), nm, inst->var->type,
-                            inst->decorations, *sigarray, patchData);
+      uint32_t dummy = 0;
+      AddSignatureParameter(isInput, stage, inst->id, dummy, std::vector<uint32_t>(), nm,
+                            inst->var->type, inst->decorations, *sigarray, patchData);
 
       // eliminate any members of gl_PerVertex that are actually unused and just came along
       // for the ride (usually with gl_Position, but maybe declared globally and still unused)
@@ -4124,7 +4147,7 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
           cblock.name = StringFormat::Fmt("uniforms%u", inst->id);
         cblock.bufferBacked = !pushConst;
 
-        BindpointMap bindmap;
+        Bindpoint bindmap;
         // set can be implicitly 0, but the binding must be set explicitly.
         // If no binding is found, we set -1 and sort to the end of the resources
         // list as it's not bound anywhere (most likely, declared but not used)
@@ -4154,12 +4177,12 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
 
         if(ssbo)
         {
-          res.IsReadOnly = false;
-          res.IsTexture = false;
+          res.isReadOnly = false;
+          res.isTexture = false;
           res.name = cblock.name;
-          res.resType = TextureDim::Buffer;
+          res.resType = TextureType::Buffer;
 
-          res.variableType.descriptor.cols = 0;
+          res.variableType.descriptor.columns = 0;
           res.variableType.descriptor.rows = 0;
           res.variableType.descriptor.rowMajorStorage = false;
           res.variableType.descriptor.rows = 0;
@@ -4213,33 +4236,33 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
         res.name = inst->str.empty() ? StringFormat::Fmt("res%u", inst->id) : inst->str;
 
         if(type->multisampled)
-          res.resType = type->arrayed ? TextureDim::Texture2DMSArray : TextureDim::Texture2DMS;
+          res.resType = type->arrayed ? TextureType::Texture2DMSArray : TextureType::Texture2DMS;
         else if(type->texdim == spv::Dim1D)
-          res.resType = type->arrayed ? TextureDim::Texture1DArray : TextureDim::Texture1D;
+          res.resType = type->arrayed ? TextureType::Texture1DArray : TextureType::Texture1D;
         else if(type->texdim == spv::Dim2D)
-          res.resType = type->arrayed ? TextureDim::Texture2DArray : TextureDim::Texture2D;
+          res.resType = type->arrayed ? TextureType::Texture2DArray : TextureType::Texture2D;
         else if(type->texdim == spv::DimCube)
-          res.resType = type->arrayed ? TextureDim::TextureCubeArray : TextureDim::TextureCube;
+          res.resType = type->arrayed ? TextureType::TextureCubeArray : TextureType::TextureCube;
         else if(type->texdim == spv::Dim3D)
-          res.resType = TextureDim::Texture3D;
+          res.resType = TextureType::Texture3D;
         else if(type->texdim == spv::DimRect)
-          res.resType = TextureDim::TextureRect;
+          res.resType = TextureType::TextureRect;
         else if(type->texdim == spv::DimBuffer)
-          res.resType = TextureDim::Buffer;
+          res.resType = TextureType::Buffer;
 
         bool sepSampler = (type->type == SPVTypeData::eSampler);
 
-        res.IsTexture = res.resType != TextureDim::Buffer && type->type != SPVTypeData::eSampler;
-        res.IsReadOnly = true;
+        res.isTexture = res.resType != TextureType::Buffer && type->type != SPVTypeData::eSampler;
+        res.isReadOnly = true;
 
         SPVTypeData *sampledType = type->baseType;
         if(type->type == SPVTypeData::eSampler)
         {
-          res.resType = TextureDim::Unknown;
+          res.resType = TextureType::Unknown;
         }
         else if(type->texdim == spv::DimSubpassData)
         {
-          res.resType = TextureDim::Texture2D;
+          res.resType = TextureType::Texture2D;
 
           if(sampledType->type == SPVTypeData::eFloat)
             res.variableType.descriptor.type = VarType::Float;
@@ -4264,7 +4287,7 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
             isrw = (type->sampled == 2);
           }
 
-          res.IsReadOnly = !isrw;
+          res.isReadOnly = !isrw;
 
           if(sampledType->type == SPVTypeData::eFloat)
             res.variableType.descriptor.type = VarType::Float;
@@ -4277,12 +4300,12 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
         }
 
         res.variableType.descriptor.rows = 1;
-        res.variableType.descriptor.cols = 1;
+        res.variableType.descriptor.columns = 1;
         res.variableType.descriptor.elements = 1;
         res.variableType.descriptor.rowMajorStorage = false;
         res.variableType.descriptor.rowMajorStorage = false;
 
-        BindpointMap bindmap;
+        Bindpoint bindmap;
         // set can be implicitly 0, but the binding must be set explicitly.
         // If no binding is found, we set -1 and sort to the end of the resources
         // list as it's not bound anywhere (most likely, declared but not used)
@@ -4321,7 +4344,7 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
 
         if(sepSampler)
           samplers.push_back(shaderrespair(bindmap, res));
-        else if(res.IsReadOnly)
+        else if(res.isReadOnly)
           roresources.push_back(shaderrespair(bindmap, res));
         else
           rwresources.push_back(shaderrespair(bindmap, res));
@@ -4335,7 +4358,7 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
     }
     else
     {
-      RDCWARN("Unexpected storage class for global: %s", ToStr::Get(inst->var->storage).c_str());
+      RDCWARN("Unexpected storage class for global: %s", ToStr(inst->var->storage).c_str());
     }
   }
 
@@ -4347,7 +4370,7 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
     cblock.bufferBacked = false;
     cblock.byteSize = 0;
 
-    BindpointMap bindmap;
+    Bindpoint bindmap;
 
     // set something crazy so this doesn't overlap with a real buffer binding
     // also identify this as specialization constant data
@@ -4356,7 +4379,7 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
     bindmap.arraySize = 1;
     bindmap.used = true;
 
-    create_array_uninit(cblock.variables, specConstants.size());
+    cblock.variables.resize(specConstants.size());
     for(size_t i = 0; i < specConstants.size(); i++)
     {
       cblock.variables[i].name = specConstants[i]->str;
@@ -4410,7 +4433,7 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
         if(a.regIndex != b.regIndex)
           return a.regIndex < b.regIndex;
 
-        return strcmp(a.varName.elems, b.varName.elems) < 0;
+        return a.varName < b.varName;
       }
       if(a.systemValue == ShaderBuiltin::Undefined)
         return false;
@@ -4429,9 +4452,9 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
 
     std::sort(indices.begin(), indices.end(), sig_param_sort(inputs));
 
-    create_array_uninit(reflection.InputSig, inputs.size());
+    reflection.inputSignature.reserve(inputs.size());
     for(size_t i = 0; i < inputs.size(); i++)
-      reflection.InputSig[i] = inputs[indices[i]];
+      reflection.inputSignature.push_back(inputs[indices[i]]);
   }
 
   {
@@ -4441,9 +4464,9 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
 
     std::sort(indices.begin(), indices.end(), sig_param_sort(outputs));
 
-    create_array_uninit(reflection.OutputSig, outputs.size());
+    reflection.outputSignature.reserve(outputs.size());
     for(size_t i = 0; i < outputs.size(); i++)
-      reflection.OutputSig[i] = outputs[indices[i]];
+      reflection.outputSignature.push_back(outputs[indices[i]]);
 
     std::vector<SPIRVPatchData::OutputAccess> outPatch = patchData.outputs;
     for(size_t i = 0; i < outputs.size(); i++)
@@ -4452,81 +4475,81 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
 
   size_t numInputs = 16;
 
-  for(size_t i = 0; i < reflection.InputSig.size(); i++)
-    if(reflection.InputSig[i].systemValue == ShaderBuiltin::Undefined)
-      numInputs = RDCMAX(numInputs, (size_t)reflection.InputSig[i].regIndex + 1);
+  for(size_t i = 0; i < reflection.inputSignature.size(); i++)
+    if(reflection.inputSignature[i].systemValue == ShaderBuiltin::Undefined)
+      numInputs = RDCMAX(numInputs, (size_t)reflection.inputSignature[i].regIndex + 1);
 
-  create_array_uninit(mapping.InputAttributes, numInputs);
+  mapping.inputAttributes.resize(numInputs);
   for(size_t i = 0; i < numInputs; i++)
-    mapping.InputAttributes[i] = -1;
+    mapping.inputAttributes[i] = -1;
 
-  for(size_t i = 0; i < reflection.InputSig.size(); i++)
-    if(reflection.InputSig[i].systemValue == ShaderBuiltin::Undefined)
-      mapping.InputAttributes[reflection.InputSig[i].regIndex] = (int32_t)i;
+  for(size_t i = 0; i < reflection.inputSignature.size(); i++)
+    if(reflection.inputSignature[i].systemValue == ShaderBuiltin::Undefined)
+      mapping.inputAttributes[reflection.inputSignature[i].regIndex] = (int32_t)i;
 
   std::sort(cblocks.begin(), cblocks.end());
   std::sort(samplers.begin(), samplers.end());
   std::sort(roresources.begin(), roresources.end());
   std::sort(rwresources.begin(), rwresources.end());
 
-  create_array_uninit(mapping.ConstantBlocks, cblocks.size());
-  create_array_uninit(reflection.ConstantBlocks, cblocks.size());
+  mapping.constantBlocks.resize(cblocks.size());
+  reflection.constantBlocks.resize(cblocks.size());
 
-  create_array_uninit(mapping.Samplers, samplers.size());
-  create_array_uninit(reflection.Samplers, samplers.size());
+  mapping.samplers.resize(samplers.size());
+  reflection.samplers.resize(samplers.size());
 
-  create_array_uninit(mapping.ReadOnlyResources, roresources.size());
-  create_array_uninit(reflection.ReadOnlyResources, roresources.size());
+  mapping.readOnlyResources.resize(roresources.size());
+  reflection.readOnlyResources.resize(roresources.size());
 
-  create_array_uninit(mapping.ReadWriteResources, rwresources.size());
-  create_array_uninit(reflection.ReadWriteResources, rwresources.size());
+  mapping.readWriteResources.resize(rwresources.size());
+  reflection.readWriteResources.resize(rwresources.size());
 
   for(size_t i = 0; i < cblocks.size(); i++)
   {
-    mapping.ConstantBlocks[i] = cblocks[i].map;
+    mapping.constantBlocks[i] = cblocks[i].map;
     // fix up any bind points marked with -1. They were sorted to the end
     // but from here on we want to just be able to index with the bind point
     // without any special casing.
-    if(mapping.ConstantBlocks[i].bind == -1)
-      mapping.ConstantBlocks[i].bind = 0;
-    reflection.ConstantBlocks[i] = cblocks[i].bindres;
-    reflection.ConstantBlocks[i].bindPoint = (int32_t)i;
+    if(mapping.constantBlocks[i].bind == -1)
+      mapping.constantBlocks[i].bind = 0;
+    reflection.constantBlocks[i] = cblocks[i].bindres;
+    reflection.constantBlocks[i].bindPoint = (int32_t)i;
   }
 
   for(size_t i = 0; i < samplers.size(); i++)
   {
-    mapping.Samplers[i] = samplers[i].map;
+    mapping.samplers[i] = samplers[i].map;
     // fix up any bind points marked with -1. They were sorted to the end
     // but from here on we want to just be able to index with the bind point
     // without any special casing.
-    if(mapping.Samplers[i].bind == -1)
-      mapping.Samplers[i].bind = 0;
-    reflection.Samplers[i].name = samplers[i].bindres.name;
-    reflection.Samplers[i].bindPoint = (int32_t)i;
+    if(mapping.samplers[i].bind == -1)
+      mapping.samplers[i].bind = 0;
+    reflection.samplers[i].name = samplers[i].bindres.name;
+    reflection.samplers[i].bindPoint = (int32_t)i;
   }
 
   for(size_t i = 0; i < roresources.size(); i++)
   {
-    mapping.ReadOnlyResources[i] = roresources[i].map;
+    mapping.readOnlyResources[i] = roresources[i].map;
     // fix up any bind points marked with -1. They were sorted to the end
     // but from here on we want to just be able to index with the bind point
     // without any special casing.
-    if(mapping.ReadOnlyResources[i].bind == -1)
-      mapping.ReadOnlyResources[i].bind = 0;
-    reflection.ReadOnlyResources[i] = roresources[i].bindres;
-    reflection.ReadOnlyResources[i].bindPoint = (int32_t)i;
+    if(mapping.readOnlyResources[i].bind == -1)
+      mapping.readOnlyResources[i].bind = 0;
+    reflection.readOnlyResources[i] = roresources[i].bindres;
+    reflection.readOnlyResources[i].bindPoint = (int32_t)i;
   }
 
   for(size_t i = 0; i < rwresources.size(); i++)
   {
-    mapping.ReadWriteResources[i] = rwresources[i].map;
+    mapping.readWriteResources[i] = rwresources[i].map;
     // fix up any bind points marked with -1. They were sorted to the end
     // but from here on we want to just be able to index with the bind point
     // without any special casing.
-    if(mapping.ReadWriteResources[i].bind == -1)
-      mapping.ReadWriteResources[i].bind = 0;
-    reflection.ReadWriteResources[i] = rwresources[i].bindres;
-    reflection.ReadWriteResources[i].bindPoint = (int32_t)i;
+    if(mapping.readWriteResources[i].bind == -1)
+      mapping.readWriteResources[i].bind = 0;
+    reflection.readWriteResources[i] = rwresources[i].bindres;
+    reflection.readWriteResources[i].bindPoint = (int32_t)i;
   }
 }
 
@@ -5998,7 +6021,7 @@ void ParseSPIRV(uint32_t *spirv, size_t spirvLength, SPVModule &module)
       {
         // we should not crash if we don't recognise/handle an opcode - this may happen because of
         // extended SPIR-V or simply custom instructions we don't recognise.
-        RDCWARN("Unhandled opcode %s - result ID will be missing", ToStr::Get(op.opcode).c_str());
+        RDCWARN("Unhandled opcode %s - result ID will be missing", ToStr(op.opcode).c_str());
         if(curBlock)
           curBlock->instructions.push_back(&op);
         break;
@@ -6122,902 +6145,4 @@ void ParseSPIRV(uint32_t *spirv, size_t spirvLength, SPVModule &module)
   };
 
   std::sort(module.globals.begin(), module.globals.end(), SortByVarClass());
-}
-
-template <>
-string ToStrHelper<false, spv::Op>::Get(const spv::Op &el)
-{
-  switch(el)
-  {
-    case spv::OpNop: return "Nop";
-    case spv::OpUndef: return "Undef";
-    case spv::OpSourceContinued: return "SourceContinued";
-    case spv::OpSource: return "Source";
-    case spv::OpSourceExtension: return "SourceExtension";
-    case spv::OpName: return "Name";
-    case spv::OpMemberName: return "MemberName";
-    case spv::OpString: return "String";
-    case spv::OpLine: return "Line";
-    case spv::OpExtension: return "Extension";
-    case spv::OpExtInstImport: return "ExtInstImport";
-    case spv::OpExtInst: return "ExtInst";
-    case spv::OpMemoryModel: return "MemoryModel";
-    case spv::OpEntryPoint: return "EntryPoint";
-    case spv::OpExecutionMode: return "ExecutionMode";
-    case spv::OpCapability: return "Capability";
-    case spv::OpTypeVoid: return "TypeVoid";
-    case spv::OpTypeBool: return "TypeBool";
-    case spv::OpTypeInt: return "TypeInt";
-    case spv::OpTypeFloat: return "TypeFloat";
-    case spv::OpTypeVector: return "TypeVector";
-    case spv::OpTypeMatrix: return "TypeMatrix";
-    case spv::OpTypeImage: return "TypeImage";
-    case spv::OpTypeSampler: return "TypeSampler";
-    case spv::OpTypeSampledImage: return "TypeSampledImage";
-    case spv::OpTypeArray: return "TypeArray";
-    case spv::OpTypeRuntimeArray: return "TypeRuntimeArray";
-    case spv::OpTypeStruct: return "TypeStruct";
-    case spv::OpTypeOpaque: return "TypeOpaque";
-    case spv::OpTypePointer: return "TypePointer";
-    case spv::OpTypeFunction: return "TypeFunction";
-    case spv::OpTypeEvent: return "TypeEvent";
-    case spv::OpTypeDeviceEvent: return "TypeDeviceEvent";
-    case spv::OpTypeReserveId: return "TypeReserveId";
-    case spv::OpTypeQueue: return "TypeQueue";
-    case spv::OpTypePipe: return "TypePipe";
-    case spv::OpTypeForwardPointer: return "TypeForwardPointer";
-    case spv::OpConstantTrue: return "ConstantTrue";
-    case spv::OpConstantFalse: return "ConstantFalse";
-    case spv::OpConstant: return "Constant";
-    case spv::OpConstantComposite: return "ConstantComposite";
-    case spv::OpConstantSampler: return "ConstantSampler";
-    case spv::OpConstantNull: return "ConstantNull";
-    case spv::OpSpecConstantTrue: return "SpecConstantTrue";
-    case spv::OpSpecConstantFalse: return "SpecConstantFalse";
-    case spv::OpSpecConstant: return "SpecConstant";
-    case spv::OpSpecConstantComposite: return "SpecConstantComposite";
-    case spv::OpSpecConstantOp: return "SpecConstantOp";
-    case spv::OpFunction: return "Function";
-    case spv::OpFunctionParameter: return "FunctionParameter";
-    case spv::OpFunctionEnd: return "FunctionEnd";
-    case spv::OpFunctionCall: return "FunctionCall";
-    case spv::OpVariable: return "Variable";
-    case spv::OpImageTexelPointer: return "ImageTexelPointer";
-    case spv::OpLoad: return "Load";
-    case spv::OpStore: return "Store";
-    case spv::OpCopyMemory: return "CopyMemory";
-    case spv::OpCopyMemorySized: return "CopyMemorySized";
-    case spv::OpAccessChain: return "AccessChain";
-    case spv::OpInBoundsAccessChain: return "InBoundsAccessChain";
-    case spv::OpPtrAccessChain: return "PtrAccessChain";
-    case spv::OpArrayLength: return "ArrayLength";
-    case spv::OpGenericPtrMemSemantics: return "GenericPtrMemSemantics";
-    case spv::OpInBoundsPtrAccessChain: return "InBoundsPtrAccessChain";
-    case spv::OpDecorate: return "Decorate";
-    case spv::OpMemberDecorate: return "MemberDecorate";
-    case spv::OpDecorationGroup: return "DecorationGroup";
-    case spv::OpGroupDecorate: return "GroupDecorate";
-    case spv::OpGroupMemberDecorate: return "GroupMemberDecorate";
-    case spv::OpVectorExtractDynamic: return "VectorExtractDynamic";
-    case spv::OpVectorInsertDynamic: return "VectorInsertDynamic";
-    case spv::OpVectorShuffle: return "VectorShuffle";
-    case spv::OpCompositeConstruct: return "CompositeConstruct";
-    case spv::OpCompositeExtract: return "CompositeExtract";
-    case spv::OpCompositeInsert: return "CompositeInsert";
-    case spv::OpCopyObject: return "CopyObject";
-    case spv::OpTranspose: return "Transpose";
-    case spv::OpSampledImage: return "SampledImage";
-    case spv::OpImageSampleImplicitLod: return "ImageSampleImplicitLod";
-    case spv::OpImageSampleExplicitLod: return "ImageSampleExplicitLod";
-    case spv::OpImageSampleDrefImplicitLod: return "ImageSampleDrefImplicitLod";
-    case spv::OpImageSampleDrefExplicitLod: return "ImageSampleDrefExplicitLod";
-    case spv::OpImageSampleProjImplicitLod: return "ImageSampleProjImplicitLod";
-    case spv::OpImageSampleProjExplicitLod: return "ImageSampleProjExplicitLod";
-    case spv::OpImageSampleProjDrefImplicitLod: return "ImageSampleProjDrefImplicitLod";
-    case spv::OpImageSampleProjDrefExplicitLod: return "ImageSampleProjDrefExplicitLod";
-    case spv::OpImageFetch: return "ImageFetch";
-    case spv::OpImageGather: return "ImageGather";
-    case spv::OpImageDrefGather: return "ImageDrefGather";
-    case spv::OpImageRead: return "ImageRead";
-    case spv::OpImageWrite: return "ImageWrite";
-    case spv::OpImage: return "Image";
-    case spv::OpImageQueryFormat: return "ImageQueryFormat";
-    case spv::OpImageQueryOrder: return "ImageQueryOrder";
-    case spv::OpImageQuerySizeLod: return "ImageQuerySizeLod";
-    case spv::OpImageQuerySize: return "ImageQuerySize";
-    case spv::OpImageQueryLod: return "ImageQueryLod";
-    case spv::OpImageQueryLevels: return "ImageQueryLevels";
-    case spv::OpImageQuerySamples: return "ImageQuerySamples";
-    case spv::OpConvertFToU: return "ConvertFToU";
-    case spv::OpConvertFToS: return "ConvertFToS";
-    case spv::OpConvertSToF: return "ConvertSToF";
-    case spv::OpConvertUToF: return "ConvertUToF";
-    case spv::OpUConvert: return "UConvert";
-    case spv::OpSConvert: return "SConvert";
-    case spv::OpFConvert: return "FConvert";
-    case spv::OpQuantizeToF16: return "QuantizeToF16";
-    case spv::OpConvertPtrToU: return "ConvertPtrToU";
-    case spv::OpSatConvertSToU: return "SatConvertSToU";
-    case spv::OpSatConvertUToS: return "SatConvertUToS";
-    case spv::OpConvertUToPtr: return "ConvertUToPtr";
-    case spv::OpPtrCastToGeneric: return "PtrCastToGeneric";
-    case spv::OpGenericCastToPtr: return "GenericCastToPtr";
-    case spv::OpGenericCastToPtrExplicit: return "GenericCastToPtrExplicit";
-    case spv::OpBitcast: return "Bitcast";
-    case spv::OpSNegate: return "SNegate";
-    case spv::OpFNegate: return "FNegate";
-    case spv::OpIAdd: return "IAdd";
-    case spv::OpFAdd: return "FAdd";
-    case spv::OpISub: return "ISub";
-    case spv::OpFSub: return "FSub";
-    case spv::OpIMul: return "IMul";
-    case spv::OpFMul: return "FMul";
-    case spv::OpUDiv: return "UDiv";
-    case spv::OpSDiv: return "SDiv";
-    case spv::OpFDiv: return "FDiv";
-    case spv::OpUMod: return "UMod";
-    case spv::OpSRem: return "SRem";
-    case spv::OpSMod: return "SMod";
-    case spv::OpFRem: return "FRem";
-    case spv::OpFMod: return "FMod";
-    case spv::OpVectorTimesScalar: return "VectorTimesScalar";
-    case spv::OpMatrixTimesScalar: return "MatrixTimesScalar";
-    case spv::OpVectorTimesMatrix: return "VectorTimesMatrix";
-    case spv::OpMatrixTimesVector: return "MatrixTimesVector";
-    case spv::OpMatrixTimesMatrix: return "MatrixTimesMatrix";
-    case spv::OpOuterProduct: return "OuterProduct";
-    case spv::OpDot: return "Dot";
-    case spv::OpIAddCarry: return "IAddCarry";
-    case spv::OpISubBorrow: return "ISubBorrow";
-    case spv::OpUMulExtended: return "UMulExtended";
-    case spv::OpSMulExtended: return "SMulExtended";
-    case spv::OpAny: return "Any";
-    case spv::OpAll: return "All";
-    case spv::OpIsNan: return "IsNan";
-    case spv::OpIsInf: return "IsInf";
-    case spv::OpIsFinite: return "IsFinite";
-    case spv::OpIsNormal: return "IsNormal";
-    case spv::OpSignBitSet: return "SignBitSet";
-    case spv::OpLessOrGreater: return "LessOrGreater";
-    case spv::OpOrdered: return "Ordered";
-    case spv::OpUnordered: return "Unordered";
-    case spv::OpLogicalEqual: return "LogicalEqual";
-    case spv::OpLogicalNotEqual: return "LogicalNotEqual";
-    case spv::OpLogicalOr: return "LogicalOr";
-    case spv::OpLogicalAnd: return "LogicalAnd";
-    case spv::OpLogicalNot: return "LogicalNot";
-    case spv::OpSelect: return "Select";
-    case spv::OpIEqual: return "IEqual";
-    case spv::OpINotEqual: return "INotEqual";
-    case spv::OpUGreaterThan: return "UGreaterThan";
-    case spv::OpSGreaterThan: return "SGreaterThan";
-    case spv::OpUGreaterThanEqual: return "UGreaterThanEqual";
-    case spv::OpSGreaterThanEqual: return "SGreaterThanEqual";
-    case spv::OpULessThan: return "ULessThan";
-    case spv::OpSLessThan: return "SLessThan";
-    case spv::OpULessThanEqual: return "ULessThanEqual";
-    case spv::OpSLessThanEqual: return "SLessThanEqual";
-    case spv::OpFOrdEqual: return "FOrdEqual";
-    case spv::OpFUnordEqual: return "FUnordEqual";
-    case spv::OpFOrdNotEqual: return "FOrdNotEqual";
-    case spv::OpFUnordNotEqual: return "FUnordNotEqual";
-    case spv::OpFOrdLessThan: return "FOrdLessThan";
-    case spv::OpFUnordLessThan: return "FUnordLessThan";
-    case spv::OpFOrdGreaterThan: return "FOrdGreaterThan";
-    case spv::OpFUnordGreaterThan: return "FUnordGreaterThan";
-    case spv::OpFOrdLessThanEqual: return "FOrdLessThanEqual";
-    case spv::OpFUnordLessThanEqual: return "FUnordLessThanEqual";
-    case spv::OpFOrdGreaterThanEqual: return "FOrdGreaterThanEqual";
-    case spv::OpFUnordGreaterThanEqual: return "FUnordGreaterThanEqual";
-    case spv::OpShiftRightLogical: return "ShiftRightLogical";
-    case spv::OpShiftRightArithmetic: return "ShiftRightArithmetic";
-    case spv::OpShiftLeftLogical: return "ShiftLeftLogical";
-    case spv::OpBitwiseOr: return "BitwiseOr";
-    case spv::OpBitwiseXor: return "BitwiseXor";
-    case spv::OpBitwiseAnd: return "BitwiseAnd";
-    case spv::OpNot: return "Not";
-    case spv::OpBitFieldInsert: return "BitFieldInsert";
-    case spv::OpBitFieldSExtract: return "BitFieldSExtract";
-    case spv::OpBitFieldUExtract: return "BitFieldUExtract";
-    case spv::OpBitReverse: return "BitReverse";
-    case spv::OpBitCount: return "BitCount";
-    case spv::OpDPdx: return "ddx";
-    case spv::OpDPdy: return "ddy";
-    case spv::OpFwidth: return "Fwidth";
-    case spv::OpDPdxFine: return "ddx_fine";
-    case spv::OpDPdyFine: return "ddy_fine";
-    case spv::OpFwidthFine: return "Fwidth_fine";
-    case spv::OpDPdxCoarse: return "ddx_coarse";
-    case spv::OpDPdyCoarse: return "ddy_coarse";
-    case spv::OpFwidthCoarse: return "Fwidth_coarse";
-    case spv::OpEmitVertex: return "EmitVertex";
-    case spv::OpEndPrimitive: return "EndPrimitive";
-    case spv::OpEmitStreamVertex: return "EmitStreamVertex";
-    case spv::OpEndStreamPrimitive: return "EndStreamPrimitive";
-    case spv::OpControlBarrier: return "ControlBarrier";
-    case spv::OpMemoryBarrier: return "MemoryBarrier";
-    case spv::OpAtomicLoad: return "AtomicLoad";
-    case spv::OpAtomicStore: return "AtomicStore";
-    case spv::OpAtomicExchange: return "AtomicExchange";
-    case spv::OpAtomicCompareExchange: return "AtomicCompareExchange";
-    case spv::OpAtomicCompareExchangeWeak: return "AtomicCompareExchangeWeak";
-    case spv::OpAtomicIIncrement: return "AtomicIIncrement";
-    case spv::OpAtomicIDecrement: return "AtomicIDecrement";
-    case spv::OpAtomicIAdd: return "AtomicIAdd";
-    case spv::OpAtomicISub: return "AtomicISub";
-    case spv::OpAtomicSMin: return "AtomicSMin";
-    case spv::OpAtomicUMin: return "AtomicUMin";
-    case spv::OpAtomicSMax: return "AtomicSMax";
-    case spv::OpAtomicUMax: return "AtomicUMax";
-    case spv::OpAtomicAnd: return "AtomicAnd";
-    case spv::OpAtomicOr: return "AtomicOr";
-    case spv::OpAtomicXor: return "AtomicXor";
-    case spv::OpPhi: return "Phi";
-    case spv::OpLoopMerge: return "LoopMerge";
-    case spv::OpSelectionMerge: return "SelectionMerge";
-    case spv::OpLabel: return "Label";
-    case spv::OpBranch: return "Branch";
-    case spv::OpBranchConditional: return "BranchConditional";
-    case spv::OpSwitch: return "Switch";
-    case spv::OpKill: return "Kill";
-    case spv::OpReturn: return "Return";
-    case spv::OpReturnValue: return "ReturnValue";
-    case spv::OpUnreachable: return "Unreachable";
-    case spv::OpLifetimeStart: return "LifetimeStart";
-    case spv::OpLifetimeStop: return "LifetimeStop";
-    case spv::OpGroupAsyncCopy: return "GroupAsyncCopy";
-    case spv::OpGroupWaitEvents: return "GroupWaitEvents";
-    case spv::OpGroupAll: return "GroupAll";
-    case spv::OpGroupAny: return "GroupAny";
-    case spv::OpGroupBroadcast: return "GroupBroadcast";
-    case spv::OpGroupIAdd: return "GroupIAdd";
-    case spv::OpGroupFAdd: return "GroupFAdd";
-    case spv::OpGroupFMin: return "GroupFMin";
-    case spv::OpGroupUMin: return "GroupUMin";
-    case spv::OpGroupSMin: return "GroupSMin";
-    case spv::OpGroupFMax: return "GroupFMax";
-    case spv::OpGroupUMax: return "GroupUMax";
-    case spv::OpGroupSMax: return "GroupSMax";
-    case spv::OpReadPipe: return "ReadPipe";
-    case spv::OpWritePipe: return "WritePipe";
-    case spv::OpReservedReadPipe: return "ReservedReadPipe";
-    case spv::OpReservedWritePipe: return "ReservedWritePipe";
-    case spv::OpReserveReadPipePackets: return "ReserveReadPipePackets";
-    case spv::OpReserveWritePipePackets: return "ReserveWritePipePackets";
-    case spv::OpCommitReadPipe: return "CommitReadPipe";
-    case spv::OpCommitWritePipe: return "CommitWritePipe";
-    case spv::OpIsValidReserveId: return "IsValidReserveId";
-    case spv::OpGetNumPipePackets: return "GetNumPipePackets";
-    case spv::OpGetMaxPipePackets: return "GetMaxPipePackets";
-    case spv::OpGroupReserveReadPipePackets: return "GroupReserveReadPipePackets";
-    case spv::OpGroupReserveWritePipePackets: return "GroupReserveWritePipePackets";
-    case spv::OpGroupCommitReadPipe: return "GroupCommitReadPipe";
-    case spv::OpGroupCommitWritePipe: return "GroupCommitWritePipe";
-    case spv::OpEnqueueMarker: return "EnqueueMarker";
-    case spv::OpEnqueueKernel: return "EnqueueKernel";
-    case spv::OpGetKernelNDrangeSubGroupCount: return "GetKernelNDrangeSubGroupCount";
-    case spv::OpGetKernelNDrangeMaxSubGroupSize: return "GetKernelNDrangeMaxSubGroupSize";
-    case spv::OpGetKernelWorkGroupSize: return "GetKernelWorkGroupSize";
-    case spv::OpGetKernelPreferredWorkGroupSizeMultiple:
-      return "GetKernelPreferredWorkGroupSizeMultiple";
-    case spv::OpRetainEvent: return "RetainEvent";
-    case spv::OpReleaseEvent: return "ReleaseEvent";
-    case spv::OpCreateUserEvent: return "CreateUserEvent";
-    case spv::OpIsValidEvent: return "IsValidEvent";
-    case spv::OpSetUserEventStatus: return "SetUserEventStatus";
-    case spv::OpCaptureEventProfilingInfo: return "CaptureEventProfilingInfo";
-    case spv::OpGetDefaultQueue: return "GetDefaultQueue";
-    case spv::OpBuildNDRange: return "BuildNDRange";
-    case spv::OpImageSparseSampleImplicitLod: return "ImageSparseSampleImplicitLod";
-    case spv::OpImageSparseSampleExplicitLod: return "ImageSparseSampleExplicitLod";
-    case spv::OpImageSparseSampleDrefImplicitLod: return "ImageSparseSampleDrefImplicitLod";
-    case spv::OpImageSparseSampleDrefExplicitLod: return "ImageSparseSampleDrefExplicitLod";
-    case spv::OpImageSparseSampleProjImplicitLod: return "ImageSparseSampleProjImplicitLod";
-    case spv::OpImageSparseSampleProjExplicitLod: return "ImageSparseSampleProjExplicitLod";
-    case spv::OpImageSparseSampleProjDrefImplicitLod: return "ImageSparseSampleProjDrefImplicitLod";
-    case spv::OpImageSparseSampleProjDrefExplicitLod: return "ImageSparseSampleProjDrefExplicitLod";
-    case spv::OpImageSparseFetch: return "ImageSparseFetch";
-    case spv::OpImageSparseGather: return "ImageSparseGather";
-    case spv::OpImageSparseDrefGather: return "ImageSparseDrefGather";
-    case spv::OpImageSparseTexelsResident: return "ImageSparseTexelsResident";
-    case spv::OpNoLine: return "NoLine";
-    case spv::OpAtomicFlagTestAndSet: return "AtomicFlagTestAndSet";
-    case spv::OpAtomicFlagClear: return "AtomicFlagClear";
-    case spv::OpImageSparseRead: return "ImageSparseRead";
-    case spv::OpSubgroupBallotKHR: return "ImageSparseRead";
-    case spv::OpSubgroupFirstInvocationKHR: return "SubgroupFirstInvocationKHR";
-    case spv::OpSubgroupAllKHR: return "SubgroupAllKHR";
-    case spv::OpSubgroupAnyKHR: return "SubgroupAnyKHR";
-    case spv::OpSubgroupAllEqualKHR: return "SubgroupAllEqualKHR";
-    case spv::OpSubgroupReadInvocationKHR: return "SubgroupReadInvocationKHR";
-    case spv::OpGroupIAddNonUniformAMD: return "GroupIAddNonUniformAMD";
-    case spv::OpGroupFAddNonUniformAMD: return "GroupFAddNonUniformAMD";
-    case spv::OpGroupFMinNonUniformAMD: return "GroupFMinNonUniformAMD";
-    case spv::OpGroupUMinNonUniformAMD: return "GroupUMinNonUniformAMD";
-    case spv::OpGroupSMinNonUniformAMD: return "GroupSMinNonUniformAMD";
-    case spv::OpGroupFMaxNonUniformAMD: return "GroupFMaxNonUniformAMD";
-    case spv::OpGroupUMaxNonUniformAMD: return "GroupUMaxNonUniformAMD";
-    case spv::OpGroupSMaxNonUniformAMD: return "GroupSMaxNonUniformAMD";
-    case spv::OpMax: break;
-  }
-
-  // VS doesn't like case statements for values not declared in the original enum
-  switch((int)el)
-  {
-    case spv::OpGroupIAddNonUniformAMD: return "GroupIAddNonUniformAMD";
-    case spv::OpGroupFAddNonUniformAMD: return "GroupFAddNonUniformAMD";
-    case spv::OpGroupFMinNonUniformAMD: return "GroupFMinNonUniformAMD";
-    case spv::OpGroupUMinNonUniformAMD: return "GroupUMinNonUniformAMD";
-    case spv::OpGroupSMinNonUniformAMD: return "GroupSMinNonUniformAMD";
-    case spv::OpGroupFMaxNonUniformAMD: return "GroupFMaxNonUniformAMD";
-    case spv::OpGroupUMaxNonUniformAMD: return "GroupUMaxNonUniformAMD";
-    case spv::OpGroupSMaxNonUniformAMD: return "GroupSMaxNonUniformAMD";
-    default: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedOp{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::SourceLanguage>::Get(const spv::SourceLanguage &el)
-{
-  switch(el)
-  {
-    case spv::SourceLanguageUnknown: return "Unknown";
-    case spv::SourceLanguageESSL: return "ESSL";
-    case spv::SourceLanguageGLSL: return "GLSL";
-    case spv::SourceLanguageOpenCL_C: return "OpenCL C";
-    case spv::SourceLanguageOpenCL_CPP: return "OpenCL C++";
-    case spv::SourceLanguageHLSL: return "HLSL";
-    case spv::SourceLanguageMax: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedLanguage{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::Capability>::Get(const spv::Capability &el)
-{
-  switch(el)
-  {
-    case spv::CapabilityMatrix: return "Matrix";
-    case spv::CapabilityShader: return "Shader";
-    case spv::CapabilityGeometry: return "Geometry";
-    case spv::CapabilityTessellation: return "Tessellation";
-    case spv::CapabilityAddresses: return "Addresses";
-    case spv::CapabilityLinkage: return "Linkage";
-    case spv::CapabilityKernel: return "Kernel";
-    case spv::CapabilityVector16: return "Vector16";
-    case spv::CapabilityFloat16Buffer: return "Float16Buffer";
-    case spv::CapabilityFloat16: return "Float16";
-    case spv::CapabilityFloat64: return "Float64";
-    case spv::CapabilityInt64: return "Int64";
-    case spv::CapabilityInt64Atomics: return "Int64Atomics";
-    case spv::CapabilityImageBasic: return "ImageBasic";
-    case spv::CapabilityImageReadWrite: return "ImageReadWrite";
-    case spv::CapabilityImageMipmap: return "ImageMipmap";
-    case spv::CapabilityPipes: return "Pipes";
-    case spv::CapabilityGroups: return "Groups";
-    case spv::CapabilityDeviceEnqueue: return "DeviceEnqueue";
-    case spv::CapabilityLiteralSampler: return "LiteralSampler";
-    case spv::CapabilityAtomicStorage: return "AtomicStorage";
-    case spv::CapabilityInt16: return "Int16";
-    case spv::CapabilityTessellationPointSize: return "TessellationPointSize";
-    case spv::CapabilityGeometryPointSize: return "GeometryPointSize";
-    case spv::CapabilityImageGatherExtended: return "ImageGatherExtended";
-    case spv::CapabilityStorageImageMultisample: return "StorageImageMultisample";
-    case spv::CapabilityUniformBufferArrayDynamicIndexing:
-      return "UniformBufferArrayDynamicIndexing";
-    case spv::CapabilitySampledImageArrayDynamicIndexing: return "SampledImageArrayDynamicIndexing";
-    case spv::CapabilityStorageBufferArrayDynamicIndexing:
-      return "StorageBufferArrayDynamicIndexing";
-    case spv::CapabilityStorageImageArrayDynamicIndexing: return "StorageImageArrayDynamicIndexing";
-    case spv::CapabilityClipDistance: return "ClipDistance";
-    case spv::CapabilityCullDistance: return "CullDistance";
-    case spv::CapabilityImageCubeArray: return "ImageCubeArray";
-    case spv::CapabilitySampleRateShading: return "SampleRateShading";
-    case spv::CapabilityImageRect: return "ImageRect";
-    case spv::CapabilitySampledRect: return "SampledRect";
-    case spv::CapabilityGenericPointer: return "GenericPointer";
-    case spv::CapabilityInt8: return "Int8";
-    case spv::CapabilityInputAttachment: return "InputAttachment";
-    case spv::CapabilitySparseResidency: return "SparseResidency";
-    case spv::CapabilityMinLod: return "MinLod";
-    case spv::CapabilitySampled1D: return "Sampled1D";
-    case spv::CapabilityImage1D: return "Image1D";
-    case spv::CapabilitySampledCubeArray: return "SampledCubeArray";
-    case spv::CapabilitySampledBuffer: return "SampledBuffer";
-    case spv::CapabilityImageBuffer: return "ImageBuffer";
-    case spv::CapabilityImageMSArray: return "ImageMSArray";
-    case spv::CapabilityStorageImageExtendedFormats: return "StorageImageExtendedFormats";
-    case spv::CapabilityImageQuery: return "ImageQuery";
-    case spv::CapabilityDerivativeControl: return "DerivativeControl";
-    case spv::CapabilityInterpolationFunction: return "InterpolationFunction";
-    case spv::CapabilityTransformFeedback: return "TransformFeedback";
-    case spv::CapabilityGeometryStreams: return "GeometryStreams";
-    case spv::CapabilityStorageImageReadWithoutFormat: return "StorageImageReadWithoutFormat";
-    case spv::CapabilityStorageImageWriteWithoutFormat: return "StorageImageWriteWithoutFormat";
-    case spv::CapabilityMultiViewport: return "MultiViewport";
-    case spv::CapabilitySubgroupBallotKHR: return "SubgroupBallotKHR";
-    case spv::CapabilityDrawParameters: return "DrawParameters";
-    case spv::CapabilitySubgroupVoteKHR: return "SubgroupVoteKHR";
-    case spv::CapabilityStorageUniformBufferBlock16: return "StorageUniformBufferBlock16";
-    case spv::CapabilityStorageUniform16: return "StorageUniform16";
-    case spv::CapabilityStoragePushConstant16: return "StoragePushConstant16";
-    case spv::CapabilityStorageInputOutput16: return "StorageInputOutput16";
-    case spv::CapabilityDeviceGroup: return "DeviceGroup";
-    case spv::CapabilityMultiView: return "MultiView";
-    case spv::CapabilityVariablePointersStorageBuffer: return "VariablePointersStorageBuffer";
-    case spv::CapabilityVariablePointers: return "VariablePointers";
-    case spv::CapabilityAtomicStorageOps: return "AtomicStorageOps";
-    case spv::CapabilitySampleMaskPostDepthCoverage: return "SampleMaskPostDepthCoverage";
-    case spv::CapabilityImageGatherBiasLodAMD: return "ImageGatherBiasLodAMD";
-    case spv::CapabilityStencilExportEXT: return "StencilExportEXT";
-    case spv::CapabilitySampleMaskOverrideCoverageNV: return "SampleMaskOverrideCoverageNV";
-    case spv::CapabilityGeometryShaderPassthroughNV: return "GeometryShaderPassthroughNV";
-    case spv::CapabilityShaderViewportIndexLayerNV: return "ShaderViewportIndexLayerNV";
-    case spv::CapabilityShaderViewportMaskNV: return "ShaderViewportMaskNV";
-    case spv::CapabilityShaderStereoViewNV: return "ShaderStereoViewNV";
-    case spv::CapabilityPerViewAttributesNV: return "PerViewAttributesNV";
-    case spv::CapabilityMax: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedCap{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::ExecutionMode>::Get(const spv::ExecutionMode &el)
-{
-  switch(el)
-  {
-    case spv::ExecutionModeInvocations: return "Invocations";
-    case spv::ExecutionModeSpacingEqual: return "SpacingEqual";
-    case spv::ExecutionModeSpacingFractionalEven: return "SpacingFractionalEven";
-    case spv::ExecutionModeSpacingFractionalOdd: return "SpacingFractionalOdd";
-    case spv::ExecutionModeVertexOrderCw: return "VertexOrderCw";
-    case spv::ExecutionModeVertexOrderCcw: return "VertexOrderCcw";
-    case spv::ExecutionModePixelCenterInteger: return "PixelCenterInteger";
-    case spv::ExecutionModeOriginUpperLeft: return "OriginUpperLeft";
-    case spv::ExecutionModeOriginLowerLeft: return "OriginLowerLeft";
-    case spv::ExecutionModeEarlyFragmentTests: return "EarlyFragmentTests";
-    case spv::ExecutionModePointMode: return "PointMode";
-    case spv::ExecutionModeXfb: return "Xfb";
-    case spv::ExecutionModeDepthReplacing: return "DepthReplacing";
-    case spv::ExecutionModeDepthGreater: return "DepthGreater";
-    case spv::ExecutionModeDepthLess: return "DepthLess";
-    case spv::ExecutionModeDepthUnchanged: return "DepthUnchanged";
-    case spv::ExecutionModeLocalSize: return "LocalSize";
-    case spv::ExecutionModeLocalSizeHint: return "LocalSizeHint";
-    case spv::ExecutionModeInputPoints: return "InputPoints";
-    case spv::ExecutionModeInputLines: return "InputLines";
-    case spv::ExecutionModeInputLinesAdjacency: return "InputLinesAdjacency";
-    case spv::ExecutionModeTriangles: return "Triangles";
-    case spv::ExecutionModeInputTrianglesAdjacency: return "InputTrianglesAdjacency";
-    case spv::ExecutionModeQuads: return "Quads";
-    case spv::ExecutionModeIsolines: return "Isolines";
-    case spv::ExecutionModeOutputVertices: return "OutputVertices";
-    case spv::ExecutionModeOutputPoints: return "OutputPoints";
-    case spv::ExecutionModeOutputLineStrip: return "OutputLineStrip";
-    case spv::ExecutionModeOutputTriangleStrip: return "OutputTriangleStrip";
-    case spv::ExecutionModeVecTypeHint: return "VecTypeHint";
-    case spv::ExecutionModeContractionOff: return "ContractionOff";
-    case spv::ExecutionModePostDepthCoverage: return "PostDepthCoverage";
-    case spv::ExecutionModeMax: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedMode{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::AddressingModel>::Get(const spv::AddressingModel &el)
-{
-  switch(el)
-  {
-    case spv::AddressingModelLogical: return "Logical";
-    case spv::AddressingModelPhysical32: return "Physical (32-bit)";
-    case spv::AddressingModelPhysical64: return "Physical (64-bit)";
-    case spv::AddressingModelMax: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedModel{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::MemoryModel>::Get(const spv::MemoryModel &el)
-{
-  switch(el)
-  {
-    case spv::MemoryModelSimple: return "Simple";
-    case spv::MemoryModelGLSL450: return "GLSL450";
-    case spv::MemoryModelOpenCL: return "OpenCL";
-    case spv::MemoryModelMax: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedModel{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::ExecutionModel>::Get(const spv::ExecutionModel &el)
-{
-  switch(el)
-  {
-    case spv::ExecutionModelVertex: return "Vertex Shader";
-    case spv::ExecutionModelTessellationControl: return "Tess. Control Shader";
-    case spv::ExecutionModelTessellationEvaluation: return "Tess. Eval Shader";
-    case spv::ExecutionModelGeometry: return "Geometry Shader";
-    case spv::ExecutionModelFragment: return "Fragment Shader";
-    case spv::ExecutionModelGLCompute: return "Compute Shader";
-    case spv::ExecutionModelKernel: return "Kernel";
-    case spv::ExecutionModelMax: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedModel{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::Decoration>::Get(const spv::Decoration &el)
-{
-  switch(el)
-  {
-    case spv::DecorationRelaxedPrecision: return "RelaxedPrecision";
-    case spv::DecorationSpecId: return "SpecId";
-    case spv::DecorationBlock: return "Block";
-    case spv::DecorationBufferBlock: return "BufferBlock";
-    case spv::DecorationRowMajor: return "RowMajor";
-    case spv::DecorationColMajor: return "ColMajor";
-    case spv::DecorationArrayStride: return "ArrayStride";
-    case spv::DecorationMatrixStride: return "MatrixStride";
-    case spv::DecorationGLSLShared: return "GLSLShared";
-    case spv::DecorationGLSLPacked: return "GLSLPacked";
-    case spv::DecorationCPacked: return "CPacked";
-    case spv::DecorationBuiltIn: return "BuiltIn";
-    case spv::DecorationNoPerspective: return "NoPerspective";
-    case spv::DecorationFlat: return "Flat";
-    case spv::DecorationPatch: return "Patch";
-    case spv::DecorationCentroid: return "Centroid";
-    case spv::DecorationSample: return "Sample";
-    case spv::DecorationInvariant: return "Invariant";
-    case spv::DecorationRestrict: return "Restrict";
-    case spv::DecorationAliased: return "Aliased";
-    case spv::DecorationVolatile: return "Volatile";
-    case spv::DecorationConstant: return "Constant";
-    case spv::DecorationCoherent: return "Coherent";
-    case spv::DecorationNonWritable: return "NonWritable";
-    case spv::DecorationNonReadable: return "NonReadable";
-    case spv::DecorationUniform: return "Uniform";
-    case spv::DecorationSaturatedConversion: return "SaturatedConversion";
-    case spv::DecorationStream: return "Stream";
-    case spv::DecorationLocation: return "Location";
-    case spv::DecorationComponent: return "Component";
-    case spv::DecorationIndex: return "Index";
-    case spv::DecorationBinding: return "Binding";
-    case spv::DecorationDescriptorSet: return "DescriptorSet";
-    case spv::DecorationOffset: return "Offset";
-    case spv::DecorationXfbBuffer: return "XfbBuffer";
-    case spv::DecorationXfbStride: return "XfbStride";
-    case spv::DecorationFuncParamAttr: return "FuncParamAttr";
-    case spv::DecorationFPRoundingMode: return "FPRoundingMode";
-    case spv::DecorationFPFastMathMode: return "FPFastMathMode";
-    case spv::DecorationLinkageAttributes: return "LinkageAttributes";
-    case spv::DecorationNoContraction: return "NoContraction";
-    case spv::DecorationInputAttachmentIndex: return "InputAttachmentIndex";
-    case spv::DecorationAlignment: return "Alignment";
-    case spv::DecorationExplicitInterpAMD: return "ExplicitInterpAMD";
-    case spv::DecorationOverrideCoverageNV: return "OverrideCoverageNV";
-    case spv::DecorationPassthroughNV: return "PassthroughNV";
-    case spv::DecorationViewportRelativeNV: return "ViewportRelativeNV";
-    case spv::DecorationSecondaryViewportRelativeNV: return "SecondaryViewportRelativeNV";
-    case spv::DecorationMax: break;
-  }
-
-  // VS doesn't like case statements for values not declared in the original enum
-  switch((int)el)
-  {
-    case spv::DecorationExplicitInterpAMD: return "ExplicitInterpAMD";
-    default: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedDecoration{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::Dim>::Get(const spv::Dim &el)
-{
-  switch(el)
-  {
-    case spv::Dim1D: return "1D";
-    case spv::Dim2D: return "2D";
-    case spv::Dim3D: return "3D";
-    case spv::DimCube: return "Cube";
-    case spv::DimRect: return "Rect";
-    case spv::DimBuffer: return "Buffer";
-    case spv::DimSubpassData: return "Subpass Data";
-    case spv::DimMax: break;
-  }
-
-  return StringFormat::Fmt("{%u}D", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::StorageClass>::Get(const spv::StorageClass &el)
-{
-  switch(el)
-  {
-    case spv::StorageClassUniformConstant: return "UniformConstant";
-    case spv::StorageClassInput: return "Input";
-    case spv::StorageClassUniform: return "Uniform";
-    case spv::StorageClassOutput: return "Output";
-    case spv::StorageClassWorkgroup: return "Workgroup";
-    case spv::StorageClassCrossWorkgroup: return "CrossWorkgroup";
-    case spv::StorageClassPrivate: return "Private";
-    case spv::StorageClassFunction: return "Function";
-    case spv::StorageClassGeneric: return "Generic";
-    case spv::StorageClassPushConstant: return "PushConstant";
-    case spv::StorageClassAtomicCounter: return "AtomicCounter";
-    case spv::StorageClassImage: return "Image";
-    case spv::StorageClassStorageBuffer: return "StorageBuffer";
-    case spv::StorageClassMax: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedClass{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::ImageFormat>::Get(const spv::ImageFormat &el)
-{
-  switch(el)
-  {
-    case spv::ImageFormatUnknown: return "Unknown";
-    case spv::ImageFormatRgba32f: return "RGBA32f";
-    case spv::ImageFormatRgba16f: return "RGBA16f";
-    case spv::ImageFormatR32f: return "R32f";
-    case spv::ImageFormatRgba8: return "RGBA8";
-    case spv::ImageFormatRgba8Snorm: return "RGBA8SNORM";
-    case spv::ImageFormatRg32f: return "RG32F";
-    case spv::ImageFormatRg16f: return "RG16F";
-    case spv::ImageFormatR11fG11fB10f: return "R11FG11FB10F";
-    case spv::ImageFormatR16f: return "R16F";
-    case spv::ImageFormatRgba16: return "RGBA16";
-    case spv::ImageFormatRgb10A2: return "RGB10A2";
-    case spv::ImageFormatRg16: return "RG16";
-    case spv::ImageFormatRg8: return "RG8";
-    case spv::ImageFormatR16: return "R16";
-    case spv::ImageFormatR8: return "R8";
-    case spv::ImageFormatRgba16Snorm: return "RGBA16SNORM";
-    case spv::ImageFormatRg16Snorm: return "RG16SNORM";
-    case spv::ImageFormatRg8Snorm: return "RG8SNORM";
-    case spv::ImageFormatR16Snorm: return "R16SNORM";
-    case spv::ImageFormatR8Snorm: return "R8SNORM";
-    case spv::ImageFormatRgba32i: return "RGBA32I";
-    case spv::ImageFormatRgba16i: return "RGBA16I";
-    case spv::ImageFormatRgba8i: return "RGBA8I";
-    case spv::ImageFormatR32i: return "R32I";
-    case spv::ImageFormatRg32i: return "RG32I";
-    case spv::ImageFormatRg16i: return "RG16I";
-    case spv::ImageFormatRg8i: return "RG8I";
-    case spv::ImageFormatR16i: return "R16I";
-    case spv::ImageFormatR8i: return "R8I";
-    case spv::ImageFormatRgba32ui: return "RGBA32UI";
-    case spv::ImageFormatRgba16ui: return "RGBA16UI";
-    case spv::ImageFormatRgba8ui: return "RGBA8UI";
-    case spv::ImageFormatR32ui: return "R32UI";
-    case spv::ImageFormatRgb10a2ui: return "RGB10A2UI";
-    case spv::ImageFormatRg32ui: return "RG32UI";
-    case spv::ImageFormatRg16ui: return "RG16UI";
-    case spv::ImageFormatRg8ui: return "RG8UI";
-    case spv::ImageFormatR16ui: return "R16UI";
-    case spv::ImageFormatR8ui: return "R8UI";
-    case spv::ImageFormatMax: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedFormat{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::BuiltIn>::Get(const spv::BuiltIn &el)
-{
-  switch(el)
-  {
-    case spv::BuiltInPosition: return "Position";
-    case spv::BuiltInPointSize: return "PointSize";
-    case spv::BuiltInClipDistance: return "ClipDistance";
-    case spv::BuiltInCullDistance: return "CullDistance";
-    case spv::BuiltInVertexId: return "VertexId";
-    case spv::BuiltInInstanceId: return "InstanceId";
-    case spv::BuiltInPrimitiveId: return "PrimitiveId";
-    case spv::BuiltInInvocationId: return "InvocationId";
-    case spv::BuiltInLayer: return "Layer";
-    case spv::BuiltInViewportIndex: return "ViewportIndex";
-    case spv::BuiltInTessLevelOuter: return "TessLevelOuter";
-    case spv::BuiltInTessLevelInner: return "TessLevelInner";
-    case spv::BuiltInTessCoord: return "TessCoord";
-    case spv::BuiltInPatchVertices: return "PatchVertices";
-    case spv::BuiltInFragCoord: return "FragCoord";
-    case spv::BuiltInPointCoord: return "PointCoord";
-    case spv::BuiltInFrontFacing: return "FrontFacing";
-    case spv::BuiltInSampleId: return "SampleId";
-    case spv::BuiltInSamplePosition: return "SamplePosition";
-    case spv::BuiltInSampleMask: return "SampleMask";
-    case spv::BuiltInFragDepth: return "FragDepth";
-    case spv::BuiltInHelperInvocation: return "HelperInvocation";
-    case spv::BuiltInNumWorkgroups: return "NumWorkgroups";
-    case spv::BuiltInWorkgroupSize: return "WorkgroupSize";
-    case spv::BuiltInWorkgroupId: return "WorkgroupId";
-    case spv::BuiltInLocalInvocationId: return "LocalInvocationId";
-    case spv::BuiltInGlobalInvocationId: return "GlobalInvocationId";
-    case spv::BuiltInLocalInvocationIndex: return "LocalInvocationIndex";
-    case spv::BuiltInWorkDim: return "WorkDim";
-    case spv::BuiltInGlobalSize: return "GlobalSize";
-    case spv::BuiltInEnqueuedWorkgroupSize: return "EnqueuedWorkgroupSize";
-    case spv::BuiltInGlobalOffset: return "GlobalOffset";
-    case spv::BuiltInGlobalLinearId: return "GlobalLinearId";
-    case spv::BuiltInSubgroupSize: return "SubgroupSize";
-    case spv::BuiltInSubgroupMaxSize: return "SubgroupMaxSize";
-    case spv::BuiltInNumSubgroups: return "NumSubgroups";
-    case spv::BuiltInNumEnqueuedSubgroups: return "NumEnqueuedSubgroups";
-    case spv::BuiltInSubgroupId: return "SubgroupId";
-    case spv::BuiltInSubgroupLocalInvocationId: return "SubgroupLocalInvocationId";
-    case spv::BuiltInVertexIndex: return "VertexIndex";
-    case spv::BuiltInInstanceIndex: return "InstanceIndex";
-    case spv::BuiltInSubgroupEqMaskKHR: return "SubgroupEqMaskKHR";
-    case spv::BuiltInSubgroupGeMaskKHR: return "SubgroupGeMaskKHR";
-    case spv::BuiltInSubgroupGtMaskKHR: return "SubgroupGtMaskKHR";
-    case spv::BuiltInSubgroupLeMaskKHR: return "SubgroupLeMaskKHR";
-    case spv::BuiltInSubgroupLtMaskKHR: return "SubgroupLtMaskKHR";
-    case spv::BuiltInBaseVertex: return "BaseVertex";
-    case spv::BuiltInBaseInstance: return "BaseInstance";
-    case spv::BuiltInDrawIndex: return "DrawIndex";
-    case spv::BuiltInDeviceIndex: return "DeviceIndex";
-    case spv::BuiltInViewIndex: return "ViewIndex";
-    case spv::BuiltInBaryCoordNoPerspAMD: return "BaryCoordNoPerspAMD";
-    case spv::BuiltInBaryCoordNoPerspCentroidAMD: return "BaryCoordNoPerspCentroidAMD";
-    case spv::BuiltInBaryCoordNoPerspSampleAMD: return "BaryCoordNoPerspSampleAMD";
-    case spv::BuiltInBaryCoordSmoothAMD: return "BaryCoordSmoothAMD";
-    case spv::BuiltInBaryCoordSmoothCentroidAMD: return "BaryCoordSmoothCentroidAMD";
-    case spv::BuiltInBaryCoordSmoothSampleAMD: return "BaryCoordSmoothSampleAMD";
-    case spv::BuiltInBaryCoordPullModelAMD: return "BaryCoordPullModelAMD";
-    case spv::BuiltInFragStencilRefEXT: return "FragStencilRefEXT";
-    case spv::BuiltInViewportMaskNV: return "ViewportMaskNV";
-    case spv::BuiltInSecondaryPositionNV: return "SecondaryPositionNV";
-    case spv::BuiltInSecondaryViewportMaskNV: return "SecondaryViewportMaskNV";
-    case spv::BuiltInPositionPerViewNV: return "PositionPerViewNV";
-    case spv::BuiltInViewportMaskPerViewNV: return "ViewportMaskPerViewNV";
-    case spv::BuiltInMax: break;
-  }
-
-  // VS doesn't like case statements for values not declared in the original enum
-  switch((int)el)
-  {
-    case spv::BuiltInBaryCoordNoPerspAMD: return "BaryCoordNoPerspAMD";
-    case spv::BuiltInBaryCoordNoPerspCentroidAMD: return "BaryCoordNoPerspCentroidAMD";
-    case spv::BuiltInBaryCoordNoPerspSampleAMD: return "BaryCoordNoPerspSampleAMD";
-    case spv::BuiltInBaryCoordSmoothAMD: return "BaryCoordSmoothAMD";
-    case spv::BuiltInBaryCoordSmoothCentroidAMD: return "BaryCoordSmoothCentroidAMD";
-    case spv::BuiltInBaryCoordSmoothSampleAMD: return "BaryCoordSmoothSampleAMD";
-    case spv::BuiltInBaryCoordPullModelAMD: return "BaryCoordPullModelAMD";
-    default: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedBuiltIn{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::Scope>::Get(const spv::Scope &el)
-{
-  switch(el)
-  {
-    case spv::ScopeCrossDevice: return "CrossDevice";
-    case spv::ScopeDevice: return "Device";
-    case spv::ScopeWorkgroup: return "Workgroup";
-    case spv::ScopeSubgroup: return "Subgroup";
-    case spv::ScopeInvocation: return "Invocation";
-    case spv::ScopeMax: break;
-  }
-
-  return StringFormat::Fmt("UnrecognisedScope{%u}", (uint32_t)el);
-}
-
-template <>
-string ToStrHelper<false, spv::FunctionControlMask>::Get(const spv::FunctionControlMask &el)
-{
-  string ret;
-
-  if(el & spv::FunctionControlInlineMask)
-    ret += ", Inline";
-  if(el & spv::FunctionControlDontInlineMask)
-    ret += ", DontInline";
-  if(el & spv::FunctionControlPureMask)
-    ret += ", Pure";
-  if(el & spv::FunctionControlConstMask)
-    ret += ", Const";
-
-  if(!ret.empty())
-    ret = ret.substr(2);
-
-  return ret;
-}
-
-template <>
-string ToStrHelper<false, spv::SelectionControlMask>::Get(const spv::SelectionControlMask &el)
-{
-  string ret;
-
-  if(el & spv::SelectionControlFlattenMask)
-    ret += ", Flatten";
-  if(el & spv::SelectionControlDontFlattenMask)
-    ret += ", DontFlatten";
-
-  if(!ret.empty())
-    ret = ret.substr(2);
-
-  return ret;
-}
-
-template <>
-string ToStrHelper<false, spv::LoopControlMask>::Get(const spv::LoopControlMask &el)
-{
-  string ret;
-
-  if(el & spv::LoopControlUnrollMask)
-    ret += ", Unroll";
-  if(el & spv::LoopControlDontUnrollMask)
-    ret += ", DontUnroll";
-
-  if(!ret.empty())
-    ret = ret.substr(2);
-
-  return ret;
-}
-
-template <>
-string ToStrHelper<false, spv::MemoryAccessMask>::Get(const spv::MemoryAccessMask &el)
-{
-  string ret;
-
-  if(el & spv::MemoryAccessVolatileMask)
-    ret += ", Volatile";
-  if(el & spv::MemoryAccessAlignedMask)
-    ret += ", Aligned";
-  if(el & spv::MemoryAccessNontemporalMask)
-    ret += ", Nontemporal";
-
-  if(!ret.empty())
-    ret = ret.substr(2);
-
-  return ret;
-}
-
-template <>
-string ToStrHelper<false, spv::MemorySemanticsMask>::Get(const spv::MemorySemanticsMask &el)
-{
-  string ret;
-
-  if(el == spv::MemorySemanticsMaskNone)
-    return "None";
-
-  if(el & spv::MemorySemanticsAcquireMask)
-    ret += ", Acquire";
-  if(el & spv::MemorySemanticsReleaseMask)
-    ret += ", Release";
-  if(el & spv::MemorySemanticsAcquireReleaseMask)
-    ret += ", Acquire/Release";
-  if(el & spv::MemorySemanticsSequentiallyConsistentMask)
-    ret += ", Sequentially Consistent";
-  if(el & spv::MemorySemanticsUniformMemoryMask)
-    ret += ", Uniform Memory";
-  if(el & spv::MemorySemanticsSubgroupMemoryMask)
-    ret += ", Subgroup Memory";
-  if(el & spv::MemorySemanticsWorkgroupMemoryMask)
-    ret += ", Workgroup Memory";
-  if(el & spv::MemorySemanticsCrossWorkgroupMemoryMask)
-    ret += ", Cross Workgroup Memory";
-  if(el & spv::MemorySemanticsAtomicCounterMemoryMask)
-    ret += ", Atomic Counter Memory";
-  if(el & spv::MemorySemanticsImageMemoryMask)
-    ret += ", Image Memory";
-
-  if(!ret.empty())
-    ret = ret.substr(2);
-
-  return ret;
 }

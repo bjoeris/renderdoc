@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +27,7 @@
 #include <QFrame>
 #include <QMenu>
 #include <QMouseEvent>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
 namespace Ui
 {
@@ -71,19 +71,17 @@ struct Following
   ResourceId GetResourceId(ICaptureContext &ctx);
   BoundResource GetBoundResource(ICaptureContext &ctx, int arrayIdx);
 
-  static QVector<BoundResource> GetOutputTargets(ICaptureContext &ctx);
+  static rdcarray<BoundResource> GetOutputTargets(ICaptureContext &ctx);
 
   static BoundResource GetDepthTarget(ICaptureContext &ctx);
 
-  QMap<BindpointMap, QVector<BoundResource>> GetReadWriteResources(ICaptureContext &ctx);
+  rdcarray<BoundResourceArray> GetReadWriteResources(ICaptureContext &ctx);
 
-  static QMap<BindpointMap, QVector<BoundResource>> GetReadWriteResources(ICaptureContext &ctx,
-                                                                          ShaderStage stage);
+  static rdcarray<BoundResourceArray> GetReadWriteResources(ICaptureContext &ctx, ShaderStage stage);
 
-  QMap<BindpointMap, QVector<BoundResource>> GetReadOnlyResources(ICaptureContext &ctx);
+  rdcarray<BoundResourceArray> GetReadOnlyResources(ICaptureContext &ctx);
 
-  static QMap<BindpointMap, QVector<BoundResource>> GetReadOnlyResources(ICaptureContext &ctx,
-                                                                         ShaderStage stage);
+  static rdcarray<BoundResourceArray> GetReadOnlyResources(ICaptureContext &ctx, ShaderStage stage);
 
   const ShaderReflection *GetReflection(ICaptureContext &ctx);
   static const ShaderReflection *GetReflection(ICaptureContext &ctx, ShaderStage stage);
@@ -96,8 +94,11 @@ struct TexSettings
 {
   TexSettings()
   {
+    displayType = 0;
     r = g = b = true;
     a = false;
+    depth = true;
+    stencil = false;
     mip = 0;
     slice = 0;
     minrange = 0.0f;
@@ -114,7 +115,7 @@ struct TexSettings
   CompType typeHint;
 };
 
-class TextureViewer : public QFrame, public ITextureViewer, public ILogViewer
+class TextureViewer : public QFrame, public ITextureViewer, public ICaptureViewer
 {
 private:
   Q_OBJECT
@@ -130,11 +131,11 @@ public:
   void ViewTexture(ResourceId ID, bool focus) override;
   void GotoLocation(int x, int y) override;
 
-  // ILogViewerForm
-  void OnLogfileLoaded() override;
-  void OnLogfileClosed() override;
-  void OnSelectedEventChanged(uint32_t eventID) override {}
-  void OnEventChanged(uint32_t eventID) override;
+  // ICaptureViewer
+  void OnCaptureLoaded() override;
+  void OnCaptureClosed() override;
+  void OnSelectedEventChanged(uint32_t eventId) override {}
+  void OnEventChanged(uint32_t eventId) override;
 
   QVariant persistData();
   void setPersistData(const QVariant &persistData);
@@ -161,6 +162,7 @@ private slots:
 
   void on_locationGoto_clicked();
   void on_viewTexBuffer_clicked();
+  void on_resourceDetails_clicked();
   void on_texListShow_clicked();
   void on_saveTex_clicked();
   void on_debugPixelContext_clicked();
@@ -224,19 +226,20 @@ private:
 
   void Reset();
 
+  void refreshTextureList();
+
   ResourcePreview *UI_CreateThumbnail(ThumbnailStrip *strip);
   void UI_CreateThumbnails();
   void InitResourcePreview(ResourcePreview *prev, ResourceId id, CompType typeHint, bool force,
                            Following &follow, const QString &bindName, const QString &slotName);
 
-  void InitStageResourcePreviews(ShaderStage stage,
-                                 const rdctype::array<ShaderResource> &resourceDetails,
-                                 const rdctype::array<BindpointMap> &mapping,
-                                 QMap<BindpointMap, QVector<BoundResource>> &ResList,
-                                 ThumbnailStrip *prevs, int &prevIndex, bool copy, bool rw);
+  void InitStageResourcePreviews(ShaderStage stage, const rdcarray<ShaderResource> &resourceDetails,
+                                 const rdcarray<Bindpoint> &mapping,
+                                 rdcarray<BoundResourceArray> &ResList, ThumbnailStrip *prevs,
+                                 int &prevIndex, bool copy, bool rw);
 
   void AddResourceUsageEntry(QMenu &menu, uint32_t start, uint32_t end, ResourceUsage usage);
-  void OpenResourceContextMenu(ResourceId id, const rdctype::array<EventUsage> &usage);
+  void OpenResourceContextMenu(ResourceId id, const rdcarray<EventUsage> &usage);
 
   void AutoFitRange();
   void rangePoint_Update();

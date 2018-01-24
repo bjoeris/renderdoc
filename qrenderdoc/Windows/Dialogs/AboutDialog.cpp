@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +34,7 @@ AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent), ui(new Ui::AboutDia
 {
   ui->setupUi(this);
 
-  QString hash = lit(GIT_COMMIT_HASH);
+  QString hash = QString::fromLatin1(GitVersionHash);
 
   if(hash[0] == QLatin1Char('N') && hash[1] == QLatin1Char('O'))
   {
@@ -43,11 +43,10 @@ AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent), ui(new Ui::AboutDia
   }
   else
   {
-    ui->version->setText(
-        QFormatStr("Version %1 (built from <a href='%2'>%3</a>)")
-            .arg(lit(FULL_VERSION_STRING))
-            .arg(lit("https://github.com/baldurk/renderdoc/commit/" GIT_COMMIT_HASH))
-            .arg(lit(GIT_COMMIT_HASH).left(8)));
+    ui->version->setText(QFormatStr("Version %1 (built from <a href='%2'>%3</a>)")
+                             .arg(lit(FULL_VERSION_STRING))
+                             .arg(lit("https://github.com/baldurk/renderdoc/commit/%1").arg(hash))
+                             .arg(hash.left(8)));
   }
 
 #if defined(DISTRIBUTION_VERSION)

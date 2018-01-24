@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,7 +25,7 @@
 
 #include "os/os_specific.h"
 #include <stdarg.h>
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 
 using std::string;
 
@@ -192,3 +192,427 @@ string OSUtility::MakeMachineIdentString(uint64_t ident)
 
   return ret;
 }
+
+#if ENABLED(ENABLE_UNIT_TESTS)
+
+#include "3rdparty/catch/catch.hpp"
+
+TEST_CASE("Test OS-specific functions", "[osspecific]")
+{
+  SECTION("Environment Variables")
+  {
+    const char *var = Process::GetEnvVariable("TMP");
+
+    if(!var)
+      var = Process::GetEnvVariable("TEMP");
+
+    if(!var)
+      var = Process::GetEnvVariable("HOME");
+
+    CHECK(var);
+    CHECK(strlen(var) > 1);
+
+    var = Process::GetEnvVariable("__renderdoc__unit_test_var");
+
+    CHECK_FALSE(var);
+
+    EnvironmentModification mod;
+    mod.name = "__renderdoc__unit_test_var";
+    mod.value = "test_value";
+    mod.sep = EnvSep::SemiColon;
+    mod.mod = EnvMod::Append;
+
+    Process::RegisterEnvironmentModification(mod);
+    Process::ApplyEnvironmentModification();
+
+    var = Process::GetEnvVariable("__renderdoc__unit_test_var");
+
+    CHECK(var);
+    CHECK(var == std::string("test_value"));
+
+    Process::RegisterEnvironmentModification(mod);
+    Process::ApplyEnvironmentModification();
+
+    var = Process::GetEnvVariable("__renderdoc__unit_test_var");
+
+    CHECK(var);
+    CHECK(var == std::string("test_value;test_value"));
+
+    mod.sep = EnvSep::Colon;
+
+    Process::RegisterEnvironmentModification(mod);
+    Process::ApplyEnvironmentModification();
+
+    var = Process::GetEnvVariable("__renderdoc__unit_test_var");
+
+    CHECK(var);
+    CHECK(var == std::string("test_value;test_value:test_value"));
+
+    mod.value = "prepend";
+    mod.sep = EnvSep::SemiColon;
+    mod.mod = EnvMod::Prepend;
+
+    Process::RegisterEnvironmentModification(mod);
+    Process::ApplyEnvironmentModification();
+
+    var = Process::GetEnvVariable("__renderdoc__unit_test_var");
+
+    CHECK(var);
+    CHECK(var == std::string("prepend;test_value;test_value:test_value"));
+
+    mod.value = "reset";
+    mod.sep = EnvSep::SemiColon;
+    mod.mod = EnvMod::Set;
+
+    Process::RegisterEnvironmentModification(mod);
+    Process::ApplyEnvironmentModification();
+
+    var = Process::GetEnvVariable("__renderdoc__unit_test_var");
+
+    CHECK(var);
+    CHECK(var == std::string("reset"));
+  };
+
+  SECTION("Timing")
+  {
+    double freq = Timing::GetTickFrequency();
+    REQUIRE(freq > 0.0);
+
+    {
+      uint64_t startTick = Timing::GetTick();
+      CHECK(startTick > 0);
+
+      uint64_t firstTick = Timing::GetTick();
+
+      Threading::Sleep(1500);
+
+      uint64_t lastTick = Timing::GetTick();
+
+      double milliseconds1 = double(firstTick - startTick) / freq;
+      double milliseconds2 = double(lastTick - firstTick) / freq;
+
+      CHECK(milliseconds1 > 0.0);
+      CHECK(milliseconds1 < 1.0);
+
+      CHECK(milliseconds2 > 1480.0);
+      CHECK(milliseconds2 < 1520.0);
+    }
+
+    // timestamp as of the creation of this test
+    CHECK(Timing::GetUnixTimestamp() > 1504519614);
+  };
+
+  SECTION("Bit counting")
+  {
+    SECTION("32-bits")
+    {
+      uint32_t val = 0;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 32);
+      }
+
+      val = 1;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 31);
+      }
+
+      val <<= 1;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 30);
+      }
+
+      val <<= 4;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 26);
+      }
+
+      val++;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 26);
+      }
+
+      val += 5;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 26);
+      }
+
+      val += 1000;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 21);
+      }
+
+      val *= 3;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 20);
+      }
+
+      val *= 200000;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 2);
+      }
+    };
+
+#if ENABLED(RDOC_X64)
+    SECTION("64-bits")
+    {
+      uint64_t val = 0;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 64);
+      }
+
+      val = 1;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 63);
+      }
+
+      val <<= 1;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 62);
+      }
+
+      val <<= 4;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 58);
+      }
+
+      val++;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 58);
+      }
+
+      val += 5;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 58);
+      }
+
+      val += 1000;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 53);
+      }
+
+      val *= 3;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 52);
+      }
+
+      val *= 200000;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 34);
+      }
+
+      val *= 1000000;
+
+      {
+        INFO("val is " << val);
+        CHECK(Bits::CountLeadingZeroes(val) == 14);
+      }
+    };
+#endif
+  };
+
+  const int numThreads = 8;
+  const int numValues = 10;
+  const int totalCount = numThreads * numValues;
+
+  SECTION("Simple threads")
+  {
+    uint64_t value = Threading::GetCurrentID();
+
+    CHECK(value != 0);
+
+    // check that a simple thread will run
+    Threading::ThreadHandle th =
+        Threading::CreateThread([&value]() { value = Threading::GetCurrentID(); });
+
+    Threading::JoinThread(th);
+    Threading::CloseThread(th);
+
+    CHECK(value != 0);
+    CHECK(value != Threading::GetCurrentID());
+
+    int values[totalCount] = {0};
+
+    for(int i = 0; i < totalCount; i++)
+      CHECK(values[i] == 0);
+
+    // launch multiple threads, each setting a subset of the values. Ensure they don't trample or
+    // write the wrong values
+    Threading::ThreadHandle threads[numThreads];
+    for(int threadID = 0; threadID < numThreads; threadID++)
+    {
+      threads[threadID] = Threading::CreateThread([&values, numValues, threadID]() {
+        for(int i = 0; i < numValues; i++)
+          values[threadID * numValues + i] = threadID * 1000 + i;
+      });
+    }
+
+    for(int threadID = 0; threadID < numThreads; threadID++)
+    {
+      Threading::JoinThread(threads[threadID]);
+      Threading::CloseThread(threads[threadID]);
+    }
+
+    for(int i = 0; i < totalCount; i++)
+    {
+      CHECK((values[i] / 1000) == (i / numValues));
+      CHECK((values[i] % 1000) == (i % numValues));
+    }
+  };
+
+  SECTION("Atomics")
+  {
+    volatile int32_t value = 0;
+
+    // check that thread atomics work on multiple overlapping threads
+    Threading::ThreadHandle threads[numThreads];
+    for(int threadID = 0; threadID < numThreads; threadID++)
+    {
+      threads[threadID] = Threading::CreateThread([&value, numValues]() {
+        for(int i = 0; i < numValues; i++)
+          Atomic::Inc32(&value);
+      });
+    }
+
+    for(int threadID = 0; threadID < numThreads; threadID++)
+    {
+      Threading::JoinThread(threads[threadID]);
+      Threading::CloseThread(threads[threadID]);
+    }
+
+    // each thread incremented numValues times
+    CHECK(value == numValues * numThreads);
+
+    Atomic::Dec32(&value);
+
+    CHECK(value == numValues * numThreads - 1);
+  };
+
+  SECTION("Locks")
+  {
+    // check that holding the lock prevents a thread from modifying the value
+    uint64_t value = 0;
+    Threading::CriticalSection lock;
+    lock.Lock();
+
+    Threading::ThreadHandle th = Threading::CreateThread([&value, &lock]() {
+      lock.Lock();
+      value = Threading::GetCurrentID();
+      lock.Unlock();
+    });
+
+    CHECK(value == 0);
+
+    Threading::Sleep(50);
+
+    CHECK(value == 0);
+
+    // allow the thread to run
+    lock.Unlock();
+
+    Threading::JoinThread(th);
+    Threading::CloseThread(th);
+
+    CHECK(value != 0);
+
+    // check that we can acquire the lock now
+    bool locked = lock.Trylock();
+
+    CHECK(locked);
+
+    if(locked)
+      lock.Unlock();
+  };
+
+  SECTION("IP processing")
+  {
+    CHECK(Network::MakeIP(127, 0, 0, 1) == 0x7f000001);
+    CHECK(Network::MakeIP(216, 58, 211, 174) == 0xD83AD3AE);
+    CHECK(Network::GetIPOctet(Network::MakeIP(216, 58, 211, 174), 0) == 216);
+    CHECK(Network::GetIPOctet(Network::MakeIP(216, 58, 211, 174), 1) == 58);
+    CHECK(Network::GetIPOctet(Network::MakeIP(216, 58, 211, 174), 2) == 211);
+    CHECK(Network::GetIPOctet(Network::MakeIP(216, 58, 211, 174), 3) == 174);
+
+    CHECK(Network::MatchIPMask(Network::MakeIP(127, 0, 0, 1), 0x7f000001, 0xFFFFFFFF));
+    CHECK(Network::MatchIPMask(Network::MakeIP(127, 0, 0, 1), 0x7f000000, 0xFF000000));
+    CHECK(Network::MatchIPMask(Network::MakeIP(127, 8, 0, 1), 0x7f000000, 0xFF000000));
+    CHECK(Network::MatchIPMask(Network::MakeIP(127, 100, 22, 5), 0x7f000000, 0xFF000000));
+    CHECK(Network::MatchIPMask(Network::MakeIP(127, 66, 66, 66), 0x7f000000, 0xFF000000));
+    CHECK_FALSE(Network::MatchIPMask(Network::MakeIP(216, 58, 211, 174), 0x80000000, ~0U));
+
+    uint32_t ip = 0;
+    uint32_t mask = 0;
+    Network::ParseIPRangeCIDR("foobar", ip, mask);
+    CHECK(ip == 0);
+    CHECK(mask == 0);
+
+    Network::ParseIPRangeCIDR("", ip, mask);
+    CHECK(ip == 0);
+    CHECK(mask == 0);
+
+    Network::ParseIPRangeCIDR("1.23/4", ip, mask);
+    CHECK(ip == 0);
+    CHECK(mask == 0);
+
+    Network::ParseIPRangeCIDR("1.23.4.5.6.7/8", ip, mask);
+    CHECK(ip == 0);
+    CHECK(mask == 0);
+
+    Network::ParseIPRangeCIDR("999.888.777.666/555", ip, mask);
+    CHECK(ip == 0);
+    CHECK(mask == 0);
+
+    Network::ParseIPRangeCIDR("216.58,211.174/16", ip, mask);
+    CHECK(ip == 0);
+    CHECK(mask == 0);
+
+    Network::ParseIPRangeCIDR("216.58.211.174/16", ip, mask);
+    CHECK(ip == Network::MakeIP(216, 58, 211, 174));
+    CHECK(mask == 0xFFFF0000);
+
+    Network::ParseIPRangeCIDR("216.58.211.174/8", ip, mask);
+    CHECK(ip == Network::MakeIP(216, 58, 211, 174));
+    CHECK(mask == 0xFF000000);
+
+    Network::ParseIPRangeCIDR("216.58.211.174/31", ip, mask);
+    CHECK(ip == Network::MakeIP(216, 58, 211, 174));
+    CHECK(mask == 0xFFFFFFFe);
+  };
+};
+
+#endif    // ENABLED(ENABLE_UNIT_TESTS)

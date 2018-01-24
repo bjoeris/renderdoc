@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +24,7 @@
 
 #include "api/replay/renderdoc_replay.h"
 #include "api/replay/version.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 
 #include <errno.h>
 #include <sys/stat.h>
@@ -33,31 +33,27 @@
 #include "vk_core.h"
 #include "vk_replay.h"
 
-void VulkanReplay::OutputWindow::SetWindowHandle(WindowingSystem system, void *data)
+void VulkanReplay::OutputWindow::SetWindowHandle(WindowingData window)
 {
-  m_WindowSystem = system;
-
 #if ENABLED(RDOC_XLIB)
-  if(system == WindowingSystem::Xlib)
+  if(window.system == WindowingSystem::Xlib)
   {
-    XlibWindowData *xdata = (XlibWindowData *)data;
-    xlib.display = xdata->display;
-    xlib.window = xdata->window;
+    xlib.display = window.xlib.display;
+    xlib.window = window.xlib.window;
     return;
   }
 #endif
 
 #if ENABLED(RDOC_XCB)
-  if(system == WindowingSystem::XCB)
+  if(window.system == WindowingSystem::XCB)
   {
-    XCBWindowData *xdata = (XCBWindowData *)data;
-    xcb.connection = xdata->connection;
-    xcb.window = xdata->window;
+    xcb.connection = window.xcb.connection;
+    xcb.window = window.xcb.window;
     return;
   }
 #endif
 
-  RDCERR("Unrecognised/unsupported window system %d", system);
+  RDCERR("Unrecognised/unsupported window system %d", window.system);
 }
 
 void VulkanReplay::OutputWindow::CreateSurface(VkInstance inst)

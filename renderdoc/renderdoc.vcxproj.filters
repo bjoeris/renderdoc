@@ -91,6 +91,24 @@
     <Filter Include="3rdparty\catch">
       <UniqueIdentifier>{af7852be-f538-40f0-be6a-19078ba71639}</UniqueIdentifier>
     </Filter>
+    <Filter Include="3rdparty\zstd">
+      <UniqueIdentifier>{184cdbbc-02cf-4839-914b-350b03745b36}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="3rdparty\pugixml">
+      <UniqueIdentifier>{50c142cb-d8b9-44f7-a68a-ab9015975ea5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Compressors">
+      <UniqueIdentifier>{3cb4fd0e-7cd9-45a3-99d2-1158f27ec438}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Container File">
+      <UniqueIdentifier>{95eea12f-e6e5-4638-acd6-72e71dcd8853}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Stream I/O">
+      <UniqueIdentifier>{3b8694d9-cb25-45e0-a1c2-8cc8cd03df3f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Codecs">
+      <UniqueIdentifier>{dc39ebda-045d-4d75-8ef9-0c927be3c7ff}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="maths\camera.h">
@@ -138,17 +156,11 @@
     <ClInclude Include="maths\formatpacking.h">
       <Filter>Common\Maths</Filter>
     </ClInclude>
-    <ClInclude Include="core\socket_helpers.h">
-      <Filter>Core\networking</Filter>
-    </ClInclude>
     <ClInclude Include="core\replay_proxy.h">
       <Filter>Core\networking</Filter>
     </ClInclude>
     <ClInclude Include="core\crash_handler.h">
       <Filter>Core</Filter>
-    </ClInclude>
-    <ClInclude Include="replay\type_helpers.h">
-      <Filter>Replay</Filter>
     </ClInclude>
     <ClInclude Include="replay\replay_driver.h">
       <Filter>Replay</Filter>
@@ -215,9 +227,6 @@
     </ClInclude>
     <ClInclude Include="3rdparty\stb\stb_truetype.h">
       <Filter>3rdparty\stb</Filter>
-    </ClInclude>
-    <ClInclude Include="serialise\string_utils.h">
-      <Filter>Common\Strings</Filter>
     </ClInclude>
     <ClInclude Include="3rdparty\tinyexr\tinyexr.h">
       <Filter>3rdparty\tinyexr</Filter>
@@ -291,6 +300,81 @@
     <ClInclude Include="3rdparty\catch\catch.hpp">
       <Filter>3rdparty\catch</Filter>
     </ClInclude>
+    <ClInclude Include="3rdparty\zstd\zstd.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\zstdmt_compress.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\bitstream.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\compiler.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\error_private.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\fse.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\huf.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\mem.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\pool.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\threading.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\xxhash.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\zstd_errors.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\zstd_internal.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\zstd\zstd_opt.h">
+      <Filter>3rdparty\zstd</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\pugixml\pugiconfig.hpp">
+      <Filter>3rdparty\pugixml</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdparty\pugixml\pugixml.hpp">
+      <Filter>3rdparty\pugixml</Filter>
+    </ClInclude>
+    <ClInclude Include="strings\string_utils.h">
+      <Filter>Common\Strings</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\lz4io.h">
+      <Filter>Common\Serialise\Compressors</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\zstdio.h">
+      <Filter>Common\Serialise\Compressors</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\rdcfile.h">
+      <Filter>Common\Serialise\Container File</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\streamio.h">
+      <Filter>Common\Serialise\Stream I/O</Filter>
+    </ClInclude>
+    <ClInclude Include="api\replay\stringise.h">
+      <Filter>API\Replay</Filter>
+    </ClInclude>
+    <ClInclude Include="api\replay\structured_data.h">
+      <Filter>API\Replay</Filter>
+    </ClInclude>
+    <ClInclude Include="api\replay\common_pipestate.h">
+      <Filter>API\Replay</Filter>
+    </ClInclude>
+    <ClInclude Include="os\posix\posix_network.h">
+      <Filter>OS\Posix</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="maths\camera.cpp">
@@ -335,9 +419,6 @@
     <ClCompile Include="core\replay_proxy.cpp">
       <Filter>Core\networking</Filter>
     </ClCompile>
-    <ClCompile Include="replay\type_helpers.cpp">
-      <Filter>Replay</Filter>
-    </ClCompile>
     <ClCompile Include="replay\entry_points.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
@@ -370,15 +451,6 @@
     </ClCompile>
     <ClCompile Include="core\image_viewer.cpp">
       <Filter>Core</Filter>
-    </ClCompile>
-    <ClCompile Include="serialise\grisu2.cpp">
-      <Filter>Common\Strings</Filter>
-    </ClCompile>
-    <ClCompile Include="serialise\utf8printf.cpp">
-      <Filter>Common\Strings</Filter>
-    </ClCompile>
-    <ClCompile Include="serialise\string_utils.cpp">
-      <Filter>Common\Strings</Filter>
     </ClCompile>
     <ClCompile Include="3rdparty\tinyexr\tinyexr.cpp">
       <Filter>3rdparty\tinyexr</Filter>
@@ -488,6 +560,96 @@
     <ClCompile Include="core\android.cpp">
       <Filter>Replay</Filter>
     </ClCompile>
+    <ClCompile Include="replay\basic_types_tests.cpp">
+      <Filter>Replay</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\entropy_common.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\error_private.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\fse_compress.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\fse_decompress.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\huf_compress.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\huf_decompress.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\pool.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\threading.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\xxhash.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\zstd_common.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\zstd_compress.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\zstd_decompress.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\zstd\zstdmt_compress.c">
+      <Filter>3rdparty\zstd</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdparty\pugixml\pugixml.cpp">
+      <Filter>3rdparty\pugixml</Filter>
+    </ClCompile>
+    <ClCompile Include="strings\grisu2.cpp">
+      <Filter>Common\Strings</Filter>
+    </ClCompile>
+    <ClCompile Include="strings\string_utils.cpp">
+      <Filter>Common\Strings</Filter>
+    </ClCompile>
+    <ClCompile Include="strings\utf8printf.cpp">
+      <Filter>Common\Strings</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\comp_io_tests.cpp">
+      <Filter>Common\Serialise\Compressors</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\lz4io.cpp">
+      <Filter>Common\Serialise\Compressors</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\zstdio.cpp">
+      <Filter>Common\Serialise\Compressors</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\streamio.cpp">
+      <Filter>Common\Serialise\Stream I/O</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\streamio_tests.cpp">
+      <Filter>Common\Serialise\Stream I/O</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\rdcfile.cpp">
+      <Filter>Common\Serialise\Container File</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\xml_codec.cpp">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\serialiser_tests.cpp">
+      <Filter>Common\Serialise</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\chrome_json_codec.cpp">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClCompile>
+    <ClCompile Include="os\posix\linux\linux_network.cpp">
+      <Filter>OS\Posix\Linux</Filter>
+    </ClCompile>
+    <ClCompile Include="os\posix\apple\apple_network.cpp">
+      <Filter>OS\Posix\Apple</Filter>
+    </ClCompile>
+    <ClCompile Include="os\posix\android\android_network.cpp">
+      <Filter>OS\Posix\Android</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="os\win32\comexport.def">
@@ -576,6 +738,12 @@
     </None>
     <None Include="data\glsl\depthms2arr.frag">
       <Filter>Resources\glsl</Filter>
+    </None>
+    <None Include="api\replay\renderdoc_tostr.inl">
+      <Filter>API\Replay</Filter>
+    </None>
+    <None Include="replay\renderdoc_serialise.inl">
+      <Filter>Replay</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

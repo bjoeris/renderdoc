@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,10 +23,11 @@
  ******************************************************************************/
 
 #include "gl_replay.h"
+#include "serialise/rdcfile.h"
 #include "gl_driver.h"
 #include "gl_resources.h"
 
-ReplayStatus GL_CreateReplayDevice(const char *logfile, IReplayDriver **driver)
+ReplayStatus GL_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
 {
   RDCUNIMPLEMENTED("GL_CreateReplayDevice");
   return ReplayStatus::APIHardwareUnsupported;

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,7 +27,7 @@
 #include "api/app/renderdoc_app.h"
 #include "common/common.h"
 #include "serialise/serialiser.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 #include "dxbc_sdbg.h"
 #include "dxbc_spdb.h"
 
@@ -538,6 +538,11 @@ DXBCFile::DXBCFile(const void *ByteCode, size_t ByteCodeLength)
 
   m_Disassembled = false;
 
+  m_Type = D3D11_ShaderType_Vertex;
+  m_Version.Major = 5;
+  m_Version.Minor = 0;
+  m_GuessedResources = true;
+
   RDCASSERT(ByteCodeLength < UINT32_MAX);
 
   RDCEraseEl(m_ShaderStats);
@@ -626,13 +631,12 @@ DXBCFile::DXBCFile(const void *ByteCode, size_t ByteCodeLength)
         desc.reg = res->bindPoint;
         desc.bindCount = res->bindCount;
         desc.flags = res->flags;
-        desc.retType = (ShaderInputBind::RetType)res->retType;
+        desc.retType = (ResourceRetType)res->retType;
         desc.dimension = (ShaderInputBind::Dimension)res->dimension;
         desc.numSamples = res->sampleCount;
 
-        if(desc.numSamples == ~0 && desc.retType != ShaderInputBind::RETTYPE_MIXED &&
-           desc.retType != ShaderInputBind::RETTYPE_UNKNOWN &&
-           desc.retType != ShaderInputBind::RETTYPE_CONTINUED)
+        if(desc.numSamples == ~0 && desc.retType != RETURN_TYPE_MIXED &&
+           desc.retType != RETURN_TYPE_UNKNOWN && desc.retType != RETURN_TYPE_CONTINUED)
         {
           // uint, uint2, uint3, uint4 seem to be in these bits of flags.
           desc.numSamples = 1 + ((desc.flags & 0xC) >> 2);
@@ -685,12 +689,15 @@ DXBCFile::DXBCFile(const void *ByteCode, size_t ByteCodeLength)
         for(vector<ShaderInputBind> *arr : {&m_SRVs, &m_UAVs, &m_Samplers})
         {
           vector<ShaderInputBind> &resArray = *arr;
-          for(size_t i = 0; i < resArray.size();)
+          for(auto it = resArray.begin(); it != resArray.end();)
           {
-            if(resArray[i].bindCount > 1)
+            if(it->bindCount > 1)
             {
-              ShaderInputBind desc = resArray[i];
-              resArray.erase(resArray.begin() + i);
+              // copy off the array item description
+              ShaderInputBind desc = *it;
+
+              // remove the array item, and get the iterator to the next item to process
+              it = resArray.erase(it);
 
               string rname = desc.name;
               uint32_t arraySize = desc.bindCount;
@@ -704,17 +711,16 @@ DXBCFile::DXBCFile(const void *ByteCode, size_t ByteCodeLength)
                 desc.reg++;
               }
 
-              // continue from the i'th element again since
-              // we just removed it.
               continue;
             }
 
-            i++;
+            // just move on if this item wasn't arrayed
+            it++;
           }
         }
       }
 
-      set<string> cbuffernames;
+      std::set<std::string> cbuffernames;
 
       for(int32_t i = 0; i < h->cbuffers.count; i++)
       {
@@ -909,13 +915,15 @@ DXBCFile::DXBCFile(const void *ByteCode, size_t ByteCodeLength)
 
       RDCASSERT(sig && sig->empty());
 
-      SIGNElement *el = (SIGNElement *)(sign + 1);
-      SIGNElement7 *el7 = (SIGNElement7 *)el;
-      SIGNElement1 *el1 = (SIGNElement1 *)el;
+      SIGNElement *el0 = (SIGNElement *)(sign + 1);
+      SIGNElement7 *el7 = (SIGNElement7 *)el0;
+      SIGNElement1 *el1 = (SIGNElement1 *)el0;
 
       for(uint32_t signIdx = 0; signIdx < sign->numElems; signIdx++)
       {
         SigParameter desc;
+
+        const SIGNElement *el = el0;
 
         if(*fourcc == FOURCC_ISG1 || *fourcc == FOURCC_OSG1)
         {
@@ -962,53 +970,53 @@ DXBCFile::DXBCFile(const void *ByteCode, size_t ByteCodeLength)
         // check system value semantics
         if(desc.systemValue == ShaderBuiltin::Undefined)
         {
-          if(!_stricmp(desc.semanticName.elems, "SV_Position"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_Position"))
             desc.systemValue = ShaderBuiltin::Position;
-          if(!_stricmp(desc.semanticName.elems, "SV_ClipDistance"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_ClipDistance"))
             desc.systemValue = ShaderBuiltin::ClipDistance;
-          if(!_stricmp(desc.semanticName.elems, "SV_CullDistance"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_CullDistance"))
             desc.systemValue = ShaderBuiltin::CullDistance;
-          if(!_stricmp(desc.semanticName.elems, "SV_RenderTargetArrayIndex"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_RenderTargetArrayIndex"))
             desc.systemValue = ShaderBuiltin::RTIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_ViewportArrayIndex"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_ViewportArrayIndex"))
             desc.systemValue = ShaderBuiltin::ViewportIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_VertexID"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_VertexID"))
             desc.systemValue = ShaderBuiltin::VertexIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_PrimitiveID"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_PrimitiveID"))
             desc.systemValue = ShaderBuiltin::PrimitiveIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_InstanceID"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_InstanceID"))
             desc.systemValue = ShaderBuiltin::InstanceIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_DispatchThreadID"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_DispatchThreadID"))
             desc.systemValue = ShaderBuiltin::DispatchThreadIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_GroupID"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_GroupID"))
             desc.systemValue = ShaderBuiltin::GroupIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_GroupIndex"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_GroupIndex"))
             desc.systemValue = ShaderBuiltin::GroupFlatIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_GroupThreadID"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_GroupThreadID"))
             desc.systemValue = ShaderBuiltin::GroupThreadIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_GSInstanceID"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_GSInstanceID"))
             desc.systemValue = ShaderBuiltin::GSInstanceIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_OutputControlPointID"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_OutputControlPointID"))
             desc.systemValue = ShaderBuiltin::OutputControlPointIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_DomainLocation"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_DomainLocation"))
             desc.systemValue = ShaderBuiltin::DomainLocation;
-          if(!_stricmp(desc.semanticName.elems, "SV_IsFrontFace"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_IsFrontFace"))
             desc.systemValue = ShaderBuiltin::IsFrontFace;
-          if(!_stricmp(desc.semanticName.elems, "SV_SampleIndex"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_SampleIndex"))
             desc.systemValue = ShaderBuiltin::MSAASampleIndex;
-          if(!_stricmp(desc.semanticName.elems, "SV_TessFactor"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_TessFactor"))
             desc.systemValue = ShaderBuiltin::OuterTessFactor;
-          if(!_stricmp(desc.semanticName.elems, "SV_InsideTessFactor"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_InsideTessFactor"))
             desc.systemValue = ShaderBuiltin::InsideTessFactor;
-          if(!_stricmp(desc.semanticName.elems, "SV_Target"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_Target"))
             desc.systemValue = ShaderBuiltin::ColorOutput;
-          if(!_stricmp(desc.semanticName.elems, "SV_Depth"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_Depth"))
             desc.systemValue = ShaderBuiltin::DepthOutput;
-          if(!_stricmp(desc.semanticName.elems, "SV_Coverage"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_Coverage"))
             desc.systemValue = ShaderBuiltin::MSAACoverage;
-          if(!_stricmp(desc.semanticName.elems, "SV_DepthGreaterEqual"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_DepthGreaterEqual"))
             desc.systemValue = ShaderBuiltin::DepthOutputGreaterEqual;
-          if(!_stricmp(desc.semanticName.elems, "SV_DepthLessEqual"))
+          if(!_stricmp(desc.semanticName.c_str(), "SV_DepthLessEqual"))
             desc.systemValue = ShaderBuiltin::DepthOutputLessEqual;
         }
 
@@ -1016,7 +1024,7 @@ DXBCFile::DXBCFile(const void *ByteCode, size_t ByteCodeLength)
 
         sig->push_back(desc);
 
-        el++;
+        el0++;
         el1++;
         el7++;
       }
@@ -1028,16 +1036,16 @@ DXBCFile::DXBCFile(const void *ByteCode, size_t ByteCodeLength)
         for(uint32_t j = 0; j < sign->numElems; j++)
         {
           SigParameter &b = (*sig)[j];
-          if(i != j && !strcmp(a.semanticName.elems, b.semanticName.elems))
+          if(i != j && a.semanticName == b.semanticName)
           {
             a.needSemanticIndex = true;
             break;
           }
         }
 
-        string semanticIdxName = a.semanticName.elems;
+        std::string semanticIdxName = a.semanticName;
         if(a.needSemanticIndex)
-          semanticIdxName += ToStr::Get(a.semanticIndex);
+          semanticIdxName += ToStr(a.semanticIndex);
 
         a.semanticIdxName = semanticIdxName;
       }
@@ -1086,7 +1094,7 @@ void DXBCFile::GuessResources()
         desc.reg = idx;
         desc.bindCount = 1;
         desc.flags = dcl.samplerMode == SAMPLER_MODE_COMPARISON ? 2 : 0;
-        desc.retType = ShaderInputBind::RETTYPE_UNKNOWN;
+        desc.retType = RETURN_TYPE_UNKNOWN;
         desc.dimension = ShaderInputBind::DIM_UNKNOWN;
         desc.numSamples = 0;
 
@@ -1119,7 +1127,7 @@ void DXBCFile::GuessResources()
         desc.reg = idx;
         desc.bindCount = 1;
         desc.flags = 0;
-        desc.retType = (ShaderInputBind::RetType)dcl.resType[0];
+        desc.retType = dcl.resType[0];
 
         switch(dcl.dim)
         {
@@ -1188,7 +1196,7 @@ void DXBCFile::GuessResources()
         desc.reg = idx;
         desc.bindCount = 1;
         desc.flags = 0;
-        desc.retType = ShaderInputBind::RETTYPE_MIXED;
+        desc.retType = RETURN_TYPE_MIXED;
         desc.dimension = ShaderInputBind::DIM_BUFFER;
         desc.numSamples = 0;
 
@@ -1224,7 +1232,7 @@ void DXBCFile::GuessResources()
         desc.reg = idx;
         desc.bindCount = 1;
         desc.flags = 0;
-        desc.retType = ShaderInputBind::RETTYPE_MIXED;
+        desc.retType = RETURN_TYPE_MIXED;
         desc.dimension = ShaderInputBind::DIM_BUFFER;
         desc.numSamples = dcl.stride;
 
@@ -1261,7 +1269,7 @@ void DXBCFile::GuessResources()
         desc.reg = idx;
         desc.bindCount = 1;
         desc.flags = 0;
-        desc.retType = ShaderInputBind::RETTYPE_MIXED;
+        desc.retType = RETURN_TYPE_MIXED;
         desc.dimension = ShaderInputBind::DIM_BUFFER;
         desc.numSamples = dcl.stride;
 
@@ -1294,7 +1302,7 @@ void DXBCFile::GuessResources()
         desc.reg = idx;
         desc.bindCount = 1;
         desc.flags = 0;
-        desc.retType = (ShaderInputBind::RetType) int(dcl.resType[0]);    // enums match
+        desc.retType = dcl.resType[0];
 
         switch(dcl.dim)
         {
@@ -1354,7 +1362,7 @@ void DXBCFile::GuessResources()
         desc.reg = idx;
         desc.bindCount = 1;
         desc.flags = 1;
-        desc.retType = ShaderInputBind::RETTYPE_UNKNOWN;
+        desc.retType = RETURN_TYPE_UNKNOWN;
         desc.dimension = ShaderInputBind::DIM_UNKNOWN;
         desc.numSamples = 0;
 
@@ -1427,8 +1435,8 @@ uint32_t DecodeFlags(const ShaderCompileFlags &compileFlags)
 {
   uint32_t ret = 0;
 
-  if(compileFlags.flags.count >= 1 && compileFlags.flags[0].first == "compileFlags")
-    ret = atoi(compileFlags.flags[0].second.c_str());
+  if(!compileFlags.flags.empty() && compileFlags.flags[0].name == "compileFlags")
+    ret = atoi(compileFlags.flags[0].value.c_str());
 
   return ret;
 }
@@ -1437,7 +1445,6 @@ ShaderCompileFlags EncodeFlags(const uint32_t flags)
 {
   ShaderCompileFlags ret;
 
-  create_array_uninit(ret.flags, 1);
   ret.flags = {{"compileFlags", StringFormat::Fmt("%u", flags)}};
 
   return ret;

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -68,8 +68,11 @@ void ShutdownSPIRVCompiler();
 struct SPVInstruction;
 
 enum class ShaderStage : uint32_t;
+enum class ShaderBuiltin : uint32_t;
 struct ShaderReflection;
 struct ShaderBindpointMapping;
+
+ShaderBuiltin BuiltInToSystemAttribute(ShaderStage stage, const spv::BuiltIn el);
 
 // extra information that goes along with a ShaderReflection that has extra information for SPIR-V
 // patching
@@ -82,6 +85,9 @@ struct SPIRVPatchData
 
     // the access chain of indices
     std::vector<uint32_t> accessChain;
+
+    // is this output part of a matrix
+    bool isMatrix = false;
   };
 
   // matches the output signature array, with details of where to fetch the output from in the
@@ -126,6 +132,7 @@ struct SPVModule
   SPVInstruction *GetByID(uint32_t id);
   string Disassemble(const string &entryPoint);
 
+  std::vector<std::string> EntryPoints() const;
   ShaderStage StageForEntry(const string &entryPoint) const;
 
   void MakeReflection(ShaderStage stage, const string &entryPoint, ShaderReflection &reflection,

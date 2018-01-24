@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,7 @@
 #pragma once
 
 #include <QFrame>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
 namespace Ui
 {
@@ -55,13 +55,14 @@ enum class VariableCategory
   Outputs,
 };
 
-class ShaderViewer : public QFrame, public IShaderViewer, public ILogViewer
+class ShaderViewer : public QFrame, public IShaderViewer, public ICaptureViewer
 {
   Q_OBJECT
 
 public:
-  static IShaderViewer *EditShader(ICaptureContext &ctx, bool customShader, const QString &entryPoint,
-                                   const QStringMap &files, IShaderViewer::SaveCallback saveCallback,
+  static IShaderViewer *EditShader(ICaptureContext &ctx, bool customShader,
+                                   const QString &entryPoint, const rdcstrpairs &files,
+                                   IShaderViewer::SaveCallback saveCallback,
                                    IShaderViewer::CloseCallback closeCallback, QWidget *parent)
   {
     ShaderViewer *ret = new ShaderViewer(ctx, parent);
@@ -72,19 +73,19 @@ public:
   }
 
   static IShaderViewer *DebugShader(ICaptureContext &ctx, const ShaderBindpointMapping *bind,
-                                    const ShaderReflection *shader, ShaderStage stage,
+                                    const ShaderReflection *shader, ResourceId pipeline,
                                     ShaderDebugTrace *trace, const QString &debugContext,
                                     QWidget *parent)
   {
     ShaderViewer *ret = new ShaderViewer(ctx, parent);
-    ret->debugShader(bind, shader, stage, trace, debugContext);
+    ret->debugShader(bind, shader, pipeline, trace, debugContext);
     return ret;
   }
 
-  static IShaderViewer *ViewShader(ICaptureContext &ctx, const ShaderBindpointMapping *bind,
-                                   const ShaderReflection *shader, ShaderStage stage, QWidget *parent)
+  static IShaderViewer *ViewShader(ICaptureContext &ctx, const ShaderReflection *shader,
+                                   ResourceId pipeline, QWidget *parent)
   {
-    return DebugShader(ctx, bind, shader, stage, NULL, QString(), parent);
+    return DebugShader(ctx, NULL, shader, pipeline, NULL, QString(), parent);
   }
 
   ~ShaderViewer();
@@ -96,13 +97,13 @@ public:
 
   virtual void ToggleBreakpoint(int instruction = -1) override;
 
-  virtual void ShowErrors(const QString &errors) override;
+  virtual void ShowErrors(const rdcstr &errors) override;
 
-  // ILogViewerForm
-  void OnLogfileLoaded() override;
-  void OnLogfileClosed() override;
-  void OnSelectedEventChanged(uint32_t eventID) override {}
-  void OnEventChanged(uint32_t eventID) override;
+  // ICaptureViewer
+  void OnCaptureLoaded() override;
+  void OnCaptureClosed() override;
+  void OnSelectedEventChanged(uint32_t eventId) override {}
+  void OnEventChanged(uint32_t eventId) override;
 
 private slots:
   // automatic slots
@@ -147,14 +148,15 @@ public slots:
 
 private:
   explicit ShaderViewer(ICaptureContext &ctx, QWidget *parent = 0);
-  void editShader(bool customShader, const QString &entryPoint, const QStringMap &files);
+  void editShader(bool customShader, const QString &entryPoint, const rdcstrpairs &files);
   void debugShader(const ShaderBindpointMapping *bind, const ShaderReflection *shader,
-                   ShaderStage stage, ShaderDebugTrace *trace, const QString &debugContext);
-
+                   ResourceId pipeline, ShaderDebugTrace *trace, const QString &debugContext);
   bool eventFilter(QObject *watched, QEvent *event) override;
 
-  const rdctype::array<ShaderVariable> *GetVariableList(VariableCategory varCat, int arrayIdx);
+  const rdcarray<ShaderVariable> *GetVariableList(VariableCategory varCat, int arrayIdx);
   void getRegisterFromWord(const QString &text, VariableCategory &varCat, int &varIdx, int &arrayIdx);
+
+  void updateWindowTitle();
 
   void showVariableTooltip(VariableCategory varCat, int varIdx, int arrayIdx);
   void updateVariableTooltip();
@@ -170,6 +172,8 @@ private:
   const ShaderBindpointMapping *m_Mapping = NULL;
   const ShaderReflection *m_ShaderDetails = NULL;
   ShaderStage m_Stage;
+  QString m_DebugContext;
+  ResourceId m_Pipeline;
   ScintillaEdit *m_DisassemblyView = NULL;
   QFrame *m_DisassemblyToolbar = NULL;
   QWidget *m_DisassemblyFrame = NULL;
@@ -210,6 +214,8 @@ private:
   static const int INDICATOR_FINDRESULT = 0;
   static const int INDICATOR_REGHIGHLIGHT = 1;
 
+  QString targetName(const SPIRVDisassembler &disasm);
+
   void addFileList();
 
   ScintillaEdit *MakeEditor(const QString &name, const QString &text, int lang);
@@ -232,6 +238,6 @@ private:
   void runTo(int runToInstruction, bool forward, ShaderEvents condition = ShaderEvents::NoEvent);
 
   QString stringRep(const ShaderVariable &var, bool useType);
-  RDTreeWidgetItem *makeResourceRegister(const BindpointMap &bind, uint32_t idx,
+  RDTreeWidgetItem *makeResourceRegister(const Bindpoint &bind, uint32_t idx,
                                          const BoundResource &ro, const ShaderResource &resources);
 };

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  * 
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -246,7 +246,7 @@ cbuffer overlayconsts : register(b0)
 	float4 overlaycol;
 };
 
-MultipleOutput RENDERDOC_OverlayPS(float4 IN : SV_Position)
+MultipleOutput RENDERDOC_FixedColPS(float4 IN : SV_Position)
 {
 	MultipleOutput OUT = (MultipleOutput)0;
 
