@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -28,17 +28,6 @@
 #include <stdio.h>
 #include "core/core.h"
 #include "serialise/serialiser.h"
-
-string ToStrHelper<false, IID>::Get(const IID &el)
-{
-  char tostrBuf[256] = {0};
-  StringFormat::snprintf(tostrBuf, 255, "GUID {%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}",
-                         el.Data1, (unsigned int)el.Data2, (unsigned int)el.Data3, el.Data4[0],
-                         el.Data4[1], el.Data4[2], el.Data4[3], el.Data4[4], el.Data4[5],
-                         el.Data4[6], el.Data4[7]);
-
-  return tostrBuf;
-}
 
 WRAPPED_POOL_INST(WrappedIDXGIDevice4);
 
@@ -159,7 +148,7 @@ bool RefCountDXGIObject::HandleWrap(REFIID riid, void **ppvObject)
     if(!printed)
     {
       printed = true;
-      RDCWARN("Querying IDXGIObject for unsupported D3D10 interface: %s", ToStr::Get(riid).c_str());
+      RDCWARN("Querying IDXGIObject for unsupported D3D10 interface: %s", ToStr(riid).c_str());
     }
     return false;
   }
@@ -169,12 +158,12 @@ bool RefCountDXGIObject::HandleWrap(REFIID riid, void **ppvObject)
     if(!printed)
     {
       printed = true;
-      RDCWARN("Querying IDXGIObject for unknown GUID: %s", ToStr::Get(riid).c_str());
+      RDCWARN("Querying IDXGIObject for unknown GUID: %s", ToStr(riid).c_str());
     }
   }
   else
   {
-    string guid = ToStr::Get(riid);
+    string guid = ToStr(riid);
     RDCWARN("Querying IDXGIObject for interface: %s", guid.c_str());
   }
 
@@ -302,7 +291,7 @@ HRESULT STDMETHODCALLTYPE WrappedIDXGISwapChain4::QueryInterface(REFIID riid, vo
   }
   else
   {
-    string guid = ToStr::Get(riid);
+    string guid = ToStr(riid);
     RDCWARN("Querying IDXGISwapChain for interface: %s", guid.c_str());
   }
 
@@ -396,7 +385,7 @@ HRESULT WrappedIDXGISwapChain4::SetFullscreenState(
   WrappedIDXGIOutput5 *wrappedOutput = (WrappedIDXGIOutput5 *)pTarget;
   IDXGIOutput *unwrappedOutput = wrappedOutput ? wrappedOutput->GetReal() : NULL;
 
-  if(RenderDoc::Inst().GetCaptureOptions().AllowFullscreen)
+  if(RenderDoc::Inst().GetCaptureOptions().allowFullscreen)
     return m_pReal->SetFullscreenState(Fullscreen, unwrappedOutput);
 
   return S_OK;
@@ -448,7 +437,7 @@ HRESULT WrappedIDXGISwapChain4::GetBuffer(
           uuid != __uuidof(ID3D12Resource))
   {
     RDCERR("Unsupported or unrecognised UUID passed to IDXGISwapChain::GetBuffer - %s",
-           ToStr::Get(uuid).c_str());
+           ToStr(uuid).c_str());
     return E_NOINTERFACE;
   }
 
@@ -463,7 +452,7 @@ HRESULT WrappedIDXGISwapChain4::GetBuffer(
 
     if(FAILED(ret))
     {
-      RDCERR("Failed to get swapchain backbuffer %d: %08x", Buffer, ret);
+      RDCERR("Failed to get swapchain backbuffer %d: HRESULT: %s", Buffer, ToStr(ret).c_str());
       SAFE_RELEASE(realSurface);
       tex = NULL;
     }
@@ -475,7 +464,7 @@ HRESULT WrappedIDXGISwapChain4::GetBuffer(
     }
 
     // if the original UUID was IDXGISurface, fixup for the expected interface being returned
-    if(riid == __uuidof(IDXGISurface))
+    if(tex && riid == __uuidof(IDXGISurface))
     {
       IDXGISurface *surf = NULL;
       HRESULT hr = tex->QueryInterface(__uuidof(IDXGISurface), (void **)&surf);
@@ -527,7 +516,7 @@ HRESULT WrappedIDXGISwapChain4::Present(
     /* [in] */ UINT SyncInterval,
     /* [in] */ UINT Flags)
 {
-  if(!RenderDoc::Inst().GetCaptureOptions().AllowVSync)
+  if(!RenderDoc::Inst().GetCaptureOptions().allowVSync)
   {
     SyncInterval = 0;
   }
@@ -540,7 +529,7 @@ HRESULT WrappedIDXGISwapChain4::Present(
 HRESULT WrappedIDXGISwapChain4::Present1(UINT SyncInterval, UINT Flags,
                                          const DXGI_PRESENT_PARAMETERS *pPresentParameters)
 {
-  if(!RenderDoc::Inst().GetCaptureOptions().AllowVSync)
+  if(!RenderDoc::Inst().GetCaptureOptions().allowVSync)
   {
     SyncInterval = 0;
   }
@@ -663,7 +652,7 @@ HRESULT STDMETHODCALLTYPE WrappedIDXGIOutput5::QueryInterface(REFIID riid, void 
   }
   else
   {
-    string guid = ToStr::Get(riid);
+    string guid = ToStr(riid);
     RDCWARN("Querying IDXGIOutput for interface: %s", guid.c_str());
   }
 
@@ -738,7 +727,7 @@ HRESULT STDMETHODCALLTYPE WrappedIDXGIAdapter3::QueryInterface(REFIID riid, void
   }
   else
   {
-    string guid = ToStr::Get(riid);
+    string guid = ToStr(riid);
     RDCWARN("Querying IDXGIAdapter for interface: %s", guid.c_str());
   }
 
@@ -838,7 +827,7 @@ HRESULT STDMETHODCALLTYPE WrappedIDXGIDevice4::QueryInterface(REFIID riid, void 
   }
   else
   {
-    string guid = ToStr::Get(riid);
+    string guid = ToStr(riid);
     RDCWARN("Querying IDXGIDevice for interface: %s", guid.c_str());
   }
 
@@ -945,7 +934,7 @@ HRESULT STDMETHODCALLTYPE WrappedIDXGIFactory5::QueryInterface(REFIID riid, void
   }
   else
   {
-    string guid = ToStr::Get(riid);
+    string guid = ToStr(riid);
     RDCWARN("Querying IDXGIFactory for interface: %s", guid.c_str());
   }
 
@@ -959,7 +948,7 @@ HRESULT WrappedIDXGIFactory5::CreateSwapChain(IUnknown *pDevice, DXGI_SWAP_CHAIN
 
   if(wrapDevice)
   {
-    if(!RenderDoc::Inst().GetCaptureOptions().AllowFullscreen && pDesc)
+    if(!RenderDoc::Inst().GetCaptureOptions().allowFullscreen && pDesc)
     {
       pDesc->Windowed = TRUE;
     }
@@ -992,7 +981,7 @@ HRESULT WrappedIDXGIFactory5::CreateSwapChainForHwnd(
 
   if(wrapDevice)
   {
-    if(!RenderDoc::Inst().GetCaptureOptions().AllowFullscreen && pFullscreenDesc)
+    if(!RenderDoc::Inst().GetCaptureOptions().allowFullscreen && pFullscreenDesc)
     {
       pFullscreenDesc = NULL;
     }
@@ -1026,7 +1015,7 @@ HRESULT WrappedIDXGIFactory5::CreateSwapChainForCoreWindow(IUnknown *pDevice, IU
   WrappedIDXGIOutput5 *wrappedOutput = (WrappedIDXGIOutput5 *)pRestrictToOutput;
   IDXGIOutput *unwrappedOutput = wrappedOutput ? wrappedOutput->GetReal() : NULL;
 
-  if(!RenderDoc::Inst().GetCaptureOptions().AllowFullscreen)
+  if(!RenderDoc::Inst().GetCaptureOptions().allowFullscreen)
   {
     RDCWARN("Impossible to disallow fullscreen on call to CreateSwapChainForCoreWindow");
   }
@@ -1066,7 +1055,7 @@ HRESULT WrappedIDXGIFactory5::CreateSwapChainForComposition(IUnknown *pDevice,
   WrappedIDXGIOutput5 *wrappedOutput = (WrappedIDXGIOutput5 *)pRestrictToOutput;
   IDXGIOutput *unwrappedOutput = wrappedOutput ? wrappedOutput->GetReal() : NULL;
 
-  if(!RenderDoc::Inst().GetCaptureOptions().AllowFullscreen)
+  if(!RenderDoc::Inst().GetCaptureOptions().allowFullscreen)
   {
     RDCWARN("Impossible to disallow fullscreen on call to CreateSwapChainForComposition");
   }

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -71,6 +71,8 @@ enum VkResourceType
   eResSwapchain,
   eResSurface
 };
+
+DECLARE_REFLECTION_ENUM(VkResourceType);
 
 // VkDisplayKHR and VkDisplayModeKHR are both UNWRAPPED because there's no need to wrap them.
 // The only thing we need to wrap VkSurfaceKHR for is to get back the window from it later.
@@ -817,6 +819,8 @@ struct ImageRegionState
   VkImageLayout newLayout;
 };
 
+DECLARE_REFLECTION_STRUCT(ImageRegionState);
+
 struct SwapchainInfo
 {
   VkFormat format;
@@ -868,7 +872,8 @@ struct CmdBufferRecordingInfo
   VkDevice device;
   VkCommandBufferAllocateInfo allocInfo;
 
-  VkResourceRecord *framebuffer;
+  VkResourceRecord *framebuffer = NULL;
+  VkResourceRecord *allocRecord = NULL;
 
   vector<pair<ResourceId, ImageRegionState> > imgbarriers;
 
@@ -1073,6 +1078,15 @@ public:
   // so just pack/unpack into bitfields
   struct ViewRange
   {
+    ViewRange()
+    {
+      aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      baseMipLevel = 0;
+      levelCount = 1;
+      baseArrayLayer = 0;
+      layerCount = 1;
+    }
+
     ViewRange &operator=(const VkImageSubresourceRange &range)
     {
       aspectMask = (uint32_t)range.aspectMask;
@@ -1147,6 +1161,8 @@ struct ImageLayouts
   VkFormat format;
 };
 
+DECLARE_REFLECTION_STRUCT(ImageLayouts);
+
 bool IsBlockFormat(VkFormat f);
 bool IsDepthOrStencilFormat(VkFormat f);
 bool IsDepthAndStencilFormat(VkFormat f);
@@ -1156,6 +1172,7 @@ bool IsStencilOnlyFormat(VkFormat f);
 bool IsSRGBFormat(VkFormat f);
 bool IsUIntFormat(VkFormat f);
 bool IsSIntFormat(VkFormat f);
+bool IsYUVFormat(VkFormat f);
 
 VkFormat GetDepthOnlyFormat(VkFormat f);
 VkFormat GetUIntTypedFormat(VkFormat f);

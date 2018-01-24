@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,6 +30,7 @@
 #include "api/replay/renderdoc_replay.h"
 #include "common/common.h"
 #include "driver/d3d11/d3d11_device.h"
+#include "driver/d3d11/d3d11_shader_cache.h"
 #include "maths/formatpacking.h"
 #include "dxbc_inspect.h"
 
@@ -537,7 +538,7 @@ void State::Init()
 
     if(decl.declaration == OPCODE_DCL_TEMPS)
     {
-      create_array_uninit(registers, decl.numTemps);
+      registers.reserve(decl.numTemps);
 
       for(uint32_t t = 0; t < decl.numTemps; t++)
       {
@@ -545,7 +546,7 @@ void State::Init()
 
         StringFormat::snprintf(buf, 63, "r%d", t);
 
-        registers[t] = ShaderVariable(buf, 0l, 0l, 0l, 0l);
+        registers.push_back(ShaderVariable(buf, 0l, 0l, 0l, 0l));
       }
     }
     if(decl.declaration == OPCODE_DCL_INDEXABLE_TEMP)
@@ -561,20 +562,20 @@ void State::Init()
 
   if(indexTempSizes.size())
   {
-    create_array_uninit(indexableTemps, indexTempSizes.size());
+    indexableTemps.resize(indexTempSizes.size());
 
     for(int32_t i = 0; i < (int32_t)indexTempSizes.size(); i++)
     {
       if(indexTempSizes[i] > 0)
       {
-        create_array_uninit(indexableTemps[i], indexTempSizes[i]);
+        indexableTemps[i].members.resize(indexTempSizes[i]);
         for(uint32_t t = 0; t < indexTempSizes[i]; t++)
         {
           char buf[64] = {0};
 
           StringFormat::snprintf(buf, 63, "x%u[%u]", i, t);
 
-          indexableTemps[i][t] = ShaderVariable(buf, 0l, 0l, 0l, 0l);
+          indexableTemps[i].members[t] = ShaderVariable(buf, 0l, 0l, 0l, 0l);
         }
       }
     }
@@ -632,8 +633,8 @@ void State::SetDst(const ASMOperand &dstoper, const ASMOperation &op, const Shad
   {
     case TYPE_TEMP:
     {
-      RDCASSERT(indices[0] < (uint32_t)registers.count);
-      if(indices[0] < (uint32_t)registers.count)
+      RDCASSERT(indices[0] < (uint32_t)registers.size());
+      if(indices[0] < (uint32_t)registers.size())
         v = &registers[(size_t)indices[0]];
       break;
     }
@@ -643,13 +644,13 @@ void State::SetDst(const ASMOperand &dstoper, const ASMOperation &op, const Shad
 
       if(dstoper.indices.size() == 2)
       {
-        RDCASSERT(indices[0] < (uint32_t)indexableTemps.count);
-        if(indices[0] < (uint32_t)indexableTemps.count)
+        RDCASSERT(indices[0] < (uint32_t)indexableTemps.size());
+        if(indices[0] < (uint32_t)indexableTemps.size())
         {
-          RDCASSERT(indices[1] < (uint32_t)indexableTemps[indices[0]].count);
-          if(indices[1] < (uint32_t)indexableTemps[indices[0]].count)
+          RDCASSERT(indices[1] < (uint32_t)indexableTemps[indices[0]].members.size());
+          if(indices[1] < (uint32_t)indexableTemps[indices[0]].members.size())
           {
-            v = &indexableTemps[indices[0]][indices[1]];
+            v = &indexableTemps[indices[0]].members[indices[1]];
           }
         }
       }
@@ -657,8 +658,8 @@ void State::SetDst(const ASMOperand &dstoper, const ASMOperation &op, const Shad
     }
     case TYPE_OUTPUT:
     {
-      RDCASSERT(indices[0] < (uint32_t)outputs.count);
-      if(indices[0] < (uint32_t)outputs.count)
+      RDCASSERT(indices[0] < (uint32_t)outputs.size());
+      if(indices[0] < (uint32_t)outputs.size())
         v = &outputs[(size_t)indices[0]];
       break;
     }
@@ -680,10 +681,10 @@ void State::SetDst(const ASMOperand &dstoper, const ASMOperation &op, const Shad
     {
       RDCERR("Currently unsupported destination operand type %d!", dstoper.type);
 
-      string name = dstoper.toString(dxbc, ToString::ShowSwizzle);
-      for(int32_t i = 0; i < outputs.count; i++)
+      std::string name = dstoper.toString(dxbc, ToString::ShowSwizzle);
+      for(size_t i = 0; i < outputs.size(); i++)
       {
-        if(outputs[i].name.elems && !strcmp(name.c_str(), outputs[i].name.elems))
+        if(outputs[i].name == name)
         {
           v = &outputs[i];
           break;
@@ -821,9 +822,9 @@ ShaderVariable State::GetSrc(const ASMOperand &oper, const ASMOperation &op) con
     case TYPE_TEMP:
     {
       // we assume we never write to an uninitialised register
-      RDCASSERT(indices[0] < (uint32_t)registers.count);
+      RDCASSERT(indices[0] < (uint32_t)registers.size());
 
-      if(indices[0] < (uint32_t)registers.count)
+      if(indices[0] < (uint32_t)registers.size())
         v = s = registers[indices[0]];
       else
         v = s = ShaderVariable("", indices[0], indices[0], indices[0], indices[0]);
@@ -836,13 +837,13 @@ ShaderVariable State::GetSrc(const ASMOperand &oper, const ASMOperation &op) con
 
       if(oper.indices.size() == 2)
       {
-        RDCASSERT(indices[0] < (uint32_t)indexableTemps.count);
-        if(indices[0] < (uint32_t)indexableTemps.count)
+        RDCASSERT(indices[0] < (uint32_t)indexableTemps.size());
+        if(indices[0] < (uint32_t)indexableTemps.size())
         {
-          RDCASSERT(indices[1] < (uint32_t)indexableTemps[indices[0]].count);
-          if(indices[1] < (uint32_t)indexableTemps[indices[0]].count)
+          RDCASSERT(indices[1] < (uint32_t)indexableTemps[indices[0]].members.size());
+          if(indices[1] < (uint32_t)indexableTemps[indices[0]].members.size())
           {
-            v = s = indexableTemps[indices[0]][indices[1]];
+            v = s = indexableTemps[indices[0]].members[indices[1]];
           }
         }
       }
@@ -850,9 +851,9 @@ ShaderVariable State::GetSrc(const ASMOperand &oper, const ASMOperation &op) con
     }
     case TYPE_INPUT:
     {
-      RDCASSERT(indices[0] < (uint32_t)trace->inputs.count);
+      RDCASSERT(indices[0] < (uint32_t)trace->inputs.size());
 
-      if(indices[0] < (uint32_t)trace->inputs.count)
+      if(indices[0] < (uint32_t)trace->inputs.size())
         v = s = trace->inputs[indices[0]];
       else
         v = s = ShaderVariable("", indices[0], indices[0], indices[0], indices[0]);
@@ -861,9 +862,9 @@ ShaderVariable State::GetSrc(const ASMOperand &oper, const ASMOperation &op) con
     }
     case TYPE_OUTPUT:
     {
-      RDCASSERT(indices[0] < (uint32_t)outputs.count);
+      RDCASSERT(indices[0] < (uint32_t)outputs.size());
 
-      if(indices[0] < (uint32_t)outputs.count)
+      if(indices[0] < (uint32_t)outputs.size())
         v = s = outputs[indices[0]];
       else
         v = s = ShaderVariable("", indices[0], indices[0], indices[0], indices[0]);
@@ -937,16 +938,17 @@ ShaderVariable State::GetSrc(const ASMOperand &oper, const ASMOperation &op) con
         }
       }
 
-      RDCASSERTMSG("Invalid cbuffer lookup", cb != -1 && cb < trace->cbuffers.count, cb,
-                   trace->cbuffers.count);
+      RDCASSERTMSG("Invalid cbuffer lookup", cb != -1 && cb < trace->constantBlocks.count(), cb,
+                   trace->constantBlocks.count());
 
-      if(cb >= 0 && cb < trace->cbuffers.count)
+      if(cb >= 0 && cb < trace->constantBlocks.count())
       {
-        RDCASSERTMSG("Out of bounds cbuffer lookup", indices[1] < (uint32_t)trace->cbuffers[cb].count,
-                     indices[1], trace->cbuffers[cb].count);
+        RDCASSERTMSG("Out of bounds cbuffer lookup",
+                     indices[1] < (uint32_t)trace->constantBlocks[cb].members.count(), indices[1],
+                     trace->constantBlocks[cb].members.count());
 
-        if(indices[1] < (uint32_t)trace->cbuffers[cb].count)
-          v = s = trace->cbuffers[cb][indices[1]];
+        if(indices[1] < (uint32_t)trace->constantBlocks[cb].members.count())
+          v = s = trace->constantBlocks[cb].members[indices[1]];
         else
           v = s = ShaderVariable("", 0U, 0U, 0U, 0U);
       }
@@ -1092,6 +1094,25 @@ ShaderVariable State::GetSrc(const ASMOperand &oper, const ASMOperation &op) con
   return v;
 }
 
+static uint32_t BitwiseReverseLSB16(uint32_t x)
+{
+  // Reverse the bits in x, then discard the lower half
+  // https://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel
+  x = ((x >> 1) & 0x55555555) | ((x & 0x55555555) << 1);
+  x = ((x >> 2) & 0x33333333) | ((x & 0x33333333) << 2);
+  x = ((x >> 4) & 0x0F0F0F0F) | ((x & 0x0F0F0F0F) << 4);
+  x = ((x >> 8) & 0x00FF00FF) | ((x & 0x00FF00FF) << 8);
+  return x << 16;
+}
+
+static uint32_t PopCount(uint32_t x)
+{
+  // https://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+  x = x - ((x >> 1) & 0x55555555);
+  x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+  return (((x + (x >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+}
+
 State State::GetNext(GlobalState &global, State quad[4]) const
 {
   State s = *this;
@@ -1155,13 +1176,9 @@ State State::GetNext(GlobalState &global, State quad[4]) const
     {
       ShaderVariable ret("", 0U, 0U, 0U, 0U);
 
-      // do a bitwise reverse
       for(size_t i = 0; i < 4; i++)
       {
-        for(size_t b = 0; b < 32; b++)
-        {
-          ret.value.uv[i] |= (srcOpers[0].value.uv[i] & (1 << b)) << (31 - 2 * b);
-        }
+        ret.value.uv[i] = BitwiseReverseLSB16(srcOpers[0].value.uv[i]);
       }
 
       s.SetDst(op.operands[0], op, ret);
@@ -1172,13 +1189,9 @@ State State::GetNext(GlobalState &global, State quad[4]) const
     {
       ShaderVariable ret("", 0U, 0U, 0U, 0U);
 
-      // do a bitwise reverse
       for(size_t i = 0; i < 4; i++)
       {
-        uint32_t bf = srcOpers[0].value.uv[i];
-        bf = bf - ((bf >> 1) & 0x55555555);
-        bf = (bf & 0x33333333) + ((bf >> 2) & 0x33333333);
-        ret.value.uv[i] = (((bf + (bf >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+        ret.value.uv[i] = PopCount(srcOpers[0].value.uv[i]);
       }
 
       s.SetDst(op.operands[0], op, ret);
@@ -1718,7 +1731,7 @@ State State::GetNext(GlobalState &global, State quad[4]) const
       csProgram += "}\n";
 
       ID3D11ComputeShader *cs =
-          device->GetDebugManager()->MakeCShader(csProgram.c_str(), "main", "cs_5_0");
+          device->GetShaderCache()->MakeCShader(csProgram.c_str(), "main", "cs_5_0");
 
       ID3D11DeviceContext *context = NULL;
 
@@ -1757,7 +1770,7 @@ State State::GetNext(GlobalState &global, State quad[4]) const
 
       if(FAILED(hr))
       {
-        RDCERR("Failed to create constant buf %08x", hr);
+        RDCERR("Failed to create constant buf HRESULT: %s", ToStr(hr).c_str());
         return s;
       }
 
@@ -1783,7 +1796,7 @@ State State::GetNext(GlobalState &global, State quad[4]) const
 
       if(FAILED(hr))
       {
-        RDCERR("Failed to create UAV buf %08x", hr);
+        RDCERR("Failed to create UAV buf HRESULT: %s", ToStr(hr).c_str());
         return s;
       }
 
@@ -1795,7 +1808,7 @@ State State::GetNext(GlobalState &global, State quad[4]) const
 
       if(FAILED(hr))
       {
-        RDCERR("Failed to create copy buf %08x", hr);
+        RDCERR("Failed to create copy buf HRESULT: %s", ToStr(hr).c_str());
         return s;
       }
 
@@ -1811,7 +1824,7 @@ State State::GetNext(GlobalState &global, State quad[4]) const
 
       if(FAILED(hr))
       {
-        RDCERR("Failed to create uav %08x", hr);
+        RDCERR("Failed to create uav HRESULT: %s", ToStr(hr).c_str());
         return s;
       }
 
@@ -1825,7 +1838,7 @@ State State::GetNext(GlobalState &global, State quad[4]) const
 
       if(FAILED(hr))
       {
-        RDCERR("Failed to map results %08x", hr);
+        RDCERR("Failed to map results HRESULT: %s", ToStr(hr).c_str());
         return s;
       }
 
@@ -4037,8 +4050,12 @@ State State::GetNext(GlobalState &global, State quad[4]) const
       UINT texSlot = (UINT)op.operands[2].indices[0].index;
       UINT sampSlot = 0;
 
-      if(op.operands.size() >= 4 && !op.operands[3].indices.empty())
-        sampSlot = (UINT)op.operands[3].indices[0].index;
+      for(size_t i = 0; i < op.operands.size(); i++)
+      {
+        const ASMOperand &operand = op.operands[i];
+        if(operand.type == OperandType::TYPE_SAMPLER)
+          sampSlot = (UINT)operand.indices[0].index;
+      }
 
       if(op.operation == OPCODE_SAMPLE || op.operation == OPCODE_SAMPLE_B ||
          op.operation == OPCODE_SAMPLE_D)
@@ -4166,9 +4183,9 @@ State State::GetNext(GlobalState &global, State quad[4]) const
       }
 
       ID3D11VertexShader *vs =
-          device->GetDebugManager()->MakeVShader(vsProgram.c_str(), "main", "vs_5_0");
+          device->GetShaderCache()->MakeVShader(vsProgram.c_str(), "main", "vs_5_0");
       ID3D11PixelShader *ps =
-          device->GetDebugManager()->MakePShader(sampleProgram.c_str(), "main", "ps_5_0");
+          device->GetShaderCache()->MakePShader(sampleProgram.c_str(), "main", "ps_5_0");
 
       ID3D11DeviceContext *context = NULL;
 
@@ -4247,7 +4264,7 @@ State State::GetNext(GlobalState &global, State quad[4]) const
 
         if(FAILED(hr))
         {
-          RDCERR("Failed to create new sampler state in debugging %08x", hr);
+          RDCERR("Failed to create new sampler state in debugging HRESULT: %s", ToStr(hr).c_str());
         }
         else
         {
@@ -4298,7 +4315,7 @@ State State::GetNext(GlobalState &global, State quad[4]) const
 
       if(FAILED(hr))
       {
-        RDCERR("Failed to create RT tex %08x", hr);
+        RDCERR("Failed to create RT tex HRESULT: %s", ToStr(hr).c_str());
         return s;
       }
 
@@ -4310,7 +4327,7 @@ State State::GetNext(GlobalState &global, State quad[4]) const
 
       if(FAILED(hr))
       {
-        RDCERR("Failed to create copy tex %08x", hr);
+        RDCERR("Failed to create copy tex HRESULT: %s", ToStr(hr).c_str());
         return s;
       }
 
@@ -4324,7 +4341,7 @@ State State::GetNext(GlobalState &global, State quad[4]) const
 
       if(FAILED(hr))
       {
-        RDCERR("Failed to create rt rtv %08x", hr);
+        RDCERR("Failed to create rt rtv HRESULT: %s", ToStr(hr).c_str());
         return s;
       }
 
@@ -4338,7 +4355,7 @@ State State::GetNext(GlobalState &global, State quad[4]) const
 
       if(FAILED(hr))
       {
-        RDCERR("Failed to map results %08x", hr);
+        RDCERR("Failed to map results HRESULT: %s", ToStr(hr).c_str());
         return s;
       }
 

@@ -38,3 +38,4 @@ renderdocui/3rdparty/ironpython/pythonlibs.zip
 qrenderdoc/generated/
 .DS_Store
 plugins-*/
+__pycache__

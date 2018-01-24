@@ -2,16 +2,21 @@ option(STATIC_QRENDERDOC "Compile qrenderdoc as static" OFF)
 option(QRENDERDOC_NO_CXX11_REGEX "Disable C++11 regex in scintilla" OFF)
 
 set(QMAKE_QT5_COMMAND qmake CACHE STRING "Command to run to invoke Qt5's qmake. Normally this is qmake, possibly with qtchooser, but might be qmake-qt5")
-set(RENDERDOC_SWIG_PACKAGE https://github.com/baldurk/swig/archive/renderdoc-modified-1.zip CACHE STRING "The location where RenderDoc's swig fork source can be found. By default points to the URL on github but can be pointed to a local file.")
+set(RENDERDOC_SWIG_PACKAGE https://github.com/baldurk/swig/archive/renderdoc-modified-4.zip CACHE STRING "The location where RenderDoc's swig fork source can be found. By default points to the URL on github but can be pointed to a local file.")
 
 set(QMAKE_CONFIG "debug")
 set(QMAKE_LDFLAGS "")
 set(QMAKE_CXXFLAGS "")
+set(SWIG_FLAGS "")
 
 if(STATIC_QRENDERDOC)
     set(QMAKE_CXXFLAGS "-DSTATIC_QRENDERDOC=1")
     set(QMAKE_CONFIG "debug static")
     set(QMAKE_LDFLAGS "-static-libstdc++ -lutil")
+endif()
+
+if(NOT APPLE)
+    set(SWIG_FLAGS "-DSWIGWORDSIZE64")
 endif()
 
 if(QRENDERDOC_NO_CXX11_REGEX)
@@ -71,7 +76,7 @@ ExternalProject_Add(custom_swig
     URL ${RENDERDOC_SWIG_PACKAGE}
     BUILD_IN_SOURCE 1
     CONFIGURE_COMMAND ./autogen.sh > /dev/null 2>&1
-    COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ./configure --with-pcre=yes --prefix=${CMAKE_BINARY_DIR} > /dev/null
+    COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} CFLAGS=-fPIC CXXFLAGS=-fPIC ./configure --with-pcre=yes --prefix=${CMAKE_BINARY_DIR} > /dev/null
     BUILD_COMMAND $(MAKE) > /dev/null 2>&1
     INSTALL_COMMAND $(MAKE) install > /dev/null 2>&1)
 
@@ -101,6 +106,9 @@ file(WRITE
      "QMAKE_CXXFLAGS+=${warning_flags}\n"
      "QMAKE_CXXFLAGS+=${QMAKE_CXXFLAGS}\n"
      "QMAKE_LFLAGS+=${QMAKE_LDFLAGS}\n"
+     "\n"
+     "LIB_SUFFIX=${LIB_SUFFIX}\n"
+     "LIB_SUBFOLDER_TRAIL_SLASH=${LIB_SUBFOLDER_TRAIL_SLASH}\n"
      "\n"
      # search for -lrenderdoc here
      "LIBS+=-L${CMAKE_RUNTIME_OUTPUT_DIRECTORY}\n"
@@ -186,7 +194,7 @@ foreach(in ${swig_interfaces})
     get_filename_component(swig_file ${in} NAME_WE)
 
     add_custom_command(OUTPUT ${swig_file}_python.cxx ${swig_file}.py
-            COMMAND ${CMAKE_BINARY_DIR}/bin/swig -v -Wextra -Werror -O -c++ -python -modern -modernargs -enumclass -fastunpack -py3 -builtin -I${CMAKE_CURRENT_SOURCE_DIR} -I${CMAKE_SOURCE_DIR}/renderdoc/api/replay -outdir ${CMAKE_CURRENT_BINARY_DIR} -o ${CMAKE_CURRENT_BINARY_DIR}/${swig_file}_python.cxx ${CMAKE_CURRENT_SOURCE_DIR}/${in}
+            COMMAND ${CMAKE_BINARY_DIR}/bin/swig -v -Wextra -Werror ${SWIG_FLAGS} -O -c++ -python -modern -interface ${swig_file} -modernargs -enumclass -fastunpack -py3 -builtin -I${CMAKE_CURRENT_SOURCE_DIR} -I${CMAKE_SOURCE_DIR}/renderdoc/api/replay -outdir ${CMAKE_CURRENT_BINARY_DIR} -o ${CMAKE_CURRENT_BINARY_DIR}/${swig_file}_python.cxx ${CMAKE_CURRENT_SOURCE_DIR}/${in}
             DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${in}
             DEPENDS custom_swig
             DEPENDS ${RDOC_REPLAY_FILES}
@@ -202,21 +210,19 @@ foreach(in ${swig_interfaces})
     list(APPEND swig_output ${swig_file}.py.c)
 endforeach()
 
+add_custom_target(swig-bindings ALL DEPENDS ${swig_output})
+
+if(ENABLE_QRENDERDOC)
+
 # The case here is deliberately not matching the executable name
 # This means the custom command doesn't create this output file,
 # which causes CMake to rerun this target every time so that Qt
 # can do dependency checking and rebuild anything necessary.
 add_custom_command(OUTPUT QRenderDoc
-	COMMAND ${QMAKE_QT5_COMMAND} "CMAKE_DIR=${CMAKE_BINARY_DIR}" ${CMAKE_CURRENT_SOURCE_DIR}
-	COMMAND $(MAKE)
-	DEPENDS RenderDoc.icns
-	DEPENDS ${swig_output})
-add_custom_target(build-qrenderdoc ALL DEPENDS QRenderDoc DEPENDS renderdoc)
-
-# Build python modules - primarily used for constructing documentation
-if(UNIX AND NOT APPLE)
-    add_subdirectory(Code/pyrenderdoc)
-endif()
+    COMMAND ${QMAKE_QT5_COMMAND} "CMAKE_DIR=${CMAKE_BINARY_DIR}" ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMAND $(MAKE)
+    DEPENDS RenderDoc.icns)
+add_custom_target(build-qrenderdoc ALL DEPENDS QRenderDoc DEPENDS renderdoc DEPENDS swig-bindings)
 
 install (PROGRAMS ${CMAKE_BINARY_DIR}/bin/qrenderdoc DESTINATION bin)
 
@@ -237,3 +243,10 @@ install (CODE "MESSAGE(\"sudo update-menus\")")
 install (CODE "MESSAGE(\"sudo update-mime-database /usr/share/mime/\")")
 install (CODE "MESSAGE(\"sudo gtk-update-icon-cache /usr/share/icons/hicolor/\")")
 install (CODE "MESSAGE(\"NB: Your paths may vary.\")")
+
+endif() # if(ENABLE_QRENDERDOC)
+
+# Build python modules - primarily used for constructing documentation
+if(ENABLE_PYRENDERDOC AND UNIX AND NOT APPLE)
+    add_subdirectory(Code/pyrenderdoc)
+endif()

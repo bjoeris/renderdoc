@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,32 +32,49 @@
 
 class WrappedID3D12Device;
 
+class D3D12DebugManager;
+
 struct PortableHandle;
+
+enum TexDisplayFlags
+{
+  eTexDisplay_None = 0,
+  eTexDisplay_LinearRender = 0x1,
+  eTexDisplay_F32Render = 0x2,
+  eTexDisplay_BlendAlpha = 0x4,
+};
 
 class D3D12Replay : public IReplayDriver
 {
 public:
   D3D12Replay();
 
+  D3D12DebugManager *GetDebugManager() { return m_DebugManager; }
   void SetProxy(bool proxy) { m_Proxy = proxy; }
   bool IsRemoteProxy() { return m_Proxy; }
   void Shutdown();
 
   void SetDevice(WrappedID3D12Device *d) { m_pDevice = d; }
+  void CreateResources();
+  void DestroyResources();
   APIProperties GetAPIProperties();
 
-  vector<ResourceId> GetBuffers();
+  ResourceDescription &GetResourceDesc(ResourceId id);
+  const std::vector<ResourceDescription> &GetResources();
+
+  std::vector<ResourceId> GetBuffers();
   BufferDescription GetBuffer(ResourceId id);
 
-  vector<ResourceId> GetTextures();
+  std::vector<ResourceId> GetTextures();
   TextureDescription GetTexture(ResourceId id);
 
   vector<DebugMessage> GetDebugMessages();
 
+  rdcarray<ShaderEntryPoint> GetShaderEntryPoints(ResourceId shader);
   ShaderReflection *GetShader(ResourceId shader, string entryPoint);
 
   vector<string> GetDisassemblyTargets();
-  string DisassembleShader(const ShaderReflection *refl, const string &target);
+  string DisassembleShader(ResourceId pipeline, const ShaderReflection *refl, const string &target);
 
   vector<EventUsage> GetUsage(ResourceId id);
 
@@ -71,10 +88,11 @@ public:
   void FreeTargetResource(ResourceId id);
   void FreeCustomShader(ResourceId id);
 
-  void ReadLogInitialisation();
+  ReplayStatus ReadLogInitialisation(RDCFile *rdc, bool readStructuredBuffers);
   void ReplayLog(uint32_t endEventID, ReplayLogType replayType);
+  const SDFile &GetStructuredFile();
 
-  vector<uint32_t> GetPassEvents(uint32_t eventID);
+  vector<uint32_t> GetPassEvents(uint32_t eventId);
 
   vector<WindowingSystem> GetSupportedWindowSystems()
   {
@@ -83,7 +101,7 @@ public:
     return ret;
   }
 
-  uint64_t MakeOutputWindow(WindowingSystem system, void *data, bool depth);
+  uint64_t MakeOutputWindow(WindowingData window, bool depth);
   void DestroyOutputWindow(uint64_t id);
   bool CheckResizeOutputWindow(uint64_t id);
   void GetOutputWindowDimensions(uint64_t id, int32_t &w, int32_t &h);
@@ -93,9 +111,11 @@ public:
   bool IsOutputWindowVisible(uint64_t id);
   void FlipOutputWindow(uint64_t id);
 
-  void InitPostVSBuffers(uint32_t eventID);
+  void InitPostVSBuffers(uint32_t eventId);
   void InitPostVSBuffers(const vector<uint32_t> &passEvents);
 
+  // indicates that EID alias is the same as eventId
+  void AliasPostVSBuffers(uint32_t eventId, uint32_t alias) { m_PostVSAlias[alias] = eventId; }
   ResourceId GetLiveID(ResourceId id);
 
   bool GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, uint32_t sample,
@@ -104,11 +124,11 @@ public:
                     CompType typeHint, float minval, float maxval, bool channels[4],
                     vector<uint32_t> &histogram);
 
-  MeshFormat GetPostVSBuffers(uint32_t eventID, uint32_t instID, MeshDataStage stage);
+  MeshFormat GetPostVSBuffers(uint32_t eventId, uint32_t instID, MeshDataStage stage);
 
-  void GetBufferData(ResourceId buff, uint64_t offset, uint64_t len, vector<byte> &retData);
-  byte *GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
-                       const GetTextureDataParams &params, size_t &dataSize);
+  void GetBufferData(ResourceId buff, uint64_t offset, uint64_t len, bytebuf &retData);
+  void GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
+                      const GetTextureDataParams &params, bytebuf &data);
 
   void BuildTargetShader(string source, string entry, const ShaderCompileFlags &compileFlags,
                          ShaderStage type, ResourceId *id, string *errors);
@@ -116,7 +136,7 @@ public:
   void RemoveReplacement(ResourceId id);
 
   vector<GPUCounter> EnumerateCounters();
-  void DescribeCounter(GPUCounter counterID, CounterDescription &desc);
+  CounterDescription DescribeCounter(GPUCounter counterID);
   vector<CounterResult> FetchCounters(const vector<GPUCounter> &counters);
 
   ResourceId CreateProxyTexture(const TextureDescription &templateTex);
@@ -128,7 +148,7 @@ public:
   ResourceId CreateProxyBuffer(const BufferDescription &templateBuf);
   void SetProxyBufferData(ResourceId bufid, byte *data, size_t dataSize);
 
-  void RenderMesh(uint32_t eventID, const vector<MeshFormat> &secondaryDraws, const MeshDisplay &cfg);
+  void RenderMesh(uint32_t eventId, const vector<MeshFormat> &secondaryDraws, const MeshDisplay &cfg);
 
   bool RenderTexture(TextureDisplay cfg);
 
@@ -137,23 +157,24 @@ public:
   void RenderHighlightBox(float w, float h, float scale);
 
   void FillCBufferVariables(ResourceId shader, string entryPoint, uint32_t cbufSlot,
-                            vector<ShaderVariable> &outvars, const vector<byte> &data);
+                            vector<ShaderVariable> &outvars, const bytebuf &data);
 
   vector<PixelModification> PixelHistory(vector<EventUsage> events, ResourceId target, uint32_t x,
                                          uint32_t y, uint32_t slice, uint32_t mip,
                                          uint32_t sampleIdx, CompType typeHint);
-  ShaderDebugTrace DebugVertex(uint32_t eventID, uint32_t vertid, uint32_t instid, uint32_t idx,
+  ShaderDebugTrace DebugVertex(uint32_t eventId, uint32_t vertid, uint32_t instid, uint32_t idx,
                                uint32_t instOffset, uint32_t vertOffset);
-  ShaderDebugTrace DebugPixel(uint32_t eventID, uint32_t x, uint32_t y, uint32_t sample,
+  ShaderDebugTrace DebugPixel(uint32_t eventId, uint32_t x, uint32_t y, uint32_t sample,
                               uint32_t primitive);
-  ShaderDebugTrace DebugThread(uint32_t eventID, const uint32_t groupid[3],
+  ShaderDebugTrace DebugThread(uint32_t eventId, const uint32_t groupid[3],
                                const uint32_t threadid[3]);
   void PickPixel(ResourceId texture, uint32_t x, uint32_t y, uint32_t sliceFace, uint32_t mip,
                  uint32_t sample, CompType typeHint, float pixel[4]);
-  uint32_t PickVertex(uint32_t eventID, const MeshDisplay &cfg, uint32_t x, uint32_t y);
+  uint32_t PickVertex(uint32_t eventId, int32_t width, int32_t height, const MeshDisplay &cfg,
+                      uint32_t x, uint32_t y);
 
   ResourceId RenderOverlay(ResourceId texid, CompType typeHint, DebugOverlay overlay,
-                           uint32_t eventID, const vector<uint32_t> &passEvents);
+                           uint32_t eventId, const vector<uint32_t> &passEvents);
 
   void BuildCustomShader(string source, string entry, const ShaderCompileFlags &compileFlags,
                          ShaderStage type, ResourceId *id, string *errors);
@@ -163,34 +184,208 @@ public:
   bool IsRenderOutput(ResourceId id);
 
   void FileChanged() {}
-  void InitCallstackResolver();
-  bool HasCallstacks();
-  Callstack::StackResolver *GetCallstackResolver();
-
-  // called before any device is created, to init any counters
-  static void PreDeviceInitCounters();
-  // called after the device is created, to init any counters
-  void PostDeviceInitCounters();
-
-  // called after any device is destroyed, to do corresponding shutdown of counters
-  static void PostDeviceShutdownCounters();
-  // called before the device is destroyed, to shutdown any counters
-  void PreDeviceShutdownCounters();
-
 private:
   void FillRegisterSpaces(const D3D12RenderState::RootSignature &rootSig,
-                          rdctype::array<D3D12Pipe::RegisterSpace> &spaces,
+                          rdcarray<D3D12Pipe::RegisterSpace> &spaces,
                           D3D12_SHADER_VISIBILITY visibility);
   void FillResourceView(D3D12Pipe::View &view, D3D12Descriptor *desc);
+
+  void ClearPostVSCache();
+
+  void CreateSOBuffers();
+
+  void BuildShader(std::string source, std::string entry, const ShaderCompileFlags &compileFlags,
+                   ShaderStage type, ResourceId *id, std::string *errors);
+
+  bool RenderTextureInternal(D3D12_CPU_DESCRIPTOR_HANDLE rtv, TextureDisplay cfg,
+                             TexDisplayFlags flags);
+
+  void SetOutputDimensions(int w, int h)
+  {
+    m_OutputWidth = (float)w;
+    m_OutputHeight = (float)h;
+  }
+
+  struct D3D12PostVSData
+  {
+    struct InstData
+    {
+      uint32_t numVerts = 0;
+      uint64_t bufOffset = 0;
+    };
+
+    struct StageData
+    {
+      ID3D12Resource *buf = NULL;
+      D3D_PRIMITIVE_TOPOLOGY topo = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+
+      uint32_t vertStride = 0;
+
+      // simple case - uniform
+      uint32_t numVerts = 0;
+      uint32_t instStride = 0;
+
+      // complex case - expansion per instance
+      std::vector<InstData> instData;
+
+      bool useIndices = false;
+      ID3D12Resource *idxBuf = NULL;
+      DXGI_FORMAT idxFmt = DXGI_FORMAT_UNKNOWN;
+
+      bool hasPosOut = false;
+
+      float nearPlane = 0.0f;
+      float farPlane = 0.0f;
+    } vsin, vsout, gsout;
+
+    const StageData &GetStage(MeshDataStage type)
+    {
+      if(type == MeshDataStage::VSOut)
+        return vsout;
+      else if(type == MeshDataStage::GSOut)
+        return gsout;
+      else
+        RDCERR("Unexpected mesh data stage!");
+
+      return vsin;
+    }
+  };
+
+  std::map<uint32_t, D3D12PostVSData> m_PostVSData;
+  std::map<uint32_t, uint32_t> m_PostVSAlias;
+
+  uint64_t m_SOBufferSize = 128;
+  ID3D12Resource *m_SOBuffer = NULL;
+  ID3D12Resource *m_SOStagingBuffer = NULL;
+  ID3D12Resource *m_SOPatchedIndexBuffer = NULL;
+  ID3D12QueryHeap *m_SOQueryHeap = NULL;
 
   bool m_Proxy;
 
   vector<ID3D12Resource *> m_ProxyResources;
+
+  struct OutputWindow
+  {
+    HWND wnd;
+    IDXGISwapChain *swap;
+    ID3D12Resource *bb[2];
+    uint32_t bbIdx;
+    ID3D12Resource *col;
+    ID3D12Resource *colResolve;
+    ID3D12Resource *depth;
+    D3D12_CPU_DESCRIPTOR_HANDLE rtv;
+    D3D12_CPU_DESCRIPTOR_HANDLE dsv;
+
+    WrappedID3D12Device *dev;
+
+    void MakeRTV(bool multisampled);
+    void MakeDSV();
+
+    int width, height;
+  };
+
+  float m_OutputWidth = 1.0f;
+  float m_OutputHeight = 1.0f;
+
+  uint64_t m_OutputWindowID = 1;
+  uint64_t m_DSVID = 0;
+  uint64_t m_CurrentOutputWindow = 0;
+  std::map<uint64_t, OutputWindow> m_OutputWindows;
+
+  HighlightCache m_HighlightCache;
+
+  ID3D12Resource *m_CustomShaderTex = NULL;
+  ResourceId m_CustomShaderResourceId;
+
+  // General use/misc items that are used in many places
+  struct GeneralMisc
+  {
+    void Init(WrappedID3D12Device *device, D3D12DebugManager *debug);
+    void Release();
+
+    ID3D12Resource *ResultReadbackBuffer = NULL;
+    ID3D12RootSignature *ConstOnlyRootSig = NULL;
+    ID3D12PipelineState *CheckerboardPipe = NULL;
+    ID3D12PipelineState *CheckerboardMSAAPipe = NULL;
+    ID3D12PipelineState *FixedColPipe = NULL;
+  } m_General;
+
+  struct TextureRendering
+  {
+    void Init(WrappedID3D12Device *device, D3D12DebugManager *debug);
+    void Release();
+
+    ID3DBlob *VS = NULL;
+    ID3D12RootSignature *RootSig = NULL;
+    ID3D12PipelineState *SRGBPipe = NULL;
+    ID3D12PipelineState *LinearPipe = NULL;
+    ID3D12PipelineState *F32Pipe = NULL;
+    ID3D12PipelineState *BlendPipe = NULL;
+  } m_TexRender;
+
+  struct OverlayRendering
+  {
+    void Init(WrappedID3D12Device *device, D3D12DebugManager *debug);
+    void Release();
+
+    ID3DBlob *MeshVS = NULL;
+    ID3DBlob *TriangleSizeGS = NULL;
+    ID3DBlob *TriangleSizePS = NULL;
+    ID3DBlob *QuadOverdrawWritePS = NULL;
+    ID3D12RootSignature *QuadResolveRootSig = NULL;
+    ID3D12PipelineState *QuadResolvePipe = NULL;
+
+    ID3D12Resource *Texture = NULL;
+    ResourceId resourceId;
+  } m_Overlay;
+
+  struct VertexPicking
+  {
+    void Init(WrappedID3D12Device *device, D3D12DebugManager *debug);
+    void Release();
+
+    static const uint32_t MaxMeshPicks = 500;
+    ID3D12Resource *VB = NULL;
+    uint32_t VBSize = 0;
+    ID3D12Resource *ResultBuf = NULL;
+    ID3D12RootSignature *RootSig = NULL;
+    ID3D12PipelineState *Pipe = NULL;
+  } m_VertexPick;
+
+  struct PixelPicking
+  {
+    void Init(WrappedID3D12Device *device, D3D12DebugManager *debug);
+    void Release();
+
+    ID3D12Resource *Texture = NULL;
+  } m_PixelPick;
+
+  struct HistogramMinMax
+  {
+    void Init(WrappedID3D12Device *device, D3D12DebugManager *debug);
+    void Release();
+
+    ID3D12RootSignature *HistogramRootSig = NULL;
+    // one per texture type, one per int/uint/float
+    ID3D12PipelineState *TileMinMaxPipe[10][3] = {};
+    ID3D12PipelineState *HistogramPipe[10][3] = {};
+    // one per int/uint/float
+    ID3D12PipelineState *ResultMinMaxPipe[3] = {};
+    ID3D12Resource *MinMaxResultBuffer = NULL;
+    ID3D12Resource *MinMaxTileBuffer = NULL;
+  } m_Histogram;
+
+  std::vector<ResourceDescription> m_Resources;
+  std::map<ResourceId, size_t> m_ResourceIdx;
 
   D3D12Pipe::State m_PipelineState;
   D3D11Pipe::State m_D3D11State;
   VKPipe::State m_VKState;
   GLPipe::State m_GLState;
 
-  WrappedID3D12Device *m_pDevice;
+  WrappedID3D12Device *m_pDevice = NULL;
+
+  D3D12DebugManager *m_DebugManager = NULL;
+
+  IDXGIFactory4 *m_pFactory = NULL;
 };

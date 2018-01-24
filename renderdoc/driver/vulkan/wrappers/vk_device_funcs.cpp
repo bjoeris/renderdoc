@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,8 @@
 
 #include "../vk_core.h"
 #include "../vk_debug.h"
+#include "../vk_rendertext.h"
+#include "../vk_shader_cache.h"
 
 // vk_dispatchtables.cpp
 void InitDeviceTable(VkDevice dev, PFN_vkGetDeviceProcAddr gpa);
@@ -89,12 +91,10 @@ static void StripUnwantedLayers(vector<string> &Layers)
   }
 }
 
-ReplayStatus WrappedVulkan::Initialise(VkInitParams &params)
+ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVersion)
 {
-  if(m_pSerialiser->HasError())
-    return ReplayStatus::FileIOFailed;
-
   m_InitParams = params;
+  m_SectionVersion = sectionVersion;
 
   params.AppName = string("RenderDoc @ ") + params.AppName;
   params.EngineName = string("RenderDoc @ ") + params.EngineName;
@@ -102,10 +102,8 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params)
   // PORTABILITY verify that layers/extensions are available
   StripUnwantedLayers(params.Layers);
 
-#if ENABLED(FORCE_VALIDATION_LAYERS)
+#if ENABLED(FORCE_VALIDATION_LAYERS) && DISABLED(RDOC_ANDROID)
   params.Layers.push_back("VK_LAYER_LUNARG_standard_validation");
-
-  params.Extensions.push_back("VK_EXT_debug_report");
 #endif
 
   // strip out any WSI/direct display extensions. We'll add the ones we want for creating windows
@@ -183,6 +181,15 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params)
     }
   }
 
+  // we always want this extension if it's available, and not already enabled
+  if(supportedExtensions.find(VK_EXT_DEBUG_REPORT_EXTENSION_NAME) != supportedExtensions.end() &&
+     std::find(params.Extensions.begin(), params.Extensions.end(),
+               VK_EXT_DEBUG_REPORT_EXTENSION_NAME) == params.Extensions.end())
+  {
+    RDCLOG("Enabling VK_EXT_debug_report");
+    params.Extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+  }
+
   const char **layerscstr = new const char *[params.Layers.size()];
   for(size_t i = 0; i < params.Layers.size(); i++)
     layerscstr[i] = params.Layers[i].c_str();
@@ -240,6 +247,10 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params)
 
   GetResourceManager()->WrapResource(m_Instance, m_Instance);
   GetResourceManager()->AddLiveResource(params.InstanceID, m_Instance);
+
+  // we'll add the chunk later when we re-process it.
+  AddResource(params.InstanceID, ResourceType::Device, "Instance");
+  GetReplay()->GetResourceDesc(params.InstanceID).initialisationChunks.clear();
 
   InitInstanceExtensionTables(m_Instance, &extInfo);
 
@@ -347,11 +358,39 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
 
   const char **addedExts = new const char *[modifiedCreateInfo.enabledExtensionCount + 1];
 
-  for(uint32_t i = 0; i < modifiedCreateInfo.enabledExtensionCount; i++)
-    addedExts[i] = modifiedCreateInfo.ppEnabledExtensionNames[i];
+  bool hasDebugReport = false;
 
-  if(RenderDoc::Inst().GetCaptureOptions().APIValidation)
-    addedExts[modifiedCreateInfo.enabledExtensionCount++] = VK_EXT_DEBUG_REPORT_EXTENSION_NAME;
+  for(uint32_t i = 0; i < modifiedCreateInfo.enabledExtensionCount; i++)
+  {
+    addedExts[i] = modifiedCreateInfo.ppEnabledExtensionNames[i];
+    if(!strcmp(addedExts[i], VK_EXT_DEBUG_REPORT_EXTENSION_NAME))
+      hasDebugReport = true;
+  }
+
+  // enumerate what instance extensions are available
+  void *module = Process::LoadModule(VulkanLibraryName);
+  PFN_vkEnumerateInstanceExtensionProperties enumInstExts =
+      (PFN_vkEnumerateInstanceExtensionProperties)Process::GetFunctionAddress(
+          module, "vkEnumerateInstanceExtensionProperties");
+
+  uint32_t numSupportedExts = 0;
+  enumInstExts(NULL, &numSupportedExts, NULL);
+
+  std::vector<VkExtensionProperties> supportedExts(numSupportedExts);
+  enumInstExts(NULL, &numSupportedExts, &supportedExts[0]);
+
+  // always enable debug report, if it's available
+  if(!hasDebugReport)
+  {
+    for(const VkExtensionProperties &ext : supportedExts)
+    {
+      if(!strcmp(ext.extensionName, VK_EXT_DEBUG_REPORT_EXTENSION_NAME))
+      {
+        addedExts[modifiedCreateInfo.enabledExtensionCount++] = VK_EXT_DEBUG_REPORT_EXTENSION_NAME;
+        break;
+      }
+    }
+  }
 
   modifiedCreateInfo.ppEnabledExtensionNames = addedExts;
 
@@ -366,7 +405,7 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
   *pInstance = m_Instance;
 
   // should only be called during capture
-  RDCASSERT(m_State >= WRITING);
+  RDCASSERT(IsCaptureMode(m_State));
 
   m_InitParams.Set(pCreateInfo, GetResID(m_Instance));
   VkResourceRecord *record = GetResourceManager()->AddResourceRecord(m_Instance);
@@ -398,8 +437,7 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
   m_Queue = VK_NULL_HANDLE;
   m_InternalCmds.Reset();
 
-  if(RenderDoc::Inst().GetCaptureOptions().APIValidation &&
-     ObjDisp(m_Instance)->CreateDebugReportCallbackEXT)
+  if(ObjDisp(m_Instance)->CreateDebugReportCallbackEXT)
   {
     VkDebugReportCallbackCreateInfoEXT debugInfo = {};
     debugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
@@ -466,8 +504,11 @@ void WrappedVulkan::Shutdown()
   for(size_t i = 0; i < m_ReplayPhysicalDevices.size(); i++)
     GetResourceManager()->ReleaseWrappedResource(m_ReplayPhysicalDevices[i]);
 
+  m_Replay.DestroyResources();
+
   // destroy debug manager and any objects it created
   SAFE_DELETE(m_DebugManager);
+  SAFE_DELETE(m_ShaderCache);
 
   if(ObjDisp(m_Instance)->DestroyDebugReportCallbackEXT && m_DbgMsgCallback != VK_NULL_HANDLE)
     ObjDisp(m_Instance)->DestroyDebugReportCallbackEXT(Unwrap(m_Instance), m_DbgMsgCallback, NULL);
@@ -521,35 +562,32 @@ void WrappedVulkan::vkDestroyInstance(VkInstance instance, const VkAllocationCal
   m_Instance = VK_NULL_HANDLE;
 }
 
-bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(Serialiser *localSerialiser,
-                                                         VkInstance instance,
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(SerialiserType &ser, VkInstance instance,
                                                          uint32_t *pPhysicalDeviceCount,
                                                          VkPhysicalDevice *pPhysicalDevices)
 {
-  SERIALISE_ELEMENT(ResourceId, inst, GetResID(instance));
-  SERIALISE_ELEMENT(uint32_t, physIndex, *pPhysicalDeviceCount);
-  SERIALISE_ELEMENT(ResourceId, physId, GetResID(*pPhysicalDevices));
+  SERIALISE_ELEMENT(instance);
+  SERIALISE_ELEMENT_LOCAL(PhysicalDeviceIndex, *pPhysicalDeviceCount);
+  SERIALISE_ELEMENT_LOCAL(PhysicalDevice, GetResID(*pPhysicalDevices));
 
-  uint32_t memIdxMap[32] = {0};
-  if(m_State >= WRITING)
-    memcpy(memIdxMap, GetRecord(*pPhysicalDevices)->memIdxMap, sizeof(memIdxMap));
-
-  localSerialiser->SerialisePODArray<32>("memIdxMap", memIdxMap);
-
+  uint32_t memIdxMap[VK_MAX_MEMORY_TYPES] = {0};
   // not used at the moment but useful for reference and might be used
   // in the future
   VkPhysicalDeviceProperties physProps;
   VkPhysicalDeviceMemoryProperties memProps;
   VkPhysicalDeviceFeatures physFeatures;
+  uint32_t queueCount = 0;
   VkQueueFamilyProperties queueProps[16];
 
-  if(m_State >= WRITING)
+  if(ser.IsWriting())
   {
+    memcpy(memIdxMap, GetRecord(*pPhysicalDevices)->memIdxMap, sizeof(memIdxMap));
+
     ObjDisp(instance)->GetPhysicalDeviceProperties(Unwrap(*pPhysicalDevices), &physProps);
     ObjDisp(instance)->GetPhysicalDeviceMemoryProperties(Unwrap(*pPhysicalDevices), &memProps);
     ObjDisp(instance)->GetPhysicalDeviceFeatures(Unwrap(*pPhysicalDevices), &physFeatures);
 
-    uint32_t queueCount = 0;
     ObjDisp(instance)->GetPhysicalDeviceQueueFamilyProperties(Unwrap(*pPhysicalDevices),
                                                               &queueCount, NULL);
 
@@ -563,33 +601,33 @@ bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(Serialiser *localSerial
                                                               &queueCount, queueProps);
   }
 
-  localSerialiser->Serialise("physProps", physProps);
-  localSerialiser->Serialise("memProps", memProps);
-  localSerialiser->Serialise("physFeatures", physFeatures);
-  localSerialiser->SerialisePODArray<16>("queueProps", queueProps);
+  SERIALISE_ELEMENT(memIdxMap);
+  SERIALISE_ELEMENT(physProps);
+  SERIALISE_ELEMENT(memProps);
+  SERIALISE_ELEMENT(physFeatures);
+  SERIALISE_ELEMENT(queueCount);
+  SERIALISE_ELEMENT(queueProps);
 
   VkPhysicalDevice pd = VK_NULL_HANDLE;
 
-  if(m_State >= WRITING)
-  {
-    pd = *pPhysicalDevices;
-  }
-  else
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
   {
     {
       VkDriverInfo capturedVersion(physProps);
 
-      RDCLOG("Captured log describes physical device %u:", physIndex);
+      RDCLOG("Captured log describes physical device %u:", PhysicalDeviceIndex);
       RDCLOG("   - %s (ver %u.%u patch 0x%x) - %04x:%04x", physProps.deviceName,
              capturedVersion.Major(), capturedVersion.Minor(), capturedVersion.Patch(),
              physProps.vendorID, physProps.deviceID);
 
-      if(physIndex >= m_OriginalPhysicalDevices.size())
-        m_OriginalPhysicalDevices.resize(physIndex + 1);
+      if(PhysicalDeviceIndex >= m_OriginalPhysicalDevices.size())
+        m_OriginalPhysicalDevices.resize(PhysicalDeviceIndex + 1);
 
-      m_OriginalPhysicalDevices[physIndex].props = physProps;
-      m_OriginalPhysicalDevices[physIndex].memProps = memProps;
-      m_OriginalPhysicalDevices[physIndex].features = physFeatures;
+      m_OriginalPhysicalDevices[PhysicalDeviceIndex].props = physProps;
+      m_OriginalPhysicalDevices[PhysicalDeviceIndex].memProps = memProps;
+      m_OriginalPhysicalDevices[PhysicalDeviceIndex].features = physFeatures;
     }
 
     // match up physical devices to those available on replay as best as possible. In general
@@ -668,26 +706,39 @@ bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(Serialiser *localSerial
 
     pd = m_ReplayPhysicalDevices[bestIdx];
 
-    GetResourceManager()->AddLiveResource(physId, pd);
+    if(!m_ReplayPhysicalDevicesUsed[bestIdx])
+      GetResourceManager()->AddLiveResource(PhysicalDevice, pd);
+    else
+      GetResourceManager()->ReplaceResource(PhysicalDevice,
+                                            GetResourceManager()->GetOriginalID(GetResID(pd)));
 
-    if(physIndex >= m_PhysicalDevices.size())
-      m_PhysicalDevices.resize(physIndex + 1);
-    m_PhysicalDevices[physIndex] = pd;
+    AddResource(PhysicalDevice, ResourceType::Device, "Physical Device");
+    DerivedResource(m_Instance, PhysicalDevice);
+
+    if(PhysicalDeviceIndex >= m_PhysicalDevices.size())
+      m_PhysicalDevices.resize(PhysicalDeviceIndex + 1);
+    m_PhysicalDevices[PhysicalDeviceIndex] = pd;
 
     if(m_ReplayPhysicalDevicesUsed[bestIdx])
     {
       // error if we're remapping multiple physical devices to the same best match
       RDCERR(
-          "Mappnig multiple capture-time physical devices to a single replay-time physical device."
+          "Mapping multiple capture-time physical devices to a single replay-time physical device."
           "This means the HW has changed between capture and replay and may cause bugs.");
     }
-    else
+    else if(m_MemIdxMaps[bestIdx] == NULL)
     {
       // the first physical device 'wins' for the memory index map
       uint32_t *storedMap = new uint32_t[32];
       memcpy(storedMap, memIdxMap, sizeof(memIdxMap));
-      m_MemIdxMaps[physIndex] = storedMap;
+
+      for(uint32_t i = 0; i < 32; i++)
+        storedMap[i] = i;
+
+      m_MemIdxMaps[bestIdx] = storedMap;
     }
+
+    m_ReplayPhysicalDevicesUsed[bestIdx] = true;
   }
 
   return true;
@@ -706,7 +757,8 @@ VkResult WrappedVulkan::vkEnumeratePhysicalDevices(VkInstance instance,
 
   VkPhysicalDevice *devices = new VkPhysicalDevice[count];
 
-  vkr = ObjDisp(instance)->EnumeratePhysicalDevices(Unwrap(instance), &count, devices);
+  SERIALISE_TIME_CALL(
+      vkr = ObjDisp(instance)->EnumeratePhysicalDevices(Unwrap(instance), &count, devices));
   RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
   m_PhysicalDevices.resize(count);
@@ -726,7 +778,7 @@ VkResult WrappedVulkan::vkEnumeratePhysicalDevices(VkInstance instance,
     {
       GetResourceManager()->WrapResource(instance, devices[i]);
 
-      if(m_State >= WRITING)
+      if(IsCaptureMode(m_State))
       {
         // add the record first since it's used in the serialise function below to fetch
         // the memory indices
@@ -745,8 +797,8 @@ VkResult WrappedVulkan::vkEnumeratePhysicalDevices(VkInstance instance,
         {
           CACHE_THREAD_SERIALISER();
 
-          SCOPED_SERIALISE_CONTEXT(ENUM_PHYSICALS);
-          Serialise_vkEnumeratePhysicalDevices(localSerialiser, instance, &i, &devices[i]);
+          SCOPED_SERIALISE_CHUNK(VulkanChunk::vkEnumeratePhysicalDevices);
+          Serialise_vkEnumeratePhysicalDevices(ser, instance, &i, &devices[i]);
 
           record->AddChunk(scope.Get());
         }
@@ -861,24 +913,24 @@ VkResult WrappedVulkan::vkEnumeratePhysicalDevices(VkInstance instance,
   return VK_SUCCESS;
 }
 
-bool WrappedVulkan::Serialise_vkCreateDevice(Serialiser *localSerialiser,
-                                             VkPhysicalDevice physicalDevice,
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevice physicalDevice,
                                              const VkDeviceCreateInfo *pCreateInfo,
                                              const VkAllocationCallbacks *pAllocator,
                                              VkDevice *pDevice)
 {
-  SERIALISE_ELEMENT(ResourceId, physId, GetResID(physicalDevice));
-  SERIALISE_ELEMENT(VkDeviceCreateInfo, serCreateInfo, *pCreateInfo);
-  SERIALISE_ELEMENT(ResourceId, devId, GetResID(*pDevice));
-  SERIALISE_ELEMENT(uint32_t, queueFamily, m_SupportedQueueFamily);
+  SERIALISE_ELEMENT(physicalDevice);
+  SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
+  SERIALISE_ELEMENT_LOCAL(Device, GetResID(*pDevice));
+  SERIALISE_ELEMENT(m_SupportedQueueFamily);
 
-  if(m_State == READING)
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
   {
     // we must make any modifications locally, so the free of pointers
     // in the serialised VkDeviceCreateInfo don't double-free
-    VkDeviceCreateInfo createInfo = serCreateInfo;
-
-    m_SupportedQueueFamily = queueFamily;
+    VkDeviceCreateInfo createInfo = CreateInfo;
 
     std::vector<string> Extensions;
     for(uint32_t i = 0; i < createInfo.enabledExtensionCount; i++)
@@ -904,8 +956,6 @@ bool WrappedVulkan::Serialise_vkCreateDevice(Serialiser *localSerialiser,
       Layers.push_back(createInfo.ppEnabledLayerNames[i]);
 
     StripUnwantedLayers(Layers);
-
-    physicalDevice = GetResourceManager()->GetLiveHandle<VkPhysicalDevice>(physId);
 
     std::set<string> supportedExtensions;
 
@@ -937,9 +987,12 @@ bool WrappedVulkan::Serialise_vkCreateDevice(Serialiser *localSerialiser,
       RDCLOG("Enabling VK_EXT_debug_marker");
     }
 
-#if ENABLED(FORCE_VALIDATION_LAYERS)
-    Layers.push_back("VK_LAYER_LUNARG_standard_validation");
-#endif
+    // enable VK_EXT_debug_marker if it's available, to fetch shader disassembly
+    if(supportedExtensions.find(VK_AMD_SHADER_INFO_EXTENSION_NAME) != supportedExtensions.end())
+    {
+      Extensions.push_back(VK_AMD_SHADER_INFO_EXTENSION_NAME);
+      RDCLOG("Enabling VK_AMD_shader_info");
+    }
 
     createInfo.enabledLayerCount = (uint32_t)Layers.size();
 
@@ -1055,8 +1108,15 @@ bool WrappedVulkan::Serialise_vkCreateDevice(Serialiser *localSerialiser,
 
     if(availFeatures.fillModeNonSolid)
       enabledFeatures.fillModeNonSolid = true;
+
+    // we have a fallback for this case, so no warning
+
+    if(availFeatures.geometryShader)
+      enabledFeatures.geometryShader = true;
     else
-      RDCWARN("fillModeNonSolid = false, wireframe overlay will be solid");
+      RDCWARN(
+          "geometryShader = false, lit mesh rendering will not be available if rendering on this "
+          "device.");
 
     if(availFeatures.robustBufferAccess)
       enabledFeatures.robustBufferAccess = true;
@@ -1064,11 +1124,6 @@ bool WrappedVulkan::Serialise_vkCreateDevice(Serialiser *localSerialiser,
       RDCWARN(
           "robustBufferAccess = false, out of bounds access due to bugs in application or "
           "RenderDoc may cause crashes");
-
-    if(availFeatures.vertexPipelineStoresAndAtomics)
-      enabledFeatures.vertexPipelineStoresAndAtomics = true;
-    else
-      RDCWARN("vertexPipelineStoresAndAtomics = false, output mesh data will not be available");
 
     if(availFeatures.shaderStorageImageWriteWithoutFormat)
       enabledFeatures.shaderStorageImageWriteWithoutFormat = true;
@@ -1117,7 +1172,10 @@ bool WrappedVulkan::Serialise_vkCreateDevice(Serialiser *localSerialiser,
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
     GetResourceManager()->WrapResource(device, device);
-    GetResourceManager()->AddLiveResource(devId, device);
+    GetResourceManager()->AddLiveResource(Device, device);
+
+    AddResource(Device, ResourceType::Device, "Device");
+    DerivedResource(physicalDevice, Device);
 
     InstanceDeviceInfo extInfo;
 
@@ -1184,7 +1242,11 @@ bool WrappedVulkan::Serialise_vkCreateDevice(Serialiser *localSerialiser,
       }
     }
 
-    m_DebugManager = new VulkanDebugManager(this, device);
+    m_ShaderCache = new VulkanShaderCache(this);
+
+    m_DebugManager = new VulkanDebugManager(this);
+
+    m_Replay.CreateResources();
 
     SAFE_DELETE_ARRAY(modQueues);
     SAFE_DELETE_ARRAY(layerArray);
@@ -1326,7 +1388,7 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
   {
     RDCASSERT(m_SetDeviceLoaderData == layerCreateInfo->u.pfnSetDeviceLoaderData ||
                   m_SetDeviceLoaderData == NULL,
-              m_SetDeviceLoaderData, layerCreateInfo->u.pfnSetDeviceLoaderData);
+              (void *)m_SetDeviceLoaderData, (void *)layerCreateInfo->u.pfnSetDeviceLoaderData);
     m_SetDeviceLoaderData = layerCreateInfo->u.pfnSetDeviceLoaderData;
   }
 
@@ -1376,7 +1438,8 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
 
   createInfo.pEnabledFeatures = &enabledFeatures;
 
-  VkResult ret = createFunc(Unwrap(physicalDevice), &createInfo, pAllocator, pDevice);
+  VkResult ret;
+  SERIALISE_TIME_CALL(ret = createFunc(Unwrap(physicalDevice), &createInfo, pAllocator, pDevice));
 
   // don't serialise out any of the pNext stuff for layer initialisation
   // (note that we asserted above that there was nothing else in the chain)
@@ -1388,15 +1451,15 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
 
     ResourceId id = GetResourceManager()->WrapResource(*pDevice, *pDevice);
 
-    if(m_State >= WRITING)
+    if(IsCaptureMode(m_State))
     {
       Chunk *chunk = NULL;
 
       {
         CACHE_THREAD_SERIALISER();
 
-        SCOPED_SERIALISE_CONTEXT(CREATE_DEVICE);
-        Serialise_vkCreateDevice(localSerialiser, physicalDevice, &createInfo, NULL, pDevice);
+        SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCreateDevice);
+        Serialise_vkCreateDevice(ser, physicalDevice, &createInfo, NULL, pDevice);
 
         chunk = scope.Get();
       }
@@ -1481,7 +1544,11 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
 
     m_PhysicalDeviceData.fakeMemProps = GetRecord(physicalDevice)->memProps;
 
-    m_DebugManager = new VulkanDebugManager(this, device);
+    m_ShaderCache = new VulkanShaderCache(this);
+
+    m_TextRenderer = new VulkanTextRenderer(this);
+
+    m_DebugManager = new VulkanDebugManager(this);
   }
 
   SAFE_DELETE_ARRAY(modQueues);
@@ -1504,6 +1571,8 @@ void WrappedVulkan::vkDestroyDevice(VkDevice device, const VkAllocationCallbacks
 
   // delete all debug manager objects
   SAFE_DELETE(m_DebugManager);
+  SAFE_DELETE(m_ShaderCache);
+  SAFE_DELETE(m_TextRenderer);
 
   // since we didn't create proper registered resources for our command buffers,
   // they won't be taken down properly with the pool. So we release them (just our
@@ -1541,13 +1610,15 @@ void WrappedVulkan::vkDestroyDevice(VkDevice device, const VkAllocationCallbacks
   m_PhysicalDevice = VK_NULL_HANDLE;
 }
 
-bool WrappedVulkan::Serialise_vkDeviceWaitIdle(Serialiser *localSerialiser, VkDevice device)
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkDeviceWaitIdle(SerialiserType &ser, VkDevice device)
 {
-  SERIALISE_ELEMENT(ResourceId, id, GetResID(device));
+  SERIALISE_ELEMENT(device);
 
-  if(m_State < WRITING)
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
   {
-    device = GetResourceManager()->GetLiveHandle<VkDevice>(id);
     ObjDisp(device)->DeviceWaitIdle(Unwrap(device));
   }
 
@@ -1556,17 +1627,27 @@ bool WrappedVulkan::Serialise_vkDeviceWaitIdle(Serialiser *localSerialiser, VkDe
 
 VkResult WrappedVulkan::vkDeviceWaitIdle(VkDevice device)
 {
-  VkResult ret = ObjDisp(device)->DeviceWaitIdle(Unwrap(device));
+  VkResult ret;
+  SERIALISE_TIME_CALL(ret = ObjDisp(device)->DeviceWaitIdle(Unwrap(device)));
 
-  if(m_State >= WRITING_CAPFRAME)
+  if(IsActiveCapturing(m_State))
   {
     CACHE_THREAD_SERIALISER();
 
-    SCOPED_SERIALISE_CONTEXT(DEVICE_WAIT_IDLE);
-    Serialise_vkDeviceWaitIdle(localSerialiser, device);
+    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkDeviceWaitIdle);
+    Serialise_vkDeviceWaitIdle(ser, device);
 
     m_FrameCaptureRecord->AddChunk(scope.Get());
   }
 
   return ret;
 }
+
+INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkEnumeratePhysicalDevices, VkInstance instance,
+                                uint32_t *pPhysicalDeviceCount, VkPhysicalDevice *pPhysicalDevices);
+
+INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateDevice, VkPhysicalDevice physicalDevice,
+                                const VkDeviceCreateInfo *pCreateInfo,
+                                const VkAllocationCallbacks *pAllocator, VkDevice *pDevice);
+
+INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkDeviceWaitIdle, VkDevice device);

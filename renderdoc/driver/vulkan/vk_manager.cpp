@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,16 +24,6 @@
 
 #include "vk_manager.h"
 #include "vk_core.h"
-
-template <>
-void Serialiser::Serialise(const char *name, ImageRegionState &el)
-{
-  ScopedContext scope(this, name, "ImageRegionState", 0, true);
-
-  Serialise("range", el.subresourceRange);
-  Serialise("prevstate", el.oldLayout);
-  Serialise("state", el.newLayout);
-}
 
 bool VulkanResourceManager::SerialisableResource(ResourceId id, VkResourceRecord *record)
 {
@@ -208,7 +198,7 @@ void VulkanResourceManager::RecordBarriers(vector<pair<ResourceId, ImageRegionSt
   {
     const VkImageMemoryBarrier &t = barriers[ti];
 
-    ResourceId id = m_State < WRITING ? GetNonDispWrapper(t.image)->id : GetResID(t.image);
+    ResourceId id = IsReplayMode(m_State) ? GetNonDispWrapper(t.image)->id : GetResID(t.image);
 
     if(id == ResourceId())
     {
@@ -258,31 +248,29 @@ void VulkanResourceManager::MergeBarriers(vector<pair<ResourceId, ImageRegionSta
   TRDBG("Post-merge, there are %u states", (uint32_t)dststates.size());
 }
 
-void VulkanResourceManager::SerialiseImageStates(map<ResourceId, ImageLayouts> &states,
-                                                 vector<VkImageMemoryBarrier> &barriers)
+template <typename SerialiserType>
+void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
+                                                 std::map<ResourceId, ImageLayouts> &states,
+                                                 std::vector<VkImageMemoryBarrier> &barriers)
 {
-  Serialiser *localSerialiser = m_pSerialiser;
-
-  SERIALISE_ELEMENT(uint32_t, NumMems, (uint32_t)states.size());
+  SERIALISE_ELEMENT_LOCAL(NumImages, (uint32_t)states.size());
 
   auto srcit = states.begin();
 
-  vector<pair<ResourceId, ImageRegionState> > vec;
+  std::vector<pair<ResourceId, ImageRegionState> > vec;
 
-  for(uint32_t i = 0; i < NumMems; i++)
+  for(uint32_t i = 0; i < NumImages; i++)
   {
-    SERIALISE_ELEMENT(ResourceId, id, srcit->first);
-    SERIALISE_ELEMENT(uint32_t, NumStates, (uint32_t)srcit->second.subresourceStates.size());
+    SERIALISE_ELEMENT_LOCAL(Image, (ResourceId)(srcit->first));
+    SERIALISE_ELEMENT_LOCAL(ImageState, (ImageLayouts)(srcit->second));
 
     ResourceId liveid;
-    if(m_State < WRITING && HasLiveResource(id))
-      liveid = GetLiveID(id);
+    if(IsReplayingAndReading() && HasLiveResource(Image))
+      liveid = GetLiveID(Image);
 
-    for(uint32_t m = 0; m < NumStates; m++)
+    if(IsReplayingAndReading() && liveid != ResourceId())
     {
-      SERIALISE_ELEMENT(ImageRegionState, state, srcit->second.subresourceStates[m]);
-
-      if(m_State < WRITING && liveid != ResourceId() && srcit != states.end())
+      for(ImageRegionState &state : ImageState.subresourceStates)
       {
         VkImageMemoryBarrier t;
         t.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -305,7 +293,7 @@ void VulkanResourceManager::SerialiseImageStates(map<ResourceId, ImageLayouts> &
       }
     }
 
-    if(m_State >= WRITING)
+    if(ser.IsWriting())
       srcit++;
   }
 
@@ -361,6 +349,13 @@ void VulkanResourceManager::SerialiseImageStates(map<ResourceId, ImageLayouts> &
   }
 }
 
+template void VulkanResourceManager::SerialiseImageStates(ReadSerialiser &ser,
+                                                          std::map<ResourceId, ImageLayouts> &states,
+                                                          std::vector<VkImageMemoryBarrier> &barriers);
+template void VulkanResourceManager::SerialiseImageStates(WriteSerialiser &ser,
+                                                          std::map<ResourceId, ImageLayouts> &states,
+                                                          std::vector<VkImageMemoryBarrier> &barriers);
+
 void VulkanResourceManager::MarkSparseMapReferenced(SparseMapping *sparse)
 {
   if(sparse == NULL)
@@ -373,11 +368,12 @@ void VulkanResourceManager::MarkSparseMapReferenced(SparseMapping *sparse)
     MarkResourceFrameReferenced(GetResID(sparse->opaquemappings[i].memory), eFrameRef_Read);
 
   for(int a = 0; a < NUM_VK_IMAGE_ASPECTS; a++)
-    for(VkDeviceSize i = 0;
-        sparse->pages[a] &&
-        i < VkDeviceSize(sparse->imgdim.width * sparse->imgdim.height * sparse->imgdim.depth);
-        i++)
+  {
+    VkDeviceSize totalSize =
+        VkDeviceSize(sparse->imgdim.width) * sparse->imgdim.height * sparse->imgdim.depth;
+    for(VkDeviceSize i = 0; sparse->pages[a] && i < totalSize; i++)
       MarkResourceFrameReferenced(GetResID(sparse->pages[a][i].first), eFrameRef_Read);
+  }
 }
 
 void VulkanResourceManager::ApplyBarriers(vector<pair<ResourceId, ImageRegionState> > &states,
@@ -415,11 +411,10 @@ void VulkanResourceManager::ApplyBarriers(vector<pair<ResourceId, ImageRegionSta
     if(t.oldLayout == t.newLayout)
       continue;
 
-    TRDBG("Barrier of %s (%u->%u, %u->%u) from %s to %s",
-          ToStr::Get(t.subresourceRange.aspect).c_str(), t.subresourceRange.baseMipLevel,
-          t.subresourceRange.levelCount, t.subresourceRange.baseArrayLayer,
-          t.subresourceRange.layerCount, ToStr::Get(t.oldLayout).c_str(),
-          ToStr::Get(t.newLayout).c_str());
+    TRDBG("Barrier of %s (%u->%u, %u->%u) from %s to %s", ToStr(t.subresourceRange.aspect).c_str(),
+          t.subresourceRange.baseMipLevel, t.subresourceRange.levelCount,
+          t.subresourceRange.baseArrayLayer, t.subresourceRange.layerCount,
+          ToStr(t.oldLayout).c_str(), ToStr(t.newLayout).c_str());
 
     bool done = false;
 
@@ -428,10 +423,9 @@ void VulkanResourceManager::ApplyBarriers(vector<pair<ResourceId, ImageRegionSta
     auto it = stit->second.subresourceStates.begin();
     for(; it != stit->second.subresourceStates.end(); ++it)
     {
-      TRDBG(".. state %s (%u->%u, %u->%u) from %s to %s",
-            ToStr::Get(it->subresourceRange.aspect).c_str(), it->range.baseMipLevel,
-            it->range.levelCount, it->range.baseArrayLayer, it->range.layerCount,
-            ToStr::Get(it->oldLayout).c_str(), ToStr::Get(it->newLayout).c_str());
+      TRDBG(".. state %s (%u->%u, %u->%u) from %s to %s", ToStr(it->subresourceRange.aspect).c_str(),
+            it->range.baseMipLevel, it->range.levelCount, it->range.baseArrayLayer,
+            it->range.layerCount, ToStr(it->oldLayout).c_str(), ToStr(it->newLayout).c_str());
 
       // image barriers are handled by initially inserting one subresource range for the whole
       // object,
@@ -581,9 +575,15 @@ bool VulkanResourceManager::Prepare_InitialState(WrappedVkRes *res)
   return m_Core->Prepare_InitialState(res);
 }
 
-bool VulkanResourceManager::Serialise_InitialState(ResourceId resid, WrappedVkRes *res)
+uint32_t VulkanResourceManager::GetSize_InitialState(ResourceId id, WrappedVkRes *res)
 {
-  return m_Core->Serialise_InitialState(resid, res);
+  return m_Core->GetSize_InitialState(id, res);
+}
+
+bool VulkanResourceManager::Serialise_InitialState(WriteSerialiser &ser, ResourceId resid,
+                                                   WrappedVkRes *res)
+{
+  return m_Core->Serialise_InitialState(ser, resid, res);
 }
 
 void VulkanResourceManager::Create_InitialState(ResourceId id, WrappedVkRes *live, bool hasData)

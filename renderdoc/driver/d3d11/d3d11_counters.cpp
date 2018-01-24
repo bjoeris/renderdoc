@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,23 +30,7 @@
 #include "d3d11_debug.h"
 #include "d3d11_device.h"
 
-void D3D11DebugManager::PreDeviceInitCounters()
-{
-}
-
-void D3D11DebugManager::PostDeviceInitCounters()
-{
-}
-
-void D3D11DebugManager::PreDeviceShutdownCounters()
-{
-}
-
-void D3D11DebugManager::PostDeviceShutdownCounters()
-{
-}
-
-vector<GPUCounter> D3D11DebugManager::EnumerateCounters()
+vector<GPUCounter> D3D11Replay::EnumerateCounters()
 {
   vector<GPUCounter> ret;
 
@@ -75,26 +59,25 @@ vector<GPUCounter> D3D11DebugManager::EnumerateCounters()
   return ret;
 }
 
-void D3D11DebugManager::DescribeCounter(GPUCounter counterID, CounterDescription &desc)
+CounterDescription D3D11Replay::DescribeCounter(GPUCounter counterID)
 {
-  desc.counterID = counterID;
+  CounterDescription desc = {};
+  desc.counter = counterID;
 
   /////AMD//////
   if(counterID >= GPUCounter::FirstAMD && counterID < GPUCounter::FirstIntel)
   {
     if(m_pAMDCounters)
     {
-      desc = m_pAMDCounters->GetCounterDescription(counterID);
-
-      return;
+      return m_pAMDCounters->GetCounterDescription(counterID);
     }
   }
 
   // 448A0516-B50E-4312-A6DC-CFE7222FC1AC
-  desc.uuid.bytes[0] = 0x448A0516;
-  desc.uuid.bytes[1] = 0xB50E4312;
-  desc.uuid.bytes[2] = 0xA6DCCFE7;
-  desc.uuid.bytes[3] = 0x222FC1AC ^ (uint32_t)counterID;
+  desc.uuid.words[0] = 0x448A0516;
+  desc.uuid.words[1] = 0xB50E4312;
+  desc.uuid.words[2] = 0xA6DCCFE7;
+  desc.uuid.words[3] = 0x222FC1AC ^ (uint32_t)counterID;
 
   desc.category = "D3D11";
 
@@ -202,6 +185,8 @@ void D3D11DebugManager::DescribeCounter(GPUCounter counterID, CounterDescription
       desc.unit = CounterUnit::Absolute;
       break;
   }
+
+  return desc;
 }
 
 struct GPUTimer
@@ -210,17 +195,16 @@ struct GPUTimer
   ID3D11Query *after;
   ID3D11Query *stats;
   ID3D11Query *occlusion;
-  uint32_t eventID;
+  uint32_t eventId;
 };
 
 struct D3D11CounterContext
 {
   uint32_t eventStart;
   vector<GPUTimer> timers;
-  int reuseIdx;
 };
 
-void D3D11DebugManager::FillTimers(D3D11CounterContext &ctx, const DrawcallTreeNode &drawnode)
+void D3D11Replay::FillTimers(D3D11CounterContext &ctx, const DrawcallDescription &drawnode)
 {
   const D3D11_QUERY_DESC qtimedesc = {D3D11_QUERY_TIMESTAMP, 0};
   const D3D11_QUERY_DESC qstatsdesc = {D3D11_QUERY_PIPELINE_STATISTICS, 0};
@@ -231,10 +215,10 @@ void D3D11DebugManager::FillTimers(D3D11CounterContext &ctx, const DrawcallTreeN
 
   for(size_t i = 0; i < drawnode.children.size(); i++)
   {
-    const DrawcallDescription &d = drawnode.children[i].draw;
+    const DrawcallDescription &d = drawnode.children[i];
     FillTimers(ctx, drawnode.children[i]);
 
-    if(d.events.count == 0)
+    if(d.events.empty())
       continue;
 
     GPUTimer *timer = NULL;
@@ -242,30 +226,23 @@ void D3D11DebugManager::FillTimers(D3D11CounterContext &ctx, const DrawcallTreeN
     HRESULT hr = S_OK;
 
     {
-      if(ctx.reuseIdx == -1)
-      {
-        ctx.timers.push_back(GPUTimer());
+      ctx.timers.push_back(GPUTimer());
 
-        timer = &ctx.timers.back();
-        timer->eventID = d.eventID;
-        timer->before = timer->after = timer->stats = timer->occlusion = NULL;
+      timer = &ctx.timers.back();
+      timer->eventId = d.eventId;
+      timer->before = timer->after = timer->stats = timer->occlusion = NULL;
 
-        hr = m_pDevice->CreateQuery(&qtimedesc, &timer->before);
-        RDCASSERTEQUAL(hr, S_OK);
-        hr = m_pDevice->CreateQuery(&qtimedesc, &timer->after);
-        RDCASSERTEQUAL(hr, S_OK);
-        hr = m_pDevice->CreateQuery(&qstatsdesc, &timer->stats);
-        RDCASSERTEQUAL(hr, S_OK);
-        hr = m_pDevice->CreateQuery(&qoccldesc, &timer->occlusion);
-        RDCASSERTEQUAL(hr, S_OK);
-      }
-      else
-      {
-        timer = &ctx.timers[ctx.reuseIdx++];
-      }
+      hr = m_pDevice->CreateQuery(&qtimedesc, &timer->before);
+      RDCASSERTEQUAL(hr, S_OK);
+      hr = m_pDevice->CreateQuery(&qtimedesc, &timer->after);
+      RDCASSERTEQUAL(hr, S_OK);
+      hr = m_pDevice->CreateQuery(&qstatsdesc, &timer->stats);
+      RDCASSERTEQUAL(hr, S_OK);
+      hr = m_pDevice->CreateQuery(&qoccldesc, &timer->occlusion);
+      RDCASSERTEQUAL(hr, S_OK);
     }
 
-    m_WrappedDevice->ReplayLog(ctx.eventStart, d.eventID, eReplay_WithoutDraw);
+    m_pDevice->ReplayLog(ctx.eventStart, d.eventId, eReplay_WithoutDraw);
 
     m_pImmediateContext->Flush();
 
@@ -275,7 +252,7 @@ void D3D11DebugManager::FillTimers(D3D11CounterContext &ctx, const DrawcallTreeN
       m_pImmediateContext->Begin(timer->occlusion);
     if(timer->before && timer->after)
       m_pImmediateContext->End(timer->before);
-    m_WrappedDevice->ReplayLog(ctx.eventStart, d.eventID, eReplay_OnlyDraw);
+    m_pDevice->ReplayLog(ctx.eventStart, d.eventId, eReplay_OnlyDraw);
     if(timer->before && timer->after)
       m_pImmediateContext->End(timer->after);
     if(timer->occlusion)
@@ -283,43 +260,43 @@ void D3D11DebugManager::FillTimers(D3D11CounterContext &ctx, const DrawcallTreeN
     if(timer->stats)
       m_pImmediateContext->End(timer->stats);
 
-    ctx.eventStart = d.eventID + 1;
+    ctx.eventStart = d.eventId + 1;
   }
 }
 
-void D3D11DebugManager::FillTimersAMD(uint32_t &eventStartID, uint32_t &sampleIndex,
-                                      vector<uint32_t> &eventIDs, const DrawcallTreeNode &drawnode)
+void D3D11Replay::FillTimersAMD(uint32_t &eventStartID, uint32_t &sampleIndex,
+                                vector<uint32_t> &eventIDs, const DrawcallDescription &drawnode)
 {
   if(drawnode.children.empty())
     return;
 
   for(size_t i = 0; i < drawnode.children.size(); i++)
   {
-    const DrawcallDescription &d = drawnode.children[i].draw;
+    const DrawcallDescription &d = drawnode.children[i];
 
     FillTimersAMD(eventStartID, sampleIndex, eventIDs, drawnode.children[i]);
 
-    if(d.events.count == 0)
+    if(d.events.empty())
       continue;
 
-    eventIDs.push_back(d.eventID);
+    eventIDs.push_back(d.eventId);
 
-    m_WrappedDevice->ReplayLog(eventStartID, d.eventID, eReplay_WithoutDraw);
+    m_pDevice->ReplayLog(eventStartID, d.eventId, eReplay_WithoutDraw);
 
     m_pImmediateContext->Flush();
 
     m_pAMDCounters->BeginSample(sampleIndex);
 
-    m_WrappedDevice->ReplayLog(eventStartID, d.eventID, eReplay_OnlyDraw);
+    m_pDevice->ReplayLog(eventStartID, d.eventId, eReplay_OnlyDraw);
 
     m_pAMDCounters->EndSample();
 
-    eventStartID = d.eventID + 1;
+    eventStartID = d.eventId + 1;
     sampleIndex++;
   }
 }
 
-vector<CounterResult> D3D11DebugManager::FetchCountersAMD(const vector<GPUCounter> &counters)
+vector<CounterResult> D3D11Replay::FetchCountersAMD(const vector<GPUCounter> &counters)
 {
   vector<CounterResult> ret;
 
@@ -352,7 +329,7 @@ vector<CounterResult> D3D11DebugManager::FetchCountersAMD(const vector<GPUCounte
 
     eventIDs.clear();
 
-    FillTimersAMD(eventStartID, sampleIndex, eventIDs, m_WrappedContext->GetRootDraw());
+    FillTimersAMD(eventStartID, sampleIndex, eventIDs, m_pImmediateContext->GetRootDraw());
 
     m_pAMDCounters->EndPass();
   }
@@ -438,7 +415,7 @@ vector<CounterResult> D3D11DebugManager::FetchCountersAMD(const vector<GPUCounte
   return ret;
 }
 
-vector<CounterResult> D3D11DebugManager::FetchCounters(const vector<GPUCounter> &counters)
+vector<CounterResult> D3D11Replay::FetchCounters(const vector<GPUCounter> &counters)
 {
   vector<CounterResult> ret;
 
@@ -484,20 +461,19 @@ vector<CounterResult> D3D11DebugManager::FetchCounters(const vector<GPUCounter> 
   hr = m_pDevice->CreateQuery(&disjointdesc, &disjoint);
   if(FAILED(hr))
   {
-    RDCERR("Failed to create disjoint query %08x", hr);
+    RDCERR("Failed to create disjoint query HRESULT: %s", ToStr(hr).c_str());
     return ret;
   }
 
   hr = m_pDevice->CreateQuery(&qdesc, &start);
   if(FAILED(hr))
   {
-    RDCERR("Failed to create start query %08x", hr);
+    RDCERR("Failed to create start query HRESULT: %s", ToStr(hr).c_str());
     return ret;
   }
 
   D3D11CounterContext ctx;
 
-  for(int loop = 0; loop < 1; loop++)
   {
     {
       m_pImmediateContext->Begin(disjoint);
@@ -505,8 +481,7 @@ vector<CounterResult> D3D11DebugManager::FetchCounters(const vector<GPUCounter> 
       m_pImmediateContext->End(start);
 
       ctx.eventStart = 0;
-      ctx.reuseIdx = loop == 0 ? -1 : 0;
-      FillTimers(ctx, m_WrappedContext->GetRootDraw());
+      FillTimers(ctx, m_pImmediateContext->GetRootDraw());
 
       m_pImmediateContext->End(disjoint);
     }
@@ -559,55 +534,55 @@ vector<CounterResult> D3D11DebugManager::FetchCounters(const vector<GPUCounter> 
             {
               case GPUCounter::EventGPUDuration:
                 ret.push_back(
-                    CounterResult(ctx.timers[i].eventID, GPUCounter::EventGPUDuration, duration));
+                    CounterResult(ctx.timers[i].eventId, GPUCounter::EventGPUDuration, duration));
                 break;
               case GPUCounter::InputVerticesRead:
-                ret.push_back(CounterResult(ctx.timers[i].eventID, GPUCounter::InputVerticesRead,
+                ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::InputVerticesRead,
                                             pipelineStats.IAVertices));
                 break;
               case GPUCounter::IAPrimitives:
-                ret.push_back(CounterResult(ctx.timers[i].eventID, GPUCounter::IAPrimitives,
+                ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::IAPrimitives,
                                             pipelineStats.IAPrimitives));
                 break;
               case GPUCounter::VSInvocations:
-                ret.push_back(CounterResult(ctx.timers[i].eventID, GPUCounter::VSInvocations,
+                ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::VSInvocations,
                                             pipelineStats.VSInvocations));
                 break;
               case GPUCounter::GSInvocations:
-                ret.push_back(CounterResult(ctx.timers[i].eventID, GPUCounter::GSInvocations,
+                ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::GSInvocations,
                                             pipelineStats.GSInvocations));
                 break;
               case GPUCounter::GSPrimitives:
-                ret.push_back(CounterResult(ctx.timers[i].eventID, GPUCounter::GSPrimitives,
+                ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::GSPrimitives,
                                             pipelineStats.GSPrimitives));
                 break;
               case GPUCounter::RasterizerInvocations:
-                ret.push_back(CounterResult(ctx.timers[i].eventID, GPUCounter::RasterizerInvocations,
+                ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::RasterizerInvocations,
                                             pipelineStats.CInvocations));
                 break;
               case GPUCounter::RasterizedPrimitives:
-                ret.push_back(CounterResult(ctx.timers[i].eventID, GPUCounter::RasterizedPrimitives,
+                ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::RasterizedPrimitives,
                                             pipelineStats.CPrimitives));
                 break;
               case GPUCounter::PSInvocations:
-                ret.push_back(CounterResult(ctx.timers[i].eventID, GPUCounter::PSInvocations,
+                ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::PSInvocations,
                                             pipelineStats.PSInvocations));
                 break;
               case GPUCounter::HSInvocations:
-                ret.push_back(CounterResult(ctx.timers[i].eventID, GPUCounter::HSInvocations,
+                ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::HSInvocations,
                                             pipelineStats.HSInvocations));
                 break;
               case GPUCounter::DSInvocations:
-                ret.push_back(CounterResult(ctx.timers[i].eventID, GPUCounter::DSInvocations,
+                ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::DSInvocations,
                                             pipelineStats.DSInvocations));
                 break;
               case GPUCounter::CSInvocations:
-                ret.push_back(CounterResult(ctx.timers[i].eventID, GPUCounter::CSInvocations,
+                ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::CSInvocations,
                                             pipelineStats.CSInvocations));
                 break;
               case GPUCounter::SamplesWritten:
                 ret.push_back(
-                    CounterResult(ctx.timers[i].eventID, GPUCounter::SamplesWritten, occlusion));
+                    CounterResult(ctx.timers[i].eventId, GPUCounter::SamplesWritten, occlusion));
                 break;
             }
           }
@@ -620,7 +595,7 @@ vector<CounterResult> D3D11DebugManager::FetchCounters(const vector<GPUCounter> 
             {
               case GPUCounter::EventGPUDuration:
                 ret.push_back(
-                    CounterResult(ctx.timers[i].eventID, GPUCounter::EventGPUDuration, -1.0));
+                    CounterResult(ctx.timers[i].eventId, GPUCounter::EventGPUDuration, -1.0));
                 break;
               case GPUCounter::InputVerticesRead:
               case GPUCounter::IAPrimitives:
@@ -635,7 +610,7 @@ vector<CounterResult> D3D11DebugManager::FetchCounters(const vector<GPUCounter> 
               case GPUCounter::CSInvocations:
               case GPUCounter::SamplesWritten:
                 ret.push_back(
-                    CounterResult(ctx.timers[i].eventID, d3dCounters[c], 0xFFFFFFFFFFFFFFFF));
+                    CounterResult(ctx.timers[i].eventId, d3dCounters[c], 0xFFFFFFFFFFFFFFFF));
                 break;
             }
           }

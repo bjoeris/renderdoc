@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -196,7 +196,7 @@ private:
 
     if(m_EnabledHooks)
     {
-      if(!reading && RenderDoc::Inst().GetCaptureOptions().APIValidation)
+      if(!reading && RenderDoc::Inst().GetCaptureOptions().apiValidation)
       {
         Flags |= D3D11_CREATE_DEVICE_DEBUG;
       }
@@ -215,7 +215,7 @@ private:
       pUsedSwapDesc = &swapDesc;
     }
 
-    if(pUsedSwapDesc && m_EnabledHooks && !RenderDoc::Inst().GetCaptureOptions().AllowFullscreen)
+    if(pUsedSwapDesc && m_EnabledHooks && !RenderDoc::Inst().GetCaptureOptions().allowFullscreen)
     {
       pUsedSwapDesc->Windowed = TRUE;
     }
@@ -276,7 +276,7 @@ private:
     }
     else
     {
-      RDCDEBUG("failed. 0x%08x", ret);
+      RDCDEBUG("failed. HRESULT: %s", ToStr(ret).c_str());
     }
 
     m_InsideCreate = false;
@@ -351,8 +351,8 @@ private:
     return E_FAIL;
   }
 
-  PFNNVCreateDevice nvapi_CreateDevice_real;
-  PFNNVCreateDeviceAndSwapChain nvapi_CreateDeviceAndSwapChain_real;
+  PFNNVCreateDevice nvapi_CreateDevice_real = NULL;
+  PFNNVCreateDeviceAndSwapChain nvapi_CreateDeviceAndSwapChain_real = NULL;
 
   static HRESULT WINAPI nvapi_CreateDevice(IDXGIAdapter *pAdapter, D3D_DRIVER_TYPE DriverType,
                                            HMODULE Software, UINT Flags,
@@ -373,7 +373,7 @@ private:
 
     if(d3d11hooks.m_EnabledHooks)
     {
-      if(!reading && RenderDoc::Inst().GetCaptureOptions().APIValidation)
+      if(!reading && RenderDoc::Inst().GetCaptureOptions().apiValidation)
       {
         Flags |= D3D11_CREATE_DEVICE_DEBUG;
       }
@@ -410,7 +410,7 @@ private:
     }
     else
     {
-      RDCDEBUG("failed. 0x%08x", ret);
+      RDCDEBUG("failed. HRESULT: %s", ToStr(ret).c_str());
     }
 
     return ret;
@@ -434,7 +434,7 @@ private:
 
     if(d3d11hooks.m_EnabledHooks)
     {
-      if(!reading && RenderDoc::Inst().GetCaptureOptions().APIValidation)
+      if(!reading && RenderDoc::Inst().GetCaptureOptions().apiValidation)
       {
         Flags |= D3D11_CREATE_DEVICE_DEBUG;
       }
@@ -454,7 +454,7 @@ private:
     }
 
     if(pUsedSwapDesc && d3d11hooks.m_EnabledHooks &&
-       !RenderDoc::Inst().GetCaptureOptions().AllowFullscreen)
+       !RenderDoc::Inst().GetCaptureOptions().allowFullscreen)
     {
       pUsedSwapDesc->Windowed = TRUE;
     }
@@ -486,7 +486,7 @@ private:
     }
     else
     {
-      RDCDEBUG("failed. 0x%08x", ret);
+      RDCDEBUG("failed. HRESULT: %s", ToStr(ret).c_str());
     }
 
     return ret;

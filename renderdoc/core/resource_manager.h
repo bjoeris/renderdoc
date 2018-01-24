@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -296,7 +296,7 @@ template <typename WrappedResourceType, typename RealResourceType, typename Reco
 class ResourceManager : public ResourceRecordHandler
 {
 public:
-  ResourceManager(LogState state, Serialiser *ser);
+  ResourceManager();
   virtual ~ResourceManager();
 
   void Shutdown();
@@ -308,7 +308,7 @@ public:
     {
     }
     InitialContentData()
-        : resource((WrappedResourceType)RecordType::NullResource), num(0), blob(NULL)
+        : resourceType(0), resource((WrappedResourceType)RecordType::NullResource), num(0), blob(NULL)
     {
     }
     uint32_t resourceType;
@@ -317,8 +317,6 @@ public:
     byte *blob;
   };
 
-  bool IsWriting() { return m_State >= WRITING; }
-  bool IsReading() { return m_State < WRITING; }
   ///////////////////////////////////////////
   // Capture-side methods
 
@@ -335,11 +333,8 @@ public:
   WrappedResourceType GetCurrentResource(ResourceId id);
   void ReleaseCurrentResource(ResourceId id);
 
-  void MarkInFrame(bool inFrame) { m_InFrame = inFrame; }
-  void ReleaseInFrameResources();
-
   // insert the chunks for the resources referenced in the frame
-  void InsertReferencedChunks(Serialiser *fileSer);
+  void InsertReferencedChunks(WriteSerialiser &ser);
 
   // mark resource records as unwritten, ready to be written to a new logfile.
   void MarkUnwrittenResources();
@@ -372,12 +367,16 @@ public:
   void SetInitialChunk(ResourceId id, Chunk *chunk);
 
   // generate chunks for initial contents and insert.
-  void InsertInitialContentsChunks(Serialiser *fileSer);
+  void InsertInitialContentsChunks(WriteSerialiser &ser);
+
+  // for initial contents that don't need a chunk - apply them here. This allows any patching to
+  // creation-time chunks to happen before they're written to disk.
+  void ApplyInitialContentsNonChunks(WriteSerialiser &ser);
 
   // Serialise out which resources need initial contents, along with whether their
   // initial contents are in the serialised stream (e.g. RTs might still want to be
   // cleared on frame init).
-  void Serialise_InitialContentsNeeded();
+  void Serialise_InitialContentsNeeded(WriteSerialiser &ser);
 
   // handle marking a resource referenced for read or write and storing RAW access etc.
   static bool MarkReferenced(map<ResourceId, FrameRefType> &refs, ResourceId id,
@@ -410,7 +409,7 @@ public:
   ResourceId GetLiveID(ResourceId id);
 
   // Serialise in which resources need initial contents and set them up.
-  void CreateInitialContents();
+  void CreateInitialContents(ReadSerialiser &ser);
 
   // Free any initial contents that are prepared (for after capture is complete)
   void FreeInitialContents();
@@ -435,15 +434,11 @@ protected:
   virtual bool AllowDeletedResource_InitialState() { return false; }
   virtual bool Need_InitialStateChunk(WrappedResourceType res) = 0;
   virtual bool Prepare_InitialState(WrappedResourceType res) = 0;
-  virtual bool Serialise_InitialState(ResourceId id, WrappedResourceType res) = 0;
+  virtual uint32_t GetSize_InitialState(ResourceId id, WrappedResourceType res) = 0;
+  virtual bool Serialise_InitialState(WriteSerialiser &ser, ResourceId id,
+                                      WrappedResourceType res) = 0;
   virtual void Create_InitialState(ResourceId id, WrappedResourceType live, bool hasData) = 0;
   virtual void Apply_InitialState(WrappedResourceType live, InitialContentData initial) = 0;
-
-  LogState m_State;
-  Serialiser *m_pSerialiser;
-
-  Serialiser *GetSerialiser() { return m_pSerialiser; }
-  bool m_InFrame;
 
   // very coarse lock, protects EVERYTHING. This could certainly be improved and it may be a
   // bottleneck
@@ -483,8 +478,7 @@ protected:
   map<ResourceId, ResourceId> m_OriginalIDs, m_LiveIDs;
 
   // used during replay - holds resources allocated and the original id that they represent
-  // for a) in-frame creations and b) pre-frame creations respectively.
-  map<ResourceId, WrappedResourceType> m_InframeResourceMap, m_LiveResourceMap;
+  map<ResourceId, WrappedResourceType> m_LiveResourceMap;
 
   // used during capture - holds resource records by id.
   map<ResourceId, RecordType *> m_ResourceRecords;
@@ -493,21 +487,19 @@ protected:
   map<ResourceId, ResourceId> m_Replacements;
 };
 
+// this is just a couple of convenience macros to reduce the amount of visual noise on the
+// implementations
+#define ResourceManagerType ResourceManager<WrappedResourceType, RealResourceType, RecordType>
+
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-ResourceManager<WrappedResourceType, RealResourceType, RecordType>::ResourceManager(LogState state,
-                                                                                    Serialiser *ser)
+ResourceManagerType::ResourceManager()
 {
   if(RenderDoc::Inst().GetCrashHandler())
     RenderDoc::Inst().GetCrashHandler()->RegisterMemoryRegion(this, sizeof(ResourceManager));
-
-  m_State = state;
-  m_pSerialiser = ser;
-
-  m_InFrame = false;
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::Shutdown()
+void ResourceManagerType::Shutdown()
 {
   while(!m_LiveResourceMap.empty())
   {
@@ -520,27 +512,15 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::Shutdow
       m_LiveResourceMap.erase(removeit);
   }
 
-  while(!m_InframeResourceMap.empty())
-  {
-    auto it = m_InframeResourceMap.begin();
-    ResourceId id = it->first;
-    ResourceTypeRelease(it->second);
-
-    auto removeit = m_InframeResourceMap.find(id);
-    if(removeit != m_InframeResourceMap.end())
-      m_InframeResourceMap.erase(removeit);
-  }
-
   FreeInitialContents();
 
   RDCASSERT(m_ResourceRecords.empty());
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-ResourceManager<WrappedResourceType, RealResourceType, RecordType>::~ResourceManager()
+ResourceManagerType::~ResourceManager()
 {
   RDCASSERT(m_LiveResourceMap.empty());
-  RDCASSERT(m_InframeResourceMap.empty());
   RDCASSERT(m_InitialContents.empty());
   RDCASSERT(m_ResourceRecords.empty());
 
@@ -549,8 +529,8 @@ ResourceManager<WrappedResourceType, RealResourceType, RecordType>::~ResourceMan
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkReferenced(
-    map<ResourceId, FrameRefType> &refs, ResourceId id, FrameRefType refType)
+bool ResourceManagerType::MarkReferenced(map<ResourceId, FrameRefType> &refs, ResourceId id,
+                                         FrameRefType refType)
 {
   if(refs.find(id) == refs.end())
   {
@@ -592,8 +572,7 @@ bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkRef
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkResourceFrameReferenced(
-    ResourceId id, FrameRefType refType)
+void ResourceManagerType::MarkResourceFrameReferenced(ResourceId id, FrameRefType refType)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -612,7 +591,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkRes
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::ReadBeforeWrite(ResourceId id)
+bool ResourceManagerType::ReadBeforeWrite(ResourceId id)
 {
   if(m_FrameReferencedResources.find(id) != m_FrameReferencedResources.end())
     return m_FrameReferencedResources[id] == eFrameRef_ReadBeforeWrite ||
@@ -622,7 +601,7 @@ bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::ReadBef
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkDirtyResource(ResourceId res)
+void ResourceManagerType::MarkDirtyResource(ResourceId res)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -633,7 +612,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkDir
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkPendingDirty(ResourceId res)
+void ResourceManagerType::MarkPendingDirty(ResourceId res)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -644,7 +623,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkPen
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::FlushPendingDirty()
+void ResourceManagerType::FlushPendingDirty()
 {
   SCOPED_LOCK(m_Lock);
 
@@ -653,7 +632,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::FlushPe
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::IsResourceDirty(ResourceId res)
+bool ResourceManagerType::IsResourceDirty(ResourceId res)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -664,7 +643,7 @@ bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::IsResou
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkCleanResource(ResourceId res)
+void ResourceManagerType::MarkCleanResource(ResourceId res)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -678,8 +657,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkCle
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::SetInitialContents(
-    ResourceId id, InitialContentData contents)
+void ResourceManagerType::SetInitialContents(ResourceId id, InitialContentData contents)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -690,7 +668,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::SetInit
   if(it != m_InitialContents.end())
   {
     ResourceTypeRelease(it->second.resource);
-    Serialiser::FreeAlignedBuffer(it->second.blob);
+    FreeAlignedBuffer(it->second.blob);
     m_InitialContents.erase(it);
   }
 
@@ -698,8 +676,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::SetInit
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::SetInitialChunk(ResourceId id,
-                                                                                         Chunk *chunk)
+void ResourceManagerType::SetInitialChunk(ResourceId id, Chunk *chunk)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -707,7 +684,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::SetInit
 
   auto it = m_InitialChunks.find(id);
 
-  RDCASSERT(chunk->GetChunkType() == INITIAL_CONTENTS);
+  RDCASSERT(chunk->GetChunkType<SystemChunk>() == SystemChunk::InitialContents);
 
   if(it != m_InitialChunks.end())
   {
@@ -720,8 +697,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::SetInit
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-typename ResourceManager<WrappedResourceType, RealResourceType, RecordType>::InitialContentData ResourceManager<
-    WrappedResourceType, RealResourceType, RecordType>::GetInitialContents(ResourceId id)
+typename ResourceManagerType::InitialContentData ResourceManagerType::GetInitialContents(ResourceId id)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -734,20 +710,36 @@ typename ResourceManager<WrappedResourceType, RealResourceType, RecordType>::Ini
   return InitialContentData();
 }
 
-template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::Serialise_InitialContentsNeeded()
+// use a namespace so this doesn't pollute the global namesapce
+namespace ResourceManagerInternal
 {
+struct WrittenRecord
+{
+  ResourceId id;
+  bool written;
+};
+};
+
+DECLARE_REFLECTION_STRUCT(ResourceManagerInternal::WrittenRecord);
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, ResourceManagerInternal::WrittenRecord &el)
+{
+  SERIALISE_MEMBER(id);
+  SERIALISE_MEMBER(written);
+}
+
+template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
+void ResourceManagerType::Serialise_InitialContentsNeeded(WriteSerialiser &ser)
+{
+  using namespace ResourceManagerInternal;
+
   SCOPED_LOCK(m_Lock);
 
-  struct WrittenRecord
-  {
-    ResourceId id;
-    bool written;
-  };
-  vector<WrittenRecord> written;
+  std::vector<WrittenRecord> WrittenRecords;
 
   // reasonable estimate, and these records are small
-  written.reserve(m_FrameReferencedResources.size());
+  WrittenRecords.reserve(m_FrameReferencedResources.size());
 
   for(auto it = m_FrameReferencedResources.begin(); it != m_FrameReferencedResources.end(); ++it)
   {
@@ -757,7 +749,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::Seriali
     {
       WrittenRecord wr = {it->first, record ? record->DataInSerialiser : true};
 
-      written.push_back(wr);
+      WrittenRecords.push_back(wr);
     }
   }
 
@@ -769,53 +761,47 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::Seriali
     {
       WrittenRecord wr = {id, true};
 
-      written.push_back(wr);
+      WrittenRecords.push_back(wr);
     }
   }
 
-  uint32_t numWritten = (uint32_t)written.size();
-  m_pSerialiser->Serialise("NumWrittenResources", numWritten);
+  uint32_t chunkSize = uint32_t(WrittenRecords.size() * sizeof(WrittenRecord) + 16);
 
-  for(auto it = written.begin(); it != written.end(); ++it)
-  {
-    m_pSerialiser->Serialise("id", it->id);
-    m_pSerialiser->Serialise("WrittenData", it->written);
-  }
+  SCOPED_SERIALISE_CHUNK(SystemChunk::InitialContentsList, chunkSize);
+  SERIALISE_ELEMENT(WrittenRecords);
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::FreeInitialContents()
+void ResourceManagerType::FreeInitialContents()
 {
   while(!m_InitialContents.empty())
   {
     auto it = m_InitialContents.begin();
     ResourceTypeRelease(it->second.resource);
-    Serialiser::FreeAlignedBuffer(it->second.blob);
+    FreeAlignedBuffer(it->second.blob);
     if(!m_InitialContents.empty())
       m_InitialContents.erase(m_InitialContents.begin());
   }
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::CreateInitialContents()
+void ResourceManagerType::CreateInitialContents(ReadSerialiser &ser)
 {
+  using namespace ResourceManagerInternal;
+
   set<ResourceId> neededInitials;
 
-  uint32_t NumWrittenResources = 0;
-  m_pSerialiser->Serialise("NumWrittenResources", NumWrittenResources);
+  std::vector<WrittenRecord> WrittenRecords;
+  SERIALISE_ELEMENT(WrittenRecords);
 
-  for(uint32_t i = 0; i < NumWrittenResources; i++)
+  for(const WrittenRecord &wr : WrittenRecords)
   {
-    ResourceId id = ResourceId();
-    bool WrittenData = false;
-
-    m_pSerialiser->Serialise("id", id);
-    m_pSerialiser->Serialise("WrittenData", WrittenData);
+    ResourceId id = wr.id;
 
     neededInitials.insert(id);
 
     if(HasLiveResource(id) && m_InitialContents.find(id) == m_InitialContents.end())
-      Create_InitialState(id, GetLiveResource(id), WrittenData);
+      Create_InitialState(id, GetLiveResource(id), wr.written);
   }
 
   for(auto it = m_InitialContents.begin(); it != m_InitialContents.end();)
@@ -825,7 +811,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::CreateI
     if(neededInitials.find(id) == neededInitials.end())
     {
       ResourceTypeRelease(it->second.resource);
-      Serialiser::FreeAlignedBuffer(it->second.blob);
+      FreeAlignedBuffer(it->second.blob);
       ++it;
       m_InitialContents.erase(id);
     }
@@ -837,7 +823,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::CreateI
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::ApplyInitialContents()
+void ResourceManagerType::ApplyInitialContents()
 {
   RDCDEBUG("Applying initial contents");
   uint32_t numContents = 0;
@@ -858,7 +844,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::ApplyIn
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkUnwrittenResources()
+void ResourceManagerType::MarkUnwrittenResources()
 {
   SCOPED_LOCK(m_Lock);
 
@@ -869,8 +855,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::MarkUnw
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::InsertReferencedChunks(
-    Serialiser *fileSer)
+void ResourceManagerType::InsertReferencedChunks(WriteSerialiser &ser)
 {
   map<int32_t, Chunk *> sortedChunks;
 
@@ -878,10 +863,16 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::InsertR
 
   RDCDEBUG("%u frame resource records", (uint32_t)m_FrameReferencedResources.size());
 
-  if(RenderDoc::Inst().GetCaptureOptions().RefAllResources)
+  if(RenderDoc::Inst().GetCaptureOptions().refAllResources)
   {
+    float num = float(m_ResourceRecords.size());
+    float idx = 0.0f;
+
     for(auto it = m_ResourceRecords.begin(); it != m_ResourceRecords.end(); ++it)
     {
+      RenderDoc::Inst().SetProgress(CaptureProgress::AddReferencedResources, idx / num);
+      idx += 1.0f;
+
       if(!SerialisableResource(it->first, it->second))
         continue;
 
@@ -890,8 +881,14 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::InsertR
   }
   else
   {
+    float num = float(m_FrameReferencedResources.size());
+    float idx = 0.0f;
+
     for(auto it = m_FrameReferencedResources.begin(); it != m_FrameReferencedResources.end(); ++it)
     {
+      RenderDoc::Inst().SetProgress(CaptureProgress::AddReferencedResources, idx / num);
+      idx += 1.0f;
+
       RecordType *record = GetResourceRecord(it->first);
       if(record)
         record->Insert(sortedChunks);
@@ -901,24 +898,28 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::InsertR
   RDCDEBUG("%u frame resource chunks", (uint32_t)sortedChunks.size());
 
   for(auto it = sortedChunks.begin(); it != sortedChunks.end(); it++)
-  {
-    fileSer->Insert(it->second);
-  }
+    it->second->Write(ser);
 
   RDCDEBUG("inserted to serialiser");
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::PrepareInitialContents()
+void ResourceManagerType::PrepareInitialContents()
 {
   SCOPED_LOCK(m_Lock);
 
   RDCDEBUG("Preparing up to %u potentially dirty resources", (uint32_t)m_DirtyResources.size());
   uint32_t prepared = 0;
 
+  float num = float(m_DirtyResources.size());
+  float idx = 0.0f;
+
   for(auto it = m_DirtyResources.begin(); it != m_DirtyResources.end(); ++it)
   {
     ResourceId id = *it;
+
+    RenderDoc::Inst().SetProgress(CaptureProgress::PrepareInitialStates, idx / num);
+    idx += 1.0f;
 
     if(!HasCurrentResource(id))
       continue;
@@ -958,8 +959,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::Prepare
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::InsertInitialContentsChunks(
-    Serialiser *fileSerialiser)
+void ResourceManagerType::InsertInitialContentsChunks(WriteSerialiser &ser)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -968,12 +968,18 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::InsertI
 
   RDCDEBUG("Checking %u possibly dirty resources", (uint32_t)m_DirtyResources.size());
 
+  float num = float(m_DirtyResources.size());
+  float idx = 0.0f;
+
   for(auto it = m_DirtyResources.begin(); it != m_DirtyResources.end(); ++it)
   {
     ResourceId id = *it;
 
+    RenderDoc::Inst().SetProgress(CaptureProgress::SerialiseInitialStates, idx / num);
+    idx += 1.0f;
+
     if(m_FrameReferencedResources.find(id) == m_FrameReferencedResources.end() &&
-       !RenderDoc::Inst().GetCaptureOptions().RefAllResources)
+       !RenderDoc::Inst().GetCaptureOptions().refAllResources)
     {
 #if ENABLED(VERBOSE_DIRTY_RESOURCES)
       RDCDEBUG("Dirty tesource %llu is GPU dirty but not referenced - skipping", id);
@@ -1023,24 +1029,23 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::InsertI
     if(!Need_InitialStateChunk(res))
     {
       // just need to grab data, don't create chunk
-      Serialise_InitialState(id, res);
+      Serialise_InitialState(ser, id, res);
       continue;
     }
 
     auto preparedChunk = m_InitialChunks.find(id);
     if(preparedChunk != m_InitialChunks.end())
     {
-      fileSerialiser->Insert(preparedChunk->second);
+      preparedChunk->second->Write(ser);
       m_InitialChunks.erase(preparedChunk);
     }
     else
     {
-      ScopedContext scope(m_pSerialiser, "Initial Contents", "Initial Contents", INITIAL_CONTENTS,
-                          false);
+      uint32_t size = GetSize_InitialState(id, res);
 
-      Serialise_InitialState(id, res);
+      SCOPED_SERIALISE_CHUNK(SystemChunk::InitialContents, size);
 
-      fileSerialiser->Insert(scope.Get(true));
+      Serialise_InitialState(ser, id, res);
     }
   }
 
@@ -1060,17 +1065,16 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::InsertI
       auto preparedChunk = m_InitialChunks.find(it->first);
       if(preparedChunk != m_InitialChunks.end())
       {
-        fileSerialiser->Insert(preparedChunk->second);
+        preparedChunk->second->Write(ser);
         m_InitialChunks.erase(preparedChunk);
       }
       else
       {
-        ScopedContext scope(m_pSerialiser, "Initial Contents", "Initial Contents", INITIAL_CONTENTS,
-                            false);
+        uint32_t size = GetSize_InitialState(it->first, it->second);
 
-        Serialise_InitialState(it->first, it->second);
+        SCOPED_SERIALISE_CHUNK(SystemChunk::InitialContents, size);
 
-        fileSerialiser->Insert(scope.Get(true));
+        Serialise_InitialState(ser, it->first, it->second);
       }
     }
   }
@@ -1086,22 +1090,41 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::InsertI
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::ReleaseInFrameResources()
+void ResourceManagerType::ApplyInitialContentsNonChunks(WriteSerialiser &ser)
 {
   SCOPED_LOCK(m_Lock);
 
-  // clean up last frame's temporaries - we needed to keep them around so they were valid for
-  // pipeline inspection etc after replaying the last log.
-  for(auto it = m_InframeResourceMap.begin(); it != m_InframeResourceMap.end(); ++it)
+  for(auto it = m_DirtyResources.begin(); it != m_DirtyResources.end(); ++it)
   {
-    ResourceTypeRelease(it->second);
-  }
+    ResourceId id = *it;
 
-  m_InframeResourceMap.clear();
+    if(m_FrameReferencedResources.find(id) == m_FrameReferencedResources.end() &&
+       !RenderDoc::Inst().GetCaptureOptions().refAllResources)
+    {
+      continue;
+    }
+
+    WrappedResourceType res = (WrappedResourceType)RecordType::NullResource;
+    bool isAlive = HasCurrentResource(id);
+
+    if(!AllowDeletedResource_InitialState() && !isAlive)
+      continue;
+
+    if(isAlive)
+      res = GetCurrentResource(id);
+
+    RecordType *record = GetResourceRecord(id);
+
+    if(!record || record->SpecialResource)
+      continue;
+
+    if(!Need_InitialStateChunk(res))
+      Serialise_InitialState(ser, id, res);
+  }
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::ClearReferencedResources()
+void ResourceManagerType::ClearReferencedResources()
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1117,8 +1140,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::ClearRe
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::ReplaceResource(
-    ResourceId from, ResourceId to)
+void ResourceManagerType::ReplaceResource(ResourceId from, ResourceId to)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1127,7 +1149,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::Replace
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::HasReplacement(ResourceId from)
+bool ResourceManagerType::HasReplacement(ResourceId from)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1135,7 +1157,7 @@ bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::HasRepl
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::RemoveReplacement(ResourceId id)
+void ResourceManagerType::RemoveReplacement(ResourceId id)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1148,8 +1170,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::RemoveR
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-RecordType *ResourceManager<WrappedResourceType, RealResourceType, RecordType>::GetResourceRecord(
-    ResourceId id)
+RecordType *ResourceManagerType::GetResourceRecord(ResourceId id)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1162,7 +1183,7 @@ RecordType *ResourceManager<WrappedResourceType, RealResourceType, RecordType>::
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::HasResourceRecord(ResourceId id)
+bool ResourceManagerType::HasResourceRecord(ResourceId id)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1175,8 +1196,7 @@ bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::HasReso
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-RecordType *ResourceManager<WrappedResourceType, RealResourceType, RecordType>::AddResourceRecord(
-    ResourceId id)
+RecordType *ResourceManagerType::AddResourceRecord(ResourceId id)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1186,8 +1206,7 @@ RecordType *ResourceManager<WrappedResourceType, RealResourceType, RecordType>::
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::RemoveResourceRecord(
-    ResourceId id)
+void ResourceManagerType::RemoveResourceRecord(ResourceId id)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1197,15 +1216,13 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::RemoveR
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::DestroyResourceRecord(
-    ResourceRecord *record)
+void ResourceManagerType::DestroyResourceRecord(ResourceRecord *record)
 {
   delete(RecordType *)record;
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::AddWrapper(
-    WrappedResourceType wrap, RealResourceType real)
+bool ResourceManagerType::AddWrapper(WrappedResourceType wrap, RealResourceType real)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1230,8 +1247,7 @@ bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::AddWrap
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::RemoveWrapper(
-    RealResourceType real)
+void ResourceManagerType::RemoveWrapper(RealResourceType real)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1246,7 +1262,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::RemoveW
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::HasWrapper(RealResourceType real)
+bool ResourceManagerType::HasWrapper(RealResourceType real)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1257,8 +1273,7 @@ bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::HasWrap
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-WrappedResourceType ResourceManager<WrappedResourceType, RealResourceType, RecordType>::GetWrapper(
-    RealResourceType real)
+WrappedResourceType ResourceManagerType::GetWrapper(RealResourceType real)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1276,8 +1291,7 @@ WrappedResourceType ResourceManager<WrappedResourceType, RealResourceType, Recor
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::AddLiveResource(
-    ResourceId origid, WrappedResourceType livePtr)
+void ResourceManagerType::AddLiveResource(ResourceId origid, WrappedResourceType livePtr)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1289,26 +1303,18 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::AddLive
   m_OriginalIDs[GetID(livePtr)] = origid;
   m_LiveIDs[origid] = GetID(livePtr);
 
-  if(m_InFrame && m_InframeResourceMap.find(origid) != m_InframeResourceMap.end())
-  {
-    ResourceTypeRelease(m_InframeResourceMap[origid]);
-    m_InframeResourceMap.erase(origid);
-  }
-  else if(!m_InFrame && m_LiveResourceMap.find(origid) != m_LiveResourceMap.end())
+  if(m_LiveResourceMap.find(origid) != m_LiveResourceMap.end())
   {
     RDCERR("Releasing live resource for duplicate creation: %llu", origid);
     ResourceTypeRelease(m_LiveResourceMap[origid]);
     m_LiveResourceMap.erase(origid);
   }
 
-  if(m_InFrame)
-    m_InframeResourceMap[origid] = livePtr;
-  else
-    m_LiveResourceMap[origid] = livePtr;
+  m_LiveResourceMap[origid] = livePtr;
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::HasLiveResource(ResourceId origid)
+bool ResourceManagerType::HasLiveResource(ResourceId origid)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1316,13 +1322,11 @@ bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::HasLive
     return false;
 
   return (m_Replacements.find(origid) != m_Replacements.end() ||
-          m_InframeResourceMap.find(origid) != m_InframeResourceMap.end() ||
           m_LiveResourceMap.find(origid) != m_LiveResourceMap.end());
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-WrappedResourceType ResourceManager<WrappedResourceType, RealResourceType, RecordType>::GetLiveResource(
-    ResourceId origid)
+WrappedResourceType ResourceManagerType::GetLiveResource(ResourceId origid)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1334,9 +1338,6 @@ WrappedResourceType ResourceManager<WrappedResourceType, RealResourceType, Recor
   if(m_Replacements.find(origid) != m_Replacements.end())
     return GetLiveResource(m_Replacements[origid]);
 
-  if(m_InframeResourceMap.find(origid) != m_InframeResourceMap.end())
-    return m_InframeResourceMap[origid];
-
   if(m_LiveResourceMap.find(origid) != m_LiveResourceMap.end())
     return m_LiveResourceMap[origid];
 
@@ -1344,26 +1345,17 @@ WrappedResourceType ResourceManager<WrappedResourceType, RealResourceType, Recor
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::EraseLiveResource(
-    ResourceId origid)
+void ResourceManagerType::EraseLiveResource(ResourceId origid)
 {
   SCOPED_LOCK(m_Lock);
 
   RDCASSERT(HasLiveResource(origid), origid);
 
-  if(m_InframeResourceMap.find(origid) != m_InframeResourceMap.end())
-  {
-    m_InframeResourceMap.erase(origid);
-  }
-  else
-  {
-    m_LiveResourceMap.erase(origid);
-  }
+  m_LiveResourceMap.erase(origid);
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::AddCurrentResource(
-    ResourceId id, WrappedResourceType res)
+void ResourceManagerType::AddCurrentResource(ResourceId id, WrappedResourceType res)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1372,7 +1364,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::AddCurr
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::HasCurrentResource(ResourceId id)
+bool ResourceManagerType::HasCurrentResource(ResourceId id)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1380,8 +1372,7 @@ bool ResourceManager<WrappedResourceType, RealResourceType, RecordType>::HasCurr
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-WrappedResourceType ResourceManager<WrappedResourceType, RealResourceType,
-                                    RecordType>::GetCurrentResource(ResourceId id)
+WrappedResourceType ResourceManagerType::GetCurrentResource(ResourceId id)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1393,8 +1384,7 @@ WrappedResourceType ResourceManager<WrappedResourceType, RealResourceType,
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::ReleaseCurrentResource(
-    ResourceId id)
+void ResourceManagerType::ReleaseCurrentResource(ResourceId id)
 {
   SCOPED_LOCK(m_Lock);
 
@@ -1403,8 +1393,7 @@ void ResourceManager<WrappedResourceType, RealResourceType, RecordType>::Release
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-ResourceId ResourceManager<WrappedResourceType, RealResourceType, RecordType>::GetOriginalID(
-    ResourceId id)
+ResourceId ResourceManagerType::GetOriginalID(ResourceId id)
 {
   if(id == ResourceId())
     return id;
@@ -1414,7 +1403,7 @@ ResourceId ResourceManager<WrappedResourceType, RealResourceType, RecordType>::G
 }
 
 template <typename WrappedResourceType, typename RealResourceType, typename RecordType>
-ResourceId ResourceManager<WrappedResourceType, RealResourceType, RecordType>::GetLiveID(ResourceId id)
+ResourceId ResourceManagerType::GetLiveID(ResourceId id)
 {
   if(id == ResourceId())
     return id;
@@ -1422,3 +1411,5 @@ ResourceId ResourceManager<WrappedResourceType, RealResourceType, RecordType>::G
   RDCASSERT(m_LiveIDs.find(id) != m_LiveIDs.end(), id);
   return m_LiveIDs[id];
 }
+
+#undef ResourceManagerType

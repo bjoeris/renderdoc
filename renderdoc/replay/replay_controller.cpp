@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -27,14 +27,16 @@
 #include <string.h>
 #include <time.h>
 #include "common/dds_readwrite.h"
+#include "driver/ihv/amd/amd_isa.h"
 #include "jpeg-compressor/jpgd.h"
 #include "jpeg-compressor/jpge.h"
 #include "maths/formatpacking.h"
 #include "os/os_specific.h"
+#include "serialise/rdcfile.h"
 #include "serialise/serialiser.h"
-#include "serialise/string_utils.h"
 #include "stb/stb_image.h"
 #include "stb/stb_image_write.h"
+#include "strings/string_utils.h"
 #include "tinyexr/tinyexr.h"
 
 float ConvertComponent(const ResourceFormat &fmt, byte *data)
@@ -170,6 +172,11 @@ ReplayController::ReplayController()
   m_pDevice = NULL;
 
   m_EventID = 100000;
+
+  m_D3D11PipelineState = NULL;
+  m_D3D12PipelineState = NULL;
+  m_GLPipelineState = NULL;
+  m_VulkanPipelineState = NULL;
 }
 
 ReplayController::~ReplayController()
@@ -196,18 +203,18 @@ ReplayController::~ReplayController()
   m_pDevice = NULL;
 }
 
-void ReplayController::SetFrameEvent(uint32_t eventID, bool force)
+void ReplayController::SetFrameEvent(uint32_t eventId, bool force)
 {
-  if(eventID != m_EventID || force)
+  if(eventId != m_EventID || force)
   {
-    m_EventID = eventID;
+    m_EventID = eventId;
 
-    m_pDevice->ReplayLog(eventID, eReplay_WithoutDraw);
+    m_pDevice->ReplayLog(eventId, eReplay_WithoutDraw);
 
     for(size_t i = 0; i < m_Outputs.size(); i++)
-      m_Outputs[i]->SetFrameEvent(eventID);
+      m_Outputs[i]->SetFrameEvent(eventId);
 
-    m_pDevice->ReplayLog(eventID, eReplay_OnlyDraw);
+    m_pDevice->ReplayLog(eventId, eReplay_OnlyDraw);
 
     FetchPipelineState();
   }
@@ -233,22 +240,30 @@ const VKPipe::State &ReplayController::GetVulkanPipelineState()
   return *m_VulkanPipelineState;
 }
 
-rdctype::array<rdctype::str> ReplayController::GetDisassemblyTargets()
+rdcarray<rdcstr> ReplayController::GetDisassemblyTargets()
 {
-  rdctype::array<rdctype::str> ret;
+  rdcarray<rdcstr> ret;
 
   vector<string> targets = m_pDevice->GetDisassemblyTargets();
 
-  create_array_uninit(ret, targets.size());
-  for(int32_t i = 0; i < ret.count; i++)
-    ret[i] = targets[i];
+  ret.reserve(targets.size());
+  for(const std::string &t : targets)
+    ret.push_back(t);
+
+  for(const std::string &t : m_GCNTargets)
+    ret.push_back(t);
 
   return ret;
 }
 
-rdctype::str ReplayController::DisassembleShader(const ShaderReflection *refl, const char *target)
+rdcstr ReplayController::DisassembleShader(ResourceId pipeline, const ShaderReflection *refl,
+                                           const char *target)
 {
-  return m_pDevice->DisassembleShader(refl, target);
+  for(const std::string &t : m_GCNTargets)
+    if(t == target)
+      return GCNISA::Disassemble(refl->encoding, refl->stage, refl->rawBytes, target);
+
+  return m_pDevice->DisassembleShader(pipeline, refl, target);
 }
 
 FrameDescription ReplayController::GetFrameInfo()
@@ -256,107 +271,77 @@ FrameDescription ReplayController::GetFrameInfo()
   return m_FrameRecord.frameInfo;
 }
 
-DrawcallDescription *ReplayController::GetDrawcallByEID(uint32_t eventID)
+const SDFile &ReplayController::GetStructuredFile()
 {
-  if(eventID >= m_Drawcalls.size())
-    return NULL;
-
-  return m_Drawcalls[eventID];
+  return m_pDevice->GetStructuredFile();
 }
 
-rdctype::array<DrawcallDescription> ReplayController::GetDrawcalls()
+DrawcallDescription *ReplayController::GetDrawcallByEID(uint32_t eventId)
+{
+  if(eventId >= m_Drawcalls.size())
+    return NULL;
+
+  return m_Drawcalls[eventId];
+}
+
+rdcarray<DrawcallDescription> ReplayController::GetDrawcalls()
 {
   return m_FrameRecord.drawcallList;
 }
 
-rdctype::array<CounterResult> ReplayController::FetchCounters(const rdctype::array<GPUCounter> &counters)
+rdcarray<CounterResult> ReplayController::FetchCounters(const rdcarray<GPUCounter> &counters)
 {
-  vector<GPUCounter> counterArray;
-  counterArray.reserve(counters.count);
-  for(int32_t i = 0; i < counters.count; i++)
-    counterArray.push_back(counters[i]);
+  std::vector<GPUCounter> counterArray(counters.begin(), counters.end());
 
   return m_pDevice->FetchCounters(counterArray);
 }
 
-rdctype::array<GPUCounter> ReplayController::EnumerateCounters()
+rdcarray<GPUCounter> ReplayController::EnumerateCounters()
 {
   return m_pDevice->EnumerateCounters();
 }
 
 CounterDescription ReplayController::DescribeCounter(GPUCounter counterID)
 {
-  CounterDescription ret;
-
-  m_pDevice->DescribeCounter(counterID, ret);
-
-  return ret;
+  return m_pDevice->DescribeCounter(counterID);
 }
 
-rdctype::array<BufferDescription> ReplayController::GetBuffers()
+const rdcarray<ResourceDescription> &ReplayController::GetResources()
 {
-  if(m_Buffers.empty())
-  {
-    vector<ResourceId> ids = m_pDevice->GetBuffers();
+  return m_Resources;
+}
 
-    m_Buffers.resize(ids.size());
-
-    for(size_t i = 0; i < ids.size(); i++)
-      m_Buffers[i] = m_pDevice->GetBuffer(ids[i]);
-  }
-
+const rdcarray<BufferDescription> &ReplayController::GetBuffers()
+{
   return m_Buffers;
 }
 
-rdctype::array<TextureDescription> ReplayController::GetTextures()
+const rdcarray<TextureDescription> &ReplayController::GetTextures()
 {
-  if(m_Textures.empty())
-  {
-    vector<ResourceId> ids = m_pDevice->GetTextures();
-
-    m_Textures.resize(ids.size());
-
-    for(size_t i = 0; i < ids.size(); i++)
-      m_Textures[i] = m_pDevice->GetTexture(ids[i]);
-  }
-
   return m_Textures;
 }
 
-rdctype::array<rdctype::str> ReplayController::GetResolve(const rdctype::array<uint64_t> &callstack)
-{
-  rdctype::array<rdctype::str> ret;
-
-  if(callstack.empty())
-    return ret;
-
-  Callstack::StackResolver *resolv = m_pDevice->GetCallstackResolver();
-
-  if(resolv == NULL)
-  {
-    create_array_uninit(ret, 1);
-    ret[0] = "";
-    return ret;
-  }
-
-  create_array_uninit(ret, (size_t)callstack.count);
-  for(int32_t i = 0; i < callstack.count; i++)
-  {
-    Callstack::AddressDetails info = resolv->GetAddr(callstack[i]);
-    ret[i] = info.formattedString();
-  }
-
-  return ret;
-}
-
-rdctype::array<DebugMessage> ReplayController::GetDebugMessages()
+rdcarray<DebugMessage> ReplayController::GetDebugMessages()
 {
   return m_pDevice->GetDebugMessages();
 }
 
-rdctype::array<EventUsage> ReplayController::GetUsage(ResourceId id)
+rdcarray<ShaderEntryPoint> ReplayController::GetShaderEntryPoints(ResourceId shader)
 {
-  return m_pDevice->GetUsage(m_pDevice->GetLiveID(id));
+  return m_pDevice->GetShaderEntryPoints(m_pDevice->GetLiveID(shader));
+}
+
+ShaderReflection *ReplayController::GetShader(ResourceId shader, ShaderEntryPoint entry)
+{
+  return m_pDevice->GetShader(m_pDevice->GetLiveID(shader), entry.name);
+}
+
+rdcarray<EventUsage> ReplayController::GetUsage(ResourceId id)
+{
+  id = m_pDevice->GetLiveID(id);
+  if(id == ResourceId())
+    return rdcarray<EventUsage>();
+  return m_pDevice->GetUsage(id);
 }
 
 MeshFormat ReplayController::GetPostVSData(uint32_t instID, MeshDataStage stage)
@@ -371,35 +356,32 @@ MeshFormat ReplayController::GetPostVSData(uint32_t instID, MeshDataStage stage)
 
   instID = RDCMIN(instID, draw->numInstances - 1);
 
-  return m_pDevice->GetPostVSBuffers(draw->eventID, instID, stage);
+  return m_pDevice->GetPostVSBuffers(draw->eventId, instID, stage);
 }
 
-rdctype::array<byte> ReplayController::GetBufferData(ResourceId buff, uint64_t offset, uint64_t len)
+bytebuf ReplayController::GetBufferData(ResourceId buff, uint64_t offset, uint64_t len)
 {
-  rdctype::array<byte> ret;
+  bytebuf retData;
 
   if(buff == ResourceId())
-    return ret;
+    return retData;
 
   ResourceId liveId = m_pDevice->GetLiveID(buff);
 
   if(liveId == ResourceId())
   {
     RDCERR("Couldn't get Live ID for %llu getting buffer data", buff);
-    return ret;
+    return retData;
   }
 
-  vector<byte> retData;
   m_pDevice->GetBufferData(liveId, offset, len, retData);
 
-  create_array_init(ret, retData.size(), !retData.empty() ? &retData[0] : NULL);
-
-  return ret;
+  return retData;
 }
 
-rdctype::array<byte> ReplayController::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip)
+bytebuf ReplayController::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip)
 {
-  rdctype::array<byte> ret;
+  bytebuf ret;
 
   ResourceId liveId = m_pDevice->GetLiveID(tex);
 
@@ -409,15 +391,7 @@ rdctype::array<byte> ReplayController::GetTextureData(ResourceId tex, uint32_t a
     return ret;
   }
 
-  size_t sz = 0;
-  byte *bytes = m_pDevice->GetTextureData(liveId, arrayIdx, mip, GetTextureDataParams(), sz);
-
-  if(sz == 0 || bytes == NULL)
-    create_array_uninit(ret, 0);
-  else
-    create_array_init(ret, sz, bytes);
-
-  SAFE_DELETE_ARRAY(bytes);
+  m_pDevice->GetTextureData(liveId, arrayIdx, mip, GetTextureDataParams(), ret);
 
   return ret;
 }
@@ -426,6 +400,13 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
 {
   TextureSave sd = saveData;    // mutable copy
   ResourceId liveid = m_pDevice->GetLiveID(sd.id);
+
+  if(liveid == ResourceId())
+  {
+    RDCERR("Couldn't get Live ID for %llu getting texture data", sd.id);
+    return false;
+  }
+
   TextureDescription td = m_pDevice->GetTexture(liveid);
 
   bool success = false;
@@ -674,14 +655,14 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
       params.forDiskSave = true;
       params.typeHint = sd.typeHint;
       params.resolve = resolveSamples;
-      params.remap = downcast ? eRemap_RGBA8 : eRemap_None;
+      params.remap = downcast ? RemapTexture::RGBA8 : RemapTexture::NoRemap;
       params.blackPoint = sd.comp.blackPoint;
       params.whitePoint = sd.comp.whitePoint;
 
-      size_t datasize = 0;
-      byte *bytes = m_pDevice->GetTextureData(liveid, slice, mip, params, datasize);
+      bytebuf data;
+      m_pDevice->GetTextureData(liveid, slice, mip, params, data);
 
-      if(bytes == NULL)
+      if(data.empty())
       {
         RDCERR("Couldn't get bytes for mip %u, slice %u", mip, slice);
 
@@ -693,6 +674,8 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
 
       if(td.depth == 1)
       {
+        byte *bytes = new byte[data.size()];
+        memcpy(bytes, data.data(), data.size());
         subdata.push_back(bytes);
         continue;
       }
@@ -719,17 +702,16 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
       if(numSlices == 1)
       {
         byte *depthslice = new byte[mipSlicePitch];
-        byte *b = bytes + mipSlicePitch * sliceOffset;
+        byte *b = data.data() + mipSlicePitch * sliceOffset;
         memcpy(depthslice, b, slicePitch);
         subdata.push_back(depthslice);
 
-        delete[] bytes;
         continue;
       }
 
       s += (d - 1);
 
-      byte *b = bytes;
+      byte *b = data.data();
 
       // add each depth slice as a separate subdata
       for(uint32_t di = 0; di < d; di++)
@@ -742,8 +724,6 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
 
         b += mipSlicePitch;
       }
-
-      delete[] bytes;
     }
   }
 
@@ -1238,16 +1218,15 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
   return success;
 }
 
-rdctype::array<PixelModification> ReplayController::PixelHistory(ResourceId target, uint32_t x,
-                                                                 uint32_t y, uint32_t slice,
-                                                                 uint32_t mip, uint32_t sampleIdx,
-                                                                 CompType typeHint)
+rdcarray<PixelModification> ReplayController::PixelHistory(ResourceId target, uint32_t x,
+                                                           uint32_t y, uint32_t slice, uint32_t mip,
+                                                           uint32_t sampleIdx, CompType typeHint)
 {
-  rdctype::array<PixelModification> ret;
+  rdcarray<PixelModification> ret;
 
   for(size_t t = 0; t < m_Textures.size(); t++)
   {
-    if(m_Textures[t].ID == target)
+    if(m_Textures[t].resourceId == target)
     {
       if(x >= m_Textures[t].width || y >= m_Textures[t].height)
       {
@@ -1266,13 +1245,18 @@ rdctype::array<PixelModification> ReplayController::PixelHistory(ResourceId targ
     }
   }
 
-  auto usage = m_pDevice->GetUsage(m_pDevice->GetLiveID(target));
+  ResourceId id = m_pDevice->GetLiveID(target);
+
+  if(id == ResourceId())
+    return ret;
+
+  std::vector<EventUsage> usage = m_pDevice->GetUsage(id);
 
   vector<EventUsage> events;
 
   for(size_t i = 0; i < usage.size(); i++)
   {
-    if(usage[i].eventID > m_EventID)
+    if(usage[i].eventId > m_EventID)
       continue;
 
     switch(usage[i].usage)
@@ -1331,8 +1315,12 @@ rdctype::array<PixelModification> ReplayController::PixelHistory(ResourceId targ
     return ret;
   }
 
-  ret = m_pDevice->PixelHistory(events, m_pDevice->GetLiveID(target), x, y, slice, mip, sampleIdx,
-                                typeHint);
+  id = m_pDevice->GetLiveID(target);
+
+  if(id == ResourceId())
+    return ret;
+
+  ret = m_pDevice->PixelHistory(events, id, x, y, slice, mip, sampleIdx, typeHint);
 
   SetFrameEvent(m_EventID, true);
 
@@ -1379,47 +1367,54 @@ void ReplayController::FreeTrace(ShaderDebugTrace *trace)
   delete trace;
 }
 
-rdctype::array<ShaderVariable> ReplayController::GetCBufferVariableContents(
+rdcarray<ShaderVariable> ReplayController::GetCBufferVariableContents(
     ResourceId shader, const char *entryPoint, uint32_t cbufslot, ResourceId buffer, uint64_t offs)
 {
-  vector<byte> data;
+  bytebuf data;
   if(buffer != ResourceId())
-    m_pDevice->GetBufferData(m_pDevice->GetLiveID(buffer), offs, 0, data);
+  {
+    buffer = m_pDevice->GetLiveID(buffer);
+    if(buffer != ResourceId())
+      m_pDevice->GetBufferData(buffer, offs, 0, data);
+  }
 
   vector<ShaderVariable> v;
 
-  m_pDevice->FillCBufferVariables(m_pDevice->GetLiveID(shader), entryPoint, cbufslot, v, data);
+  shader = m_pDevice->GetLiveID(shader);
+
+  if(shader != ResourceId())
+    m_pDevice->FillCBufferVariables(shader, entryPoint, cbufslot, v, data);
 
   return v;
 }
 
-rdctype::array<WindowingSystem> ReplayController::GetSupportedWindowSystems()
+rdcarray<WindowingSystem> ReplayController::GetSupportedWindowSystems()
 {
   return m_pDevice->GetSupportedWindowSystems();
 }
 
-void ReplayController::ReplayLoop(WindowingSystem system, void *data, ResourceId texid)
+void ReplayController::ReplayLoop(WindowingData window, ResourceId texid)
 {
-  ReplayOutput *output = CreateOutput(system, data, ReplayOutputType::Texture);
+  ReplayOutput *output = CreateOutput(window, ReplayOutputType::Texture);
 
   TextureDisplay d;
-  d.texid = texid;
+  d.resourceId = texid;
   d.mip = 0;
   d.sampleIdx = ~0U;
   d.overlay = DebugOverlay::NoOverlay;
   d.typeHint = CompType::Typeless;
-  d.HDRMul = -1.0f;
+  d.hdrMultiplier = -1.0f;
   d.linearDisplayAsGamma = true;
-  d.FlipY = false;
-  d.rangemin = 0.0f;
-  d.rangemax = 1.0f;
+  d.flipY = false;
+  d.rangeMin = 0.0f;
+  d.rangeMax = 1.0f;
   d.scale = 1.0f;
-  d.offx = 0.0f;
-  d.offy = 0.0f;
+  d.xOffset = 0.0f;
+  d.yOffset = 0.0f;
   d.sliceFace = 0;
-  d.rawoutput = false;
-  d.Red = d.Green = d.Blue = true;
-  d.Alpha = false;
+  d.rawOutput = false;
+  d.red = d.green = d.blue = true;
+  d.alpha = false;
   output->SetTextureDisplay(d);
 
   m_ReplayLoopCancel = 0;
@@ -1450,9 +1445,9 @@ void ReplayController::CancelReplayLoop()
     Threading::Sleep(1);
 }
 
-ReplayOutput *ReplayController::CreateOutput(WindowingSystem system, void *data, ReplayOutputType type)
+ReplayOutput *ReplayController::CreateOutput(WindowingData window, ReplayOutputType type)
 {
-  ReplayOutput *out = new ReplayOutput(this, system, data, type);
+  ReplayOutput *out = new ReplayOutput(this, window, type);
 
   m_Outputs.push_back(out);
 
@@ -1467,7 +1462,17 @@ ReplayOutput *ReplayController::CreateOutput(WindowingSystem system, void *data,
 
 void ReplayController::ShutdownOutput(IReplayOutput *output)
 {
-  RDCUNIMPLEMENTED("Shutting down individual outputs");
+  for(auto it = m_Outputs.begin(); it != m_Outputs.end(); ++it)
+  {
+    if((IReplayOutput *)*it == output)
+    {
+      delete *it;
+      m_Outputs.erase(it);
+      return;
+    }
+  }
+
+  RDCERR("Unrecognised output");
 }
 
 void ReplayController::Shutdown()
@@ -1475,7 +1480,7 @@ void ReplayController::Shutdown()
   delete this;
 }
 
-rdctype::pair<ResourceId, rdctype::str> ReplayController::BuildTargetShader(
+rdcpair<ResourceId, rdcstr> ReplayController::BuildTargetShader(
     const char *entry, const char *source, const ShaderCompileFlags &compileFlags, ShaderStage type)
 {
   ResourceId id;
@@ -1489,9 +1494,7 @@ rdctype::pair<ResourceId, rdctype::str> ReplayController::BuildTargetShader(
     case ShaderStage::Geometry:
     case ShaderStage::Pixel:
     case ShaderStage::Compute: break;
-    default:
-      RDCERR("Unexpected type in BuildShader!");
-      return rdctype::pair<ResourceId, rdctype::str>();
+    default: RDCERR("Unexpected type in BuildShader!"); return rdcpair<ResourceId, rdcstr>();
   }
 
   m_pDevice->BuildTargetShader(source, entry, compileFlags, type, &id, &errs);
@@ -1499,10 +1502,10 @@ rdctype::pair<ResourceId, rdctype::str> ReplayController::BuildTargetShader(
   if(id != ResourceId())
     m_TargetResources.insert(id);
 
-  return rdctype::make_pair<ResourceId, rdctype::str>(id, errs);
+  return make_rdcpair<ResourceId, rdcstr>(id, errs);
 }
 
-rdctype::pair<ResourceId, rdctype::str> ReplayController::BuildCustomShader(
+rdcpair<ResourceId, rdcstr> ReplayController::BuildCustomShader(
     const char *entry, const char *source, const ShaderCompileFlags &compileFlags, ShaderStage type)
 {
   ResourceId id;
@@ -1516,9 +1519,7 @@ rdctype::pair<ResourceId, rdctype::str> ReplayController::BuildCustomShader(
     case ShaderStage::Geometry:
     case ShaderStage::Pixel:
     case ShaderStage::Compute: break;
-    default:
-      RDCERR("Unexpected type in BuildShader!");
-      return rdctype::pair<ResourceId, rdctype::str>();
+    default: RDCERR("Unexpected type in BuildShader!"); return rdcpair<ResourceId, rdcstr>();
   }
 
   m_pDevice->BuildCustomShader(source, entry, compileFlags, type, &id, &errs);
@@ -1526,7 +1527,7 @@ rdctype::pair<ResourceId, rdctype::str> ReplayController::BuildCustomShader(
   if(id != ResourceId())
     m_CustomShaders.insert(id);
 
-  return rdctype::make_pair<ResourceId, rdctype::str>(id, errs);
+  return make_rdcpair<ResourceId, rdcstr>(id, errs);
 }
 
 void ReplayController::FreeTargetResource(ResourceId id)
@@ -1563,29 +1564,15 @@ void ReplayController::RemoveReplacement(ResourceId id)
       m_Outputs[i]->Display();
 }
 
-ReplayStatus ReplayController::CreateDevice(const char *logfile)
+ReplayStatus ReplayController::CreateDevice(RDCFile *rdc)
 {
-  RDCLOG("Creating replay device for %s", logfile);
-
-  RDCDriver driverType = RDC_Unknown;
-  string driverName = "";
-  uint64_t fileMachineIdent = 0;
-  auto status =
-      RenderDoc::Inst().FillInitParams(logfile, driverType, driverName, fileMachineIdent, NULL);
-
-  if(driverType == RDC_Unknown || driverName == "" || status != ReplayStatus::Succeeded)
-  {
-    RDCERR("Couldn't get device type from log");
-    return status;
-  }
-
   IReplayDriver *driver = NULL;
-  status = RenderDoc::Inst().CreateReplayDriver(driverType, logfile, &driver);
+  ReplayStatus status = RenderDoc::Inst().CreateReplayDriver(rdc, &driver);
 
   if(driver && status == ReplayStatus::Succeeded)
   {
     RDCLOG("Created replay driver.");
-    return PostCreateInit(driver);
+    return PostCreateInit(driver, rdc);
   }
 
   RDCERR("Couldn't create a replay device :(.");
@@ -1597,22 +1584,53 @@ ReplayStatus ReplayController::SetDevice(IReplayDriver *device)
   if(device)
   {
     RDCLOG("Got replay driver.");
-    return PostCreateInit(device);
+    return PostCreateInit(device, NULL);
   }
 
   RDCERR("Given invalid replay driver.");
   return ReplayStatus::InternalError;
 }
 
-ReplayStatus ReplayController::PostCreateInit(IReplayDriver *device)
+ReplayStatus ReplayController::PostCreateInit(IReplayDriver *device, RDCFile *rdc)
 {
   m_pDevice = device;
 
-  m_pDevice->ReadLogInitialisation();
+  ReplayStatus status = m_pDevice->ReadLogInitialisation(rdc, false);
+
+  if(status != ReplayStatus::Succeeded)
+    return status;
 
   FetchPipelineState();
 
+  m_APIProps = m_pDevice->GetAPIProperties();
+
+  // fetch GCN ISA targets
+  GCNISA::GetTargets(m_APIProps.pipelineType, m_GCNTargets);
+
+  {
+    std::vector<ResourceId> ids = m_pDevice->GetBuffers();
+
+    m_Buffers.resize(ids.size());
+
+    for(size_t i = 0; i < ids.size(); i++)
+      m_Buffers[i] = m_pDevice->GetBuffer(ids[i]);
+  }
+
+  {
+    std::vector<ResourceId> ids = m_pDevice->GetTextures();
+
+    m_Textures.resize(ids.size());
+
+    for(size_t i = 0; i < ids.size(); i++)
+      m_Textures[i] = m_pDevice->GetTexture(ids[i]);
+  }
+
+  m_Resources = m_pDevice->GetResources();
+
   m_FrameRecord = m_pDevice->GetFrameRecord();
+
+  if(m_FrameRecord.drawcallList.empty())
+    return ReplayStatus::APIReplayFailed;
 
   DrawcallDescription *previous = NULL;
   SetupDrawcallPointers(&m_Drawcalls, m_FrameRecord.drawcallList, NULL, previous);
@@ -1625,20 +1643,9 @@ void ReplayController::FileChanged()
   m_pDevice->FileChanged();
 }
 
-bool ReplayController::HasCallstacks()
-{
-  return m_pDevice->HasCallstacks();
-}
-
 APIProperties ReplayController::GetAPIProperties()
 {
   return m_pDevice->GetAPIProperties();
-}
-
-bool ReplayController::InitResolver()
-{
-  m_pDevice->InitCallstackResolver();
-  return m_pDevice->GetCallstackResolver() != NULL;
 }
 
 void ReplayController::FetchPipelineState()
@@ -1650,70 +1657,3 @@ void ReplayController::FetchPipelineState()
   m_GLPipelineState = &m_pDevice->GetGLPipelineState();
   m_VulkanPipelineState = &m_pDevice->GetVulkanPipelineState();
 }
-
-struct testStruct
-{
-#define INSTANTIATE(cls) cls CONCAT(testthing, __LINE__);
-
-  INSTANTIATE(MeshFormat);
-  INSTANTIATE(MeshDisplay);
-  INSTANTIATE(TextureDisplay);
-  INSTANTIATE(TextureComponentMapping);
-  INSTANTIATE(TextureSampleMapping);
-  INSTANTIATE(TextureSliceMapping);
-  INSTANTIATE(TextureSave);
-  INSTANTIATE(NewCaptureData);
-  INSTANTIATE(RegisterAPIData);
-  INSTANTIATE(BusyData);
-  INSTANTIATE(NewChildData);
-  INSTANTIATE(TargetControlMessage);
-  INSTANTIATE(EnvironmentModification);
-
-  INSTANTIATE(FloatVector);
-  INSTANTIATE(PathEntry);
-  INSTANTIATE(ResourceFormat);
-  INSTANTIATE(TextureFilter);
-  INSTANTIATE(BufferDescription);
-  INSTANTIATE(TextureDescription);
-  INSTANTIATE(APIEvent);
-  INSTANTIATE(DebugMessage);
-  INSTANTIATE(ConstantBindStats);
-  INSTANTIATE(SamplerBindStats);
-  INSTANTIATE(ResourceBindStats);
-  INSTANTIATE(ResourceUpdateStats);
-  INSTANTIATE(DrawcallStats);
-  INSTANTIATE(DispatchStats);
-  INSTANTIATE(IndexBindStats);
-  INSTANTIATE(VertexBindStats);
-  INSTANTIATE(LayoutBindStats);
-  INSTANTIATE(ShaderChangeStats);
-  INSTANTIATE(BlendStats);
-  INSTANTIATE(DepthStencilStats);
-  INSTANTIATE(RasterizationStats);
-  INSTANTIATE(OutputTargetStats);
-  INSTANTIATE(FrameStatistics);
-  INSTANTIATE(FrameDescription);
-  INSTANTIATE(EventUsage);
-  INSTANTIATE(DrawcallDescription);
-  INSTANTIATE(APIProperties);
-  INSTANTIATE(CounterDescription);
-  INSTANTIATE(CounterResult);
-  INSTANTIATE(ModificationValue);
-  INSTANTIATE(PixelModification);
-
-  INSTANTIATE(ShaderVariable);
-  INSTANTIATE(ShaderDebugState);
-  INSTANTIATE(ShaderDebugTrace);
-  INSTANTIATE(SigParameter);
-  INSTANTIATE(ShaderConstant);
-  INSTANTIATE(ShaderVariableDescriptor);
-  INSTANTIATE(ShaderVariableType);
-  INSTANTIATE(ShaderRegister);
-  INSTANTIATE(ShaderConstant);
-  INSTANTIATE(ConstantBlock);
-  INSTANTIATE(ShaderResource);
-  INSTANTIATE(ShaderDebugChunk);
-  INSTANTIATE(ShaderReflection);
-  INSTANTIATE(BindpointMap);
-  INSTANTIATE(ShaderBindpointMapping);
-};

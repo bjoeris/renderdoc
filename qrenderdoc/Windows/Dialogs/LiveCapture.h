@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,11 +24,12 @@
 
 #pragma once
 
+#include <QDateTime>
 #include <QFrame>
 #include <QMutex>
 #include <QSemaphore>
 #include <QTimer>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
 namespace Ui
 {
@@ -39,6 +40,8 @@ class QSplitter;
 class QAction;
 class QToolButton;
 class QListWidgetItem;
+class QMenu;
+class LambdaThread;
 class RDLabel;
 class MainWindow;
 class QKeyEvent;
@@ -69,6 +72,7 @@ private slots:
   void on_triggerCapture_clicked();
   void on_queueCap_clicked();
   void on_previewSplit_splitterMoved(int pos, int index);
+  void on_apiIcon_clicked(QMouseEvent *event);
 
   // manual slots
   void captures_keyPress(QKeyEvent *e);
@@ -90,7 +94,7 @@ private:
 
   friend class NameEditOnlyDelegate;
 
-  struct CaptureLog
+  struct Capture
   {
     uint32_t remoteID;
     QString name;
@@ -113,16 +117,26 @@ private:
     bool added = false;
   };
 
-  CaptureLog *GetLog(QListWidgetItem *item);
-  void SetLog(QListWidgetItem *item, CaptureLog *log);
+  struct APIStatus
+  {
+    APIStatus() = default;
+    APIStatus(bool p, bool s) : presenting(p), supported(s) {}
+    bool presenting = false;
+    bool supported = false;
+  };
 
-  QString MakeText(CaptureLog *log);
+  Capture *GetCapture(QListWidgetItem *item);
+  void AddCapture(QListWidgetItem *item, Capture *cap);
+
+  QString MakeText(Capture *cap);
   QImage MakeThumb(const QImage &screenshot);
+
+  void updateAPIStatus();
 
   void connectionThreadEntry();
   void captureCopied(uint32_t ID, const QString &localPath);
   void captureAdded(uint32_t ID, const QString &executable, const QString &api,
-                    const rdctype::array<byte> &thumbnail, int32_t thumbWidth, int32_t thumbHeight,
+                    const bytebuf &thumbnail, int32_t thumbWidth, int32_t thumbHeight,
                     QDateTime timestamp, const QString &path, bool local);
   void connectionClosed();
 
@@ -131,8 +145,8 @@ private:
   void killThread();
 
   void setTitle(const QString &title);
-  void openCapture(CaptureLog *log);
-  bool saveCapture(CaptureLog *log);
+  void openCapture(Capture *cap);
+  bool saveCapture(Capture *cap);
   bool checkAllowDelete();
   void deleteCaptureUnprompted(QListWidgetItem *item);
 
@@ -152,10 +166,10 @@ private:
   QSemaphore m_Disconnect;
   ITargetControl *m_Connection = NULL;
 
-  uint32_t m_CopyLogID = ~0U;
-  QString m_CopyLogLocalPath;
-  QMutex m_DeleteLogsLock;
-  QVector<uint32_t> m_DeleteLogs;
+  uint32_t m_CopyCaptureID = ~0U;
+  QString m_CopyCaptureLocalPath;
+  QMutex m_DeleteCapturesLock;
+  QVector<uint32_t> m_DeleteCaptures;
 
   bool m_IgnoreThreadClosed = false;
   bool m_IgnorePreviewToggle = false;
@@ -174,4 +188,5 @@ private:
 
   QMutex m_ChildrenLock;
   QList<ChildProcess> m_Children;
+  QMap<QString, APIStatus> m_APIs;
 };

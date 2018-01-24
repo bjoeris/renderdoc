@@ -234,6 +234,20 @@
             </widget>
            </item>
            <item>
+            <widget class="Line" name="line">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="controlTypeLabel">
+             <property name="text">
+              <string>Controls</string>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QComboBox" name="controlType"/>
            </item>
            <item>
@@ -244,7 +258,18 @@
             </widget>
            </item>
            <item>
-            <widget class="QComboBox" name="drawRange"/>
+            <widget class="QLabel" name="drawRangeLabel">
+             <property name="text">
+              <string>Show</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="drawRange">
+             <property name="sizeAdjustPolicy">
+              <enum>QComboBox::AdjustToContents</enum>
+             </property>
+            </widget>
            </item>
            <item>
             <widget class="Line" name="line_6">
@@ -714,6 +739,20 @@
      </widget>
     </item>
     <item>
+     <widget class="QToolButton" name="resourceDetails">
+      <property name="toolTip">
+       <string>Open the currently buffer's resource details in the resource inspector</string>
+      </property>
+      <property name="icon">
+       <iconset resource="../Resources/resources.qrc">
+        <normaloff>:/link.png</normaloff>:/link.png</iconset>
+      </property>
+      <property name="autoRaise">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item>
      <widget class="Line" name="offsetLine">
       <property name="orientation">
        <enum>Qt::Vertical</enum>
@@ -831,12 +870,6 @@
      <width>521</width>
      <height>61</height>
     </rect>
-   </property>
-   <property name="sizePolicy">
-    <sizepolicy hsizetype="Preferred" vsizetype="MinimumExpanding">
-     <horstretch>0</horstretch>
-     <verstretch>0</verstretch>
-    </sizepolicy>
    </property>
   </widget>
  </widget>

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +32,12 @@ using std::string;
 
 void Daemonise()
 {
+}
+
+WindowingData DisplayRemoteServerPreview(bool active, const rdcarray<WindowingSystem> &systems)
+{
+  WindowingData ret = {WindowingSystem::Unknown};
+  return ret;
 }
 
 void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &displayCfg, uint32_t width,

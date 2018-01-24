@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +30,11 @@
 class TrackedResource8
 {
 public:
-  TrackedResource8() { m_ID = ResourceIDGen::GetNewUniqueID(); }
+  TrackedResource8()
+  {
+    m_ID = ResourceIDGen::GetNewUniqueID();
+    m_pRecord = NULL;
+  }
   ResourceId GetResourceID() { return m_ID; }
   D3D8ResourceRecord *GetResourceRecord() { return m_pRecord; }
   void SetResourceRecord(D3D8ResourceRecord *record) { m_pRecord = record; }
@@ -57,7 +61,7 @@ protected:
 
     bool ret = m_pDevice->GetResourceManager()->AddWrapper(this, real);
     if(!ret)
-      RDCERR("Error adding wrapper for type %s", ToStr::Get(__uuidof(NestedType)).c_str());
+      RDCERR("Error adding wrapper for type %s", ToStr(__uuidof(NestedType)).c_str());
 
     m_pDevice->GetResourceManager()->AddCurrentResource(GetResourceID(), this);
   }

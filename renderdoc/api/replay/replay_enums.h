@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,188 +25,73 @@
 
 #pragma once
 
-#ifdef NO_ENUM_CLASS_OPERATORS
+DOCUMENT(R"(The types of several pre-defined and known sections. This allows consumers of the API
+to recognise and understand the contents of the section.
 
-#define BITMASK_OPERATORS(a)
-#define ITERABLE_OPERATORS(a)
+Note that sections above the highest value here may be encountered if they were written in a new
+version of RenderDoc that addes a new section type. They should be considered equal to
+:data:`Unknown` by any processing.
 
-#else
+.. data:: Unknown
 
-#include <type_traits>
+  An unknown section - any custom or non-predefined section will have this type.
 
-// helper template that allows the result of & to be cast back to the enum or explicitly cast to
-// bool for use in if() or ?: or so on or compared against 0.
-//
-// If you get an error about missing operator then you're probably doing something like
-// (bitfield & value) == 0 or (bitfield & value) != 0 or similar. Instead prefer:
-// !(bitfield & value)     or (bitfield & value) to make use of the bool cast directly
-template <typename enum_name>
-struct EnumCastHelper
-{
-public:
-  constexpr EnumCastHelper(enum_name v) : val(v) {}
-  constexpr operator enum_name() const { return val; }
-  constexpr explicit operator bool() const
-  {
-    typedef typename std::underlying_type<enum_name>::type etype;
-    return etype(val) != 0;
-  }
+.. data:: FrameCapture
 
-private:
-  const enum_name val;
-};
+  This section contains the actual captured frame, in RenderDoc's internal chunked representation.
+  The contents can be fetched as structured data with or without replaying the frame.
 
-// helper templates for iterating over all values in an enum that has sequential values and is
-// to be used for array indices or something like that.
-template <typename enum_name>
-struct ValueIterContainer
-{
-  struct ValueIter
-  {
-    ValueIter(enum_name v) : val(v) {}
-    enum_name val;
-    enum_name operator*() const { return val; }
-    bool operator!=(const ValueIter &it) const { return !(val == *it); }
-    const inline enum_name operator++()
-    {
-      ++val;
-      return val;
-    }
-  };
+  The name for this section will be "renderdoc/internal/framecapture".
 
-  ValueIter begin() { return ValueIter(enum_name::First); }
-  ValueIter end() { return ValueIter(enum_name::Count); }
-};
+.. data:: ResolveDatabase
 
-template <typename enum_name>
-struct IndexIterContainer
-{
-  typedef typename std::underlying_type<enum_name>::type etype;
+  This section contains platform-specific data used to resolve callstacks.
 
-  struct IndexIter
-  {
-    IndexIter(enum_name v) : val(v) {}
-    enum_name val;
-    etype operator*() const { return etype(val); }
-    bool operator!=(const IndexIter &it) const { return !(val == it.val); }
-    const inline enum_name operator++()
-    {
-      ++val;
-      return val;
-    }
-  };
+  The name for this section will be "renderdoc/internal/resolvedb".
 
-  IndexIter begin() { return IndexIter(enum_name::First); }
-  IndexIter end() { return IndexIter(enum_name::Count); }
-};
+.. data:: Bookmarks
 
-template <typename enum_name>
-constexpr inline ValueIterContainer<enum_name> values()
-{
-  return ValueIterContainer<enum_name>();
-};
+  This section contains a JSON document with bookmarks added to the capture to highlight important
+  events.
 
-template <typename enum_name>
-constexpr inline IndexIterContainer<enum_name> indices()
-{
-  return IndexIterContainer<enum_name>();
-};
+  The name for this section will be "renderdoc/ui/bookmarks".
 
-template <typename enum_name>
-constexpr inline size_t arraydim()
-{
-  typedef typename std::underlying_type<enum_name>::type etype;
-  return (size_t)etype(enum_name::Count);
-};
+.. data:: Notes
 
-// clang-format makes a even more of a mess of this multi-line macro than it usually does, for some
-// reason. So we just disable it since it's still readable and this isn't really the intended case
-// we are using clang-format for.
+  This section contains a JSON document with free-form information added for human consumption, e.g.
+  details about how the capture was obtained with repro steps in the original program, or with
+  driver and machine info.
 
-// clang-format off
-#define BITMASK_OPERATORS(enum_name)                                           \
-                                                                               \
-constexpr inline enum_name operator|(enum_name a, enum_name b)                 \
-{                                                                              \
-  typedef typename std::underlying_type<enum_name>::type etype;                \
-  return enum_name(etype(a) | etype(b));                                       \
-}                                                                              \
-                                                                               \
-constexpr inline EnumCastHelper<enum_name> operator&(enum_name a, enum_name b) \
-{                                                                              \
-  typedef typename std::underlying_type<enum_name>::type etype;                \
-  return EnumCastHelper<enum_name>(enum_name(etype(a) & etype(b)));            \
-}                                                                              \
-                                                                               \
-constexpr inline enum_name operator~(enum_name a)                              \
-{                                                                              \
-  typedef typename std::underlying_type<enum_name>::type etype;                \
-  return enum_name(~etype(a));                                                 \
-}                                                                              \
-                                                                               \
-inline enum_name &operator|=(enum_name &a, enum_name b)                        \
-{ return a = a | b; }                                                          \
-                                                                               \
-inline enum_name &operator&=(enum_name &a, enum_name b)                        \
-{ return a = a & b; }
+  The name for this section will be "renderdoc/ui/notes".
 
-#define ITERABLE_OPERATORS(enum_name)                                          \
-                                                                               \
-inline enum_name operator++(enum_name &a)                                      \
-{                                                                              \
-  typedef typename std::underlying_type<enum_name>::type etype;                \
-  return a = enum_name(etype(a)+1);                                            \
-}
-// clang-format on
+.. data:: ResourceRenames
 
-#endif
+  This section contains a JSON document with custom names applied to resources in the UI, over and
+  above any friendly names specified in the capture itself.
 
-#define ENUM_ARRAY_SIZE(enum_name) size_t(enum_name::Count)
+  The name for this section will be "renderdoc/ui/resrenames".
 
-DOCUMENT(R"(A set of flags describing the properties of a path on a remote filesystem.
+.. data:: AMDRGPProfile
 
-.. data:: NoFlags
+  This section contains a .rgp profile from AMD's RGP tool, which can be extracted and loaded.
 
-  No special file properties.
-
-.. data:: Directory
-
-  This file is a directory or folder.
-
-.. data:: Hidden
-
-  This file is considered hidden by the filesystem.
-
-.. data:: Executable
-
-  This file has been identified as an executable program or script.
-
-.. data:: ErrorUnknown
-
-  A special flag indicating that a query for this file failed, but for unknown reasons.
-
-.. data:: ErrorAccessDenied
-
-  A special flag indicating that a query for this file failed because access to the path was
-  denied.
-
-.. data:: ErrorInvalidPath
-
-  A special flag indicating that a query for this file failed because the path was invalid.
+  The name for this section will be "amd/rgp/profile".
 )");
-enum class PathProperty : uint32_t
+enum class SectionType : uint32_t
 {
-  NoFlags = 0x0,
-  Directory = 0x1,
-  Hidden = 0x2,
-  Executable = 0x4,
-
-  ErrorUnknown = 0x2000,
-  ErrorAccessDenied = 0x4000,
-  ErrorInvalidPath = 0x8000,
+  Unknown = 0,
+  First = Unknown,
+  FrameCapture,
+  ResolveDatabase,
+  Bookmarks,
+  Notes,
+  ResourceRenames,
+  AMDRGPProfile,
+  Count,
 };
 
-BITMASK_OPERATORS(PathProperty);
+ITERABLE_OPERATORS(SectionType);
+DECLARE_REFLECTION_ENUM(SectionType);
 
 // replay_shader.h
 
@@ -240,6 +125,8 @@ enum class VarType : uint32_t
   Double,
   Unknown = ~0U,
 };
+
+DECLARE_REFLECTION_ENUM(VarType);
 
 DOCUMENT(R"(Represents the component type of a channel in a texture or element in a structure.
 
@@ -312,6 +199,8 @@ enum class CompType : uint8_t
   Double,
 };
 
+DECLARE_REFLECTION_ENUM(CompType);
+
 DOCUMENT(R"(A single source component for a destination texture swizzle.
 
 .. data:: Red
@@ -348,6 +237,8 @@ enum class TextureSwizzle : uint32_t
   One,
 };
 
+DECLARE_REFLECTION_ENUM(TextureSwizzle);
+
 DOCUMENT(R"(A texture addressing mode in a single direction (U,V or W).
 
 .. data:: Wrap
@@ -370,7 +261,7 @@ DOCUMENT(R"(A texture addressing mode in a single direction (U,V or W).
 .. data:: ClampBorder
 
   The texture is clamped such that texture co-ordinates outside the range of ``[0.0, 1.0]`` are set
-  to the border colour specified in the sampler.
+  to the border color specified in the sampler.
 )");
 enum class AddressMode : uint32_t
 {
@@ -380,6 +271,129 @@ enum class AddressMode : uint32_t
   ClampEdge,
   ClampBorder,
 };
+
+DECLARE_REFLECTION_ENUM(AddressMode);
+
+DOCUMENT(R"(The type of a resource referred to by binding or API usage.
+
+In some cases there is a little overlap or fudging when mapping API concepts - this is primarily
+just intended for e.g. fuzzy user filtering or rough categorisation. Precise mapping would require
+API-specific concepts.
+
+.. data:: Unknown
+
+  An unknown type of resource.
+
+.. data:: Device
+
+  A system-level object, typically unique.
+
+.. data:: Queue
+
+  A queue representing the ability to execute commands in a single stream, possibly in parallel to
+  other queues.
+
+.. data:: CommandBuffer
+
+  A recorded set of commands that can then be subsequently executed.
+
+.. data:: Texture
+
+  A texture - one- to three- dimensional, possibly with array layers and mip levels. See
+  :class:`TextureDescription`.
+
+.. data:: Buffer
+
+  A linear (possibly typed) view of memory. See :class:`BufferDescription`.
+
+.. data:: View
+
+  A particular view into a texture or buffer, e.g. either accessing the underlying resource through
+  a different type, or only a subset of the resource.
+
+.. data:: Sampler
+
+  The information regarding how a texture is accessed including wrapping, minification/magnification
+  and other information. The precise details are API-specific and listed in the API state when
+  bound.
+
+.. data:: SwapchainImage
+
+  A special class of :data:`Texture` that is owned by the swapchain and is used for presentation.
+
+.. data:: Memory
+
+  An object corresponding to an actual memory allocation, which other resources can then be bound
+  to.
+
+.. data:: Shader
+
+  A single shader object for any shader stage. May be bound directly, or used to compose into a
+  :data:`PipelineState` depending on the API.
+
+.. data:: ShaderBinding
+
+  An object that determines some manner of shader binding. Since this varies significantly by API,
+  different concepts used for shader resource binding fall under this type.
+
+.. data:: PipelineState
+
+  A single object containing all information regarding the current GPU pipeline, containing both
+  shader objects, potentially some shader binding information, and fixed-function state.
+
+.. data:: StateObject
+
+  A single object encapsulating some amount of related state that can be set together, instead of
+  setting each individual state separately.
+
+.. data:: RenderPass
+
+  An object related to collecting render pass information together. This may not be an actual
+  explicit render pass object if it doesn't exist in the API, it may also be a collection of
+  textures in a framebuffer that are bound together to the API for rendering.
+
+.. data:: Query
+
+  A query for retrieving some kind of feedback from the GPU, either as a fixed number or a boolean
+  value which can be used in predicated rendering.
+
+.. data:: Sync
+
+  A synchronisation object used for either synchronisation between GPU and CPU, or GPU-to-GPU work.
+
+.. data:: Pool
+
+  An object which pools together other objects in an opaque way, either for runtime allocation and
+  deallocation, or for caching purposes.
+)");
+enum class ResourceType : uint32_t
+{
+  Unknown,
+
+  Device,
+  Queue,
+  CommandBuffer,
+
+  Texture,
+  Buffer,
+  View,
+  Sampler,
+  SwapchainImage,
+  Memory,
+
+  Shader,
+  ShaderBinding,
+  PipelineState,
+
+  StateObject,
+  RenderPass,
+
+  Query,
+  Sync,
+  Pool,
+};
+
+DECLARE_REFLECTION_ENUM(ResourceType);
 
 DOCUMENT(R"(The dimensionality of a texture binding.
 
@@ -431,7 +445,7 @@ DOCUMENT(R"(The dimensionality of a texture binding.
 
   A Cubemap texture array.
 )");
-enum class TextureDim : uint32_t
+enum class TextureType : uint32_t
 {
   Unknown,
   First = Unknown,
@@ -449,7 +463,8 @@ enum class TextureDim : uint32_t
   Count,
 };
 
-ITERABLE_OPERATORS(TextureDim);
+ITERABLE_OPERATORS(TextureType);
+DECLARE_REFLECTION_ENUM(TextureType);
 
 DOCUMENT(R"(The type of a shader resource bind.
 
@@ -511,6 +526,8 @@ enum class BindType : uint32_t
   ReadWriteBuffer,
   InputAttachment,
 };
+
+DECLARE_REFLECTION_ENUM(BindType);
 
 DOCUMENT2(R"(Annotates a particular built-in input or output from a shader with a special meaning to
 the hardware or API.
@@ -722,6 +739,7 @@ enum class ShaderBuiltin : uint32_t
 };
 
 ITERABLE_OPERATORS(ShaderBuiltin);
+DECLARE_REFLECTION_ENUM(ShaderBuiltin);
 
 // replay_render.h
 
@@ -746,6 +764,8 @@ enum class ReplayOutputType : uint32_t
   Texture,
   Mesh,
 };
+
+DECLARE_REFLECTION_ENUM(ReplayOutputType);
 
 DOCUMENT(R"(Describes a particular stage in the geometry transformation pipeline.
 
@@ -774,6 +794,8 @@ enum class MeshDataStage : uint32_t
   VSOut,
   GSOut,
 };
+
+DECLARE_REFLECTION_ENUM(MeshDataStage);
 
 DOCUMENT(R"(The type of overlay image to render on top of an existing texture view, for debugging
 purposes.
@@ -901,6 +923,8 @@ enum class DebugOverlay : uint32_t
   TriangleSizeDraw,
 };
 
+DECLARE_REFLECTION_ENUM(DebugOverlay);
+
 DOCUMENT(R"(The format of an image file
 
 .. data:: DDS
@@ -930,6 +954,10 @@ DOCUMENT(R"(The format of an image file
 .. data:: EXR
 
   An EXR file
+
+.. data:: RAW
+
+  Raw data, just the bytes of the image tightly packed with no metadata or compression/encoding
 )");
 enum class FileType : uint32_t
 {
@@ -941,10 +969,12 @@ enum class FileType : uint32_t
   TGA,
   HDR,
   EXR,
+  Raw,
   Count,
 };
 
 ITERABLE_OPERATORS(FileType);
+DECLARE_REFLECTION_ENUM(FileType);
 
 DOCUMENT(R"(What to do with the alpha channel from a texture while saving out to a file.
 
@@ -977,6 +1007,7 @@ enum class AlphaMapping : uint32_t
 };
 
 ITERABLE_OPERATORS(AlphaMapping);
+DECLARE_REFLECTION_ENUM(AlphaMapping);
 
 DOCUMENT(R"(A resource format's particular type. This accounts for either block-compressed textures
 or formats that don't have equal byte-multiple sizes for each channel.
@@ -1115,6 +1146,10 @@ or formats that don't have equal byte-multiple sizes for each channel.
 .. data:: YUV
 
   The pixel data is in an opaque YUV format.
+
+.. data:: PVRTC
+
+  PowerVR properitary texture compression format.
 )");
 enum class ResourceFormatType : uint8_t
 {
@@ -1142,7 +1177,10 @@ enum class ResourceFormatType : uint8_t
   D32S8,
   S8,
   YUV,
+  PVRTC,
 };
+
+DECLARE_REFLECTION_ENUM(ResourceFormatType);
 
 DOCUMENT(R"(An API specific hint for a certain behaviour. A legacy concept in OpenGL that controls
 hints to the implementation where there is room for interpretation within the range of valid
@@ -1166,6 +1204,8 @@ enum class QualityHint : uint32_t
   Nicest,
   Fastest,
 };
+
+DECLARE_REFLECTION_ENUM(QualityHint);
 
 DOCUMENT(R"(Identifies a Graphics API.
 
@@ -1194,6 +1234,8 @@ enum class GraphicsAPI : uint32_t
   Vulkan,
 };
 
+DECLARE_REFLECTION_ENUM(GraphicsAPI);
+
 DOCUMENT(R"(Check if an API is D3D or not
 
 :param GraphicsAPI api: The graphics API in question
@@ -1203,6 +1245,29 @@ constexpr inline bool IsD3D(GraphicsAPI api)
 {
   return api == GraphicsAPI::D3D11 || api == GraphicsAPI::D3D12;
 }
+
+DOCUMENT(R"(Identifies a shader encoding used to pass shader code to an API.
+
+.. data:: DXBC
+
+  DXBC binary shader, used by D3D11 and D3D12.
+
+.. data:: GLSL
+
+  GLSL in string format, used by OpenGL.
+
+.. data:: SPIRV
+
+  SPIR-V binary shader, used by Vulkan and with an extension by OpenGL.
+)");
+enum class ShaderEncoding : uint32_t
+{
+  DXBC,
+  GLSL,
+  SPIRV,
+};
+
+DECLARE_REFLECTION_ENUM(ShaderEncoding);
 
 DOCUMENT(R"(A primitive topology used for processing vertex data.
 
@@ -1436,6 +1501,8 @@ enum class Topology : uint32_t
   PatchList_32CPs,
 };
 
+DECLARE_REFLECTION_ENUM(Topology);
+
 DOCUMENT(R"(Return the patch list ``Topology`` with N control points
 
 ``N`` must be between 1 and 32 inclusive.
@@ -1456,7 +1523,7 @@ DOCUMENT(R"(Return the number of control points in a patch list ``Topology``
 
 :param Topology t: The patch list topology
 :return: The number of control points in the specified topology
-:rtype: int
+:rtype: ``int``
 )");
 constexpr inline uint32_t PatchList_Count(Topology topology)
 {
@@ -1469,117 +1536,13 @@ DOCUMENT(R"(Check whether or not this is a strip-type topology.
 
 :param Topology t: The topology to check.
 :return: ``True`` if it describes a strip topology, ``False`` for a list.
-:rtype: int
+:rtype: ``int``
 )");
 constexpr inline bool IsStrip(Topology topology)
 {
   return topology == Topology::LineStrip || topology == Topology::TriangleStrip ||
          topology == Topology::LineStrip_Adj || topology == Topology::TriangleStrip_Adj;
 }
-
-DOCUMENT(R"(A set of flags describing how this buffer may be used
-
-.. data:: NoFlags
-
-  The buffer will not be used for any of the uses below.
-
-.. data:: Vertex
-
-  The buffer will be used for sourcing vertex input data.
-
-.. data:: Index
-
-  The buffer will be used for sourcing primitive index data.
-
-.. data:: Constants
-
-  The buffer will be used for sourcing shader constant data.
-
-.. data:: ReadWrite
-
-  The buffer will be used for read and write access from shaders.
-
-.. data:: Indirect
-
-  The buffer will be used to provide indirect parameters for launching GPU-based drawcalls.
-)");
-enum class BufferCategory : uint32_t
-{
-  NoFlags = 0x0,
-  Vertex = 0x1,
-  Index = 0x2,
-  Constants = 0x4,
-  ReadWrite = 0x8,
-  Indirect = 0x10,
-};
-
-BITMASK_OPERATORS(BufferCategory);
-
-DOCUMENT(R"(A set of flags for D3D buffer view properties.
-
-.. data:: NoFlags
-
-  The buffer will not be used for any of the uses below.
-
-.. data:: Raw
-
-  The buffer is used as a raw (byte-addressed) buffer.
-
-.. data:: Append
-
-  The buffer is used as a append/consume view.
-
-.. data:: Counter
-
-  The buffer is used with a structured buffer with associated hidden counter.
-)");
-enum class D3DBufferViewFlags : uint32_t
-{
-  NoFlags = 0x0,
-  Raw = 0x1,
-  Append = 0x2,
-  Counter = 0x4,
-};
-
-BITMASK_OPERATORS(D3DBufferViewFlags);
-
-DOCUMENT(R"(A set of flags describing how this texture may be used
-
-.. data:: NoFlags
-
-  The texture will not be used for any of the uses below.
-
-.. data:: ShaderRead
-
-  The texture will be read by a shader.
-
-.. data:: ColorTarget
-
-  The texture will be written to as a color target.
-
-.. data:: DepthTarget
-
-  The texture will be written to and tested against as a depth target.
-
-.. data:: ShaderReadWrite
-
-  The texture will be read and written to by a shader.
-
-.. data:: SwapBuffer
-
-  The texture is part of a window swapchain.
-)");
-enum class TextureCategory : uint32_t
-{
-  NoFlags = 0x0,
-  ShaderRead = 0x1,
-  ColorTarget = 0x2,
-  DepthTarget = 0x4,
-  ShaderReadWrite = 0x8,
-  SwapBuffer = 0x10,
-};
-
-BITMASK_OPERATORS(TextureCategory);
 
 DOCUMENT(R"(The stage in a pipeline where a shader runs
 
@@ -1641,109 +1604,13 @@ enum class ShaderStage : uint32_t
 };
 
 ITERABLE_OPERATORS(ShaderStage);
+DECLARE_REFLECTION_ENUM(ShaderStage);
 
 template <typename integer>
 constexpr inline ShaderStage StageFromIndex(integer stage)
 {
   return ShaderStage(stage);
 }
-
-DOCUMENT(R"(A set of flags for ``ShaderStage`` stages
-
-.. data:: Unknown
-
-  No flags set for any shader stages.
-
-.. data:: Vertex
-
-  The flag for :data:`ShaderStage.Vertex`.
-
-.. data:: Hull
-
-  The flag for :data:`ShaderStage.Hull`.
-
-.. data:: Tess_Control
-
-  The flag for :data:`ShaderStage.Tess_Control`.
-
-.. data:: Domain
-
-  The flag for :data:`ShaderStage.Domain`.
-
-.. data:: Tess_Eval
-
-  The flag for :data:`ShaderStage.Tess_Eval`.
-
-.. data:: Geometry
-
-  The flag for :data:`ShaderStage.Geometry`.
-
-.. data:: Pixel
-
-  The flag for :data:`ShaderStage.Pixel`.
-
-.. data:: Fragment
-
-  The flag for :data:`ShaderStage.Fragment`.
-
-.. data:: Compute
-
-  The flag for :data:`ShaderStage.Compute`.
-
-.. data:: All
-
-  A shorthand version with flags set for all stages together.
-)");
-enum class ShaderStageMask : uint32_t
-{
-  Unknown = 0,
-  Vertex = 1 << uint32_t(ShaderStage::Vertex),
-  Hull = 1 << uint32_t(ShaderStage::Hull),
-  Tess_Control = Hull,
-  Domain = 1 << uint32_t(ShaderStage::Domain),
-  Tess_Eval = Domain,
-  Geometry = 1 << uint32_t(ShaderStage::Geometry),
-  Pixel = 1 << uint32_t(ShaderStage::Pixel),
-  Fragment = Pixel,
-  Compute = 1 << uint32_t(ShaderStage::Compute),
-  All = Vertex | Hull | Domain | Geometry | Pixel | Compute,
-};
-
-BITMASK_OPERATORS(ShaderStageMask);
-
-DOCUMENT(R"(Calculate the corresponding flag for a shader stage
-
-:param ShaderStage stage: The shader stage
-:return: The flag that corresponds to the input shader stage
-:rtype: ShaderStageMask
-)");
-constexpr inline ShaderStageMask MaskForStage(ShaderStage stage)
-{
-  return ShaderStageMask(1 << uint32_t(stage));
-}
-
-DOCUMENT(R"(A set of flags for events that may occur while debugging a shader
-
-.. data:: NoEvent
-
-  No event has occurred.
-
-.. data:: SampleLoadGather
-
-  A texture was sampled, loaded or gathered.
-
-.. data:: GeneratedNanOrInf
-
-  A floating point operation generated a ``NaN`` or ``infinity`` result.
-)");
-enum class ShaderEvents : uint32_t
-{
-  NoEvent = 0,
-  SampleLoadGather = 0x1,
-  GeneratedNanOrInf = 0x2,
-};
-
-BITMASK_OPERATORS(ShaderEvents);
 
 DOCUMENT(R"(The type of issue that a debug message is about.
 
@@ -1826,6 +1693,8 @@ enum class MessageCategory : uint32_t
   Performance,
 };
 
+DECLARE_REFLECTION_ENUM(MessageCategory);
+
 DOCUMENT(R"(How serious a debug message is
 
 .. data:: High
@@ -1851,6 +1720,8 @@ enum class MessageSeverity : uint32_t
   Low,
   Info,
 };
+
+DECLARE_REFLECTION_ENUM(MessageSeverity);
 
 DOCUMENT(R"(Where a debug message was reported from
 
@@ -1899,6 +1770,8 @@ enum class MessageSource : uint32_t
   RuntimeWarning,
   UnsupportedConfiguration,
 };
+
+DECLARE_REFLECTION_ENUM(MessageSource);
 
 DOCUMENT(R"(How a resource is being used in the pipeline at a particular point.
 
@@ -2125,6 +1998,8 @@ enum class ResourceUsage : uint32_t
   Barrier,
 };
 
+DECLARE_REFLECTION_ENUM(ResourceUsage);
+
 template <typename integer>
 constexpr inline ResourceUsage CBUsage(integer stage)
 {
@@ -2178,143 +2053,6 @@ constexpr inline ResourceUsage RWResUsage(ShaderStage stage)
   return RWResUsage(uint32_t(stage));
 }
 
-DOCUMENT(R"(A set of flags describing the properties of a particular drawcall.
-
-.. data:: NoFlags
-
-  The drawcall has no special properties.
-
-.. data:: Clear
-
-  The drawcall is a clear call. See :data:`ClearColor` and :data:`ClearDepthStencil`.
-
-.. data:: Drawcall
-
-  The drawcall renders primitives using the graphics pipeline.
-
-.. data:: Dispatch
-
-  The drawcall issues a number of compute workgroups.
-
-.. data:: CmdList
-
-  The drawcall calls into a previously recorded child command list.
-
-.. data:: SetMarker
-
-  The drawcall inserts a single debugging marker.
-
-.. data:: PushMarker
-
-  The drawcall begins a debugging marker region that has children.
-
-.. data:: PopMarker
-
-  The drawcall ends a debugging marker region.
-
-  .. note::
-
-    Drawcalls with this flag will not be exposed and it is only used internally for tracking
-    markers.
-
-.. data:: Present
-
-  The drawcall is a presentation call that hands a swapchain image to the presentation engine.
-
-.. data:: MultiDraw
-
-  The drawcall is a multi-draw that contains several specified child draws.
-
-.. data:: Copy
-
-  The drawcall performs a resource copy operation.
-
-.. data:: Resolve
-
-  The drawcall performs a resource resolve or blit operation.
-
-.. data:: GenMips
-
-  The drawcall performs a resource mip-generation operation.
-
-.. data:: PassBoundary
-
-  The drawcall marks the beginning or end of a render pass. See :data:`BeginPass` and
-  :data:`EndPass`.
-
-.. data:: UseIBuffer
-
-  The drawcall uses an index buffer.
-
-.. data:: Instanced
-
-  The drawcall uses instancing. This does not mean it renders more than one instanced, simply that
-  it uses the instancing feature.
-
-.. data:: Auto
-
-  The drawcall interacts with stream-out to render all vertices previously written. This is a
-  Direct3D 11 specific feature.
-
-.. data:: Indirect
-
-  The drawcall uses a buffer on the GPU to source some or all of its parameters in an indirect way.
-
-.. data:: ClearColor
-
-  The drawcall clears a colour target.
-
-.. data:: ClearDepthStencil
-
-  The drawcall clears a depth-stencil target.
-
-.. data:: BeginPass
-
-  The drawcall marks the beginning of a render pass.
-
-.. data:: EndPass
-
-  The drawcall marks the end of a render pass.
-
-.. data:: APICalls
-
-  The drawcall does not contain any work directly, but is a 'virtual' draw inserted to encompass
-  non-draw API calls that happened within a region, so they are included within the region where
-  they occurred and not grouped into the next drawcall outside that region.
-)");
-enum class DrawFlags : uint32_t
-{
-  NoFlags = 0x0000,
-
-  // types
-  Clear = 0x0001,
-  Drawcall = 0x0002,
-  Dispatch = 0x0004,
-  CmdList = 0x0008,
-  SetMarker = 0x0010,
-  PushMarker = 0x0020,
-  PopMarker = 0x0040,    // this is only for internal tracking use
-  Present = 0x0080,
-  MultiDraw = 0x0100,
-  Copy = 0x0200,
-  Resolve = 0x0400,
-  GenMips = 0x0800,
-  PassBoundary = 0x1000,
-
-  // flags
-  UseIBuffer = 0x010000,
-  Instanced = 0x020000,
-  Auto = 0x040000,
-  Indirect = 0x080000,
-  ClearColor = 0x100000,
-  ClearDepthStencil = 0x200000,
-  BeginPass = 0x400000,
-  EndPass = 0x800000,
-  APICalls = 0x1000000,
-};
-
-BITMASK_OPERATORS(DrawFlags);
-
 DOCUMENT(R"(What kind of solid shading to use when rendering a mesh.
 
 .. data:: NoSolid
@@ -2323,7 +2061,7 @@ DOCUMENT(R"(What kind of solid shading to use when rendering a mesh.
 
 .. data:: Solid
 
-  The mesh should be rendered in a single flat unshaded colour.
+  The mesh should be rendered in a single flat unshaded color.
 
 .. data:: Lit
 
@@ -2331,7 +2069,7 @@ DOCUMENT(R"(What kind of solid shading to use when rendering a mesh.
 
 .. data:: Secondary
 
-  The mesh should be rendered using the secondary element as colour.
+  The mesh should be rendered using the secondary element as color.
 
 )");
 enum class SolidShade : uint32_t
@@ -2342,6 +2080,8 @@ enum class SolidShade : uint32_t
   Secondary,
   Count,
 };
+
+DECLARE_REFLECTION_ENUM(SolidShade);
 
 DOCUMENT(R"(The fill mode for polygons.
 
@@ -2363,6 +2103,8 @@ enum class FillMode : uint32_t
   Wireframe,
   Point,
 };
+
+DECLARE_REFLECTION_ENUM(FillMode);
 
 DOCUMENT(R"(The culling mode for polygons.
 
@@ -2389,6 +2131,8 @@ enum class CullMode : uint32_t
   Back,
   FrontAndBack,
 };
+
+DECLARE_REFLECTION_ENUM(CullMode);
 
 DOCUMENT(R"(The texture filtering mode for a given direction (minification, magnification, or
 between mips).
@@ -2423,6 +2167,8 @@ enum class FilterMode : uint32_t
   Anisotropic,
 };
 
+DECLARE_REFLECTION_ENUM(FilterMode);
+
 DOCUMENT(R"(The function used to process the returned value after interpolation.
 
 .. data:: Normal
@@ -2448,13 +2194,15 @@ DOCUMENT(R"(The function used to process the returned value after interpolation.
 
   Texels that were weight to 0 during interpolation are not included in the max function.
 )");
-enum class FilterFunc : uint32_t
+enum class FilterFunction : uint32_t
 {
   Normal,
   Comparison,
   Minimum,
   Maximum,
 };
+
+DECLARE_REFLECTION_ENUM(FilterFunction);
 
 DOCUMENT(R"(A comparison function to return a ``bool`` result from two inputs ``A`` and ``B``.
 
@@ -2491,7 +2239,7 @@ DOCUMENT(R"(A comparison function to return a ``bool`` result from two inputs ``
   ``A != B``
 
 )");
-enum class CompareFunc : uint32_t
+enum class CompareFunction : uint32_t
 {
   Never,
   AlwaysTrue,
@@ -2502,6 +2250,8 @@ enum class CompareFunc : uint32_t
   Equal,
   NotEqual,
 };
+
+DECLARE_REFLECTION_ENUM(CompareFunction);
 
 DOCUMENT(R"(A stencil operation to apply in stencil processing.
 
@@ -2537,7 +2287,7 @@ DOCUMENT(R"(A stencil operation to apply in stencil processing.
 
   Invert the bits in the stencil value (bitwise ``NOT``).
 )");
-enum class StencilOp : uint32_t
+enum class StencilOperation : uint32_t
 {
   Keep,
   Zero,
@@ -2549,6 +2299,8 @@ enum class StencilOp : uint32_t
   Invert,
 };
 
+DECLARE_REFLECTION_ENUM(StencilOperation);
+
 DOCUMENT(R"(A multiplier on one component in the blend equation.
 
 .. note:: The "source" value is the value written out by the shader.
@@ -2557,7 +2309,7 @@ DOCUMENT(R"(A multiplier on one component in the blend equation.
 
   The "destination" value is the value in the target being blended to.
 
-  These values are combined using a given blend operation, see :class:`BlendOp`.
+  These values are combined using a given blend operation, see :class:`BlendOperation`.
 
   Where a color is referenced, the value depends on where the multiplier appears in the blend
   equation. If it is a multiplier on the color component then it refers to the color component. If
@@ -2611,11 +2363,11 @@ DOCUMENT(R"(A multiplier on one component in the blend equation.
 
 .. data:: FactorRGB
 
-  The colour components of the fixed blend factor constant.
+  The color components of the fixed blend factor constant.
 
 .. data:: InvFactorRGB
 
-  ``1.0`` minus the colour components of the fixed blend factor constant.
+  ``1.0`` minus the color components of the fixed blend factor constant.
 
 .. data:: FactorAlpha
 
@@ -2664,7 +2416,9 @@ enum class BlendMultiplier : uint32_t
   InvSrc1Alpha,
 };
 
-DOCUMENT(R"(A blending operation to apply in colour blending.
+DECLARE_REFLECTION_ENUM(BlendMultiplier);
+
+DOCUMENT(R"(A blending operation to apply in color blending.
 
 .. note:: The "source" value is the value written out by the shader.
 
@@ -2692,7 +2446,7 @@ DOCUMENT(R"(A blending operation to apply in colour blending.
 
   The maximum of the source and destination value.
 )");
-enum class BlendOp : uint32_t
+enum class BlendOperation : uint32_t
 {
   Add,
   Subtract,
@@ -2700,6 +2454,8 @@ enum class BlendOp : uint32_t
   Minimum,
   Maximum,
 };
+
+DECLARE_REFLECTION_ENUM(BlendOperation);
 
 DOCUMENT(R"(A logical operation to apply when writing texture values to an output.
 
@@ -2776,7 +2532,7 @@ DOCUMENT(R"(A logical operation to apply when writing texture values to an outpu
   The inverted source and destination values are combined with the bitwise ``OR`` operator - i.e.
   ``(NOT s) OR d``.
 )");
-enum class LogicOp : uint32_t
+enum class LogicOperation : uint32_t
 {
   NoOp,
   Clear,
@@ -2795,6 +2551,8 @@ enum class LogicOp : uint32_t
   OrReverse,
   OrInverted,
 };
+
+DECLARE_REFLECTION_ENUM(LogicOperation);
 
 DOCUMENT(R"(Pre-defined GPU counters that can be supported by a given implementation.
 
@@ -2925,12 +2683,13 @@ enum class GPUCounter : uint32_t
 };
 
 ITERABLE_OPERATORS(GPUCounter);
+DECLARE_REFLECTION_ENUM(GPUCounter);
 
 DOCUMENT(R"(Check whether or not this is an AMD private counter.
 
 :param GPUCounter c: The counter.
 :return: ``True`` if it is an AMD private counter, ``False`` if it's not.
-:rtype: bool
+:rtype: ``bool``
 )");
 inline constexpr bool IsAMDCounter(GPUCounter c)
 {
@@ -2941,7 +2700,7 @@ DOCUMENT(R"(Check whether or not this is an Intel private counter.
 
 :param GPUCounter c: The counter.
 :return: ``True`` if it is an Intel private counter, ``False`` if it's not.
-:rtype: bool
+:rtype: ``bool``
 )");
 inline constexpr bool IsIntelCounter(GPUCounter c)
 {
@@ -2952,7 +2711,7 @@ DOCUMENT(R"(Check whether or not this is an Nvidia private counter.
 
 :param GPUCounter c: The counter.
 :return: ``True`` if it is an Nvidia private counter, ``False`` if it's not.
-:rtype: bool
+:rtype: ``bool``
 )");
 inline constexpr bool IsNvidiaCounter(GPUCounter c)
 {
@@ -2995,6 +2754,8 @@ enum class CounterUnit : uint32_t
   Cycles,
 };
 
+DECLARE_REFLECTION_ENUM(CounterUnit);
+
 DOCUMENT(R"(The type of camera controls for an :class:`Camera`.
 
 .. data:: Arcball
@@ -3010,6 +2771,8 @@ enum class CameraType : uint32_t
   Arcball = 0,
   FPSLook,
 };
+
+DECLARE_REFLECTION_ENUM(CameraType);
 
 DOCUMENT(R"(How supported a given API is on a particular replay instance.
 
@@ -3032,6 +2795,8 @@ enum class ReplaySupport : uint32_t
   Supported,
   SuggestRemote,
 };
+
+DECLARE_REFLECTION_ENUM(ReplaySupport);
 
 DOCUMENT(R"(The status of a high-level replay operation such as opening a capture or connecting to
 a remote server.
@@ -3103,6 +2868,15 @@ a remote server.
 .. data:: APIHardwareUnsupported
 
   The API is not supported on the currently available hardware.
+
+.. data:: APIDataCorrupted
+
+  While loading the capture for replay, the driver encountered corrupted or invalid serialised data.
+
+.. data:: APIReplayFailed
+
+  The API failed to replay the capture, with some runtime error that couldn't be determined until
+  the replay began.
 )");
 enum class ReplayStatus : uint32_t
 {
@@ -3123,7 +2897,11 @@ enum class ReplayStatus : uint32_t
   APIInitFailed,
   APIIncompatibleVersion,
   APIHardwareUnsupported,
+  APIDataCorrupted,
+  APIReplayFailed,
 };
+
+DECLARE_REFLECTION_ENUM(ReplayStatus);
 
 DOCUMENT(R"(The type of message received from or sent to an application target control connection.
 
@@ -3158,6 +2936,10 @@ DOCUMENT(R"(The type of message received from or sent to an application target c
 .. data:: NewChild
 
   The target has created a child process.
+
+.. data:: CaptureProgress
+
+  Progress update on an on-going frame capture.
 )");
 enum class TargetControlMessageType : uint32_t
 {
@@ -3169,7 +2951,10 @@ enum class TargetControlMessageType : uint32_t
   CaptureCopied,
   RegisterAPI,
   NewChild,
+  CaptureProgress,
 };
+
+DECLARE_REFLECTION_ENUM(TargetControlMessageType);
 
 DOCUMENT(R"(How to modify an environment variable.
 
@@ -3191,6 +2976,8 @@ enum class EnvMod : uint32_t
   Append,
   Prepend,
 };
+
+DECLARE_REFLECTION_ENUM(EnvMod);
 
 DOCUMENT(R"(The separator to use if needed when modifying an environment variable.
 
@@ -3220,6 +3007,8 @@ enum class EnvSep : uint32_t
   Colon,
   NoSep,
 };
+
+DECLARE_REFLECTION_ENUM(EnvSep);
 
 DOCUMENT(R"(The type of a log message
 
@@ -3252,6 +3041,435 @@ enum class LogType : int32_t
   Fatal,
   Count,
 };
+
+DECLARE_REFLECTION_ENUM(LogType);
+
+#if defined(ENABLE_PYTHON_FLAG_ENUMS)
+
+ENABLE_PYTHON_FLAG_ENUMS;
+
+#endif
+
+DOCUMENT(R"(A set of flags describing the properties of a path on a remote filesystem.
+
+.. data:: NoFlags
+
+  No special file properties.
+
+.. data:: Directory
+
+  This file is a directory or folder.
+
+.. data:: Hidden
+
+  This file is considered hidden by the filesystem.
+
+.. data:: Executable
+
+  This file has been identified as an executable program or script.
+
+.. data:: ErrorUnknown
+
+  A special flag indicating that a query for this file failed, but for unknown reasons.
+
+.. data:: ErrorAccessDenied
+
+  A special flag indicating that a query for this file failed because access to the path was
+  denied.
+
+.. data:: ErrorInvalidPath
+
+  A special flag indicating that a query for this file failed because the path was invalid.
+)");
+enum class PathProperty : uint32_t
+{
+  NoFlags = 0x0,
+  Directory = 0x1,
+  Hidden = 0x2,
+  Executable = 0x4,
+
+  ErrorUnknown = 0x2000,
+  ErrorAccessDenied = 0x4000,
+  ErrorInvalidPath = 0x8000,
+};
+
+BITMASK_OPERATORS(PathProperty);
+DECLARE_REFLECTION_ENUM(PathProperty);
+
+DOCUMENT(R"(A set of flags describing the properties of a section in a renderdoc capture.
+
+.. data:: NoFlags
+
+  No special section properties.
+
+.. data:: ASCIIStored
+
+  This section was stored as pure ASCII. This can be useful since it is possible to generate
+  an ASCII section in a text editor by hand or with any simple printf style script, and then
+  concatenate it to a .rdc and have a valid section.
+
+.. data:: LZ4Compressed
+
+  This section is compressed with LZ4 on disk.
+
+.. data:: ZstdCompressed
+
+  This section is compressed with Zstd on disk.
+)");
+enum class SectionFlags : uint32_t
+{
+  NoFlags = 0x0,
+  ASCIIStored = 0x1,
+  LZ4Compressed = 0x2,
+  ZstdCompressed = 0x4,
+};
+
+BITMASK_OPERATORS(SectionFlags);
+DECLARE_REFLECTION_ENUM(SectionFlags);
+
+DOCUMENT(R"(A set of flags describing how this buffer may be used
+
+.. data:: NoFlags
+
+  The buffer will not be used for any of the uses below.
+
+.. data:: Vertex
+
+  The buffer will be used for sourcing vertex input data.
+
+.. data:: Index
+
+  The buffer will be used for sourcing primitive index data.
+
+.. data:: Constants
+
+  The buffer will be used for sourcing shader constant data.
+
+.. data:: ReadWrite
+
+  The buffer will be used for read and write access from shaders.
+
+.. data:: Indirect
+
+  The buffer will be used to provide indirect parameters for launching GPU-based drawcalls.
+)");
+enum class BufferCategory : uint32_t
+{
+  NoFlags = 0x0,
+  Vertex = 0x1,
+  Index = 0x2,
+  Constants = 0x4,
+  ReadWrite = 0x8,
+  Indirect = 0x10,
+};
+
+BITMASK_OPERATORS(BufferCategory);
+DECLARE_REFLECTION_ENUM(BufferCategory);
+
+DOCUMENT(R"(A set of flags for D3D buffer view properties.
+
+.. data:: NoFlags
+
+  The buffer will not be used for any of the uses below.
+
+.. data:: Raw
+
+  The buffer is used as a raw (byte-addressed) buffer.
+
+.. data:: Append
+
+  The buffer is used as a append/consume view.
+
+.. data:: Counter
+
+  The buffer is used with a structured buffer with associated hidden counter.
+)");
+enum class D3DBufferViewFlags : uint32_t
+{
+  NoFlags = 0x0,
+  Raw = 0x1,
+  Append = 0x2,
+  Counter = 0x4,
+};
+
+BITMASK_OPERATORS(D3DBufferViewFlags);
+DECLARE_REFLECTION_ENUM(D3DBufferViewFlags);
+
+DOCUMENT(R"(A set of flags describing how this texture may be used
+
+.. data:: NoFlags
+
+  The texture will not be used for any of the uses below.
+
+.. data:: ShaderRead
+
+  The texture will be read by a shader.
+
+.. data:: ColorTarget
+
+  The texture will be written to as a color target.
+
+.. data:: DepthTarget
+
+  The texture will be written to and tested against as a depth target.
+
+.. data:: ShaderReadWrite
+
+  The texture will be read and written to by a shader.
+
+.. data:: SwapBuffer
+
+  The texture is part of a window swapchain.
+)");
+enum class TextureCategory : uint32_t
+{
+  NoFlags = 0x0,
+  ShaderRead = 0x1,
+  ColorTarget = 0x2,
+  DepthTarget = 0x4,
+  ShaderReadWrite = 0x8,
+  SwapBuffer = 0x10,
+};
+
+BITMASK_OPERATORS(TextureCategory);
+DECLARE_REFLECTION_ENUM(TextureCategory);
+
+DOCUMENT(R"(A set of flags for ``ShaderStage`` stages
+
+.. data:: Unknown
+
+  No flags set for any shader stages.
+
+.. data:: Vertex
+
+  The flag for :data:`ShaderStage.Vertex`.
+
+.. data:: Hull
+
+  The flag for :data:`ShaderStage.Hull`.
+
+.. data:: Tess_Control
+
+  The flag for :data:`ShaderStage.Tess_Control`.
+
+.. data:: Domain
+
+  The flag for :data:`ShaderStage.Domain`.
+
+.. data:: Tess_Eval
+
+  The flag for :data:`ShaderStage.Tess_Eval`.
+
+.. data:: Geometry
+
+  The flag for :data:`ShaderStage.Geometry`.
+
+.. data:: Pixel
+
+  The flag for :data:`ShaderStage.Pixel`.
+
+.. data:: Fragment
+
+  The flag for :data:`ShaderStage.Fragment`.
+
+.. data:: Compute
+
+  The flag for :data:`ShaderStage.Compute`.
+
+.. data:: All
+
+  A shorthand version with flags set for all stages together.
+)");
+enum class ShaderStageMask : uint32_t
+{
+  Unknown = 0,
+  Vertex = 1 << uint32_t(ShaderStage::Vertex),
+  Hull = 1 << uint32_t(ShaderStage::Hull),
+  Tess_Control = Hull,
+  Domain = 1 << uint32_t(ShaderStage::Domain),
+  Tess_Eval = Domain,
+  Geometry = 1 << uint32_t(ShaderStage::Geometry),
+  Pixel = 1 << uint32_t(ShaderStage::Pixel),
+  Fragment = Pixel,
+  Compute = 1 << uint32_t(ShaderStage::Compute),
+  All = Vertex | Hull | Domain | Geometry | Pixel | Compute,
+};
+
+BITMASK_OPERATORS(ShaderStageMask);
+DECLARE_REFLECTION_ENUM(ShaderStageMask);
+
+DOCUMENT(R"(Calculate the corresponding flag for a shader stage
+
+:param ShaderStage stage: The shader stage
+:return: The flag that corresponds to the input shader stage
+:rtype: ShaderStageMask
+)");
+constexpr inline ShaderStageMask MaskForStage(ShaderStage stage)
+{
+  return ShaderStageMask(1 << uint32_t(stage));
+}
+
+DOCUMENT(R"(A set of flags for events that may occur while debugging a shader
+
+.. data:: NoEvent
+
+  No event has occurred.
+
+.. data:: SampleLoadGather
+
+  A texture was sampled, loaded or gathered.
+
+.. data:: GeneratedNanOrInf
+
+  A floating point operation generated a ``NaN`` or ``infinity`` result.
+)");
+enum class ShaderEvents : uint32_t
+{
+  NoEvent = 0,
+  SampleLoadGather = 0x1,
+  GeneratedNanOrInf = 0x2,
+};
+
+BITMASK_OPERATORS(ShaderEvents);
+DECLARE_REFLECTION_ENUM(ShaderEvents);
+
+DOCUMENT(R"(A set of flags describing the properties of a particular drawcall.
+
+.. data:: NoFlags
+
+  The drawcall has no special properties.
+
+.. data:: Clear
+
+  The drawcall is a clear call. See :data:`ClearColor` and :data:`ClearDepthStencil`.
+
+.. data:: Drawcall
+
+  The drawcall renders primitives using the graphics pipeline.
+
+.. data:: Dispatch
+
+  The drawcall issues a number of compute workgroups.
+
+.. data:: CmdList
+
+  The drawcall calls into a previously recorded child command list.
+
+.. data:: SetMarker
+
+  The drawcall inserts a single debugging marker.
+
+.. data:: PushMarker
+
+  The drawcall begins a debugging marker region that has children.
+
+.. data:: PopMarker
+
+  The drawcall ends a debugging marker region.
+
+  .. note::
+
+    Drawcalls with this flag will not be exposed and it is only used internally for tracking
+    markers.
+
+.. data:: Present
+
+  The drawcall is a presentation call that hands a swapchain image to the presentation engine.
+
+.. data:: MultiDraw
+
+  The drawcall is a multi-draw that contains several specified child draws.
+
+.. data:: Copy
+
+  The drawcall performs a resource copy operation.
+
+.. data:: Resolve
+
+  The drawcall performs a resource resolve or blit operation.
+
+.. data:: GenMips
+
+  The drawcall performs a resource mip-generation operation.
+
+.. data:: PassBoundary
+
+  The drawcall marks the beginning or end of a render pass. See :data:`BeginPass` and
+  :data:`EndPass`.
+
+.. data:: UseIBuffer
+
+  The drawcall uses an index buffer.
+
+.. data:: Instanced
+
+  The drawcall uses instancing. This does not mean it renders more than one instanced, simply that
+  it uses the instancing feature.
+
+.. data:: Auto
+
+  The drawcall interacts with stream-out to render all vertices previously written. This is a
+  Direct3D 11 specific feature.
+
+.. data:: Indirect
+
+  The drawcall uses a buffer on the GPU to source some or all of its parameters in an indirect way.
+
+.. data:: ClearColor
+
+  The drawcall clears a color target.
+
+.. data:: ClearDepthStencil
+
+  The drawcall clears a depth-stencil target.
+
+.. data:: BeginPass
+
+  The drawcall marks the beginning of a render pass.
+
+.. data:: EndPass
+
+  The drawcall marks the end of a render pass.
+
+.. data:: APICalls
+
+  The drawcall does not contain any work directly, but is a 'virtual' draw inserted to encompass
+  non-draw API calls that happened within a region, so they are included within the region where
+  they occurred and not grouped into the next drawcall outside that region.
+)");
+enum class DrawFlags : uint32_t
+{
+  NoFlags = 0x0000,
+
+  // types
+  Clear = 0x0001,
+  Drawcall = 0x0002,
+  Dispatch = 0x0004,
+  CmdList = 0x0008,
+  SetMarker = 0x0010,
+  PushMarker = 0x0020,
+  PopMarker = 0x0040,    // this is only for internal tracking use
+  Present = 0x0080,
+  MultiDraw = 0x0100,
+  Copy = 0x0200,
+  Resolve = 0x0400,
+  GenMips = 0x0800,
+  PassBoundary = 0x1000,
+
+  // flags
+  UseIBuffer = 0x010000,
+  Instanced = 0x020000,
+  Auto = 0x040000,
+  Indirect = 0x080000,
+  ClearColor = 0x100000,
+  ClearDepthStencil = 0x200000,
+  BeginPass = 0x400000,
+  EndPass = 0x800000,
+  APICalls = 0x1000000,
+};
+
+BITMASK_OPERATORS(DrawFlags);
+DECLARE_REFLECTION_ENUM(DrawFlags);
 
 DOCUMENT(R"(A set of flags giving details of the current status of vulkan layer registration.
 
@@ -3303,6 +3521,7 @@ enum class VulkanLayerFlags : uint32_t
 };
 
 BITMASK_OPERATORS(VulkanLayerFlags);
+DECLARE_REFLECTION_ENUM(VulkanLayerFlags);
 
 DOCUMENT(R"(A set of flags giving details of the current status of Android tracability.
 
@@ -3317,13 +3536,16 @@ DOCUMENT(R"(A set of flags giving details of the current status of Android traca
 
 .. data:: MissingPermissions
 
-  The application being checked does not have the requesite permission:
-
-  android.permission.INTERNET
+  The application being checked does not have the requesite permission. Currently there
+  are no required permissions.
 
 .. data:: NotDebuggable
 
   The application is not debuggable.
+
+.. data:: WrongLayerVersion
+
+   The found RenderDoc layer does not match the server's version.
 
 .. data:: RootAccess
 
@@ -3339,8 +3561,14 @@ enum class AndroidFlags : uint32_t
   MissingLibrary = 0x1,
   MissingPermissions = 0x2,
   NotDebuggable = 0x4,
-  RootAccess = 0x8,
-  Unfixable = 0x10,
+  WrongLayerVersion = 0x8,
+  RootAccess = 0x10,
+  Unfixable = 0x20,
 };
 
 BITMASK_OPERATORS(AndroidFlags);
+DECLARE_REFLECTION_ENUM(AndroidFlags);
+
+#if defined(DISABLE_PYTHON_FLAG_ENUMS)
+DISABLE_PYTHON_FLAG_ENUMS;
+#endif

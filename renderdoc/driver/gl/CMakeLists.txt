@@ -3,11 +3,19 @@ set(sources
     gl_common.h
     gl_counters.cpp
     gl_debug.cpp
+    gl_postvs.cpp
+    gl_overlay.cpp
+    gl_outputwindow.cpp
+    gl_rendermesh.cpp
+    gl_rendertexture.cpp
+    gl_rendertext.cpp
+    gl_msaa_array_conv.cpp
     gl_driver.cpp
     gl_driver.h
     gl_enum.h
     gl_hookset_defs.h
     gl_hookset.h
+    gl_initstate.cpp
     gl_manager.cpp
     gl_manager.h
     gl_renderstate.cpp
@@ -16,8 +24,10 @@ set(sources
     gl_replay.h
     gl_resources.cpp
     gl_resources.h
+    gl_program_iterate.cpp
     gl_shader_refl.cpp
     gl_shader_refl.h
+    gl_stringise.cpp
     official/gl32.h
     official/gl3platform.h
     official/glcorearb.h
@@ -58,6 +68,7 @@ else()
         list(APPEND sources
             gl_hooks_egl.cpp
             gl_hooks_egl_pass.cpp
+            gl_library_egl.cpp
             gl_replay_egl.cpp)
     endif()
 endif()

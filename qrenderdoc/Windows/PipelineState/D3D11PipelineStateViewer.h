@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,7 @@
 #pragma once
 
 #include <QFrame>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
 namespace Ui
 {
@@ -33,12 +33,13 @@ class D3D11PipelineStateViewer;
 }
 
 class QXmlStreamWriter;
+class RDLabel;
 class RDTreeWidget;
 class RDTreeWidgetItem;
 struct D3D11ViewTag;
 class PipelineStateViewer;
 
-class D3D11PipelineStateViewer : public QFrame, public ILogViewer
+class D3D11PipelineStateViewer : public QFrame, public ICaptureViewer
 {
   Q_OBJECT
 
@@ -47,11 +48,11 @@ public:
                                     QWidget *parent = 0);
   ~D3D11PipelineStateViewer();
 
-  // ILogViewerForm
-  void OnLogfileLoaded() override;
-  void OnLogfileClosed() override;
-  void OnSelectedEventChanged(uint32_t eventID) override {}
-  void OnEventChanged(uint32_t eventID) override;
+  // ICaptureViewer
+  void OnCaptureLoaded() override;
+  void OnCaptureClosed() override;
+  void OnSelectedEventChanged(uint32_t eventId) override {}
+  void OnEventChanged(uint32_t eventId) override;
 
 private slots:
   // automatic slots
@@ -67,7 +68,6 @@ private slots:
 
   // manual slots
   void shaderView_clicked();
-  void shaderLabel_clicked(QMouseEvent *event);
   void shaderEdit_clicked();
 
   void shaderSave_clicked();
@@ -82,31 +82,30 @@ private:
   ICaptureContext &m_Ctx;
   PipelineStateViewer &m_Common;
 
-  void setShaderState(const D3D11Pipe::Shader &stage, QLabel *shader, RDTreeWidget *tex,
+  void setShaderState(const D3D11Pipe::Shader &stage, RDLabel *shader, RDTreeWidget *tex,
                       RDTreeWidget *samp, RDTreeWidget *cbuffer, RDTreeWidget *classes);
 
   void addResourceRow(const D3D11ViewTag &view, const ShaderResource *shaderInput,
-                      const BindpointMap *map, RDTreeWidget *resources);
+                      const Bindpoint *map, RDTreeWidget *resources);
 
-  void clearShaderState(QLabel *shader, RDTreeWidget *tex, RDTreeWidget *samp,
+  void clearShaderState(RDLabel *shader, RDTreeWidget *tex, RDTreeWidget *samp,
                         RDTreeWidget *cbuffer, RDTreeWidget *classes);
   void setState();
   void clearState();
 
   QVariantList exportViewHTML(const D3D11Pipe::View &view, int i, ShaderReflection *refl,
                               const QString &extraParams);
-  void exportHTML(QXmlStreamWriter &xml, const D3D11Pipe::IA &ia);
+  void exportHTML(QXmlStreamWriter &xml, const D3D11Pipe::InputAssembly &ia);
   void exportHTML(QXmlStreamWriter &xml, const D3D11Pipe::Shader &sh);
-  void exportHTML(QXmlStreamWriter &xml, const D3D11Pipe::SO &so);
+  void exportHTML(QXmlStreamWriter &xml, const D3D11Pipe::StreamOut &so);
   void exportHTML(QXmlStreamWriter &xml, const D3D11Pipe::Rasterizer &rs);
-  void exportHTML(QXmlStreamWriter &xml, const D3D11Pipe::OM &om);
+  void exportHTML(QXmlStreamWriter &xml, const D3D11Pipe::OutputMerger &om);
 
   void setInactiveRow(RDTreeWidgetItem *node);
   void setEmptyRow(RDTreeWidgetItem *node);
   void highlightIABind(int slot);
 
-  QString formatMembers(int indent, const QString &nameprefix,
-                        const rdctype::array<ShaderConstant> &vars);
+  QString formatMembers(int indent, const QString &nameprefix, const rdcarray<ShaderConstant> &vars);
   const D3D11Pipe::Shader *stageForSender(QWidget *widget);
 
   bool HasImportantViewParams(const D3D11Pipe::View &view, TextureDescription *tex);

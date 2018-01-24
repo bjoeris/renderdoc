@@ -4,14 +4,25 @@ set(sources
     vk_core.cpp
     vk_core.h
     vk_counters.cpp
-    vk_debug.cpp
     vk_debug.h
+    vk_debug.cpp
+    vk_postvs.cpp
+    vk_overlay.cpp
+    vk_msaa_array_conv.cpp
+    vk_outputwindow.cpp
+    vk_rendermesh.cpp
+    vk_rendertexture.cpp
+    vk_rendertext.h
+    vk_rendertext.cpp
+    vk_shader_cache.h
+    vk_shader_cache.cpp
     vk_dispatchtables.cpp
     vk_dispatchtables.h
     vk_hookset_defs.h
     vk_info.cpp
     vk_info.h
     vk_initstate.cpp
+    vk_sparse_initstate.cpp
     vk_manager.cpp
     vk_manager.h
     vk_memory.cpp
@@ -21,6 +32,8 @@ set(sources
     vk_resources.h
     vk_state.cpp
     vk_state.h
+    vk_serialise.cpp
+    vk_stringise.cpp
     vk_layer.cpp
     official/vk_layer.h
     official/vk_platform.h
@@ -42,7 +55,7 @@ set(definitions ${RDOC_DEFINITIONS})
 
 set(VULKAN_LAYER_FOLDER_DEFAULT /etc/vulkan/implicit_layer.d)
 
-if(NOT CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT AND NOT DEFINED VULKAN_LAYER_FOLDER)
+if(NOT ANDROID AND NOT CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT AND NOT DEFINED VULKAN_LAYER_FOLDER)
     message(WARNING "*** CMAKE_INSTALL_PREFIX has been customised to ${CMAKE_INSTALL_PREFIX}, but VULKAN_LAYER_FOLDER is not customised and defaults to ${VULKAN_LAYER_FOLDER_DEFAULT}. This may not do what you expect, e.g. installing to a non-root location ***")
 endif()
 
@@ -75,17 +88,11 @@ elseif(UNIX)
     set(json_in ${CMAKE_CURRENT_SOURCE_DIR}/renderdoc.json)
     set(json_out ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/renderdoc_capture.json)
     add_custom_command(OUTPUT ${json_out}
-        COMMAND sed '{s%\\[MAJOR\\]%${RENDERDOC_VERSION_MAJOR}%\; s%\\[MINOR\\]%${RENDERDOC_VERSION_MINOR}%\; s%...renderdoc.dll%${CMAKE_INSTALL_PREFIX}/lib${LIB_SUFFIX}/librenderdoc.so%}' < ${json_in} > ${json_out}
+        COMMAND sed '{s%\\[MAJOR\\]%${RENDERDOC_VERSION_MAJOR}%\; s%\\[MINOR\\]%${RENDERDOC_VERSION_MINOR}%\; s%...renderdoc.dll%${CMAKE_INSTALL_PREFIX}/lib${LIB_SUFFIX}/${LIB_SUBFOLDER_TRAIL_SLASH}librenderdoc.so%}' < ${json_in} > ${json_out}
         DEPENDS ${json_in})
     add_custom_target(generate-json ALL DEPENDS ${json_out})
 
     install (FILES ${json_out} DESTINATION ${VULKAN_LAYER_FOLDER})
-endif()
-
-# GCC 6.1 may or may not complain about enum reference casts
-if(CMAKE_COMPILER_IS_GNUCXX)
-    set_source_files_properties(vk_common.cpp
-        PROPERTIES COMPILE_FLAGS "-Wno-strict-aliasing")
 endif()
 
 add_library(rdoc_vulkan OBJECT ${sources})

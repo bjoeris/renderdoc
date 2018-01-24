@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,16 +23,20 @@
  ******************************************************************************/
 
 #include <QApplication>
+#include <QCommandLineParser>
 #include <QDir>
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
 #include <QStandardPaths>
+#include <QSysInfo>
 #include "Code/CaptureContext.h"
 #include "Code/QRDUtils.h"
 #include "Code/Resources.h"
 #include "Code/pyrenderdoc/PythonContext.h"
+#include "Windows/Dialogs/CrashDialog.h"
 #include "Windows/MainWindow.h"
+#include "version.h"
 
 #if defined(Q_OS_WIN32)
 extern "C" {
@@ -58,6 +62,20 @@ void sharedLogOutput(QtMsgType type, const QMessageLogContext &context, const QS
   RENDERDOC_LogMessage(logtype, "QTRD", context.file, context.line, msg.toUtf8().data());
 }
 
+static QString tr(const char *string)
+{
+  return QApplication::translate("qrenderdoc", string);
+}
+
+void hideOption(QCommandLineOption &opt)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
+  opt.setFlags(QCommandLineOption::HiddenFromHelp);
+#else
+  opt.setHidden(true);
+#endif
+}
+
 int main(int argc, char *argv[])
 {
   // call this as the very first thing - no-op on other platforms, but on linux it means
@@ -68,87 +86,187 @@ int main(int argc, char *argv[])
 
   qInfo() << "QRenderDoc initialising.";
 
-  QString filename;
-  bool temp = false;
+  QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+  QGuiApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
 
-  for(int i = 0; i < argc; i++)
+  QApplication::setApplicationVersion(lit(FULL_VERSION_STRING));
+
+// shortcut here so we can run this with a non-GUI application
+#if !defined(RELEASE)
+  if(QString::fromUtf8(argv[1]) == lit("--unittest"))
   {
-    if(!QString::compare(QString::fromUtf8(argv[i]), lit("--tempfile"), Qt::CaseInsensitive))
-      temp = true;
+    QCoreApplication application(argc, argv);
+    PythonContext::GlobalInit();
+
+    bool errors = false;
+
+    qInfo() << "Checking python binding consistency.";
+
+    {
+      PythonContextHandle py;
+      errors = py.ctx().CheckInterfaces();
+    }
+
+    if(errors)
+    {
+      qCritical() << "Found errors in python bindings. Please fix!";
+      return 1;
+    }
+
+    qInfo() << "Python bindings are consistent.";
+    return 0;
+  }
+#endif
+
+  QApplication application(argc, argv);
+
+  QCommandLineParser parser;
+  parser.setApplicationDescription(tr("Qt UI for RenderDoc"));
+  QCommandLineOption helpOption = parser.addHelpOption();
+  QCommandLineOption versionOption = parser.addVersionOption();
+
+  QCommandLineOption tempfile(
+      lit("tempfile"), tr("The filename to be opened is a temporary file owned by this instance."));
+  parser.addOption(tempfile);
+
+  QCommandLineOption targetcontrol({lit("targetcontrol"), lit("remoteaccess")},
+                                   tr("A target control connection to open on startup."),
+                                   lit("host:port"));
+  parser.addOption(targetcontrol);
+
+  QCommandLineOption python({lit("python"), lit("script"), lit("py")},
+                            tr("Run a python script before opening the main UI."),
+                            lit("filename.py"));
+  parser.addOption(python);
+
+  // secret non-described options
+  QCommandLineOption installLayer(lit("install_vulkan_layer"), QString(), lit("root_or_not"));
+  hideOption(installLayer);
+  parser.addOption(installLayer);
+
+  QCommandLineOption updateFailed(lit("updatefailed"), QString(), lit("errormsg"));
+  hideOption(updateFailed);
+  parser.addOption(updateFailed);
+
+  QCommandLineOption updateDone(lit("updatedone"));
+  hideOption(updateDone);
+  parser.addOption(updateDone);
+
+  QCommandLineOption crashReport(lit("crash"), QString(), lit("reportpath"));
+  hideOption(crashReport);
+  parser.addOption(crashReport);
+
+  parser.addPositionalArgument(lit("filename"), tr("The file to open."));
+
+  bool parsedCommands = parser.parse(application.arguments());
+
+  if(!parsedCommands)
+  {
+    QString error = parser.errorText();
+    printf("%s\n", error.toUtf8().data());
+    return 1;
   }
 
-  for(int i = 0; i < argc; i++)
+  if(parser.isSet(helpOption))
   {
-    if(!QString::compare(QString::fromUtf8(argv[i]), lit("--install_vulkan_layer")) && i + 1 < argc)
-    {
-      if(!QString::compare(QString::fromUtf8(argv[i + 1]), lit("root")))
-        RENDERDOC_UpdateVulkanLayerRegistration(true);
-      else
-        RENDERDOC_UpdateVulkanLayerRegistration(false);
-      return 0;
-    }
+    parser.showHelp();
+    return 0;
+  }
+
+  if(parser.isSet(versionOption))
+  {
+    printf("QRenderDoc v%s (%s)\n", MAJOR_MINOR_VERSION_STRING, GitVersionHash);
+#if defined(DISTRIBUTION_VERSION)
+    printf("Packaged for %s - %s\n", DISTRIBUTION_NAME, DISTRIBUTION_CONTACT);
+#endif
+    return 0;
+  }
+
+  if(parser.isSet(installLayer))
+  {
+    qInfo() << "Updating Vulkan layer registration";
+    if(parser.value(installLayer) == lit("root"))
+      RENDERDOC_UpdateVulkanLayerRegistration(true);
+    else
+      RENDERDOC_UpdateVulkanLayerRegistration(false);
+    return 0;
+  }
+
+  bool temp = parser.isSet(tempfile);
+
+  bool updateApplied = false;
+
+  if(parser.isSet(updateFailed))
+  {
+    RDDialog::critical(NULL, tr("Error updating"),
+                       tr("Error applying update: %1").arg(parser.value(updateFailed)));
+  }
+
+  if(parser.isSet(updateDone))
+  {
+    updateApplied = true;
+
+    RENDERDOC_UpdateInstalledVersionNumber();
   }
 
   QString remoteHost;
   uint remoteIdent = 0;
 
-  for(int i = 0; i + 1 < argc; i++)
+  if(parser.isSet(targetcontrol))
   {
-    if(!QString::compare(QString::fromUtf8(argv[i]), lit("--remoteaccess"), Qt::CaseInsensitive))
+    QRegularExpression regexp(lit("^([a-zA-Z0-9_-]+:)?([0-9]+)$"));
+
+    QRegularExpressionMatch match = regexp.match(parser.value(targetcontrol));
+
+    if(!match.hasMatch())
     {
-      QRegularExpression regexp(lit("^([a-zA-Z0-9_-]+:)?([0-9]+)$"));
+      qCritical() << "--targetcontrol option must be followed by host:port";
+      return 1;
+    }
 
-      QRegularExpressionMatch match = regexp.match(QString::fromUtf8(argv[i + 1]));
+    QString host = match.captured(1);
 
-      if(match.hasMatch())
-      {
-        QString host = match.captured(1);
+    if(host.length() > 0 && host[host.length() - 1] == QLatin1Char(':'))
+      host.chop(1);
 
-        if(host.length() > 0 && host[host.length() - 1] == QLatin1Char(':'))
-          host.chop(1);
+    bool ok = false;
+    uint32_t ident = match.captured(2).toUInt(&ok);
 
-        bool ok = false;
-        uint32_t ident = match.captured(2).toUInt(&ok);
-
-        if(ok)
-        {
-          remoteHost = host;
-          remoteIdent = ident;
-        }
-      }
+    if(ok)
+    {
+      remoteHost = host;
+      remoteIdent = ident;
+    }
+    else
+    {
+      qCritical() << "--targetcontrol parameter" << match.captured(1) << "malformed";
+      return 1;
     }
   }
 
-  QList<QString> pyscripts;
+  QString crashReportPath;
+  if(parser.isSet(crashReport))
+    crashReportPath = parser.value(crashReport);
 
-  for(int i = 0; i + 1 < argc; i++)
+  QStringList pyscripts = parser.values(python);
+
+  // load the first filename in the positional arguments.
+  QStringList remaining = parser.positionalArguments();
+
+  QString filename;
+  for(int i = 0; i < remaining.count(); i++)
   {
-    QString a = QString::fromUtf8(argv[i]);
-    if(!QString::compare(a, lit("--python"), Qt::CaseInsensitive) ||
-       !QString::compare(a, lit("--py"), Qt::CaseInsensitive) ||
-       !QString::compare(a, lit("--script"), Qt::CaseInsensitive))
+    const QString &fn = remaining[i];
+    QFileInfo checkFile(fn);
+    if(checkFile.exists() && checkFile.isFile())
     {
-      QString f = QString::fromUtf8(argv[i + 1]);
-      QFileInfo checkFile(f);
-      if(checkFile.exists() && checkFile.isFile())
-      {
-        pyscripts.push_back(f);
-      }
+      filename = fn;
+      remaining.removeAt(i);
+      break;
     }
   }
 
-  if(argc > 1)
-  {
-    filename = QString::fromUtf8(argv[argc - 1]);
-    QFileInfo checkFile(filename);
-    if(!checkFile.exists() || !checkFile.isFile() || checkFile.suffix().toLower() == lit("py"))
-      filename = QString();
-  }
-
-  QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-  QGuiApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
-
-  QApplication application(argc, argv);
+  RegisterMetatypeConversions();
 
   {
     PersistantConfig config;
@@ -161,7 +279,7 @@ int main(int argc, char *argv[])
         dir.mkpath(configPath);
     }
 
-    QString configFilename = ConfigFilePath(lit("UI.config"));
+    QString configFilename = configFilePath(lit("UI.config"));
 
     if(!config.Load(configFilename))
     {
@@ -171,6 +289,9 @@ int main(int argc, char *argv[])
               "Error loading config file\n%1\nA default config is loaded and will be saved out.")
               .arg(configFilename));
     }
+
+    if(!config.Analytics_TotalOptOut)
+      Analytics::Load();
 
     bool isDarkTheme = IsDarkTheme();
 
@@ -190,22 +311,63 @@ int main(int argc, char *argv[])
 
     GUIInvoke::init();
 
-    PythonContext::GlobalInit();
-
     {
       GlobalEnvironment env;
 #if defined(RENDERDOC_PLATFORM_LINUX)
       env.xlibDisplay = QX11Info::display();
 #endif
-      RENDERDOC_InitGlobalEnv(env, rdctype::array<rdctype::str>());
+      rdcarray<rdcstr> coreargs;
+      if(!crashReportPath.isEmpty())
+        coreargs.push_back("--crash");
+      for(const QString &arg : remaining)
+        coreargs.push_back(arg);
+      RENDERDOC_InitGlobalEnv(env, coreargs);
     }
 
+    if(!crashReportPath.isEmpty())
     {
+      QFile f(crashReportPath);
+
+      if(f.exists() && f.open(QIODevice::ReadOnly | QIODevice::Text))
+      {
+        QVariantMap json = JSONToVariant(QString::fromUtf8(f.readAll()));
+
+        if(json.contains(lit("report")))
+        {
+          CrashDialog dialog(config, json);
+
+          RDDialog::show(&dialog);
+        }
+      }
+    }
+    else
+    {
+      PythonContext::GlobalInit();
+
       CaptureContext ctx(filename, remoteHost, remoteIdent, temp, config);
+
+      Analytics::Prompt(ctx, config);
+
+      ANALYTIC_SET(Environment.RenderDocVersion, lit(FULL_VERSION_STRING));
+#if defined(DISTRIBUTION_VERSION)
+      ANALYTIC_SET(Environment.DistributionVersion, lit(DISTRIBUTION_NAME));
+#endif
+      ANALYTIC_SET(Environment.Bitness, ((sizeof(void *) == sizeof(uint64_t)) ? 64 : 32));
+      ANALYTIC_SET(Environment.OSVersion, QSysInfo::prettyProductName());
+
+#if RENDERDOC_STABLE_BUILD
+      ANALYTIC_SET(Environment.OfficialBuildRun, true);
+#else
+      ANALYTIC_SET(Environment.DevelBuildRun, true);
+#endif
+
+      ANALYTIC_SET(DaysUsed[QDateTime::currentDateTime().date().day()], true);
 
       if(!pyscripts.isEmpty())
       {
         PythonContextHandle py;
+
+        ANALYTIC_SET(UIFeatures.PythonInterop, true);
 
         py.ctx().setGlobal("pyrenderdoc", (ICaptureContext *)&ctx);
 
@@ -216,8 +378,7 @@ int main(int argc, char *argv[])
 
                            if(!frames.isEmpty())
                            {
-                             exString += QApplication::translate(
-                                 "qrenderdoc", "Traceback (most recent call last):\n");
+                             exString += tr("Traceback (most recent call last):\n");
                              for(const QString &f : frames)
                                exString += QFormatStr("  %1\n").arg(f);
                            }
@@ -237,9 +398,24 @@ int main(int argc, char *argv[])
 
         for(const QString &f : pyscripts)
         {
-          qInfo() << "running" << f;
-          py.ctx().executeFile(f);
+          QFileInfo checkFile(f);
+          if(checkFile.exists() && checkFile.isFile())
+          {
+            qInfo() << "running" << f;
+            py.ctx().executeFile(f);
+          }
+          else
+          {
+            qWarning() << "Invalid python script" << f;
+          }
         }
+      }
+
+      if(updateApplied)
+      {
+        config.CheckUpdate_UpdateAvailable = false;
+        config.CheckUpdate_UpdateResponse = "";
+        config.Save();
       }
 
       while(ctx.isRunning())
@@ -251,6 +427,7 @@ int main(int argc, char *argv[])
 
       config.Save();
     }
+
     PythonContext::GlobalShutdown();
 
     Formatter::shutdown();

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +26,7 @@
 
 #include <QFrame>
 #include <QIcon>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
 namespace Ui
 {
@@ -41,7 +41,7 @@ class QTextStream;
 class FlowLayout;
 struct EventItemTag;
 
-class EventBrowser : public QFrame, public IEventBrowser, public ILogViewer
+class EventBrowser : public QFrame, public IEventBrowser, public ICaptureViewer
 {
 private:
   Q_OBJECT
@@ -55,11 +55,11 @@ public:
   // IEventBrowser
   QWidget *Widget() override { return this; }
   void UpdateDurationColumn() override;
-  // ILogViewerForm
-  void OnLogfileLoaded() override;
-  void OnLogfileClosed() override;
-  void OnSelectedEventChanged(uint32_t eventID) override {}
-  void OnEventChanged(uint32_t eventID) override;
+  // ICaptureViewer
+  void OnCaptureLoaded() override;
+  void OnCaptureClosed() override;
+  void OnSelectedEventChanged(uint32_t eventId) override {}
+  void OnEventChanged(uint32_t eventId) override;
 
   QVariant persistData();
   void setPersistData(const QVariant &persistData);
@@ -96,13 +96,13 @@ public slots:
 
 private:
   QPair<uint32_t, uint32_t> AddDrawcalls(RDTreeWidgetItem *parent,
-                                         const rdctype::array<DrawcallDescription> &draws);
-  void SetDrawcallTimes(RDTreeWidgetItem *node, const rdctype::array<CounterResult> &results);
+                                         const rdcarray<DrawcallDescription> &draws);
+  void SetDrawcallTimes(RDTreeWidgetItem *node, const rdcarray<CounterResult> &results);
 
   void ExpandNode(RDTreeWidgetItem *node);
 
-  bool FindEventNode(RDTreeWidgetItem *&found, RDTreeWidgetItem *parent, uint32_t eventID);
-  bool SelectEvent(uint32_t eventID);
+  bool FindEventNode(RDTreeWidgetItem *&found, RDTreeWidgetItem *parent, uint32_t eventId);
+  bool SelectEvent(uint32_t eventId);
 
   void ClearFindIcons(RDTreeWidgetItem *parent);
   void ClearFindIcons();
@@ -110,6 +110,7 @@ private:
   int SetFindIcons(RDTreeWidgetItem *parent, QString filter);
   int SetFindIcons(QString filter);
 
+  void repopulateBookmarks();
   void highlightBookmarks();
   bool hasBookmark(RDTreeWidgetItem *node);
 
@@ -129,14 +130,13 @@ private:
 
   TimeUnit m_TimeUnit = TimeUnit::Count;
 
-  rdctype::array<CounterResult> m_Times;
+  rdcarray<CounterResult> m_Times;
 
   QTimer *m_FindHighlight;
 
   FlowLayout *m_BookmarkStripLayout;
   QSpacerItem *m_BookmarkSpacer;
-  QList<int> m_Bookmarks;
-  QList<QToolButton *> m_BookmarkButtons;
+  QMap<uint32_t, QToolButton *> m_BookmarkButtons;
 
   void RefreshIcon(RDTreeWidgetItem *item, EventItemTag tag);
 

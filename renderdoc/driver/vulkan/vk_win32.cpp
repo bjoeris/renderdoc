@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,11 +27,10 @@
 
 static int dllLocator = 0;
 
-void VulkanReplay::OutputWindow::SetWindowHandle(WindowingSystem system, void *data)
+void VulkanReplay::OutputWindow::SetWindowHandle(WindowingData window)
 {
-  RDCASSERT(system == WindowingSystem::Win32, system);
-  wnd = (HWND)data;
-  m_WindowSystem = system;
+  RDCASSERT(window.system == WindowingSystem::Win32, window.system);
+  wnd = window.win32.window;
 }
 
 void VulkanReplay::OutputWindow::CreateSurface(VkInstance inst)
@@ -129,7 +128,7 @@ VkResult WrappedVulkan::vkCreateWin32SurfaceKHR(VkInstance instance,
                                                 VkSurfaceKHR *pSurface)
 {
   // should not come in here at all on replay
-  RDCASSERT(m_State >= WRITING);
+  RDCASSERT(IsCaptureMode(m_State));
 
   VkResult ret =
       ObjDisp(instance)->CreateWin32SurfaceKHR(Unwrap(instance), pCreateInfo, pAllocator, pSurface);
@@ -214,7 +213,7 @@ bool ProcessImplicitLayersKey(HKEY key, const std::wstring &path,
 {
   bool thisRegistered = false;
 
-  wchar_t name[1024] = {};
+  wchar_t name[1025] = {};
   DWORD nameSize = 1024;
   DWORD idx = 0;
 

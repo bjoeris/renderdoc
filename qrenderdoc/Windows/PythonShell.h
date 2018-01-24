@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,7 @@
 #pragma once
 
 #include <QFrame>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
 class PythonContext;
 class ScintillaEdit;
@@ -61,9 +61,11 @@ private slots:
 
   // manual slots
   void interactive_keypress(QKeyEvent *e);
+  void helpSearch_keypress(QKeyEvent *e);
   void traceLine(const QString &file, int line);
   void exception(const QString &type, const QString &value, int finalLine, QList<QString> frames);
   void textOutput(bool isStdError, const QString &output);
+  void editor_contextMenu(const QPoint &pos);
 
 private:
   Ui::PythonShell *ui;
@@ -79,7 +81,17 @@ private:
   QList<QString> history;
   int historyidx = -1;
 
+  QString m_storedLines;
+
+  QString getDottedWordAtPoint(int scintillaPos);
+
   PythonContext *newContext();
+  PythonContext *newImportedDummyContext();
+  void setGlobals(PythonContext *ret);
+
+  void startAutocomplete();
+  void selectedHelp(QString word);
+  void refreshCurrentHelp();
 
   QString scriptHeader();
   void appendText(QTextEdit *output, const QString &text);

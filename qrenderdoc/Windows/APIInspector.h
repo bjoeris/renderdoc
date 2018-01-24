@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,14 +25,16 @@
 #pragma once
 
 #include <QFrame>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
 namespace Ui
 {
 class APIInspector;
 }
 
-class APIInspector : public QFrame, public IAPIInspector, public ILogViewer
+class RDTreeWidgetItem;
+
+class APIInspector : public QFrame, public IAPIInspector, public ICaptureViewer
 {
   Q_OBJECT
 
@@ -43,11 +45,11 @@ public:
   // IAPIInspector
   QWidget *Widget() override { return this; }
   void Refresh() override { on_apiEvents_itemSelectionChanged(); }
-  // ILogViewerForm
-  void OnLogfileLoaded() override;
-  void OnLogfileClosed() override;
-  void OnSelectedEventChanged(uint32_t eventID) override;
-  void OnEventChanged(uint32_t eventID) override {}
+  // ICaptureViewer
+  void OnCaptureLoaded() override;
+  void OnCaptureClosed() override;
+  void OnSelectedEventChanged(uint32_t eventId) override;
+  void OnEventChanged(uint32_t eventId) override {}
 public slots:
   void on_apiEvents_itemSelectionChanged();
 
@@ -55,6 +57,6 @@ private:
   Ui::APIInspector *ui;
   ICaptureContext &m_Ctx;
 
-  void addCallstack(rdctype::array<rdctype::str> calls);
+  void addCallstack(rdcarray<rdcstr> calls);
   void fillAPIView();
 };

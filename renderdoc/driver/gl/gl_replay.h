@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -35,7 +35,6 @@ using std::map;
 
 class WrappedOpenGL;
 struct GLCounterContext;
-struct DrawcallTreeNode;
 
 struct GLPostVSData
 {
@@ -94,15 +93,20 @@ public:
   void SetDriver(WrappedOpenGL *d) { m_pDriver = d; }
   APIProperties GetAPIProperties();
 
-  vector<ResourceId> GetBuffers();
+  ResourceDescription &GetResourceDesc(ResourceId id);
+  const std::vector<ResourceDescription> &GetResources();
+
+  std::vector<ResourceId> GetBuffers();
   BufferDescription GetBuffer(ResourceId id);
 
-  vector<ResourceId> GetTextures();
+  std::vector<ResourceId> GetTextures();
   TextureDescription GetTexture(ResourceId id);
+
+  rdcarray<ShaderEntryPoint> GetShaderEntryPoints(ResourceId shader);
   ShaderReflection *GetShader(ResourceId shader, string entryPoint);
 
   vector<string> GetDisassemblyTargets();
-  string DisassembleShader(const ShaderReflection *refl, const string &target);
+  string DisassembleShader(ResourceId pipeline, const ShaderReflection *refl, const string &target);
 
   vector<DebugMessage> GetDebugMessages();
 
@@ -117,10 +121,11 @@ public:
   const VKPipe::State &GetVulkanPipelineState() { return m_VKState; }
   void FreeTargetResource(ResourceId id);
 
-  void ReadLogInitialisation();
+  ReplayStatus ReadLogInitialisation(RDCFile *rdc, bool storeStructuredBuffers);
   void ReplayLog(uint32_t endEventID, ReplayLogType replayType);
+  const SDFile &GetStructuredFile();
 
-  vector<uint32_t> GetPassEvents(uint32_t eventID);
+  vector<uint32_t> GetPassEvents(uint32_t eventId);
 
   vector<WindowingSystem> GetSupportedWindowSystems()
   {
@@ -134,7 +139,7 @@ public:
     return ret;
   }
 
-  uint64_t MakeOutputWindow(WindowingSystem system, void *data, bool depth);
+  uint64_t MakeOutputWindow(WindowingData window, bool depth);
   void DestroyOutputWindow(uint64_t id);
   bool CheckResizeOutputWindow(uint64_t id);
   void GetOutputWindowDimensions(uint64_t id, int32_t &w, int32_t &h);
@@ -144,7 +149,7 @@ public:
   bool IsOutputWindowVisible(uint64_t id);
   void FlipOutputWindow(uint64_t id);
 
-  void InitPostVSBuffers(uint32_t eventID);
+  void InitPostVSBuffers(uint32_t eventId);
   void InitPostVSBuffers(const vector<uint32_t> &passEvents);
 
   ResourceId GetLiveID(ResourceId id);
@@ -155,20 +160,20 @@ public:
                     CompType typeHint, float minval, float maxval, bool channels[4],
                     vector<uint32_t> &histogram);
 
-  MeshFormat GetPostVSBuffers(uint32_t eventID, uint32_t instID, MeshDataStage stage);
+  MeshFormat GetPostVSBuffers(uint32_t eventId, uint32_t instID, MeshDataStage stage);
 
-  void GetBufferData(ResourceId buff, uint64_t offset, uint64_t len, vector<byte> &ret);
-  byte *GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
-                       const GetTextureDataParams &params, size_t &dataSize);
+  void GetBufferData(ResourceId buff, uint64_t offset, uint64_t len, bytebuf &ret);
+  void GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
+                      const GetTextureDataParams &params, bytebuf &data);
 
   void ReplaceResource(ResourceId from, ResourceId to);
   void RemoveReplacement(ResourceId id);
 
   vector<GPUCounter> EnumerateCounters();
-  void DescribeCounter(GPUCounter counterID, CounterDescription &desc);
+  CounterDescription DescribeCounter(GPUCounter counterID);
   vector<CounterResult> FetchCounters(const vector<GPUCounter> &counters);
 
-  void RenderMesh(uint32_t eventID, const vector<MeshFormat> &secondaryDraws, const MeshDisplay &cfg);
+  void RenderMesh(uint32_t eventId, const vector<MeshFormat> &secondaryDraws, const MeshDisplay &cfg);
 
   void BuildTargetShader(string source, string entry, const ShaderCompileFlags &compileFlags,
                          ShaderStage type, ResourceId *id, string *errors);
@@ -190,22 +195,23 @@ public:
   void RenderHighlightBox(float w, float h, float scale);
 
   void FillCBufferVariables(ResourceId shader, string entryPoint, uint32_t cbufSlot,
-                            vector<ShaderVariable> &outvars, const vector<byte> &data);
+                            vector<ShaderVariable> &outvars, const bytebuf &data);
 
   vector<PixelModification> PixelHistory(vector<EventUsage> events, ResourceId target, uint32_t x,
                                          uint32_t y, uint32_t slice, uint32_t mip,
                                          uint32_t sampleIdx, CompType typeHint);
-  ShaderDebugTrace DebugVertex(uint32_t eventID, uint32_t vertid, uint32_t instid, uint32_t idx,
+  ShaderDebugTrace DebugVertex(uint32_t eventId, uint32_t vertid, uint32_t instid, uint32_t idx,
                                uint32_t instOffset, uint32_t vertOffset);
-  ShaderDebugTrace DebugPixel(uint32_t eventID, uint32_t x, uint32_t y, uint32_t sample,
+  ShaderDebugTrace DebugPixel(uint32_t eventId, uint32_t x, uint32_t y, uint32_t sample,
                               uint32_t primitive);
-  ShaderDebugTrace DebugThread(uint32_t eventID, const uint32_t groupid[3],
+  ShaderDebugTrace DebugThread(uint32_t eventId, const uint32_t groupid[3],
                                const uint32_t threadid[3]);
   void PickPixel(ResourceId texture, uint32_t x, uint32_t y, uint32_t sliceFace, uint32_t mip,
                  uint32_t sample, CompType typeHint, float pixel[4]);
-  uint32_t PickVertex(uint32_t eventID, const MeshDisplay &cfg, uint32_t x, uint32_t y);
+  uint32_t PickVertex(uint32_t eventId, int32_t width, int32_t height, const MeshDisplay &cfg,
+                      uint32_t x, uint32_t y);
 
-  ResourceId RenderOverlay(ResourceId id, CompType typeHint, DebugOverlay overlay, uint32_t eventID,
+  ResourceId RenderOverlay(ResourceId id, CompType typeHint, DebugOverlay overlay, uint32_t eventId,
                            const vector<uint32_t> &passEvents);
   ResourceId ApplyCustomShader(ResourceId shader, ResourceId texid, uint32_t mip, uint32_t arrayIdx,
                                uint32_t sampleIdx, CompType typeHint);
@@ -222,10 +228,6 @@ public:
   bool IsRenderOutput(ResourceId id);
 
   void FileChanged() {}
-  void InitCallstackResolver();
-  bool HasCallstacks();
-  Callstack::StackResolver *GetCallstackResolver();
-
   // called before any context is created, to init any counters
   static void PreContextInitCounters();
   // called after any context is destroyed, to do corresponding shutdown of counters
@@ -236,18 +238,18 @@ public:
   bool IsReplayContext(void *ctx) { return m_ReplayCtx.ctx == NULL || ctx == m_ReplayCtx.ctx; }
 private:
   void FillCBufferValue(WrappedOpenGL &gl, GLuint prog, bool bufferBacked, bool rowMajor,
-                        uint32_t offs, uint32_t matStride, const vector<byte> &data,
+                        uint32_t offs, uint32_t matStride, const bytebuf &data,
                         ShaderVariable &outVar);
-  void FillCBufferVariables(WrappedOpenGL &gl, GLuint prog, bool bufferBacked, string prefix,
-                            const rdctype::array<ShaderConstant> &variables,
-                            vector<ShaderVariable> &outvars, const vector<byte> &data);
+  void FillCBufferVariables(WrappedOpenGL &gl, GLuint prog, bool bufferBacked, std::string prefix,
+                            const rdcarray<ShaderConstant> &variables,
+                            std::vector<ShaderVariable> &outvars, const bytebuf &data);
 
   void CreateCustomShaderTex(uint32_t w, uint32_t h);
   void SetupOverlayPipeline(GLuint Program, GLuint Pipeline, GLuint fragProgram);
 
   void CopyArrayToTex2DMS(GLuint destMS, GLuint srcArray, GLint width, GLint height,
                           GLint arraySize, GLint samples, GLenum intFormat);
-  void CopyTex2DMSToArray(GLuint destArray, GLuint srcMS, GLint width, GLint height,
+  void CopyTex2DMSToArray(GLuint &destArray, GLuint srcMS, GLint width, GLint height,
                           GLint arraySize, GLint samples, GLenum intFormat);
 
   struct OutputWindow : public GLWindowingData
@@ -257,11 +259,11 @@ private:
     struct
     {
       // used to blit from defined FBO (VAOs not shared)
-      GLuint emptyVAO;
+      GLuint emptyVAO = 0;
 
       // textures for the below FBO. Resize with the window
-      GLuint backbuffer;
-      GLuint depthstencil;
+      GLuint backbuffer = 0;
+      GLuint depthstencil = 0;
 
       // this FBO is on the debug GL context, not the window's GL context
       // when rendering a texture or mesh etc, we render onto this FBO on
@@ -269,18 +271,18 @@ private:
       // on the window's GL context.
       // This is so we don't have to re-create any non-shared resource we
       // need for debug rendering on the window's GL context.
-      GLuint windowFBO;
+      GLuint windowFBO = 0;
 
       // this FBO is the same as the above, but on the replay context,
       // for any cases where we need to use the replay context (like
       // re-rendering a draw).
-      GLuint replayFBO;
+      GLuint replayFBO = 0;
 
       // read FBO for blit to window
-      GLuint readFBO;
+      GLuint readFBO = 0;
     } BlitData;
 
-    int width, height;
+    int width = 1, height = 1;
   };
 
   // any objects that are shared between contexts, we just initialise
@@ -367,8 +369,10 @@ private:
 
   HighlightCache m_HighlightCache;
 
-  // eventID -> data
+  // eventId -> data
   map<uint32_t, GLPostVSData> m_PostVSData;
+
+  void ClearPostVSCache();
 
   // cache the previous data returned
   ResourceId m_GetTexturePrevID;
@@ -384,7 +388,7 @@ private:
   // called before the context is destroyed, to shutdown any counters
   void PreContextShutdownCounters();
 
-  void FillTimers(GLCounterContext &ctx, const DrawcallTreeNode &drawnode,
+  void FillTimers(GLCounterContext &ctx, const DrawcallDescription &drawnode,
                   const vector<GPUCounter> &counters);
 
   GLuint CreateShaderProgram(const vector<string> &vs, const vector<string> &fs,
@@ -413,6 +417,9 @@ private:
   map<ResourceId, TextureDescription> m_CachedTextures;
 
   WrappedOpenGL *m_pDriver;
+
+  std::vector<ResourceDescription> m_Resources;
+  std::map<ResourceId, size_t> m_ResourceIdx;
 
   GLPipe::State m_CurPipelineState;
   D3D11Pipe::State m_D3D11State;

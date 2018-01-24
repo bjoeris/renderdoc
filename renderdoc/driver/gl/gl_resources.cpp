@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,6 +25,53 @@
 
 #include "gl_resources.h"
 #include "gl_hookset.h"
+#include "gl_manager.h"
+
+template <>
+std::string DoStringise(const GLNamespace &el)
+{
+  BEGIN_ENUM_STRINGISE(GLNamespace)
+  {
+    STRINGISE_ENUM_NAMED(eResUnknown, "Unknown");
+    STRINGISE_ENUM_NAMED(eResSpecial, "Special Resource");
+    STRINGISE_ENUM_NAMED(eResTexture, "Texture");
+    STRINGISE_ENUM_NAMED(eResSampler, "Sampler");
+    STRINGISE_ENUM_NAMED(eResFramebuffer, "Framebuffer");
+    STRINGISE_ENUM_NAMED(eResRenderbuffer, "Renderbuffer");
+    STRINGISE_ENUM_NAMED(eResBuffer, "Buffer");
+    STRINGISE_ENUM_NAMED(eResVertexArray, "Vertex Array");
+    STRINGISE_ENUM_NAMED(eResShader, "Shader");
+    STRINGISE_ENUM_NAMED(eResProgram, "Program");
+    STRINGISE_ENUM_NAMED(eResProgramPipe, "Program Pipeline");
+    STRINGISE_ENUM_NAMED(eResFeedback, "Transform Feedback");
+    STRINGISE_ENUM_NAMED(eResQuery, "Query");
+    STRINGISE_ENUM_NAMED(eResSync, "Sync");
+  }
+  END_ENUM_STRINGISE();
+}
+
+template <typename SerialiserType>
+void DoSerialise(SerialiserType &ser, GLResource &el)
+{
+  GLResourceManager *rm = (GLResourceManager *)ser.GetUserData();
+
+  ResourceId id;
+
+  if(ser.IsWriting() && rm && el.name)
+    id = rm->GetID(el);
+
+  DoSerialise(ser, id);
+
+  if(ser.IsReading())
+  {
+    if(id != ResourceId() && rm && rm->HasLiveResource(id))
+      el = rm->GetLiveResource(id);
+    else
+      el = GLResource(MakeNullResource);
+  }
+}
+
+INSTANTIATE_SERIALISE_TYPE(GLResource);
 
 byte GLResourceRecord::markerValue[32] = {
     0xaa, 0xbb, 0xcc, 0xdd, 0x88, 0x77, 0x66, 0x55, 0x01, 0x23, 0x45, 0x67, 0x98, 0x76, 0x54, 0x32,
@@ -34,7 +81,7 @@ size_t GetCompressedByteSize(GLsizei w, GLsizei h, GLsizei d, GLenum internalfor
 {
   if(!IsCompressedFormat(internalformat))
   {
-    RDCERR("Not compressed format %s", ToStr::Get(internalformat).c_str());
+    RDCERR("Not compressed format %s", ToStr(internalformat).c_str());
     return GetByteSize(w, h, d, GetBaseFormat(internalformat), GetDataType(internalformat));
   }
 
@@ -214,7 +261,7 @@ size_t GetCompressedByteSize(GLsizei w, GLsizei h, GLsizei d, GLenum internalfor
     return blocks[0] * blocks[1] * 16 * d;
   }
 
-  RDCERR("Unrecognised compressed format %s", ToStr::Get(internalformat).c_str());
+  RDCERR("Unrecognised compressed format %s", ToStr(internalformat).c_str());
   return GetByteSize(w, h, d, GetBaseFormat(internalformat), GetDataType(internalformat));
 }
 
@@ -257,7 +304,7 @@ size_t GetByteSize(GLsizei w, GLsizei h, GLsizei d, GLenum format, GLenum type)
     case eGL_UNSIGNED_INT_24_8: return w * h * d * 4;
     case eGL_DEPTH32F_STENCIL8:
     case eGL_FLOAT_32_UNSIGNED_INT_24_8_REV: return w * h * d * 8;
-    default: RDCERR("Unhandled Byte Size type %s!", ToStr::Get(type).c_str()); break;
+    default: RDCERR("Unhandled Byte Size type %s!", ToStr(type).c_str()); break;
   }
 
   switch((int)format)
@@ -285,7 +332,7 @@ size_t GetByteSize(GLsizei w, GLsizei h, GLsizei d, GLenum format, GLenum type)
     case eGL_RGBA_INTEGER:
     case eGL_BGRA:
     case eGL_BGRA_INTEGER: return w * h * d * elemSize * 4;
-    default: RDCERR("Unhandled Byte Size format %s!", ToStr::Get(type).c_str()); break;
+    default: RDCERR("Unhandled Byte Size format %s!", ToStr(type).c_str()); break;
   }
 
   RDCERR("Unhandled Byte Size case!");
@@ -385,7 +432,7 @@ GLenum GetBaseFormat(GLenum internalFormat)
     default: break;
   }
 
-  RDCERR("Unhandled Base Format case %s!", ToStr::Get(internalFormat).c_str());
+  RDCERR("Unhandled Base Format case %s!", ToStr(internalFormat).c_str());
 
   return eGL_NONE;
 }
@@ -476,7 +523,7 @@ GLenum GetDataType(GLenum internalFormat)
     default: break;
   }
 
-  RDCERR("Unhandled Data Type case %s!", ToStr::Get(internalFormat).c_str());
+  RDCERR("Unhandled Data Type case %s!", ToStr(internalFormat).c_str());
 
   return eGL_NONE;
 }
@@ -975,7 +1022,7 @@ GLenum TextureBinding(GLenum target)
     default: break;
   }
 
-  RDCERR("Unexpected target %s", ToStr::Get(target).c_str());
+  RDCERR("Unexpected target %s", ToStr(target).c_str());
   return eGL_NONE;
 }
 
@@ -1001,7 +1048,7 @@ GLenum BufferBinding(GLenum target)
     default: break;
   }
 
-  RDCERR("Unexpected target %s", ToStr::Get(target).c_str());
+  RDCERR("Unexpected target %s", ToStr(target).c_str());
   return eGL_NONE;
 }
 
@@ -1015,7 +1062,7 @@ GLenum FramebufferBinding(GLenum target)
     default: break;
   }
 
-  RDCERR("Unexpected target %s", ToStr::Get(target).c_str());
+  RDCERR("Unexpected target %s", ToStr(target).c_str());
   return eGL_NONE;
 }
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,6 +30,45 @@
 #ifndef WSA_FLAG_NO_HANDLE_INHERIT
 #define WSA_FLAG_NO_HANDLE_INHERIT 0x80
 #endif
+
+#ifndef WSA_FLAG_OVERLAPPED
+#define WSA_FLAG_OVERLAPPED 0x01
+#endif
+
+static std::string wsaerr_string(int err)
+{
+  switch(err)
+  {
+    case WSAEWOULDBLOCK:
+      return "WSAEWOULDBLOCK: A non-blocking socket operation could not be completed immediately";
+    case WSAEADDRINUSE:
+      return "WSAEADDRINUSE: Only one usage of each socket address (protocol/network address/port) "
+             "is normally permitted.";
+    case WSAENETDOWN: return "WSAENETDOWN: A socket operation encountered a dead network.";
+    case WSAENETUNREACH:
+      return "WSAENETUNREACH: A socket operation was attempted to an unreachable network.";
+    case WSAENETRESET:
+      return "WSAENETRESET: The connection has been broken due to keep-alive activity detecting a "
+             "failure while the operation was in progress.";
+    case WSAECONNABORTED:
+      return "WSAECONNABORTED: An established connection was aborted by the software in your host "
+             "machine.";
+    case WSAECONNRESET:
+      return "WSAECONNRESET: An existing connection was forcibly closed by the remote host.";
+    case WSAETIMEDOUT: return "WSAETIMEDOUT: A socket operation timed out.";
+    case WSAECONNREFUSED:
+      return "WSAECONNREFUSED: No connection could be made because the target machine actively "
+             "refused "
+             "it.";
+    case WSAEHOSTDOWN:
+      return "WSAEHOSTDOWN: A socket operation failed because the destination host was down.";
+    case WSAEHOSTUNREACH:
+      return "WSAETIMEDOUT: A socket operation was attempted to an unreachable host.";
+    default: break;
+  }
+
+  return StringFormat::Fmt("Unknown error %d", err);
+}
 
 namespace Network
 {
@@ -95,7 +134,7 @@ Socket *Socket::AcceptClient(bool wait)
 
     if(err != WSAEWOULDBLOCK)
     {
-      RDCWARN("accept: %d", err);
+      RDCWARN("accept: %s", wsaerr_string(err).c_str());
       Shutdown();
     }
 
@@ -117,7 +156,11 @@ bool Socket::SendDataBlocking(const void *buf, uint32_t length)
   u_long enable = 0;
   ioctlsocket(socket, FIONBIO, &enable);
 
-  DWORD timeout = 3000;
+  DWORD oldtimeout = 0;
+  int len = sizeof(oldtimeout);
+  getsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (char *)&oldtimeout, &len);
+
+  DWORD timeout = timeoutMS;
   setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (const char *)&timeout, sizeof(timeout));
 
   while(sent < length)
@@ -130,11 +173,13 @@ bool Socket::SendDataBlocking(const void *buf, uint32_t length)
 
       if(err == WSAEWOULDBLOCK)
       {
-        ret = 0;
+        RDCWARN("Timeout in send");
+        Shutdown();
+        return false;
       }
       else
       {
-        RDCWARN("send: %d", err);
+        RDCWARN("send: %s", wsaerr_string(err).c_str());
         Shutdown();
         return false;
       }
@@ -147,8 +192,7 @@ bool Socket::SendDataBlocking(const void *buf, uint32_t length)
   enable = 1;
   ioctlsocket(socket, FIONBIO, &enable);
 
-  timeout = 600000;
-  setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (const char *)&timeout, sizeof(timeout));
+  setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (const char *)&oldtimeout, sizeof(oldtimeout));
 
   RDCASSERT(sent == length);
 
@@ -175,13 +219,45 @@ bool Socket::IsRecvDataWaiting()
     }
     else
     {
-      RDCWARN("recv: %d", err);
+      RDCWARN("recv: %s", wsaerr_string(err).c_str());
       Shutdown();
       return false;
     }
   }
 
   return ret > 0;
+}
+
+bool Socket::RecvDataNonBlocking(void *buf, uint32_t &length)
+{
+  if(length == 0)
+    return true;
+
+  // socket is already blocking, don't have to change anything
+  int ret = recv(socket, (char *)buf, length, 0);
+
+  if(ret > 0)
+  {
+    length = (uint32_t)ret;
+  }
+  else
+  {
+    length = 0;
+    int err = WSAGetLastError();
+
+    if(err == WSAEWOULDBLOCK)
+    {
+      return true;
+    }
+    else
+    {
+      RDCWARN("recv: %s", wsaerr_string(err).c_str());
+      Shutdown();
+      return false;
+    }
+  }
+
+  return true;
 }
 
 bool Socket::RecvDataBlocking(void *buf, uint32_t length)
@@ -196,7 +272,11 @@ bool Socket::RecvDataBlocking(void *buf, uint32_t length)
   u_long enable = 0;
   ioctlsocket(socket, FIONBIO, &enable);
 
-  DWORD timeout = 3000;
+  DWORD oldtimeout = 0;
+  int len = sizeof(oldtimeout);
+  getsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&oldtimeout, &len);
+
+  DWORD timeout = timeoutMS;
   setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof(timeout));
 
   while(received < length)
@@ -214,11 +294,13 @@ bool Socket::RecvDataBlocking(void *buf, uint32_t length)
 
       if(err == WSAEWOULDBLOCK)
       {
-        ret = 0;
+        RDCWARN("Timeout in recv");
+        Shutdown();
+        return false;
       }
       else
       {
-        RDCWARN("recv: %d", err);
+        RDCWARN("recv: %s", wsaerr_string(err).c_str());
         Shutdown();
         return false;
       }
@@ -231,8 +313,7 @@ bool Socket::RecvDataBlocking(void *buf, uint32_t length)
   enable = 1;
   ioctlsocket(socket, FIONBIO, &enable);
 
-  timeout = 600000;
-  setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof(timeout));
+  setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&oldtimeout, sizeof(oldtimeout));
 
   RDCASSERT(received == length);
 
@@ -241,7 +322,8 @@ bool Socket::RecvDataBlocking(void *buf, uint32_t length)
 
 Socket *CreateServerSocket(const char *bindaddr, uint16_t port, int queuesize)
 {
-  SOCKET s = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_NO_HANDLE_INHERIT);
+  SOCKET s = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0,
+                       WSA_FLAG_NO_HANDLE_INHERIT | WSA_FLAG_OVERLAPPED);
 
   if(s == INVALID_SOCKET)
     return NULL;
@@ -299,7 +381,8 @@ Socket *CreateClientSocket(const char *host, uint16_t port, int timeoutMS)
 
   for(addrinfoW *ptr = addrResult; ptr != NULL; ptr = ptr->ai_next)
   {
-    SOCKET s = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, WSA_FLAG_NO_HANDLE_INHERIT);
+    SOCKET s = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0,
+                         WSA_FLAG_NO_HANDLE_INHERIT | WSA_FLAG_OVERLAPPED);
 
     if(s == INVALID_SOCKET)
       return NULL;
@@ -310,13 +393,15 @@ Socket *CreateClientSocket(const char *host, uint16_t port, int timeoutMS)
     int result = connect(s, ptr->ai_addr, (int)ptr->ai_addrlen);
     if(result == SOCKET_ERROR)
     {
-      fd_set set;
-      FD_ZERO(&set);
+      fd_set setW = {}, setE = {};
+      FD_ZERO(&setW);
+      FD_ZERO(&setE);
 
 // macro FD_SET contains the do { } while(0) idiom, which warns
 #pragma warning(push)
 #pragma warning(disable : 4127)    // conditional expression is constant
-      FD_SET(s, &set);
+      FD_SET(s, &setW);
+      FD_SET(s, &setE);
 #pragma warning(pop)
 
       int err = WSAGetLastError();
@@ -326,18 +411,24 @@ Socket *CreateClientSocket(const char *host, uint16_t port, int timeoutMS)
         timeval timeout;
         timeout.tv_sec = (timeoutMS / 1000);
         timeout.tv_usec = (timeoutMS % 1000) * 1000;
-        result = select((int)s + 1, NULL, &set, NULL, &timeout);
+        result = select((int)s + 1, NULL, &setW, &setE, &timeout);
 
-        if(result <= 0)
+        socklen_t len = sizeof(err);
+        getsockopt(s, SOL_SOCKET, SO_ERROR, (char *)&err, &len);
+
+        // if select never returned, if the timeout is less than 1 second we treat it as a
+        // connection refused. This is inaccurate but we don't want to have to wait a full second
+        // for the connect to time out. On Winsock there seems to be a minimum of 1 second before
+        // it will actually return connection refused.
+        if(result <= 0 && timeoutMS <= 1000)
         {
-          RDCDEBUG("connect timed out");
-          closesocket(s);
-          continue;
+          err = WSAECONNREFUSED;
         }
       }
-      else
+
+      if(err != 0)
       {
-        RDCWARN("Error connecting to %s:%d - %d", host, port, err);
+        RDCDEBUG("%s", wsaerr_string(err).c_str());
         closesocket(s);
         continue;
       }
@@ -349,6 +440,7 @@ Socket *CreateClientSocket(const char *host, uint16_t port, int timeoutMS)
     return new Socket((ptrdiff_t)s);
   }
 
+  RDCDEBUG("Failed to connect to %s:%d", host, port);
   return NULL;
 }
 
@@ -357,6 +449,13 @@ bool ParseIPRangeCIDR(const char *str, uint32_t &ip, uint32_t &mask)
   uint32_t a = 0, b = 0, c = 0, d = 0, num = 0;
 
   int ret = sscanf_s(str, "%u.%u.%u.%u/%u", &a, &b, &c, &d, &num);
+
+  if(ret != 5 || a > 255 || b > 255 || c > 255 || d > 255 || num > 32)
+  {
+    ip = 0;
+    mask = 0;
+    return false;
+  }
 
   ip = MakeIP(a, b, c, d);
 
@@ -370,6 +469,6 @@ bool ParseIPRangeCIDR(const char *str, uint32_t &ip, uint32_t &mask)
     mask = ((~0U) >> num) << num;
   }
 
-  return ret == 5;
+  return true;
 }
 };

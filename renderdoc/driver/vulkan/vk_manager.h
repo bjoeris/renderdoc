@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -37,8 +37,8 @@ class VulkanResourceManager
     : public ResourceManager<WrappedVkRes *, TypedRealHandle, VkResourceRecord>
 {
 public:
-  VulkanResourceManager(LogState s, Serialiser *ser, WrappedVulkan *core)
-      : ResourceManager(s, ser), m_Core(core)
+  VulkanResourceManager(CaptureState state, WrappedVulkan *core)
+      : ResourceManager(), m_State(state), m_Core(core)
   {
   }
   ~VulkanResourceManager() {}
@@ -48,14 +48,12 @@ public:
     // be calling Shutdown() after the device that owns them is destroyed. Instead
     // we just have to leak ourselves.
     RDCASSERT(m_LiveResourceMap.empty());
-    RDCASSERT(m_InframeResourceMap.empty());
     RDCASSERT(m_InitialContents.empty());
     RDCASSERT(m_ResourceRecords.empty());
     RDCASSERT(m_CurrentResourceMap.empty());
     RDCASSERT(m_WrapperMap.empty());
 
     m_LiveResourceMap.clear();
-    m_InframeResourceMap.clear();
     m_InitialContents.clear();
     m_ResourceRecords.clear();
     m_CurrentResourceMap.clear();
@@ -114,8 +112,9 @@ public:
   void ApplyBarriers(vector<pair<ResourceId, ImageRegionState> > &states,
                      map<ResourceId, ImageLayouts> &layouts);
 
-  void SerialiseImageStates(map<ResourceId, ImageLayouts> &states,
-                            vector<VkImageMemoryBarrier> &barriers);
+  template <typename SerialiserType>
+  void SerialiseImageStates(SerialiserType &ser, std::map<ResourceId, ImageLayouts> &states,
+                            std::vector<VkImageMemoryBarrier> &barriers);
 
   ResourceId GetID(WrappedVkRes *res)
   {
@@ -143,11 +142,11 @@ public:
     typename UnwrapHelper<realtype>::Outer *wrapped =
         new typename UnwrapHelper<realtype>::Outer(obj, id);
 
-    SetTableIfDispatchable(m_State >= WRITING, parentObj, m_Core, wrapped);
+    SetTableIfDispatchable(IsCaptureMode(m_State), parentObj, m_Core, wrapped);
 
     AddCurrentResource(id, wrapped);
 
-    if(m_State < WRITING)
+    if(IsReplayMode(m_State))
       AddWrapper(wrapped, ToTypedHandle(obj));
 
     obj = realtype((uint64_t)wrapped);
@@ -164,7 +163,7 @@ public:
     if(origit != m_OriginalIDs.end())
       EraseLiveResource(origit->second);
 
-    if(m_State < WRITING)
+    if(IsReplayMode(m_State))
       ResourceManager::RemoveWrapper(ToTypedHandle(Unwrap(obj)));
 
     ResourceManager::ReleaseCurrentResource(id);
@@ -177,7 +176,14 @@ public:
       // either allocation or freeing happens, so we only need to
       // lock against concurrent allocs or deletes of children.
 
-      if(record && record->bakedCommands)
+      if(ToTypedHandle(obj).type == eResCommandBuffer && record->cmdInfo &&
+         record->cmdInfo->allocRecord)
+      {
+        record->cmdInfo->allocRecord->Delete(this);
+        record->cmdInfo->allocRecord = NULL;
+      }
+
+      if(record->bakedCommands)
       {
         record->bakedCommands->Delete(this);
         record->bakedCommands = NULL;
@@ -264,9 +270,11 @@ private:
   bool AllowDeletedResource_InitialState() { return true; }
   bool Need_InitialStateChunk(WrappedVkRes *res);
   bool Prepare_InitialState(WrappedVkRes *res);
-  bool Serialise_InitialState(ResourceId resid, WrappedVkRes *res);
+  uint32_t GetSize_InitialState(ResourceId id, WrappedVkRes *res);
+  bool Serialise_InitialState(WriteSerialiser &ser, ResourceId resid, WrappedVkRes *res);
   void Create_InitialState(ResourceId id, WrappedVkRes *live, bool hasData);
   void Apply_InitialState(WrappedVkRes *live, InitialContentData initial);
 
+  CaptureState m_State;
   WrappedVulkan *m_Core;
 };

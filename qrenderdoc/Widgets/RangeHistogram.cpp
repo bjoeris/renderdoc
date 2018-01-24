@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -139,8 +139,6 @@ void RangeHistogram::mousePressEvent(QMouseEvent *e)
     return;
 
   QRect r = rect();
-
-  r.marginsRemoved(QMargins(totalSpace(), totalSpace(), totalSpace(), totalSpace()));
 
   int whiteX = (int)(whiteDelta() * r.width());
   int blackX = (int)(blackDelta() * r.width());

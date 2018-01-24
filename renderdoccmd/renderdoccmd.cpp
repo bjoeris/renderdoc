@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -28,18 +28,31 @@
 #include <replay/version.h>
 #include <string>
 
+// normally this is in the renderdoc core library, but it's needed for the 'unknown enum' path,
+// so we implement it here using ostringstream. It's not great, but this is a very uncommon path -
+// either for invalid values or for when a new enum is added and the code isn't updated
+template <>
+std::string DoStringise(const uint32_t &el)
+{
+  std::ostringstream oss;
+  oss << el;
+  return oss.str();
+}
+
+#include <replay/renderdoc_tostr.inl>
+
 using std::string;
 using std::wstring;
 
 bool usingKillSignal = false;
 volatile bool killSignal = false;
 
-rdctype::array<rdctype::str> convertArgs(const std::vector<std::string> &args)
+rdcarray<rdcstr> convertArgs(const std::vector<std::string> &args)
 {
-  rdctype::array<rdctype::str> ret;
-  ret.create((int)args.size());
+  rdcarray<rdcstr> ret;
+  ret.reserve(args.size());
   for(size_t i = 0; i < args.size(); i++)
-    ret[i] = args[i];
+    ret.push_back(args[i]);
   return ret;
 }
 
@@ -59,43 +72,43 @@ void DisplayRendererPreview(IReplayController *renderer, uint32_t width, uint32_
   if(renderer == NULL)
     return;
 
-  rdctype::array<TextureDescription> texs = renderer->GetTextures();
+  rdcarray<TextureDescription> texs = renderer->GetTextures();
 
   TextureDisplay d;
   d.mip = 0;
   d.sampleIdx = ~0U;
   d.overlay = DebugOverlay::NoOverlay;
   d.typeHint = CompType::Typeless;
-  d.CustomShader = ResourceId();
-  d.HDRMul = -1.0f;
+  d.customShaderId = ResourceId();
+  d.hdrMultiplier = -1.0f;
   d.linearDisplayAsGamma = true;
-  d.FlipY = false;
-  d.rangemin = 0.0f;
-  d.rangemax = 1.0f;
+  d.flipY = false;
+  d.rangeMin = 0.0f;
+  d.rangeMax = 1.0f;
   d.scale = 1.0f;
-  d.offx = 0.0f;
-  d.offy = 0.0f;
+  d.xOffset = 0.0f;
+  d.yOffset = 0.0f;
   d.sliceFace = 0;
-  d.rawoutput = false;
-  d.Red = d.Green = d.Blue = true;
-  d.Alpha = false;
+  d.rawOutput = false;
+  d.red = d.green = d.blue = true;
+  d.alpha = false;
 
-  for(int32_t i = 0; i < texs.count; i++)
+  for(const TextureDescription &desc : texs)
   {
-    if(texs[i].creationFlags & TextureCategory::SwapBuffer)
+    if(desc.creationFlags & TextureCategory::SwapBuffer)
     {
-      d.texid = texs[i].ID;
+      d.resourceId = desc.resourceId;
       break;
     }
   }
 
-  rdctype::array<DrawcallDescription> draws = renderer->GetDrawcalls();
+  rdcarray<DrawcallDescription> draws = renderer->GetDrawcalls();
 
-  if(draws.count > 0 && draws[draws.count - 1].flags & DrawFlags::Present)
+  if(!draws.empty() && draws.back().flags & DrawFlags::Present)
   {
-    ResourceId id = draws[draws.count - 1].copyDestination;
+    ResourceId id = draws.back().copyDestination;
     if(id != ResourceId())
-      d.texid = id;
+      d.resourceId = id;
   }
 
   DisplayRendererPreview(renderer, d, width, height);
@@ -171,7 +184,7 @@ struct VersionCommand : public Command
   virtual int Execute(cmdline::parser &parser, const CaptureOptions &)
   {
     std::cout << "renderdoccmd " << (sizeof(uintptr_t) == sizeof(uint64_t) ? "x64" : "x86")
-              << " v" MAJOR_MINOR_VERSION_STRING << " built from " << GIT_COMMIT_HASH << std::endl;
+              << " v" MAJOR_MINOR_VERSION_STRING << " built from " << GitVersionHash << std::endl;
 
 #if defined(DISTRIBUTION_VERSION)
     std::cout << "Packaged for " << DISTRIBUTION_NAME << " (" << DISTRIBUTION_VERSION << ") - "
@@ -244,6 +257,8 @@ struct ThumbCommand : public Command
 
     string format = parser.get<string>("format");
 
+    uint32_t maxsize = parser.get<uint32_t>("max-size");
+
     FileType type = FileType::JPG;
 
     if(format == "png")
@@ -268,21 +283,24 @@ struct ThumbCommand : public Command
         type = FileType::TGA;
       else if(dot != NULL && strstr(dot, "bmp"))
         type = FileType::BMP;
+      else if(dot != NULL && strstr(dot, "jpg"))
+        type = FileType::JPG;
       else
         std::cerr << "Couldn't guess format from '" << outfile << "', defaulting to jpg."
                   << std::endl;
     }
 
-    rdctype::array<byte> buf;
+    bytebuf buf;
 
-    ICaptureFile *file = RENDERDOC_OpenCaptureFile(filename.c_str());
-    if(file->OpenStatus() == ReplayStatus::Succeeded)
+    ICaptureFile *file = RENDERDOC_OpenCaptureFile();
+    ReplayStatus st = file->OpenFile(filename.c_str(), "rdc");
+    if(st == ReplayStatus::Succeeded)
     {
-      buf = file->GetThumbnail(FileType::JPG, 0);
+      buf = file->GetThumbnail(type, maxsize).data;
     }
     else
     {
-      std::cerr << "Couldn't open '" << filename << "'" << std::endl;
+      std::cerr << "Couldn't open '" << filename << "': " << ToStr(st) << std::endl;
     }
     file->Shutdown();
 
@@ -300,7 +318,7 @@ struct ThumbCommand : public Command
       }
       else
       {
-        fwrite(buf.elems, 1, buf.count, f);
+        fwrite(buf.data(), 1, buf.size(), f);
         fclose(f);
 
         std::cout << "Wrote thumbnail from '" << filename << "' to '" << outfile << "'." << std::endl;
@@ -345,7 +363,7 @@ struct CaptureCommand : public Command
       cmdLine += EscapeArgument(parser.rest()[i]);
     }
 
-    RENDERDOC_InitGlobalEnv(m_Env, rdctype::array<rdctype::str>());
+    RENDERDOC_InitGlobalEnv(m_Env, rdcarray<rdcstr>());
 
     std::cout << "Launching '" << executable << "'";
 
@@ -354,7 +372,7 @@ struct CaptureCommand : public Command
 
     std::cout << std::endl;
 
-    rdctype::array<EnvironmentModification> env;
+    rdcarray<EnvironmentModification> env;
 
     uint32_t ident = RENDERDOC_ExecuteAndInject(
         executable.c_str(), workingDir.empty() ? "" : workingDir.c_str(),
@@ -419,7 +437,7 @@ struct InjectCommand : public Command
 
     std::cout << "Injecting into PID " << PID << std::endl;
 
-    rdctype::array<EnvironmentModification> env;
+    rdcarray<EnvironmentModification> env;
 
     RENDERDOC_InitGlobalEnv(m_Env, convertArgs(parser.rest()));
 
@@ -456,6 +474,7 @@ struct RemoteServerCommand : public Command
         "host", 'h', "The interface to listen on. By default listens on all interfaces", false, "");
     parser.add<uint32_t>("port", 'p', "The port to listen on.", false,
                          RENDERDOC_GetDefaultRemoteServerPort());
+    parser.add("preview", 'v', "Display a preview window when a replay is active.");
   }
   virtual const char *Description()
   {
@@ -481,7 +500,19 @@ struct RemoteServerCommand : public Command
 
     usingKillSignal = true;
 
-    RENDERDOC_BecomeRemoteServer(host.empty() ? NULL : host.c_str(), port, &killSignal);
+    // by default have a do-nothing callback that creates no windows
+    RENDERDOC_PreviewWindowCallback previewWindow;
+
+    // if the user asked for a preview, then call to the platform-specific preview function
+    if(parser.exist("preview"))
+      previewWindow = &DisplayRemoteServerPreview;
+
+    // OR if the platform-specific preview function always has a window, then return it anyway.
+    if(DisplayRemoteServerPreview(false, {}).system != WindowingSystem::Unknown)
+      previewWindow = &DisplayRemoteServerPreview;
+
+    RENDERDOC_BecomeRemoteServer(host.empty() ? NULL : host.c_str(), port,
+                                 []() { return killSignal; }, previewWindow);
 
     std::cerr << std::endl << "Cleaning up from replay hosting." << std::endl;
 
@@ -536,8 +567,9 @@ struct ReplayCommand : public Command
 
       if(remote == NULL || status != ReplayStatus::Succeeded)
       {
-        std::cerr << "Error: Couldn't connect to " << parser.get<string>("remote-host") << ":"
-                  << parser.get<uint32_t>("remote-port") << "." << std::endl;
+        std::cerr << "Error: " << ToStr(status) << " - Couldn't connect to "
+                  << parser.get<string>("remote-host") << ":" << parser.get<uint32_t>("remote-port")
+                  << "." << std::endl;
         std::cerr << "       Have you run renderdoccmd remoteserver on '"
                   << parser.get<string>("remote-host") << "'?" << std::endl;
         return 1;
@@ -545,10 +577,10 @@ struct ReplayCommand : public Command
 
       std::cerr << "Copying capture file to remote server" << std::endl;
 
-      rdctype::str remotePath = remote->CopyCaptureToRemote(filename.c_str(), NULL);
+      rdcstr remotePath = remote->CopyCaptureToRemote(filename.c_str(), NULL);
 
       IReplayController *renderer = NULL;
-      std::tie(status, renderer) = remote->OpenCapture(~0U, remotePath.elems, NULL);
+      std::tie(status, renderer) = remote->OpenCapture(~0U, remotePath.c_str(), NULL);
 
       if(status == ReplayStatus::Succeeded)
       {
@@ -559,7 +591,7 @@ struct ReplayCommand : public Command
       }
       else
       {
-        std::cerr << "Couldn't load and replay '" << filename << "'." << std::endl;
+        std::cerr << "Couldn't load and replay '" << filename << "': " << ToStr(status) << std::endl;
       }
 
       remote->ShutdownConnection();
@@ -568,9 +600,9 @@ struct ReplayCommand : public Command
     {
       std::cout << "Replaying '" << filename << "' locally.." << std::endl;
 
-      ICaptureFile *file = RENDERDOC_OpenCaptureFile(filename.c_str());
+      ICaptureFile *file = RENDERDOC_OpenCaptureFile();
 
-      if(file->OpenStatus() != ReplayStatus::Succeeded)
+      if(file->OpenFile(filename.c_str(), "rdc") != ReplayStatus::Succeeded)
       {
         std::cerr << "Couldn't load '" << filename << "'." << std::endl;
         return 1;
@@ -591,10 +623,143 @@ struct ReplayCommand : public Command
       }
       else
       {
-        std::cerr << "Couldn't load and replay '" << filename << "'." << std::endl;
+        std::cerr << "Couldn't load and replay '" << filename << "': " << ToStr(status) << std::endl;
         return 1;
       }
     }
+    return 0;
+  }
+};
+
+struct ConvertCommand : public Command
+{
+  rdcarray<CaptureFileFormat> m_Formats;
+
+  ConvertCommand(const GlobalEnvironment &env) : Command(env)
+  {
+    ICaptureFile *tmp = RENDERDOC_OpenCaptureFile();
+
+    m_Formats = tmp->GetCaptureFileFormats();
+
+    tmp->Shutdown();
+  }
+
+  virtual void AddOptions(cmdline::parser &parser)
+  {
+    cmdline::oneof_reader<string> formatOptions;
+    for(CaptureFileFormat f : m_Formats)
+      formatOptions.add(f.name);
+
+    parser.add<string>("filename", 'f', "The file to convert from.", false);
+    parser.add<string>("output", 'o', "The file to convert to.", false);
+    parser.add<string>("input-format", 'i', "The format of the input file.", false, "",
+                       formatOptions);
+    parser.add<string>("convert-format", 'c', "The format of the output file.", false, "",
+                       formatOptions);
+    parser.add("list-formats", '\0', "Print a list of target formats.");
+    parser.stop_at_rest(true);
+  }
+  virtual const char *Description() { return "Convert between capture formats."; }
+  virtual bool IsInternalOnly() { return false; }
+  virtual bool IsCaptureCommand() { return false; }
+  virtual int Execute(cmdline::parser &parser, const CaptureOptions &)
+  {
+    if(parser.exist("list-formats"))
+    {
+      std::cout << "Available formats:" << std::endl;
+      for(CaptureFileFormat f : m_Formats)
+        std::cout << "'" << (std::string)f.name << "': " << (std::string)f.description << std::endl;
+      return 0;
+    }
+
+    std::string infile = parser.get<string>("filename");
+    std::string outfile = parser.get<string>("output");
+
+    if(infile.empty())
+    {
+      std::cerr << "Need an input filename (-f)." << std::endl << std::endl;
+      std::cerr << parser.usage() << std::endl;
+      return 1;
+    }
+
+    if(outfile.empty())
+    {
+      std::cerr << "Need an output filename (-o)." << std::endl << std::endl;
+      std::cerr << parser.usage() << std::endl;
+      return 1;
+    }
+
+    std::string infmt = parser.get<string>("input-format");
+    std::string outfmt = parser.get<string>("convert-format");
+
+    if(infmt.empty())
+    {
+      // try to guess the format by looking for the extension in the filename
+      for(CaptureFileFormat f : m_Formats)
+      {
+        string extension = ".";
+        extension += f.name;
+
+        if(infile.find(extension.c_str()) != string::npos)
+        {
+          infmt = f.name;
+          break;
+        }
+      }
+    }
+
+    if(infmt.empty())
+    {
+      std::cerr << "Couldn't guess input format from filename." << std::endl << std::endl;
+      std::cerr << parser.usage() << std::endl;
+      return 1;
+    }
+
+    if(outfmt.empty())
+    {
+      // try to guess the format by looking for the extension in the filename
+      for(CaptureFileFormat f : m_Formats)
+      {
+        string extension = ".";
+        extension += f.name;
+
+        if(outfile.find(extension.c_str()) != string::npos)
+        {
+          outfmt = f.name;
+          break;
+        }
+      }
+    }
+
+    if(outfmt.empty())
+    {
+      std::cerr << "Couldn't guess output format from filename." << std::endl << std::endl;
+      std::cerr << parser.usage() << std::endl;
+      return 1;
+    }
+
+    ICaptureFile *file = RENDERDOC_OpenCaptureFile();
+
+    ReplayStatus st = file->OpenFile(infile.c_str(), infmt.c_str());
+
+    if(st != ReplayStatus::Succeeded)
+    {
+      std::cerr << "Couldn't load '" << infile << "' as '" << infmt << "': " << ToStr(st)
+                << std::endl;
+      return 1;
+    }
+
+    st = file->Convert(outfile.c_str(), outfmt.c_str(), NULL);
+
+    if(st != ReplayStatus::Succeeded)
+    {
+      std::cerr << "Couldn't convert '" << infile << "' to '" << outfile << "' as '" << outfmt
+                << "': " << ToStr(st) << std::endl;
+      return 1;
+    }
+
+    std::cout << "Converted '" << infile << "' to '" << outfile << "'" << std::endl;
+
     return 0;
   }
 };
@@ -642,7 +807,7 @@ struct CapAltBitCommand : public Command
     CaptureOptions cmdopts;
     readCapOpts(parser.get<string>("capopts").c_str(), &cmdopts);
 
-    RENDERDOC_InitGlobalEnv(m_Env, rdctype::array<rdctype::str>());
+    RENDERDOC_InitGlobalEnv(m_Env, rdcarray<rdcstr>());
 
     std::vector<std::string> rest = parser.rest();
 
@@ -654,8 +819,8 @@ struct CapAltBitCommand : public Command
 
     int numEnvs = int(rest.size() / 3);
 
-    rdctype::array<EnvironmentModification> env;
-    env.create(numEnvs);
+    rdcarray<EnvironmentModification> env;
+    env.reserve(numEnvs);
 
     for(int i = 0; i < numEnvs; i++)
     {
@@ -715,7 +880,8 @@ struct CapAltBitCommand : public Command
         return 0;
       }
 
-      env[i] = EnvironmentModification(type, sep, rest[i * 3 + 1].c_str(), rest[i * 3 + 2].c_str());
+      env.push_back(
+          EnvironmentModification(type, sep, rest[i * 3 + 1].c_str(), rest[i * 3 + 2].c_str()));
     }
 
     string debuglog = parser.get<string>("debuglog");
@@ -726,6 +892,223 @@ struct CapAltBitCommand : public Command
                                           parser.get<string>("log").c_str(), cmdopts, false);
 
     return ret;
+  }
+};
+
+struct EmbeddedSectionCommand : public Command
+{
+  bool m_Extract = false;
+  EmbeddedSectionCommand(const GlobalEnvironment &env, bool extract) : Command(env)
+  {
+    m_Extract = extract;
+  }
+  virtual void AddOptions(cmdline::parser &parser)
+  {
+    parser.set_footer("<capture.rdc>");
+    parser.add<std::string>("section", 's', "The embedded section name.");
+    parser.add<std::string>("file", 'f', m_Extract ? "The file to write the section contents to."
+                                                   : "The file to read the section contents from.");
+    parser.add("no-clobber", 'n', m_Extract ? "Don't overwrite the file if it already exists."
+                                            : "Don't overwrite the section if it already exists.");
+
+    if(!m_Extract)
+    {
+      parser.add("lz4", 0, "Use LZ4 to compress the data.");
+      parser.add("zstd", 0, "Use Zstandard to compress the data.");
+    }
+
+    parser.add("list-sections", 0, "Print a list of known sections.");
+  }
+  virtual const char *Description()
+  {
+    if(m_Extract)
+      return "Extract an arbitrary section of data from a capture.";
+    else
+      return "Inject an arbitrary section of data into a capture.";
+  }
+  virtual bool IsInternalOnly() { return false; }
+  virtual bool IsCaptureCommand() { return false; }
+  virtual int Execute(cmdline::parser &parser, const CaptureOptions &)
+  {
+    if(parser.exist("list-sections"))
+    {
+      std::cout << "Known sections:" << std::endl;
+      for(SectionType s : values<SectionType>())
+        std::cout << ToStr(s) << std::endl;
+      return 0;
+    }
+
+    std::vector<std::string> rest = parser.rest();
+    if(rest.empty())
+    {
+      std::cerr << "Error: this command requires a filename to load." << std::endl
+                << std::endl
+                << parser.usage();
+      return 0;
+    }
+
+    std::string rdc = rest[0];
+
+    rest.erase(rest.begin());
+
+    RENDERDOC_InitGlobalEnv(m_Env, convertArgs(rest));
+
+    std::string file = parser.get<std::string>("file");
+    std::string section = parser.get<std::string>("section");
+    bool noclobber = parser.exist("no-clobber");
+    bool lz4 = !m_Extract && parser.exist("lz4");
+    bool zstd = !m_Extract && parser.exist("zstd");
+
+    if(zstd && lz4)
+    {
+      std::cerr << "Can't compress with Zstandard and lz4 - ignoring lz4." << std::endl;
+      lz4 = false;
+    }
+
+    ICaptureFile *capfile = RENDERDOC_OpenCaptureFile();
+
+    ReplayStatus status = capfile->OpenFile(rdc.c_str(), "");
+
+    if(status != ReplayStatus::Succeeded)
+    {
+      capfile->Shutdown();
+      std::cerr << "Couldn't load '" << rdc << "': " << ToStr(status) << std::endl;
+      return 1;
+    }
+
+    if(m_Extract)
+    {
+      int idx = capfile->FindSectionByName(section.c_str());
+
+      if(idx < 0)
+      {
+        std::cerr << "'" << rdc << "' has no section called '" << section << "'" << std::endl;
+        std::cerr << "Available sections are:" << std::endl;
+
+        int num = capfile->GetSectionCount();
+
+        for(int i = 0; i < num; i++)
+          std::cerr << "    " << capfile->GetSectionProperties(i).name.c_str() << std::endl;
+
+        capfile->Shutdown();
+        return 1;
+      }
+
+      FILE *f = NULL;
+
+      if(noclobber)
+      {
+        bool exists = false;
+        f = fopen(file.c_str(), "rb");
+        if(f)
+        {
+          exists = true;
+          fclose(f);
+          f = NULL;
+        }
+
+        if(exists)
+        {
+          capfile->Shutdown();
+          std::cerr << "Refusing to overwrite '" << file << "'" << std::endl;
+          return 1;
+        }
+      }
+
+      f = fopen(file.c_str(), "wb");
+
+      if(!f)
+      {
+        capfile->Shutdown();
+        std::cerr << "Couldn't open destination file '" << file << "'" << std::endl;
+        return 1;
+      }
+      else
+      {
+        bytebuf blob = capfile->GetSectionContents(idx);
+
+        capfile->Shutdown();
+
+        fwrite(blob.data(), 1, blob.size(), f);
+        fclose(f);
+
+        std::cout << "Wrote '" << section << "' from '" << rdc << "' to '" << file << "'."
+                  << std::endl;
+      }
+    }
+    else    // insert/embed
+    {
+      int idx = capfile->FindSectionByName(section.c_str());
+
+      if(idx >= 0)
+      {
+        if(noclobber)
+        {
+          capfile->Shutdown();
+          std::cerr << "Refusing to overwrite section '" << section << "' in '" << rdc << "'"
+                    << std::endl;
+          return 1;
+        }
+        else
+        {
+          std::cout << "Overwriting section '" << section << "' in '" << rdc << "'" << std::endl;
+        }
+      }
+
+      FILE *f = fopen(file.c_str(), "rb");
+
+      if(!f)
+      {
+        capfile->Shutdown();
+        std::cerr << "Couldn't open source file '" << file << "'" << std::endl;
+        return 1;
+      }
+
+      bytebuf blob;
+
+      fseek(f, 0, SEEK_END);
+      int len = ftell(f);
+      fseek(f, 0, SEEK_SET);
+
+      if(len < 0)
+      {
+        len = 0;
+        std::cerr << "I/O error reading from '" << file << "'" << std::endl;
+      }
+
+      blob.resize((size_t)len);
+      size_t read = fread(blob.data(), 1, (size_t)len, f);
+
+      if(read != (size_t)len)
+        std::cerr << "I/O error reading from '" << file << "'" << std::endl;
+
+      fclose(f);
+
+      SectionProperties props;
+      props.name = section;
+
+      for(SectionType s : values<SectionType>())
+      {
+        if(ToStr(s) == section)
+        {
+          props.type = s;
+          break;
+        }
+      }
+
+      if(zstd)
+        props.flags |= SectionFlags::ZstdCompressed;
+      if(lz4)
+        props.flags |= SectionFlags::LZ4Compressed;
+
+      capfile->WriteSection(props, blob);
+
+      capfile->Shutdown();
+
+      std::cout << "Wrote '" << section << "' from '" << file << "' to '" << rdc << "'." << std::endl;
+    }
+
+    return 0;
   }
 };
 
@@ -763,6 +1146,9 @@ int renderdoccmd(const GlobalEnvironment &env, std::vector<std::string> &argv)
     add_command("replay", new ReplayCommand(env));
     add_command("capaltbit", new CapAltBitCommand(env));
     add_command("test", new TestCommand(env));
+    add_command("convert", new ConvertCommand(env));
+    add_command("embed", new EmbeddedSectionCommand(env, false));
+    add_command("extract", new EmbeddedSectionCommand(env, true));
 
     if(argv.size() <= 1)
     {
@@ -848,29 +1234,29 @@ int renderdoccmd(const GlobalEnvironment &env, std::vector<std::string> &argv)
     if(it->second->IsCaptureCommand())
     {
       if(cmd.exist("opt-disallow-vsync"))
-        opts.AllowVSync = false;
+        opts.allowVSync = false;
       if(cmd.exist("opt-disallow-fullscreen"))
-        opts.AllowFullscreen = false;
+        opts.allowFullscreen = false;
       if(cmd.exist("opt-api-validation"))
-        opts.APIValidation = true;
+        opts.apiValidation = true;
       if(cmd.exist("opt-api-validation-unmute"))
-        opts.DebugOutputMute = false;
+        opts.debugOutputMute = false;
       if(cmd.exist("opt-capture-callstacks"))
-        opts.CaptureCallstacks = true;
+        opts.captureCallstacks = true;
       if(cmd.exist("opt-capture-callstacks-only-draws"))
-        opts.CaptureCallstacksOnlyDraws = true;
+        opts.captureCallstacksOnlyDraws = true;
       if(cmd.exist("opt-verify-map-writes"))
-        opts.VerifyMapWrites = true;
+        opts.verifyMapWrites = true;
       if(cmd.exist("opt-hook-children"))
-        opts.HookIntoChildren = true;
+        opts.hookIntoChildren = true;
       if(cmd.exist("opt-ref-all-resources"))
-        opts.RefAllResources = true;
+        opts.refAllResources = true;
       if(cmd.exist("opt-save-all-initials"))
-        opts.SaveAllInitials = true;
+        opts.saveAllInitials = true;
       if(cmd.exist("opt-capture-all-cmd-lists"))
-        opts.CaptureAllCmdLists = true;
+        opts.captureAllCmdLists = true;
 
-      opts.DelayForDebugger = (uint32_t)cmd.get<int>("opt-delay-for-debugger");
+      opts.delayForDebugger = (uint32_t)cmd.get<int>("opt-delay-for-debugger");
     }
 
     if(cmd.exist("help"))

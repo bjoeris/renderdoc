@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -225,7 +225,8 @@ private:
       allocated[idx] = false;
 
 #if ENABLED(RDOC_DEVEL)
-      memset(p, 0xfe, DebugClear ? AllocByteSize : 0);
+      if(DebugClear)
+        memset(p, 0xfe, AllocByteSize);
 #endif
     }
 

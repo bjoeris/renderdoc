@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,10 +26,259 @@
 #include <sstream>
 #include "api/replay/version.h"
 #include "core/core.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
+
+// we use GIT_COMMIT_HASH here instead of GitVersionHash since the value is actually only used on
+// android - where GIT_COMMIT_HASH is available globally. We need to have it available in a static
+// initializer at compile time, which wouldn't be possible with GitVersionHash.
+#if !defined(GIT_COMMIT_HASH)
+#define GIT_COMMIT_HASH "NO_GIT_COMMIT_HASH_DEFINED_AT_BUILD_TIME"
+#endif
+
+extern "C" RENDERDOC_API const char RENDERDOC_Version_Tag_String[] =
+    "RenderDoc_build_version: " FULL_VERSION_STRING " from git commit " GIT_COMMIT_HASH;
 
 namespace Android
 {
+enum class ToolDir
+{
+  None,
+  Java,
+  BuildTools,
+  BuildToolsLib,
+  PlatformTools,
+};
+static const char keystoreName[] = "renderdoc.keystore";
+bool toolExists(const std::string &path)
+{
+  if(path.empty())
+    return false;
+  return FileIO::exists(path.c_str()) || FileIO::exists((path + ".exe").c_str());
+}
+std::string getToolInSDK(ToolDir subdir, const std::string &jdkroot, const std::string &sdkroot,
+                         const std::string &toolname)
+{
+  std::string toolpath;
+
+  switch(subdir)
+  {
+    case ToolDir::None:
+    {
+      // This indicates the file is not a standard tool and will not exist anywhere but our
+      // distributed folder.
+      break;
+    }
+    case ToolDir::Java:
+    {
+      // if no path is configured, abort
+      if(jdkroot.empty())
+        break;
+
+      toolpath = jdkroot + "/bin/" + toolname;
+
+      if(toolExists(toolpath))
+        return toolpath;
+
+      break;
+    }
+    case ToolDir::BuildTools:
+    case ToolDir::BuildToolsLib:
+    case ToolDir::PlatformTools:
+    {
+      // if no path is configured, abort
+      if(sdkroot.empty())
+        break;
+
+      // if it's in platform tools it's easy, just concatenate the path
+      if(subdir == ToolDir::PlatformTools)
+      {
+        toolpath = sdkroot + "/platform-tools/" + toolname;
+      }
+      else
+      {
+        // otherwise we need to find the build-tools versioned folder
+        toolpath = sdkroot + "/build-tools/";
+
+        std::vector<PathEntry> paths = FileIO::GetFilesInDirectory(toolpath.c_str());
+
+        if(paths.empty())
+          break;
+
+        uint32_t bestversion = 0;
+        std::string bestpath;
+
+        for(const PathEntry &path : paths)
+        {
+          // skip non-directories
+          if(!(path.flags & PathProperty::Directory))
+            continue;
+
+          uint32_t version = 0;
+          bool valid = true;
+          for(char c : path.filename)
+          {
+            // add digits to the version
+            if(c >= '0' && c <= '9')
+            {
+              int digit = int(c) - int('0');
+              version *= 10;
+              version += digit;
+              continue;
+            }
+
+            // ignore .s
+            if(c == '.')
+              continue;
+
+            // if any char is not in [.0-9] then this filename is invalid
+            valid = false;
+            break;
+          }
+
+          // skip non-valid directories
+          if(!valid)
+            continue;
+
+          // if this directory is a higher version, prefer it
+          if(version > bestversion)
+          {
+            bestversion = version;
+            bestpath = path.filename;
+          }
+        }
+
+        // if we didn't find a version at all, abort
+        if(bestversion == 0)
+          break;
+
+        toolpath += bestpath + "/";
+
+        if(subdir == ToolDir::BuildToolsLib)
+          toolpath += "lib/";
+
+        toolpath += toolname;
+      }
+
+      if(toolExists(toolpath))
+        return toolpath;
+
+      break;
+    }
+  }
+
+  return "";
+}
+struct ToolPathCache
+{
+  std::string sdk, jdk;
+  std::map<std::string, std::string> paths;
+} cache;
+std::string getToolPath(ToolDir subdir, const std::string &toolname, bool checkExist)
+{
+  // search path for tools:
+  // 1. First look relative to the configured paths, these come from the user manually setting them
+  //    so they always have priority.
+  // 2. Next if those paths don't exist or the tool isn't found, we search relative to our
+  //    executable looking for an android/ subfolder, and look for the tool in there.
+  // 3. If we still don't have that (most likely because it's a local build from a git clone and not
+  //    a distributed build with the tools available) then we fall back to trying to auto-locate it.
+  //    - First check if the tool is in the path, assuming the user configured it to their system.
+  //    - Otherwise check environment variables or default locations
+
+  std::string sdk = RenderDoc::Inst().GetConfigSetting("androidSDKPath");
+  std::string jdk = RenderDoc::Inst().GetConfigSetting("androidJDKPath");
+
+  // invalidate the cache when these settings change
+  if(sdk != cache.sdk || jdk != cache.jdk)
+  {
+    cache.paths.clear();
+    cache.sdk = sdk;
+    cache.jdk = jdk;
+  }
+
+  // if we have the path cached and it's still valid, return it
+  if(toolExists(cache.paths[toolname]))
+    return cache.paths[toolname];
+
+  std::string &toolpath = cache.paths[toolname];
+
+  // first try according to the configured paths
+  toolpath = getToolInSDK(subdir, jdk, sdk, toolname);
+
+  if(toolExists(toolpath))
+    return toolpath;
+
+  // next try to locate it in our own distributed android subfolder
+  {
+    std::string exepath;
+    FileIO::GetExecutableFilename(exepath);
+    std::string exedir = dirname(FileIO::GetFullPathname(exepath));
+
+    toolpath = exedir + "/android/" + toolname;
+    if(toolExists(toolpath))
+      return toolpath;
+  }
+
+  // need to try to auto-guess the tool's location
+
+  // first try in PATH
+  if(subdir != ToolDir::None)
+  {
+    toolpath = FileIO::FindFileInPath(toolname);
+
+    if(toolExists(toolpath))
+      return toolpath;
+
+    // if the tool name contains a .jar then try stripping that and look for the non-.jar version in
+    // the PATH.
+    if(toolname.find(".jar") != std::string::npos)
+    {
+      toolpath = toolname;
+      toolpath.erase(toolpath.rfind(".jar"), 4);
+      toolpath = FileIO::FindFileInPath(toolpath);
+
+      if(toolExists(toolpath))
+        return toolpath;
+    }
+  }
+
+  // now try to find it based on heuristics/environment variables
+  const char *env = Process::GetEnvVariable("JAVA_HOME");
+
+  jdk = env ? env : "";
+
+  env = Process::GetEnvVariable("ANDROID_HOME");
+  sdk = env ? env : "";
+
+  if(sdk.empty() || !FileIO::exists(sdk.c_str()))
+  {
+    env = Process::GetEnvVariable("ANDROID_SDK_ROOT");
+    sdk = env ? env : "";
+  }
+
+  if(sdk.empty() || !FileIO::exists(sdk.c_str()))
+  {
+    env = Process::GetEnvVariable("ANDROID_SDK");
+    sdk = env ? env : "";
+  }
+
+  // maybe in future we can try to search in common install locations.
+
+  toolpath = getToolInSDK(subdir, jdk, sdk, toolname);
+
+  if(toolExists(toolpath))
+    return toolpath;
+
+  toolpath = "";
+
+  // if we're checking for existence, we have failed so return empty string.
+  if(checkExist)
+    return toolpath;
+
+  // otherwise we at least return the tool name so that there's something to try and run
+  return toolname;
+}
+
 bool IsHostADB(const char *hostname)
 {
   return !strncmp(hostname, "adb:", 4);
@@ -65,49 +314,25 @@ Process::ProcessResult execScript(const string &script, const string &args,
   Process::LaunchScript(script.c_str(), workDir.c_str(), args.c_str(), &result);
   return result;
 }
-Process::ProcessResult execCommand(const string &cmd, const string &workDir = ".")
+Process::ProcessResult execCommand(const string &exe, const string &args,
+                                   const string &workDir = ".")
 {
-  RDCLOG("COMMAND: %s", cmd.c_str());
-
-  size_t firstSpace = cmd.find(" ");
-  string exe = cmd.substr(0, firstSpace);
-  string args = cmd.substr(firstSpace + 1, cmd.length());
+  RDCLOG("COMMAND: %s '%s'", exe.c_str(), args.c_str());
 
   Process::ProcessResult result;
   Process::LaunchProcess(exe.c_str(), workDir.c_str(), args.c_str(), &result);
   return result;
 }
-Process::ProcessResult adbExecCommand(const string &device, const string &args)
+Process::ProcessResult adbExecCommand(const string &device, const string &args, const string &workDir)
 {
-  string adbExePath = RenderDoc::Inst().GetConfigSetting("adbExePath");
-  if(adbExePath.empty())
-  {
-    string exepath;
-    FileIO::GetExecutableFilename(exepath);
-    string exedir = dirname(FileIO::GetFullPathname(exepath));
-
-    string adbpath = exedir + "/android/adb.exe";
-    if(FileIO::exists(adbpath.c_str()))
-      adbExePath = adbpath;
-
-    if(adbExePath.empty())
-    {
-      static bool warnPath = true;
-      if(warnPath)
-      {
-        RDCWARN("adbExePath not set, attempting to call 'adb' in working env");
-        warnPath = false;
-      }
-      adbExePath = "adb";
-    }
-  }
+  std::string adb = getToolPath(ToolDir::PlatformTools, "adb", false);
   Process::ProcessResult result;
   string deviceArgs;
   if(device.empty())
     deviceArgs = args;
   else
     deviceArgs = StringFormat::Fmt("-s %s %s", device.c_str(), args.c_str());
-  return execCommand(string(adbExePath + " " + deviceArgs).c_str());
+  return execCommand(adb, deviceArgs, workDir);
 }
 string adbGetDeviceList()
 {
@@ -115,13 +340,13 @@ string adbGetDeviceList()
 }
 void adbForwardPorts(int index, const std::string &deviceID)
 {
+  const char *forwardCommand = "forward tcp:%i localabstract:renderdoc_%i";
   int offs = RenderDoc_AndroidPortOffset * (index + 1);
-  adbExecCommand(deviceID,
-                 StringFormat::Fmt("forward tcp:%i tcp:%i", RenderDoc_RemoteServerPort + offs,
-                                   RenderDoc_RemoteServerPort));
-  adbExecCommand(deviceID,
-                 StringFormat::Fmt("forward tcp:%i tcp:%i", RenderDoc_FirstTargetControlPort + offs,
-                                   RenderDoc_FirstTargetControlPort));
+
+  adbExecCommand(deviceID, StringFormat::Fmt(forwardCommand, RenderDoc_RemoteServerPort + offs,
+                                             RenderDoc_RemoteServerPort));
+  adbExecCommand(deviceID, StringFormat::Fmt(forwardCommand, RenderDoc_FirstTargetControlPort + offs,
+                                             RenderDoc_FirstTargetControlPort));
 }
 uint32_t StartAndroidPackageForCapture(const char *host, const char *package)
 {
@@ -161,12 +386,13 @@ uint32_t StartAndroidPackageForCapture(const char *host, const char *package)
   return ret;
 }
 
-bool SearchForAndroidLayer(const string &deviceID, const string &location, const string &layerName)
+bool SearchForAndroidLayer(const string &deviceID, const string &location, const string &layerName,
+                           string &foundLayer)
 {
   RDCLOG("Checking for layers in: %s", location.c_str());
-  string findLayer =
-      adbExecCommand(deviceID, "shell find " + location + " -name " + layerName).strStdout;
-  if(!findLayer.empty())
+  foundLayer =
+      trim(adbExecCommand(deviceID, "shell find " + location + " -name " + layerName).strStdout);
+  if(!foundLayer.empty())
   {
     RDCLOG("Found RenderDoc layer in %s", location.c_str());
     return true;
@@ -178,8 +404,10 @@ bool RemoveAPKSignature(const string &apk)
 {
   RDCLOG("Checking for existing signature");
 
+  std::string aapt = getToolPath(ToolDir::BuildTools, "aapt", false);
+
   // Get the list of files in META-INF
-  string fileList = execCommand("aapt list " + apk).strStdout;
+  string fileList = execCommand(aapt, "list \"" + apk + "\"").strStdout;
   if(fileList.empty())
     return false;
 
@@ -196,7 +424,7 @@ bool RemoveAPKSignature(const string &apk)
     if(line.compare(0, prefix.size(), prefix) == 0)
     {
       RDCDEBUG("Match found, removing  %s", line.c_str());
-      execCommand("aapt remove " + apk + " " + line);
+      execCommand(aapt, "remove \"" + apk + "\" " + line);
       matchCount++;
     }
   }
@@ -204,7 +432,7 @@ bool RemoveAPKSignature(const string &apk)
 
   // Ensure no hits on second pass through
   RDCDEBUG("Walk through file list again, ensure signature removed");
-  fileList = execCommand("aapt list " + apk).strStdout;
+  fileList = execCommand(aapt, "list \"" + apk + "\"").strStdout;
   std::istringstream recheck(fileList);
   while(std::getline(recheck, line))
   {
@@ -222,10 +450,35 @@ bool AddLayerToAPK(const string &apk, const string &layerPath, const string &lay
 {
   RDCLOG("Adding RenderDoc layer");
 
+  std::string aapt = getToolPath(ToolDir::BuildTools, "aapt", false);
+
   // Run aapt from the directory containing "lib" so the relative paths are good
   string relativeLayer("lib/" + abi + "/" + layerName);
   string workDir = removeFromEnd(layerPath, relativeLayer);
-  Process::ProcessResult result = execCommand("aapt add " + apk + " " + relativeLayer, workDir);
+
+  // If the layer was already present in the APK, we need to remove it first
+  Process::ProcessResult contents = execCommand(aapt, "list \"" + apk + "\"", workDir);
+  if(contents.strStdout.empty())
+  {
+    RDCERR("Failed to list contents of APK. STDERR: %s", contents.strStderror.c_str());
+    return false;
+  }
+
+  if(contents.strStdout.find(relativeLayer) != std::string::npos)
+  {
+    RDCLOG("Removing existing layer from APK before trying to add");
+    Process::ProcessResult remove =
+        execCommand(aapt, "remove \"" + apk + "\" " + relativeLayer, workDir);
+
+    if(!remove.strStdout.empty())
+    {
+      RDCERR("Failed to remove existing layer from APK. STDERR: %s", remove.strStderror.c_str());
+      return false;
+    }
+  }
+
+  // Add the RenderDoc layer
+  Process::ProcessResult result = execCommand(aapt, "add \"" + apk + "\" " + relativeLayer, workDir);
 
   if(result.strStdout.empty())
   {
@@ -238,9 +491,12 @@ bool AddLayerToAPK(const string &apk, const string &layerPath, const string &lay
 
 bool RealignAPK(const string &apk, string &alignedAPK, const string &tmpDir)
 {
+  std::string zipalign = getToolPath(ToolDir::BuildTools, "zipalign", false);
+
   // Re-align the APK for performance
   RDCLOG("Realigning APK");
-  string errOut = execCommand("zipalign -f 4 " + apk + " " + alignedAPK, tmpDir).strStderror;
+  string errOut =
+      execCommand(zipalign, "-f 4 \"" + apk + "\" \"" + alignedAPK + "\"", tmpDir).strStderror;
 
   if(!errOut.empty())
     return false;
@@ -266,14 +522,22 @@ bool RealignAPK(const string &apk, string &alignedAPK, const string &tmpDir)
 
 string GetAndroidDebugKey()
 {
-  string key = FileIO::GetTempFolderFilename() + "debug.keystore";
+  std::string keystore = getToolPath(ToolDir::None, keystoreName, false);
+
+  // if we found the keystore, use that.
+  if(FileIO::exists(keystore.c_str()))
+    return keystore;
+
+  // otherwise, see if we generated a temporary one
+  string key = FileIO::GetTempFolderFilename() + keystoreName;
 
   if(FileIO::exists(key.c_str()))
     return key;
 
-  string create = "keytool";
+  // locate keytool and use it to generate a keystore
+  string create;
   create += " -genkey";
-  create += " -keystore " + key;
+  create += " -keystore \"" + key + "\"";
   create += " -storepass android";
   create += " -alias androiddebugkey";
   create += " -keypass android";
@@ -282,7 +546,9 @@ string GetAndroidDebugKey()
   create += " -validity 10000";
   create += " -dname \"CN=, OU=, O=, L=, S=, C=\"";
 
-  Process::ProcessResult result = execCommand(create);
+  std::string keytool = getToolPath(ToolDir::Java, "keytool", false);
+
+  Process::ProcessResult result = execCommand(keytool, create);
 
   if(!result.strStderror.empty())
     RDCERR("Failed to create debug key");
@@ -293,19 +559,42 @@ bool DebugSignAPK(const string &apk, const string &workDir)
 {
   RDCLOG("Signing with debug key");
 
+  std::string aapt = getToolPath(ToolDir::BuildTools, "aapt", false);
+  std::string apksigner = getToolPath(ToolDir::BuildToolsLib, "apksigner.jar", false);
+
   string debugKey = GetAndroidDebugKey();
 
   string args;
   args += " sign ";
-  args += " --ks " + debugKey + " ";
+  args += " --ks \"" + debugKey + "\" ";
   args += " --ks-pass pass:android ";
   args += " --key-pass pass:android ";
   args += " --ks-key-alias androiddebugkey ";
-  args += apk;
-  execScript("apksigner", args.c_str(), workDir.c_str());
+  args += "\"" + apk + "\"";
+
+  if(apksigner.find(".jar") == std::string::npos)
+  {
+    // if we found the non-jar version, then the jar wasn't located and we found the wrapper script
+    // in PATH. Execute it as a script
+    execScript(apksigner, args, workDir);
+  }
+  else
+  {
+    // otherwise, find and invoke java on the .jar
+    std::string java = getToolPath(ToolDir::Java, "java", false);
+
+    std::string signerdir = dirname(FileIO::GetFullPathname(apksigner));
+
+    std::string javaargs;
+    javaargs += " \"-Djava.ext.dirs=" + signerdir + "\"";
+    javaargs += " -jar \"" + apksigner + "\"";
+    javaargs += args;
+
+    execCommand(java, javaargs, workDir);
+  }
 
   // Check for signature
-  string list = execCommand("aapt list " + apk).strStdout;
+  string list = execCommand(aapt, "list \"" + apk + "\"").strStdout;
 
   // Walk through the output.  If it starts with META-INF, we're good
   std::istringstream contents(list);
@@ -328,7 +617,7 @@ bool UninstallOriginalAPK(const string &deviceID, const string &packageName, con
 {
   RDCLOG("Uninstalling previous version of application");
 
-  execCommand("adb uninstall " + packageName, workDir);
+  adbExecCommand(deviceID, "uninstall " + packageName, workDir);
 
   // Wait until uninstall completes
   string uninstallResult;
@@ -356,7 +645,7 @@ bool ReinstallPatchedAPK(const string &deviceID, const string &apk, const string
 {
   RDCLOG("Reinstalling APK");
 
-  execCommand("adb install --abi " + abi + " " + apk, workDir);
+  adbExecCommand(deviceID, "install --abi " + abi + " \"" + apk + "\"", workDir);
 
   // Wait until re-install completes
   string reinstallResult;
@@ -381,19 +670,41 @@ bool ReinstallPatchedAPK(const string &deviceID, const string &apk, const string
 
 bool CheckPatchingRequirements()
 {
-  // check for aapt, zipalign, apksigner, debug key
-  vector<string> requirements;
-  vector<string> missingTools;
-  requirements.push_back("aapt");
-  requirements.push_back("zipalign");
-  requirements.push_back("keytool");
-  requirements.push_back("apksigner");
-  requirements.push_back("java");
+  // check for required tools for patching
+  std::vector<std::pair<ToolDir, std::string>> requirements;
+  std::vector<std::string> missingTools;
+  requirements.push_back(std::make_pair(ToolDir::BuildTools, "aapt"));
+  requirements.push_back(std::make_pair(ToolDir::BuildTools, "zipalign"));
+  requirements.push_back(std::make_pair(ToolDir::BuildToolsLib, "apksigner.jar"));
+  requirements.push_back(std::make_pair(ToolDir::Java, "java"));
 
   for(uint32_t i = 0; i < requirements.size(); i++)
   {
-    if(FileIO::FindFileInPath(requirements[i]).empty())
-      missingTools.push_back(requirements[i]);
+    std::string tool = getToolPath(requirements[i].first, requirements[i].second, true);
+
+    // if we located the tool, we're fine.
+    if(toolExists(tool))
+      continue;
+
+    // didn't find it.
+    missingTools.push_back(requirements[i].second);
+  }
+
+  // keytool is special - we look for a debug key first
+  {
+    std::string key = getToolPath(ToolDir::None, keystoreName, true);
+
+    if(key.empty())
+    {
+      // if we don't have the debug key, check that we can find keytool. First in our normal search
+      std::string tool = getToolPath(ToolDir::Java, "keytool", true);
+
+      if(tool.empty())
+      {
+        // if not, it's missing too
+        missingTools.push_back("keytool");
+      }
+    }
   }
 
   if(missingTools.size() > 0)
@@ -410,7 +721,7 @@ bool PullAPK(const string &deviceID, const string &pkgPath, const string &apk)
 {
   RDCLOG("Pulling APK to patch");
 
-  adbExecCommand(deviceID, "pull " + pkgPath + " " + apk);
+  adbExecCommand(deviceID, "pull " + pkgPath + " \"" + apk + "\"");
 
   // Wait until the apk lands
   uint32_t elapsed = 0;
@@ -431,14 +742,52 @@ bool PullAPK(const string &deviceID, const string &pkgPath, const string &apk)
   return false;
 }
 
-bool CheckPermissions(const string &dump)
+bool CheckLayerVersion(const string &deviceID, const string &layerName, const string &remoteLayer)
 {
-  if(dump.find("android.permission.INTERNET") == string::npos)
+  RDCDEBUG("Checking layer version of: %s", layerName.c_str());
+
+  bool match = false;
+
+  // Use 'strings' command on the device to find the layer's build version
+  // i.e. strings -n <tag length> <layer> | grep <tag marker>
+  // Subtract 5 to provide a bit of wiggle room on version length
+  Process::ProcessResult result = adbExecCommand(
+      deviceID, "shell strings -n " +
+                    StringFormat::Fmt("%u", strlen(RENDERDOC_Version_Tag_String) - 5) + " " +
+                    remoteLayer + " | grep RenderDoc_build_version");
+
+  string line = trim(result.strStdout);
+
+  if(line.empty())
   {
-    RDCWARN("APK missing INTERNET permission");
+    RDCLOG("RenderDoc layer is not versioned, so cannot be checked for compatibility.");
     return false;
   }
 
+  std::vector<string> vec;
+  split(line, vec, ' ');
+  string version = vec[1];
+  string hash = vec[5];
+
+  if(version == FULL_VERSION_STRING && hash == GitVersionHash)
+  {
+    RDCLOG("RenderDoc layer version (%s) and git hash (%s) match.", version.c_str(), hash.c_str());
+    match = true;
+  }
+  else
+  {
+    RDCLOG(
+        "RenderDoc layer version (%s) and git hash (%s) do NOT match the host version (%s) or git "
+        "hash (%s).",
+        version.c_str(), hash.c_str(), FULL_VERSION_STRING, GitVersionHash);
+  }
+
+  return match;
+}
+
+bool CheckPermissions(const string &dump)
+{
+  // TODO: remove this if we are sure that there are no permissions to check.
   return true;
 }
 
@@ -446,7 +795,9 @@ bool CheckAPKPermissions(const string &apk)
 {
   RDCLOG("Checking that APK can be can write to sdcard");
 
-  string badging = execCommand("aapt dump badging " + apk).strStdout;
+  std::string aapt = getToolPath(ToolDir::BuildTools, "aapt", false);
+
+  string badging = execCommand(aapt, "dump badging \"" + apk + "\"").strStdout;
 
   if(badging.empty())
   {
@@ -460,9 +811,11 @@ bool CheckDebuggable(const string &apk)
 {
   RDCLOG("Checking that APK s debuggable");
 
-  string badging = execCommand("aapt dump badging " + apk).strStdout;
+  std::string aapt = getToolPath(ToolDir::BuildTools, "aapt", false);
 
-  if(badging.find("application-debuggable"))
+  string badging = execCommand(aapt, "dump badging \"" + apk + "\"").strStdout;
+
+  if(badging.find("application-debuggable") == string::npos)
   {
     RDCERR("APK is not debuggable");
     return false;
@@ -553,7 +906,10 @@ bool installRenderDocServer(const string &deviceID)
   abi_string_map["mips64"]      = Android_mips64;
   // clang-format on
 
-  // 32-bit server works for 32 and 64 bit apps, so install 32-bit matching ABI
+  // 32-bit server works for 32 and 64 bit apps
+  // For stable builds of the server, only 32-bit libs will be packaged into APK
+  // For local builds, whatever was specified as single ABI will be packaged into APK
+
   string adbAbi = trim(adbExecCommand(deviceID, "shell getprop ro.product.cpu.abi").strStdout);
 
   string adbInstall;
@@ -561,7 +917,7 @@ bool installRenderDocServer(const string &deviceID)
   {
     case Android_armeabi_v7a:
     case Android_arm64_v8a:
-      adbInstall = adbExecCommand(deviceID, "install -r --abi armeabi-v7a " + serverApk).strStdout;
+      adbInstall = adbExecCommand(deviceID, "install -r -g \"" + serverApk + "\"").strStdout;
       break;
     case Android_armeabi:
     case Android_x86:
@@ -644,7 +1000,7 @@ bool CheckAndroidServerVersion(const string &deviceID)
   // Compare the server's versionCode and versionName with the host's for compatibility
   string hostVersionCode =
       string(STRINGIZE(RENDERDOC_VERSION_MAJOR)) + string(STRINGIZE(RENDERDOC_VERSION_MINOR));
-  string hostVersionName = RENDERDOC_STABLE_BUILD ? MAJOR_MINOR_VERSION_STRING : GIT_COMMIT_HASH;
+  string hostVersionName = RENDERDOC_STABLE_BUILD ? MAJOR_MINOR_VERSION_STRING : GitVersionHash;
 
   // False positives will hurt us, so check for explicit matches
   if((hostVersionCode == versionCode) && (hostVersionName == versionName))
@@ -786,14 +1142,14 @@ string FindAndroidLayer(const string &abi, const string &layerName)
         "%s missing! RenderDoc for Android will not work without it. "
         "Build your Android ABI in build-android in the root to have it "
         "automatically found and installed.",
-        layer.c_str());
+        layerName.c_str());
   }
 
   return layer;
 }
 
-extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_GetAndroidFriendlyName(const rdctype::str &device,
-                                                                            rdctype::str &friendly)
+extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_GetAndroidFriendlyName(const rdcstr &device,
+                                                                            rdcstr &friendly)
 {
   if(!IsHostADB(device.c_str()))
   {
@@ -831,7 +1187,7 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_GetAndroidFriendlyName(cons
     friendly = combined;
 }
 
-extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_EnumerateAndroidDevices(rdctype::str *deviceList)
+extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_EnumerateAndroidDevices(rdcstr *deviceList)
 {
   string adbStdout = adbGetDeviceList();
 
@@ -867,9 +1223,7 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_StartAndroidRemoteServer(co
   int index = 0;
   std::string deviceID;
 
-  // legacy code - delete when C# UI is gone. Handle a NULL or empty device string
-  if(device || device[0] == '\0')
-    Android::extractDeviceIDAndIndex(device, index, deviceID);
+  Android::extractDeviceIDAndIndex(device, index, deviceID);
 
   string adbPackage =
       adbExecCommand(deviceID, "shell pm list packages org.renderdoc.renderdoccmd").strStdout;
@@ -911,18 +1265,30 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_CheckAndroidPackage(const c
   *flags = AndroidFlags::NoFlags;
 
   bool found = false;
+  string layerPath = "";
 
-  // First, see if the application contains the layer
-  if(SearchForAndroidLayer(deviceID, pkgPath, layerName))
+  // Check a debug location only usable by rooted devices, overriding app's layer
+  if(SearchForAndroidLayer(deviceID, "/data/local/debug/vulkan", layerName, layerPath))
     found = true;
 
-  // Next, check a debug location only usable by rooted devices
-  if(!found && SearchForAndroidLayer(deviceID, "/data/local/debug/vulkan", layerName))
+  // See if the application contains the layer
+  if(!found && SearchForAndroidLayer(deviceID, pkgPath, layerName, layerPath))
     found = true;
 
   // TODO: Add any future layer locations
 
-  if(!found)
+  if(found)
+  {
+#if ENABLED(RDOC_DEVEL)
+    // Check the version of the layer found
+    if(!CheckLayerVersion(deviceID, layerName, layerPath))
+    {
+      RDCWARN("RenderDoc layer found, but version does not match");
+      *flags |= AndroidFlags::WrongLayerVersion;
+    }
+#endif
+  }
+  else
   {
     RDCWARN("No RenderDoc layer for Vulkan or GLES was found");
     *flags |= AndroidFlags::MissingLibrary;
@@ -965,17 +1331,25 @@ extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_PushLayerToInstalledAndroid
   if(layerPath.empty())
     return false;
 
-  string layerDst = "/data/data/" + packageName + "/lib/";
+  // Determine where to push the layer
+  string pkgPath = trim(adbExecCommand(deviceID, "shell pm path " + packageName).strStdout);
 
+  // Isolate the app's lib dir
+  pkgPath.erase(pkgPath.begin(), pkgPath.begin() + strlen("package:"));
+  string libDir = removeFromEnd(pkgPath, "base.apk") + "lib/";
+
+  // There will only be one ABI in the lib dir
+  string libsAbi = trim(adbExecCommand(deviceID, "shell ls " + libDir).strStdout);
+  string layerDst = libDir + libsAbi + "/";
   result = adbExecCommand(deviceID, "push " + layerPath + " " + layerDst);
 
   // Ensure the push succeeded
-  return SearchForAndroidLayer(deviceID, layerDst, layerName);
+  string foundLayer;
+  return SearchForAndroidLayer(deviceID, layerDst, layerName, foundLayer);
 }
 
-extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_AddLayerToAndroidPackage(const char *host,
-                                                                              const char *exe,
-                                                                              float *progress)
+extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_AddLayerToAndroidPackage(
+    const char *host, const char *exe, RENDERDOC_ProgressCallback progress)
 {
   Process::ProcessResult result = {};
   string packageName(basename(string(exe)));
@@ -984,12 +1358,16 @@ extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_AddLayerToAndroidPackage(co
   std::string deviceID;
   Android::extractDeviceIDAndIndex(host, index, deviceID);
 
-  *progress = 0.0f;
+  // make sure progress is valid so we don't have to check it everywhere
+  if(!progress)
+    progress = [](float) {};
+
+  progress(0.0f);
 
   if(!CheckPatchingRequirements())
     return false;
 
-  *progress = 0.11f;
+  progress(0.11f);
 
   // Detect which ABI was installed on the device
   string abi = DetermineInstalledABI(deviceID, packageName);
@@ -1008,48 +1386,48 @@ extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_AddLayerToAndroidPackage(co
   string origAPK(tmpDir + packageName + ".orig.apk");
   string alignedAPK(origAPK + ".aligned.apk");
 
-  *progress = 0.21f;
+  progress(0.21f);
 
   // Try the following steps, bailing if anything fails
   if(!PullAPK(deviceID, pkgPath, origAPK))
     return false;
 
-  *progress = 0.31f;
+  progress(0.31f);
 
   if(!CheckAPKPermissions(origAPK))
     return false;
 
-  *progress = 0.41f;
+  progress(0.41f);
 
   if(!RemoveAPKSignature(origAPK))
     return false;
 
-  *progress = 0.51f;
+  progress(0.51f);
 
   if(!AddLayerToAPK(origAPK, layerPath, layerName, abi, tmpDir))
     return false;
 
-  *progress = 0.61f;
+  progress(0.61f);
 
   if(!RealignAPK(origAPK, alignedAPK, tmpDir))
     return false;
 
-  *progress = 0.71f;
+  progress(0.71f);
 
   if(!DebugSignAPK(alignedAPK, tmpDir))
     return false;
 
-  *progress = 0.81f;
+  progress(0.81f);
 
   if(!UninstallOriginalAPK(deviceID, packageName, tmpDir))
     return false;
 
-  *progress = 0.91f;
+  progress(0.91f);
 
   if(!ReinstallPatchedAPK(deviceID, alignedAPK, abi, packageName, tmpDir))
     return false;
 
-  *progress = 1.0f;
+  progress(1.0f);
 
   // All clean!
   return true;

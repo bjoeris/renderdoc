@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -39,9 +39,40 @@ using std::string;
 using std::wstring;
 using std::vector;
 
+static std::string conv(const std::wstring &str)
+{
+  std::string ret;
+  // worst case each char takes 4 bytes to encode
+  ret.resize(str.size() * 4 + 1);
+
+  WideCharToMultiByte(CP_UTF8, 0, str.c_str(), -1, &ret[0], (int)ret.size(), NULL, NULL);
+
+  ret.resize(strlen(ret.c_str()));
+
+  return ret;
+}
+
+static std::wstring conv(const std::string &str)
+{
+  std::wstring ret;
+  ret.resize(str.size() + 1);
+
+  MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &ret[0], int(ret.size() + 1));
+
+  ret.resize(wcslen(ret.c_str()));
+
+  return ret;
+}
+
 HINSTANCE hInstance = NULL;
 
 #if defined(RELEASE)
+#define CRASH_HANDLER 1
+#else
+#define CRASH_HANDLER 0
+#endif
+
+#if CRASH_HANDLER
 // breakpad
 #include "breakpad/client/windows/crash_generation/client_info.h"
 #include "breakpad/client/windows/crash_generation/crash_generation_server.h"
@@ -52,150 +83,15 @@ using google_breakpad::CrashGenerationServer;
 
 bool exitServer = false;
 
-static HINSTANCE CrashHandlerInst = 0;
-static HWND CrashHandlerWnd = 0;
-
-bool uploadReport = false;
-bool uploadDump = false;
-bool uploadLog = false;
-string reproSteps = "";
-
-wstring dump = L"";
-vector<google_breakpad::CustomInfoEntry> customInfo;
-wstring logpath = L"";
-
-INT_PTR CALLBACK CrashHandlerProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
-{
-  switch(message)
-  {
-    case WM_INITDIALOG:
-    {
-      HANDLE hIcon = LoadImage(CrashHandlerInst, MAKEINTRESOURCE(IDI_ICON), IMAGE_ICON, 16, 16, 0);
-
-      if(hIcon)
-      {
-        SendMessage(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-        SendMessage(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
-      }
-
-      SetDlgItemTextW(
-          hDlg, IDC_WELCOMETEXT,
-          L"RenderDoc has encountered an unhandled exception or other similar unrecoverable "
-          L"error.\n\n"
-          L"If you had captured but not saved a logfile it should still be available in %TEMP% and "
-          L"will not be deleted,"
-          L"you can try loading it again.\n\n"
-          L"A minidump has been created and the RenderDoc diagnostic log (NOT any capture logfile) "
-          L"is available if you would like "
-          L"to send them back to be analysed. The path for both is found below if you would like "
-          L"to inspect their contents and censor as appropriate.\n\n"
-          L"Neither contains any significant private information, the minidump has some internal "
-          L"states and local memory at the time of the "
-          L"crash & thread stacks, etc. The diagnostic log contains diagnostic messages like "
-          L"warnings and errors.\n\n"
-          L"The only other information sent is the version of RenderDoc, "
-          L"and any notes you include.\n\n"
-          L"Any repro steps or notes would be helpful to include with the report. If you'd like to "
-          L"be contacted about the bug "
-          L"e.g. for updates about its status just include your email & name. Thank you!\n\n"
-          L"Baldur (baldurk@baldurk.org)");
-
-      SetDlgItemTextW(hDlg, IDC_DUMPPATH, dump.c_str());
-      SetDlgItemTextW(hDlg, IDC_LOGPATH, logpath.c_str());
-
-      CheckDlgButton(hDlg, IDC_SENDDUMP, BST_CHECKED);
-      CheckDlgButton(hDlg, IDC_SENDLOG, BST_CHECKED);
-
-      {
-        RECT r;
-        GetClientRect(hDlg, &r);
-
-        int xPos = (GetSystemMetrics(SM_CXSCREEN) - r.right) / 2;
-        int yPos = (GetSystemMetrics(SM_CYSCREEN) - r.bottom) / 2;
-
-        SetWindowPos(hDlg, HWND_TOPMOST, xPos, yPos, 0, 0, SWP_NOSIZE);
-      }
-
-      return (INT_PTR)TRUE;
-    }
-
-    case WM_SHOWWINDOW:
-    {
-      {
-        RECT r;
-        GetClientRect(hDlg, &r);
-
-        int xPos = (GetSystemMetrics(SM_CXSCREEN) - r.right) / 2;
-        int yPos = (GetSystemMetrics(SM_CYSCREEN) - r.bottom) / 2;
-
-        SetWindowPos(hDlg, HWND_NOTOPMOST, xPos, yPos, 0, 0, SWP_NOSIZE);
-      }
-
-      return (INT_PTR)TRUE;
-    }
-
-    case WM_COMMAND:
-    {
-      int ID = LOWORD(wParam);
-
-      if(ID == IDC_DONTSEND)
-      {
-        EndDialog(hDlg, 0);
-        return (INT_PTR)TRUE;
-      }
-      else if(ID == IDC_SEND)
-      {
-        uploadReport = true;
-        uploadDump = (IsDlgButtonChecked(hDlg, IDC_SENDDUMP) != 0);
-        uploadLog = (IsDlgButtonChecked(hDlg, IDC_SENDLOG) != 0);
-
-        char notes[4097] = {0};
-
-        GetDlgItemTextA(hDlg, IDC_NAME, notes, 4096);
-        notes[4096] = 0;
-
-        reproSteps = "Name: ";
-        reproSteps += notes;
-        reproSteps += "\n";
-
-        memset(notes, 0, 4096);
-        GetDlgItemTextA(hDlg, IDC_EMAIL, notes, 4096);
-        notes[4096] = 0;
-
-        reproSteps += "Email: ";
-        reproSteps += notes;
-        reproSteps += "\n\n";
-
-        memset(notes, 0, 4096);
-        GetDlgItemTextA(hDlg, IDC_REPRO, notes, 4096);
-        notes[4096] = 0;
-
-        reproSteps += notes;
-
-        EndDialog(hDlg, 0);
-        return (INT_PTR)TRUE;
-      }
-    }
-    break;
-
-    case WM_QUIT:
-    case WM_DESTROY:
-    case WM_CLOSE:
-    {
-      EndDialog(hDlg, 0);
-      return (INT_PTR)TRUE;
-    }
-    break;
-  }
-  return (INT_PTR)FALSE;
-}
+wstring wdump = L"";
+std::vector<google_breakpad::CustomInfoEntry> customInfo;
 
 static void _cdecl OnClientCrashed(void *context, const ClientInfo *client_info,
                                    const wstring *dump_path)
 {
   if(dump_path)
   {
-    dump = *dump_path;
+    wdump = *dump_path;
 
     google_breakpad::CustomClientInfo custom = client_info->GetCustomInfo();
 
@@ -232,6 +128,61 @@ void Daemonise()
   // nothing really to do, windows version of renderdoccmd is already 'detached'
 }
 
+WindowingData DisplayRemoteServerPreview(bool active, const rdcarray<WindowingSystem> &systems)
+{
+  static WindowingData remoteServerPreview = {WindowingSystem::Unknown};
+
+  if(active)
+  {
+    if(remoteServerPreview.system == WindowingSystem::Unknown)
+    {
+      // if we're first initialising, create the window
+
+      RECT wr = {0, 0, (LONG)1280, (LONG)720};
+      AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
+
+      HWND wnd =
+          CreateWindowEx(WS_EX_CLIENTEDGE, L"renderdoccmd", L"Remote Server Preview",
+                         WS_OVERLAPPED | WS_CAPTION | WS_MINIMIZEBOX, CW_USEDEFAULT, CW_USEDEFAULT,
+                         wr.right - wr.left, wr.bottom - wr.top, NULL, NULL, hInstance, NULL);
+
+      if(wnd == NULL)
+        return remoteServerPreview;
+
+      ShowWindow(wnd, SW_SHOW);
+      UpdateWindow(wnd);
+
+      remoteServerPreview.system = WindowingSystem::Win32;
+      remoteServerPreview.win32.window = wnd;
+    }
+    else
+    {
+      // otherwise, pump messages
+      MSG msg;
+      ZeroMemory(&msg, sizeof(msg));
+
+      // Check to see if any messages are waiting in the queue
+      while(PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+      {
+        // Translate the message and dispatch it to WindowProc()
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+      }
+    }
+  }
+  else
+  {
+    // if we had a previous window, destroy it.
+    if(remoteServerPreview.win32.window != NULL)
+      DestroyWindow(remoteServerPreview.win32.window);
+
+    // reset the windowing data to 'no window'
+    remoteServerPreview = {WindowingSystem::Unknown};
+  }
+
+  return remoteServerPreview;
+}
+
 void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &displayCfg, uint32_t width,
                             uint32_t height)
 {
@@ -248,7 +199,8 @@ void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &display
   ShowWindow(wnd, SW_SHOW);
   UpdateWindow(wnd);
 
-  IReplayOutput *out = renderer->CreateOutput(WindowingSystem::Win32, wnd, ReplayOutputType::Texture);
+  IReplayOutput *out =
+      renderer->CreateOutput(CreateWin32WindowingData(wnd), ReplayOutputType::Texture);
 
   out->SetTextureDisplay(displayCfg);
 
@@ -287,19 +239,7 @@ struct UpgradeCommand : public Command
   virtual bool IsCaptureCommand() { return false; }
   virtual int Execute(cmdline::parser &parser, const CaptureOptions &)
   {
-    string originalpath = parser.get<string>("path");
-
-    wstring wide_path;
-
-    {
-      wchar_t *conv = new wchar_t[originalpath.size() + 1];
-
-      MultiByteToWideChar(CP_UTF8, 0, originalpath.c_str(), -1, conv, int(originalpath.size() + 1));
-
-      wide_path = conv;
-
-      delete[] conv;
-    }
+    wstring wide_path = conv(parser.get<string>("path"));
 
     // Wait for UI to exit
     Sleep(3000);
@@ -308,7 +248,7 @@ struct UpgradeCommand : public Command
     ZeroMemory(&zip, sizeof(zip));
 
     bool successful = false;
-    wstring failReason;
+    wstring failReason = L"\"Unknown error\"";
 
     mz_bool b = mz_zip_reader_init_file(&zip, "./update.zip", 0);
 
@@ -485,7 +425,7 @@ struct UpgradeCommand : public Command
   }
 };
 
-#if defined(RELEASE)
+#if CRASH_HANDLER
 struct CrashHandlerCommand : public Command
 {
   CrashHandlerCommand(const GlobalEnvironment &env) : Command(env) {}
@@ -518,22 +458,6 @@ struct CrashHandlerCommand : public Command
       return 1;
     }
 
-    CrashHandlerInst = hInstance;
-
-    CrashHandlerWnd =
-        CreateWindowEx(WS_EX_CLIENTEDGE, L"renderdoccmd", L"renderdoccmd", WS_OVERLAPPEDWINDOW,
-                       CW_USEDEFAULT, CW_USEDEFAULT, 10, 10, NULL, NULL, hInstance, NULL);
-
-    HANDLE hIcon = LoadImage(CrashHandlerInst, MAKEINTRESOURCE(IDI_ICON), IMAGE_ICON, 16, 16, 0);
-
-    if(hIcon)
-    {
-      SendMessage(CrashHandlerWnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-      SendMessage(CrashHandlerWnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
-    }
-
-    ShowWindow(CrashHandlerWnd, SW_HIDE);
-
     HANDLE readyEvent = CreateEventA(NULL, TRUE, FALSE, "RENDERDOC_CRASHHANDLE");
 
     if(readyEvent != NULL)
@@ -565,11 +489,11 @@ struct CrashHandlerCommand : public Command
     delete crashServer;
     crashServer = NULL;
 
-    if(!dump.empty())
-    {
-      logpath = L"";
+    std::wstring wlogpath;
 
-      string report = "";
+    if(!wdump.empty())
+    {
+      string report = "{\n";
 
       for(size_t i = 0; i < customInfo.size(); i++)
       {
@@ -578,7 +502,7 @@ struct CrashHandlerCommand : public Command
 
         if(name == L"logpath")
         {
-          logpath = val;
+          wlogpath = val;
         }
         else if(name == L"ptime")
         {
@@ -586,56 +510,77 @@ struct CrashHandlerCommand : public Command
         }
         else
         {
-          report += string(name.begin(), name.end()) + ": " + string(val.begin(), val.end()) + "\n";
+          report += "  \"" + string(name.begin(), name.end()) + "\": \"" +
+                    string(val.begin(), val.end()) + "\",\n";
         }
       }
 
-      DialogBox(CrashHandlerInst, MAKEINTRESOURCE(IDD_CRASH_HANDLER), CrashHandlerWnd,
-                (DLGPROC)CrashHandlerProc);
+      rdcstr reportPath;
 
-      report += "\n\nRepro steps/Notes:\n\n" + reproSteps;
+      RENDERDOC_CreateBugReport(conv(wlogpath).c_str(), conv(wdump).c_str(), reportPath);
 
-      if(uploadReport)
+      for(size_t i = 0; i < reportPath.size(); i++)
+        if(reportPath[i] == '\\')
+          reportPath[i] = '/';
+
+      report += "  \n\"report\": \"" + std::string(reportPath) + "\"\n";
+      report += "}\n";
+
       {
-        mz_zip_archive zip;
-        ZeroMemory(&zip, sizeof(zip));
+        wstring destjson = dumpFolder + L"\\report.json";
 
-        wstring destzip = dumpFolder + L"\\report.zip";
+        FILE *f = NULL;
+        _wfopen_s(&f, destjson.c_str(), L"w");
+        fputs(report.c_str(), f);
+        fclose(f);
 
-        DeleteFileW(destzip.c_str());
+        wchar_t *paramsAlloc = new wchar_t[512];
 
-        mz_zip_writer_init_wfile(&zip, destzip.c_str(), 0);
-        mz_zip_writer_add_mem(&zip, "report.txt", report.c_str(), report.length(),
-                              MZ_BEST_COMPRESSION);
+        ZeroMemory(paramsAlloc, sizeof(wchar_t) * 512);
 
-        if(uploadDump && !dump.empty())
-          mz_zip_writer_add_wfile(&zip, "minidump.dmp", dump.c_str(), NULL, 0, MZ_BEST_COMPRESSION);
+        GetModuleFileNameW(NULL, paramsAlloc, 511);
 
-        if(uploadLog && !logpath.empty())
-          mz_zip_writer_add_wfile(&zip, "error.log", logpath.c_str(), NULL, 0, MZ_BEST_COMPRESSION);
+        wchar_t *lastSlash = wcsrchr(paramsAlloc, '\\');
 
-        mz_zip_writer_finalize_archive(&zip);
-        mz_zip_writer_end(&zip);
+        if(lastSlash)
+          *lastSlash = 0;
 
-        int timeout = 10000;
-        wstring body = L"";
-        int code = 0;
+        std::wstring exepath = paramsAlloc;
 
-        std::map<wstring, wstring> params;
+        ZeroMemory(paramsAlloc, sizeof(wchar_t) * 512);
 
-        google_breakpad::HTTPUpload::SendRequest(L"https://renderdoc.org/bugsubmit", params,
-                                                 dumpFolder + L"\\report.zip", L"report", &timeout,
-                                                 &body, &code);
+        _snwprintf_s(paramsAlloc, 511, 511, L"%s/qrenderdoc.exe --crash %s", exepath.c_str(),
+                     destjson.c_str());
 
-        DeleteFileW(destzip.c_str());
+        PROCESS_INFORMATION pi;
+        STARTUPINFOW si;
+        ZeroMemory(&pi, sizeof(pi));
+        ZeroMemory(&si, sizeof(si));
+
+        BOOL success =
+            CreateProcessW(NULL, paramsAlloc, NULL, NULL, FALSE, 0, NULL, exepath.c_str(), &si, &pi);
+
+        if(success && pi.hProcess)
+        {
+          WaitForSingleObject(pi.hProcess, INFINITE);
+        }
+
+        if(pi.hProcess)
+          CloseHandle(pi.hProcess);
+        if(pi.hThread)
+          CloseHandle(pi.hThread);
+
+        std::wstring wreport = conv(std::string(report));
+
+        DeleteFileW(wreport.c_str());
       }
     }
 
-    if(!dump.empty())
-      DeleteFileW(dump.c_str());
+    if(!wdump.empty())
+      DeleteFileW(wdump.c_str());
 
-    if(!logpath.empty())
-      DeleteFileW(logpath.c_str());
+    if(!wlogpath.empty())
+      DeleteFileW(wlogpath.c_str());
 
     return 0;
   }
@@ -657,18 +602,12 @@ struct GlobalHookCommand : public Command
   virtual bool IsCaptureCommand() { return false; }
   virtual int Execute(cmdline::parser &parser, const CaptureOptions &)
   {
-    string pathmatch = parser.get<string>("match");
+    wstring wpathmatch = conv(parser.get<string>("match"));
     string logfile = parser.get<string>("logfile");
     string debuglog = parser.get<string>("debuglog");
 
     CaptureOptions cmdopts;
     readCapOpts(parser.get<string>("capopts").c_str(), &cmdopts);
-
-    size_t len = pathmatch.length();
-    wstring wpathmatch;
-    wpathmatch.resize(len);
-    MultiByteToWideChar(CP_UTF8, 0, pathmatch.c_str(), -1, &wpathmatch[0], (int)len);
-    wpathmatch.resize(wcslen(wpathmatch.c_str()));
 
     // make sure the user doesn't accidentally run this with 'a' as a parameter or something.
     // "a.exe" is over 4 characters so this limit should not be a problem.
@@ -823,17 +762,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInst, _In_opt_ HINSTANCE hPrevInstance, _In_
 
   argv.resize(argc);
   for(size_t i = 0; i < argv.size(); i++)
-  {
-    size_t len = wcslen(wargv[i]);
-    len *= 4;    // worst case, every UTF-8 character takes 4 bytes
-    argv[i].resize(len + 1);
-    argv[i][len] = 0;
-    char *cstr = (char *)&argv[i][0];
-
-    WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, cstr, (int)len + 1, NULL, NULL);
-
-    argv[i].resize(strlen(cstr));
-  }
+    argv[i] = conv(wstring(wargv[i]));
 
   if(argv.empty())
     argv.push_back("renderdoccmd");
@@ -881,7 +810,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInst, _In_opt_ HINSTANCE hPrevInstance, _In_
   // perform an upgrade of the UI
   add_command("upgrade", new UpgradeCommand(env));
 
-#if defined(RELEASE)
+#if CRASH_HANDLER
   // special WIN32 option for launching the crash handler
   add_command("crashhandle", new CrashHandlerCommand(env));
 #endif

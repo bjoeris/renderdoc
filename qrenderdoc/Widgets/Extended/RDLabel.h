@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,7 @@
 
 #pragma once
 #include <QLabel>
+#include <QVariant>
 
 class RDLabel : public QLabel
 {
@@ -36,6 +37,10 @@ public:
   QSize sizeHint() const override;
   QSize minimumSizeHint() const override;
 
+  void setText(const QString &text);
+  QString text() const;
+
+  void setMinimumSizeHint(const QSize &sz);
   void setPreserveAspectRatio(bool preserve) { m_preserveRatio = preserve; }
   bool preserveAspectRatio() { return m_preserveRatio; }
 signals:
@@ -49,11 +54,20 @@ public slots:
 
 protected:
   void mousePressEvent(QMouseEvent *event) override;
+  void mouseReleaseEvent(QMouseEvent *event) override;
   void mouseMoveEvent(QMouseEvent *event) override;
   void mouseDoubleClickEvent(QMouseEvent *event) override;
   void leaveEvent(QEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
   void changeEvent(QEvent *event) override;
+  void paintEvent(QPaintEvent *event) override;
+
+  void modifySizeHint(QSize &sz) const;
 
   bool m_preserveRatio = false;
+  bool m_hover = false;
+
+  QSize m_minSizeHint;
+
+  QVariant m_variant;
 };

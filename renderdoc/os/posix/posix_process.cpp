@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -33,7 +33,7 @@
 #include <unistd.h>
 #include "api/app/renderdoc_app.h"
 #include "os/os_specific.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 
 // defined in foo/foo_process.cpp
 char **GetCurrentEnvironment();
@@ -192,10 +192,12 @@ void Process::ApplyEnvironmentModification()
       {
         if(!value.empty())
         {
+          std::string prep = m.value;
           if(m.sep == EnvSep::Platform || m.sep == EnvSep::Colon)
-            value += ":";
+            prep += ":";
           else if(m.sep == EnvSep::SemiColon)
-            value += ";";
+            prep += ";";
+          value = prep + value;
         }
         else
         {
@@ -215,6 +217,22 @@ void Process::ApplyEnvironmentModification()
 const char *Process::GetEnvVariable(const char *name)
 {
   return getenv(name);
+}
+
+static void CleanupStringArray(char **arr, char **invalid)
+{
+  if(arr != invalid)
+  {
+    char **arr_delete = arr;
+
+    while(*arr)
+    {
+      delete[] * arr;
+      arr++;
+    }
+
+    delete[] arr_delete;
+  }
 }
 
 static pid_t RunProcess(const char *app, const char *workingDir, const char *cmdLine, char **envp,
@@ -251,6 +269,7 @@ static pid_t RunProcess(const char *app, const char *workingDir, const char *cmd
     }
 
     argv = new char *[argc + 2];
+    memset(argv, 0, (argc + 2) * sizeof(char *));
 
     c = cmdLine;
 
@@ -313,6 +332,7 @@ static pid_t RunProcess(const char *app, const char *workingDir, const char *cmd
           }
           else
           {
+            CleanupStringArray(argv, emptyargv);
             RDCERR("Malformed command line:\n%s", cmdLine);
             return 0;
           }
@@ -338,10 +358,9 @@ static pid_t RunProcess(const char *app, const char *workingDir, const char *cmd
       argc++;
     }
 
-    argv[argc] = NULL;
-
     if(squot || dquot)
     {
+      CleanupStringArray(argv, emptyargv);
       RDCERR("Malformed command line\n%s", cmdLine);
       return 0;
     }
@@ -386,23 +405,11 @@ static pid_t RunProcess(const char *app, const char *workingDir, const char *cmd
     close(stderrPipe[1]);
   }
 
-  char **argv_delete = argv;
-
-  if(argv != emptyargv)
-  {
-    while(*argv)
-    {
-      delete[] * argv;
-      argv++;
-    }
-
-    delete[] argv_delete;
-  }
-
+  CleanupStringArray(argv, emptyargv);
   return childPid;
 }
 
-uint32_t Process::InjectIntoProcess(uint32_t pid, const rdctype::array<EnvironmentModification> &env,
+uint32_t Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
                                     const char *logfile, const CaptureOptions &opts, bool waitForExit)
 {
   RDCUNIMPLEMENTED("Injecting into already running processes on linux");
@@ -472,7 +479,7 @@ uint32_t Process::LaunchScript(const char *script, const char *workingDir, const
 
 uint32_t Process::LaunchAndInjectIntoProcess(const char *app, const char *workingDir,
                                              const char *cmdLine,
-                                             const rdctype::array<EnvironmentModification> &envList,
+                                             const rdcarray<EnvironmentModification> &envList,
                                              const char *logfile, const CaptureOptions &opts,
                                              bool waitForExit)
 {
@@ -498,6 +505,15 @@ uint32_t Process::LaunchAndInjectIntoProcess(const char *app, const char *workin
     FileIO::GetExecutableFilename(binpath);
     binpath = dirname(binpath);
     libpath = binpath + "/../lib";
+
+// point to the right customiseable path
+#if defined(RENDERDOC_LIB_SUFFIX)
+    libpath += STRINGIZE(RENDERDOC_LIB_SUFFIX);
+#endif
+
+#if defined(RENDERDOC_LIB_SUBFOLDER)
+    libpath += "/" STRINGIZE(RENDERDOC_LIB_SUBFOLDER);
+#endif
   }
 
   string optstr;
@@ -593,16 +609,7 @@ uint32_t Process::LaunchAndInjectIntoProcess(const char *app, const char *workin
     }
   }
 
-  char **envp_delete = envp;
-
-  while(*envp)
-  {
-    delete[] * envp;
-    envp++;
-  }
-
-  delete[] envp_delete;
-
+  CleanupStringArray(envp, NULL);
   return ret;
 }
 

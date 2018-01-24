@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -29,7 +29,7 @@
 #include <string>
 #include "common/threading.h"
 #include "os/os_specific.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 
 using std::string;
 
@@ -238,6 +238,47 @@ uint32_t CalcNumMips(int w, int h, int d)
   return mipLevels;
 }
 
+byte *AllocAlignedBuffer(uint64_t size, uint64_t alignment)
+{
+  byte *rawAlloc = NULL;
+
+#if defined(__EXCEPTIONS) || defined(_CPPUNWIND)
+  try
+#endif
+  {
+    rawAlloc = new byte[(size_t)size + sizeof(byte *) + (size_t)alignment];
+  }
+#if defined(__EXCEPTIONS) || defined(_CPPUNWIND)
+  catch(std::bad_alloc &)
+  {
+    rawAlloc = NULL;
+  }
+#endif
+
+  if(rawAlloc == NULL)
+    RDCFATAL("Allocation for %llu bytes failed", size);
+
+  RDCASSERT(rawAlloc);
+
+  byte *alignedAlloc = (byte *)AlignUp(uint64_t(rawAlloc + sizeof(byte *)), alignment);
+
+  byte **realPointer = (byte **)alignedAlloc;
+  realPointer[-1] = rawAlloc;
+
+  return alignedAlloc;
+}
+
+void FreeAlignedBuffer(byte *buf)
+{
+  if(buf == NULL)
+    return;
+
+  byte **realPointer = (byte **)buf;
+  byte *rawAlloc = realPointer[-1];
+
+  delete[] rawAlloc;
+}
+
 uint32_t Log2Floor(uint32_t value)
 {
   RDCASSERT(value > 0);
@@ -274,7 +315,7 @@ void rdclog_filename(const char *filename)
 
   if(!logfile.empty())
   {
-    logfileOpened = FileIO::logfile_open(filename);
+    logfileOpened = FileIO::logfile_open(logfile.c_str());
 
     if(logfileOpened && previous.c_str())
     {
@@ -335,7 +376,16 @@ void rdclogprint_int(LogType type, const char *fullMsg, const char *msg)
 }
 
 const int rdclog_outBufSize = 4 * 1024;
-static char rdclog_outputBuffer[rdclog_outBufSize + 1];
+static char rdclog_outputBuffer[rdclog_outBufSize + 3];
+
+static void write_newline(char *output)
+{
+#if ENABLED(RDOC_WIN32)
+  *(output++) = '\r';
+#endif
+  *(output++) = '\n';
+  *output = 0;
+}
 
 void rdclog_int(LogType type, const char *project, const char *file, unsigned int line,
                 const char *fmt, ...)
@@ -413,7 +463,7 @@ void rdclog_int(LogType type, const char *project, const char *file, unsigned in
   if(totalWritten > rdclog_outBufSize)
   {
     available = totalWritten + 3;
-    oversizedBuffer = output = new char[available];
+    oversizedBuffer = output = new char[available + 3];
     base = output;
 
     numWritten = StringFormat::snprintf(output, available, "% 4s %06u: %s%s%s - ", project,
@@ -432,32 +482,33 @@ void rdclog_int(LogType type, const char *project, const char *file, unsigned in
     va_end(args2);
   }
 
-  *output = 0;
-
-  const char newline[] =
-#if ENABLED(RDOC_WIN32)
-      "\r\n";
-#else
-      "\n";
-#endif
-
   // likely path - string contains no newlines
   char *nl = strchr(base, '\n');
   if(nl == NULL)
   {
-    rdclogprint_int(type, base, noPrefixOutput);
+    // append newline
+    write_newline(output);
 
-    // print a newline automatically
-    rdclogprint_int(type, newline, newline);
+    rdclogprint_int(type, base, noPrefixOutput);
   }
   else
   {
+    char backup[2];
+
     // otherwise, print the string in sections to ensure newlines are in native format
     while(nl)
     {
-      *nl = 0;
+      // backup the two characters after the \n, to allow for DOS newlines ('\r' '\n' '\0')
+      backup[0] = nl[1];
+      backup[1] = nl[2];
+
+      write_newline(nl);
+
       rdclogprint_int(type, base, noPrefixOutput);
-      rdclogprint_int(type, newline, newline);
+
+      // restore the characters
+      nl[1] = backup[0];
+      nl[2] = backup[1];
 
       base = nl + 1;
       noPrefixOutput = nl + 1;
@@ -465,10 +516,10 @@ void rdclog_int(LogType type, const char *project, const char *file, unsigned in
       nl = strchr(base, '\n');
     }
 
-    // there will be the remainder up to the final non-trailing newline, print it
+    // append final newline and write the last line
+    write_newline(output);
 
     rdclogprint_int(type, base, noPrefixOutput);
-    rdclogprint_int(type, newline, newline);
   }
 
   SAFE_DELETE_ARRAY(oversizedBuffer);

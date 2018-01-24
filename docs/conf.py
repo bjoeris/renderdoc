@@ -26,14 +26,22 @@ import struct
 
 # path to module libraries for windows
 if struct.calcsize("P") == 8:
-	modulepath = '../x64/Development'
+	binpath = '../x64/'
 else:
-	modulepath = '../Win32/Development'
+	binpath = '../Win32/'
 
-sys.path.insert(0, os.path.abspath(modulepath))
+# Prioritise release over development builds
+sys.path.insert(0, os.path.abspath(binpath + 'Development/pymodules'))
+sys.path.insert(0, os.path.abspath(binpath + 'Release/pymodules'))
+
+# Add the build paths to PATH so renderdoc.dll can be located
+os.environ["PATH"] += os.pathsep + os.path.abspath(binpath + 'Development/')
+os.environ["PATH"] += os.pathsep + os.path.abspath(binpath + 'Release/')
 
 # path to module libraries for linux
 sys.path.insert(0, os.path.abspath('../build/bin'))
+
+sys.path.insert(0, os.path.abspath('sphinx_exts'))
 
 # -- General configuration ------------------------------------------------
 
@@ -43,7 +51,7 @@ sys.path.insert(0, os.path.abspath('../build/bin'))
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.autodoc']
+extensions = ['sphinx.ext.autodoc', 'sphinx_paramlinks']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -100,7 +108,7 @@ language = None
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'python_api']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'sphinx_exts']
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.

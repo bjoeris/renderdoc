@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,24 +33,28 @@ struct FrameRecord
 {
   FrameDescription frameInfo;
 
-  rdctype::array<DrawcallDescription> drawcallList;
+  rdcarray<DrawcallDescription> drawcallList;
 };
 
-enum RemapTextureEnum
+DECLARE_REFLECTION_STRUCT(FrameRecord);
+
+enum class RemapTexture : uint32_t
 {
-  eRemap_None,
-  eRemap_RGBA8,
-  eRemap_RGBA16,
-  eRemap_RGBA32,
-  eRemap_D32S8
+  NoRemap,
+  RGBA8,
+  RGBA16,
+  RGBA32,
+  D32S8
 };
+
+DECLARE_REFLECTION_ENUM(RemapTexture);
 
 struct GetTextureDataParams
 {
   bool forDiskSave;
   CompType typeHint;
   bool resolve;
-  RemapTextureEnum remap;
+  RemapTexture remap;
   float blackPoint;
   float whitePoint;
 
@@ -58,12 +62,16 @@ struct GetTextureDataParams
       : forDiskSave(false),
         typeHint(CompType::Typeless),
         resolve(false),
-        remap(eRemap_None),
+        remap(RemapTexture::NoRemap),
         blackPoint(0.0f),
         whitePoint(1.0f)
   {
   }
 };
+
+DECLARE_REFLECTION_STRUCT(GetTextureDataParams);
+
+class RDCFile;
 
 // these two interfaces define what an API driver implementation must provide
 // to the replay. At minimum it must implement IRemoteDriver which contains
@@ -82,18 +90,22 @@ public:
 
   virtual APIProperties GetAPIProperties() = 0;
 
-  virtual vector<ResourceId> GetBuffers() = 0;
+  virtual const std::vector<ResourceDescription> &GetResources() = 0;
+
+  virtual std::vector<ResourceId> GetBuffers() = 0;
   virtual BufferDescription GetBuffer(ResourceId id) = 0;
 
-  virtual vector<ResourceId> GetTextures() = 0;
+  virtual std::vector<ResourceId> GetTextures() = 0;
   virtual TextureDescription GetTexture(ResourceId id) = 0;
 
   virtual vector<DebugMessage> GetDebugMessages() = 0;
 
+  virtual rdcarray<ShaderEntryPoint> GetShaderEntryPoints(ResourceId shader) = 0;
   virtual ShaderReflection *GetShader(ResourceId shader, string entryPoint) = 0;
 
   virtual vector<string> GetDisassemblyTargets() = 0;
-  virtual string DisassembleShader(const ShaderReflection *refl, const string &target) = 0;
+  virtual string DisassembleShader(ResourceId pipeline, const ShaderReflection *refl,
+                                   const string &target) = 0;
 
   virtual vector<EventUsage> GetUsage(ResourceId id) = 0;
 
@@ -105,22 +117,22 @@ public:
 
   virtual FrameRecord GetFrameRecord() = 0;
 
-  virtual void ReadLogInitialisation() = 0;
+  virtual ReplayStatus ReadLogInitialisation(RDCFile *rdc, bool storeStructuredBuffers) = 0;
   virtual void ReplayLog(uint32_t endEventID, ReplayLogType replayType) = 0;
+  virtual const SDFile &GetStructuredFile() = 0;
 
-  virtual vector<uint32_t> GetPassEvents(uint32_t eventID) = 0;
+  virtual vector<uint32_t> GetPassEvents(uint32_t eventId) = 0;
 
-  virtual void InitPostVSBuffers(uint32_t eventID) = 0;
+  virtual void InitPostVSBuffers(uint32_t eventId) = 0;
   virtual void InitPostVSBuffers(const vector<uint32_t> &passEvents) = 0;
 
   virtual ResourceId GetLiveID(ResourceId id) = 0;
 
-  virtual MeshFormat GetPostVSBuffers(uint32_t eventID, uint32_t instID, MeshDataStage stage) = 0;
+  virtual MeshFormat GetPostVSBuffers(uint32_t eventId, uint32_t instID, MeshDataStage stage) = 0;
 
-  virtual void GetBufferData(ResourceId buff, uint64_t offset, uint64_t len,
-                             vector<byte> &retData) = 0;
-  virtual byte *GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
-                               const GetTextureDataParams &params, size_t &dataSize) = 0;
+  virtual void GetBufferData(ResourceId buff, uint64_t offset, uint64_t len, bytebuf &retData) = 0;
+  virtual void GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
+                              const GetTextureDataParams &params, bytebuf &data) = 0;
 
   virtual void BuildTargetShader(string source, string entry, const ShaderCompileFlags &compileFlags,
                                  ShaderStage type, ResourceId *id, string *errors) = 0;
@@ -129,32 +141,28 @@ public:
   virtual void FreeTargetResource(ResourceId id) = 0;
 
   virtual vector<GPUCounter> EnumerateCounters() = 0;
-  virtual void DescribeCounter(GPUCounter counterID, CounterDescription &desc) = 0;
+  virtual CounterDescription DescribeCounter(GPUCounter counterID) = 0;
   virtual vector<CounterResult> FetchCounters(const vector<GPUCounter> &counterID) = 0;
 
   virtual void FillCBufferVariables(ResourceId shader, string entryPoint, uint32_t cbufSlot,
-                                    vector<ShaderVariable> &outvars, const vector<byte> &data) = 0;
+                                    vector<ShaderVariable> &outvars, const bytebuf &data) = 0;
 
   virtual vector<PixelModification> PixelHistory(vector<EventUsage> events, ResourceId target,
                                                  uint32_t x, uint32_t y, uint32_t slice, uint32_t mip,
                                                  uint32_t sampleIdx, CompType typeHint) = 0;
-  virtual ShaderDebugTrace DebugVertex(uint32_t eventID, uint32_t vertid, uint32_t instid,
+  virtual ShaderDebugTrace DebugVertex(uint32_t eventId, uint32_t vertid, uint32_t instid,
                                        uint32_t idx, uint32_t instOffset, uint32_t vertOffset) = 0;
-  virtual ShaderDebugTrace DebugPixel(uint32_t eventID, uint32_t x, uint32_t y, uint32_t sample,
+  virtual ShaderDebugTrace DebugPixel(uint32_t eventId, uint32_t x, uint32_t y, uint32_t sample,
                                       uint32_t primitive) = 0;
-  virtual ShaderDebugTrace DebugThread(uint32_t eventID, const uint32_t groupid[3],
+  virtual ShaderDebugTrace DebugThread(uint32_t eventId, const uint32_t groupid[3],
                                        const uint32_t threadid[3]) = 0;
 
   virtual ResourceId RenderOverlay(ResourceId texid, CompType typeHint, DebugOverlay overlay,
-                                   uint32_t eventID, const vector<uint32_t> &passEvents) = 0;
+                                   uint32_t eventId, const vector<uint32_t> &passEvents) = 0;
 
   virtual bool IsRenderOutput(ResourceId id) = 0;
 
   virtual void FileChanged() = 0;
-
-  virtual void InitCallstackResolver() = 0;
-  virtual bool HasCallstacks() = 0;
-  virtual Callstack::StackResolver *GetCallstackResolver() = 0;
 
   virtual bool NeedRemapForFetch(const ResourceFormat &format) = 0;
 };
@@ -166,7 +174,7 @@ public:
 
   virtual vector<WindowingSystem> GetSupportedWindowSystems() = 0;
 
-  virtual uint64_t MakeOutputWindow(WindowingSystem system, void *data, bool depth) = 0;
+  virtual uint64_t MakeOutputWindow(WindowingData window, bool depth) = 0;
   virtual void DestroyOutputWindow(uint64_t id) = 0;
   virtual bool CheckResizeOutputWindow(uint64_t id) = 0;
   virtual void GetOutputWindowDimensions(uint64_t id, int32_t &w, int32_t &h) = 0;
@@ -190,7 +198,7 @@ public:
   virtual ResourceId CreateProxyBuffer(const BufferDescription &templateBuf) = 0;
   virtual void SetProxyBufferData(ResourceId bufid, byte *data, size_t dataSize) = 0;
 
-  virtual void RenderMesh(uint32_t eventID, const vector<MeshFormat> &secondaryDraws,
+  virtual void RenderMesh(uint32_t eventId, const vector<MeshFormat> &secondaryDraws,
                           const MeshDisplay &cfg) = 0;
   virtual bool RenderTexture(TextureDisplay cfg) = 0;
 
@@ -206,14 +214,20 @@ public:
 
   virtual void PickPixel(ResourceId texture, uint32_t x, uint32_t y, uint32_t sliceFace,
                          uint32_t mip, uint32_t sample, CompType typeHint, float pixel[4]) = 0;
-  virtual uint32_t PickVertex(uint32_t eventID, const MeshDisplay &cfg, uint32_t x, uint32_t y) = 0;
+  virtual uint32_t PickVertex(uint32_t eventId, int32_t width, int32_t height,
+                              const MeshDisplay &cfg, uint32_t x, uint32_t y) = 0;
 };
 
 // utility functions useful in any driver implementation
 DrawcallDescription *SetupDrawcallPointers(std::vector<DrawcallDescription *> *drawcallTable,
-                                           rdctype::array<DrawcallDescription> &draws,
+                                           rdcarray<DrawcallDescription> &draws,
                                            DrawcallDescription *parent,
                                            DrawcallDescription *&previous);
+
+// for hardware/APIs that can't do line rasterization, manually expand any triangle input topology
+// to a linestrip with strip restart indices.
+void PatchLineStripIndexBufer(const DrawcallDescription *draw, uint16_t *idx16, uint32_t *idx32,
+                              std::vector<uint32_t> &patchedIndices);
 
 // simple cache for when we need buffer data for highlighting
 // vertices, typical use will be lots of vertices in the same
@@ -229,10 +243,10 @@ struct HighlightCache
   MeshDataStage stage;
   bool idxData;
 
-  std::vector<byte> vertexData;
+  bytebuf vertexData;
   std::vector<uint32_t> indices;
 
-  void CacheHighlightingData(uint32_t eventID, const MeshDisplay &cfg);
+  void CacheHighlightingData(uint32_t eventId, const MeshDisplay &cfg);
 
   bool FetchHighlightPositions(const MeshDisplay &cfg, FloatVector &activeVertex,
                                vector<FloatVector> &activePrim,

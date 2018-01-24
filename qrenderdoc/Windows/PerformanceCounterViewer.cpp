@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 #include "PerformanceCounterViewer.h"
+#include "Code/QRDUtils.h"
 #include "Windows/Dialogs/PerformanceCounterSelection.h"
 #include "ui_PerformanceCounterViewer.h"
 
@@ -39,10 +40,10 @@ struct SortValue
     double d;
   } val;
 
-  SortValue(uint32_t eventID)
+  SortValue(uint32_t eventId)
   {
     type = Integer;
-    val.u = eventID;
+    val.u = eventId;
   }
 
   SortValue(const CounterResult &result, const CounterDescription &description)
@@ -64,8 +65,13 @@ struct SortValue
           val.u = result.value.u64;
         else
           val.u = result.value.u32;
+        break;
 
-      default: break;
+      default:
+        qCritical() << "Unexpected component type" << ToQStr(description.resultType);
+        type = Float;
+        val.d = -1.0;
+        break;
     }
   }
 };
@@ -85,6 +91,13 @@ struct CustomSortedTableItem : public QTableWidgetItem
     return sortVal.val.d < customother.sortVal.val.d;
   }
 
+  virtual QVariant data(int role) const
+  {
+    if(role == Qt::TextAlignmentRole && column() > 0)
+      return QVariant(Qt::AlignRight | Qt::AlignCenter);
+
+    return QTableWidgetItem::data(role);
+  }
   SortValue sortVal;
 };
 
@@ -93,13 +106,13 @@ PerformanceCounterViewer::PerformanceCounterViewer(ICaptureContext &ctx, QWidget
 {
   ui->setupUi(this);
 
-  m_Ctx.AddLogViewer(this);
+  m_Ctx.AddCaptureViewer(this);
 
   connect(ui->captureCounters, &QToolButton::clicked, this,
           &PerformanceCounterViewer::CaptureCounters);
 
-  ui->captureCounters->setEnabled(m_Ctx.LogLoaded());
-  ui->saveCSV->setEnabled(m_Ctx.LogLoaded());
+  ui->captureCounters->setEnabled(m_Ctx.IsCaptureLoaded());
+  ui->saveCSV->setEnabled(m_Ctx.IsCaptureLoaded());
 
   ui->counterResults->horizontalHeader()->setSectionsMovable(true);
 }
@@ -108,7 +121,7 @@ PerformanceCounterViewer::~PerformanceCounterViewer()
 {
   m_Ctx.BuiltinWindowClosed(this);
 
-  m_Ctx.RemoveLogViewer(this);
+  m_Ctx.RemoveCaptureViewer(this);
   delete ui;
 }
 
@@ -171,7 +184,7 @@ QTableWidgetItem *PerformanceCounterViewer::MakeCounterResultItem(const CounterR
 
 void PerformanceCounterViewer::CaptureCounters()
 {
-  if(!m_Ctx.LogLoaded())
+  if(!m_Ctx.IsCaptureLoaded())
     return;
 
   PerformanceCounterSelection pcs(m_Ctx, m_SelectedCounters, this);
@@ -179,10 +192,12 @@ void PerformanceCounterViewer::CaptureCounters()
     return;
   m_SelectedCounters = pcs.GetSelectedCounters();
 
+  ANALYTIC_SET(UIFeatures.PerformanceCounters, true);
+
   bool done = false;
   m_Ctx.Replay().AsyncInvoke([this, &done](IReplayController *controller) -> void {
-    rdctype::array<GPUCounter> counters;
-    counters.create(m_SelectedCounters.size());
+    rdcarray<GPUCounter> counters;
+    counters.resize(m_SelectedCounters.size());
 
     QMap<GPUCounter, CounterDescription> counterDescriptions;
 
@@ -198,7 +213,7 @@ void PerformanceCounterViewer::CaptureCounters()
       counterIndex.insert((GPUCounter)m_SelectedCounters[i], i);
     }
 
-    const rdctype::array<CounterResult> results = controller->FetchCounters(counters);
+    const rdcarray<CounterResult> results = controller->FetchCounters(counters);
 
     GUIInvoke::call([this, results, counterDescriptions, counterIndex]() -> void {
       ui->counterResults->clear();
@@ -213,9 +228,9 @@ void PerformanceCounterViewer::CaptureCounters()
       QMap<uint32_t, int> eventIdToRow;
       for(const CounterResult &result : results)
       {
-        if(eventIdToRow.contains(result.eventID))
+        if(eventIdToRow.contains(result.eventId))
           continue;
-        eventIdToRow[result.eventID] = eventIdToRow.size();
+        eventIdToRow[result.eventId] = eventIdToRow.size();
       }
 
       ui->counterResults->setColumnCount(headers.size());
@@ -224,17 +239,17 @@ void PerformanceCounterViewer::CaptureCounters()
 
       for(int i = 0; i < (int)results.size(); ++i)
       {
-        int row = eventIdToRow[results[i].eventID];
+        int row = eventIdToRow[results[i].eventId];
 
         ui->counterResults->setItem(row, 0,
-                                    new CustomSortedTableItem(QString::number(results[i].eventID),
-                                                              SortValue(results[i].eventID)));
+                                    new CustomSortedTableItem(QString::number(results[i].eventId),
+                                                              SortValue(results[i].eventId)));
 
         ui->counterResults->setItem(
-            row, counterIndex[results[i].counterID] + 1,
-            MakeCounterResultItem(results[i], counterDescriptions[results[i].counterID]));
+            row, counterIndex[results[i].counter] + 1,
+            MakeCounterResultItem(results[i], counterDescriptions[results[i].counter]));
 
-        ui->counterResults->item(row, 0)->setData(Qt::UserRole, results[i].eventID);
+        ui->counterResults->item(row, 0)->setData(Qt::UserRole, results[i].eventId);
       }
 
       ui->counterResults->resizeColumnsToContents();
@@ -246,13 +261,13 @@ void PerformanceCounterViewer::CaptureCounters()
   ShowProgressDialog(this, tr("Capturing counters"), [&done]() -> bool { return done; });
 }
 
-void PerformanceCounterViewer::OnLogfileClosed()
+void PerformanceCounterViewer::OnCaptureClosed()
 {
   ui->captureCounters->setEnabled(false);
   ui->saveCSV->setEnabled(false);
 }
 
-void PerformanceCounterViewer::OnLogfileLoaded()
+void PerformanceCounterViewer::OnCaptureLoaded()
 {
   ui->captureCounters->setEnabled(true);
   ui->saveCSV->setEnabled(true);

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,22 +26,6 @@
 #include "d3d12_common.h"
 #include "d3d12_device.h"
 
-void D3D12Replay::PreDeviceInitCounters()
-{
-}
-
-void D3D12Replay::PostDeviceInitCounters()
-{
-}
-
-void D3D12Replay::PreDeviceShutdownCounters()
-{
-}
-
-void D3D12Replay::PostDeviceShutdownCounters()
-{
-}
-
 vector<GPUCounter> D3D12Replay::EnumerateCounters()
 {
   vector<GPUCounter> ret;
@@ -63,14 +47,15 @@ vector<GPUCounter> D3D12Replay::EnumerateCounters()
   return ret;
 }
 
-void D3D12Replay::DescribeCounter(GPUCounter counterID, CounterDescription &desc)
+CounterDescription D3D12Replay::DescribeCounter(GPUCounter counterID)
 {
-  desc.counterID = counterID;
+  CounterDescription desc;
+  desc.counter = counterID;
   // 0808CC9B-79DF-4549-81F7-85494E648F22
-  desc.uuid.bytes[0] = 0x0808CC9B;
-  desc.uuid.bytes[1] = 0x79DF4549;
-  desc.uuid.bytes[2] = 0x81F78549;
-  desc.uuid.bytes[3] = 0x4E648F22 ^ (uint32_t)counterID;
+  desc.uuid.words[0] = 0x0808CC9B;
+  desc.uuid.words[1] = 0x79DF4549;
+  desc.uuid.words[2] = 0x81F78549;
+  desc.uuid.words[3] = 0x4E648F22 ^ (uint32_t)counterID;
 
   switch(counterID)
   {
@@ -176,6 +161,8 @@ void D3D12Replay::DescribeCounter(GPUCounter counterID, CounterDescription &desc
       desc.unit = CounterUnit::Absolute;
       break;
   }
+
+  return desc;
 }
 
 struct D3D12GPUTimerCallback : public D3D12DrawcallCallback
@@ -225,7 +212,6 @@ struct D3D12GPUTimerCallback : public D3D12DrawcallCallback
   void PreDispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) { PreDraw(eid, cmd); }
   bool PostDispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) { return PostDraw(eid, cmd); }
   void PostRedispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) { PostRedraw(eid, cmd); }
-  bool RecordAllCmds() { return true; }
   void AliasEvent(uint32_t primary, uint32_t alias)
   {
     m_AliasEvents.push_back(std::make_pair(primary, alias));
@@ -280,7 +266,7 @@ vector<CounterResult> D3D12Replay::FetchCounters(const vector<GPUCounter> &count
                                                   __uuidof(ID3D12Resource), (void **)&readbackBuf);
   if(FAILED(hr))
   {
-    RDCERR("Failed to create query readback buffer %08x", hr);
+    RDCERR("Failed to create query readback buffer HRESULT: %s", ToStr(hr).c_str());
     return ret;
   }
 
@@ -293,7 +279,7 @@ vector<CounterResult> D3D12Replay::FetchCounters(const vector<GPUCounter> &count
                                   (void **)&timerQueryHeap);
   if(FAILED(hr))
   {
-    RDCERR("Failed to create timer query heap %08x", hr);
+    RDCERR("Failed to create timer query heap HRESULT: %s", ToStr(hr).c_str());
     return ret;
   }
 
@@ -306,7 +292,7 @@ vector<CounterResult> D3D12Replay::FetchCounters(const vector<GPUCounter> &count
                                   (void **)&pipestatsQueryHeap);
   if(FAILED(hr))
   {
-    RDCERR("Failed to create pipeline statistics query heap %08x", hr);
+    RDCERR("Failed to create pipeline statistics query heap HRESULT: %s", ToStr(hr).c_str());
     return ret;
   }
 
@@ -319,7 +305,7 @@ vector<CounterResult> D3D12Replay::FetchCounters(const vector<GPUCounter> &count
                                   (void **)&occlusionQueryHeap);
   if(FAILED(hr))
   {
-    RDCERR("Failed to create occlusion query heap %08x", hr);
+    RDCERR("Failed to create occlusion query heap HRESULT: %s", ToStr(hr).c_str());
     return ret;
   }
 
@@ -374,7 +360,7 @@ vector<CounterResult> D3D12Replay::FetchCounters(const vector<GPUCounter> &count
   hr = readbackBuf->Map(0, &range, (void **)&data);
   if(FAILED(hr))
   {
-    RDCERR("Failed to read timer query heap data %08x", hr);
+    RDCERR("Failed to read timer query heap data HRESULT: %s", ToStr(hr).c_str());
     SAFE_RELEASE(readbackBuf);
     SAFE_RELEASE(timerQueryHeap);
     SAFE_RELEASE(pipestatsQueryHeap);
@@ -412,8 +398,8 @@ vector<CounterResult> D3D12Replay::FetchCounters(const vector<GPUCounter> &count
     {
       CounterResult result;
 
-      result.eventID = cb.m_Results[i].first;
-      result.counterID = counters[c];
+      result.eventId = cb.m_Results[i].first;
+      result.counter = counters[c];
 
       switch(counters[c])
       {
@@ -445,17 +431,23 @@ vector<CounterResult> D3D12Replay::FetchCounters(const vector<GPUCounter> &count
     for(size_t c = 0; c < counters.size(); c++)
     {
       CounterResult search;
-      search.counterID = counters[c];
-      search.eventID = cb.m_AliasEvents[i].first;
+      search.counter = counters[c];
+      search.eventId = cb.m_AliasEvents[i].first;
 
       // find the result we're aliasing
       auto it = std::find(ret.begin(), ret.end(), search);
-      RDCASSERT(it != ret.end());
-
-      // duplicate the result and append
-      CounterResult aliased = *it;
-      aliased.eventID = cb.m_AliasEvents[i].second;
-      ret.push_back(aliased);
+      if(it != ret.end())
+      {
+        // duplicate the result and append
+        CounterResult aliased = *it;
+        aliased.eventId = cb.m_AliasEvents[i].second;
+        ret.push_back(aliased);
+      }
+      else
+      {
+        RDCERR("Expected to find alias-target result for EID %u counter %u, but didn't",
+               search.eventId, search.counter);
+      }
     }
   }
 

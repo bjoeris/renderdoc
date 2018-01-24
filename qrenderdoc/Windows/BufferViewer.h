@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,13 +25,17 @@
 #pragma once
 
 #include <QFrame>
-#include "Code/CaptureContext.h"
+#include <QMutex>
+#include "Code/Interface/QRDInterface.h"
+#include "Code/QRDUtils.h"
 
 namespace Ui
 {
 class BufferViewer;
 }
 
+class QItemSelection;
+class QMenu;
 class RDTableView;
 class BufferItemModel;
 class CameraWrapper;
@@ -52,7 +56,7 @@ struct BufferExport
   BufferExport(ExportFormat f) : format(f) {}
 };
 
-class BufferViewer : public QFrame, public IBufferViewer, public ILogViewer
+class BufferViewer : public QFrame, public IBufferViewer, public ICaptureViewer
 {
   Q_OBJECT
 
@@ -74,15 +78,14 @@ public:
       ScrollToRow(m_ModelVSIn, row);
   }
   void ViewBuffer(uint64_t byteOffset, uint64_t byteSize, ResourceId id,
-                  const QString &format = QString()) override;
-  void ViewTexture(uint32_t arrayIdx, uint32_t mip, ResourceId id,
-                   const QString &format = QString()) override;
+                  const rdcstr &format = "") override;
+  void ViewTexture(uint32_t arrayIdx, uint32_t mip, ResourceId id, const rdcstr &format = "") override;
 
-  // ILogViewerForm
-  void OnLogfileLoaded() override;
-  void OnLogfileClosed() override;
-  void OnSelectedEventChanged(uint32_t eventID) override {}
-  void OnEventChanged(uint32_t eventID) override;
+  // ICaptureViewer
+  void OnCaptureLoaded() override;
+  void OnCaptureClosed() override;
+  void OnSelectedEventChanged(uint32_t eventId) override {}
+  void OnEventChanged(uint32_t eventId) override;
 
   QVariant persistData();
   void setPersistData(const QVariant &persistData);
@@ -94,6 +97,7 @@ private slots:
   void on_autofitCamera_clicked();
   void on_toggleControls_toggled(bool checked);
   void on_syncViews_toggled(bool checked);
+  void on_resourceDetails_clicked();
   void on_highlightVerts_toggled(bool checked);
   void on_wireframeRender_toggled(bool checked);
   void on_solidShading_currentIndexChanged(int index);
@@ -129,6 +133,10 @@ private:
 
   IReplayOutput *m_Output;
 
+  void updateWindowTitle();
+
+  void configureDrawRange();
+
   void RT_UpdateAndDisplay(IReplayController *);
   void RT_FetchMeshData(IReplayController *r);
 
@@ -156,15 +164,15 @@ private:
 
   struct CalcBoundingBoxData
   {
-    uint32_t eventID;
+    uint32_t eventId;
     uint32_t inst;
-    int32_t baseVertex;
 
     struct StageData
     {
       QList<FormatElement> elements;
       uint32_t count;
       BufferData *indices = NULL;
+      int32_t baseVertex;
       QList<BufferData *> buffers;
     } input[3];
 

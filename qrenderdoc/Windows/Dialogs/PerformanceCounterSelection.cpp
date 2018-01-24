@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,6 @@
 #include "PerformanceCounterSelection.h"
 #include <QMenu>
 #include <QSet>
-#include "Code/CaptureContext.h"
 #include "Code/Interface/QRDInterface.h"
 #include "Code/Resources.h"
 #include "ui_PerformanceCounterSelection.h"
@@ -274,17 +273,17 @@ void PerformanceCounterSelection::SetCounters(const QVector<CounterDescription> 
 
   for(const CounterDescription &desc : descriptions)
   {
-    m_CounterToUuid[desc.counterID] = desc.uuid;
-    m_UuidToCounter[desc.uuid] = desc.counterID;
+    m_CounterToUuid[desc.counter] = desc.uuid;
+    m_UuidToCounter[desc.uuid] = desc.counter;
 
-    const CounterFamily family = GetCounterFamily(desc.counterID);
+    const CounterFamily family = GetCounterFamily(desc.counter);
     if(family != currentFamily)
     {
       currentRoot = new RDTreeWidgetItem();
-      ui->counterTree->addTopLevelItem(currentRoot);
       currentRoot->setText(0, ToString(family));
       currentRoot->setCheckState(0, Qt::Unchecked);
       currentRoot->setData(0, PreviousCheckStateRole, Qt::Unchecked);
+      ui->counterTree->addTopLevelItem(currentRoot);
 
       categories.clear();
 
@@ -299,10 +298,10 @@ void PerformanceCounterSelection::SetCounters(const QVector<CounterDescription> 
     if(categoryIterator == categories.end())
     {
       RDTreeWidgetItem *item = new RDTreeWidgetItem();
-      currentRoot->addChild(item);
       item->setText(0, desc.category);
       item->setCheckState(0, Qt::Unchecked);
       item->setData(0, PreviousCheckStateRole, Qt::Unchecked);
+      currentRoot->addChild(item);
 
       categories[category] = item;
       categoryItem = item;
@@ -313,14 +312,14 @@ void PerformanceCounterSelection::SetCounters(const QVector<CounterDescription> 
     }
 
     RDTreeWidgetItem *counterItem = new RDTreeWidgetItem();
-    categoryItem->addChild(counterItem);
     counterItem->setText(0, desc.name);
     counterItem->setData(0, CounterDescriptionRole, desc.description);
-    counterItem->setData(0, CounterIdRole, (uint32_t)desc.counterID);
+    counterItem->setData(0, CounterIdRole, (uint32_t)desc.counter);
     counterItem->setCheckState(0, Qt::Unchecked);
     counterItem->setData(0, PreviousCheckStateRole, Qt::Unchecked);
+    categoryItem->addChild(counterItem);
 
-    m_CounterToTreeItem[desc.counterID] = counterItem;
+    m_CounterToTreeItem[desc.counter] = counterItem;
   }
 }
 
@@ -365,7 +364,7 @@ void PerformanceCounterSelection::Save()
     const Uuid uuid = m_CounterToUuid[v];
     QVariantList e;
 
-    for(const byte b : uuid.bytes)
+    for(const uint32_t b : uuid.words)
     {
       e.append(b);
     }
@@ -411,11 +410,15 @@ void PerformanceCounterSelection::Load()
       QVariantList bytes = counter.toList();
       Uuid uuid;
 
-      /// TODO assert counter.size () == 4
+      if(bytes.size() != 4)
+      {
+        qWarning() << "Counter ID doesn't count 4 words";
+        continue;
+      }
 
       for(int i = 0; i < 4; ++i)
       {
-        uuid.bytes[i] = bytes[i].toUInt();
+        uuid.words[i] = bytes[i].toUInt();
       }
 
       if(!m_UuidToCounter.contains(uuid))

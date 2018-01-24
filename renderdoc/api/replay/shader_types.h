@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -28,8 +28,6 @@
 #include <stdint.h>
 #include "basic_types.h"
 #include "replay_enums.h"
-
-typedef uint8_t byte;
 
 DOCUMENT("A ``float`` 4 component vector.")
 struct FloatVecVal
@@ -116,6 +114,7 @@ data bytes when they are specified to be column-major in the API/shader metadata
 )");
 struct ShaderVariable
 {
+  DOCUMENT("");
   ShaderVariable()
   {
     name = "";
@@ -167,13 +166,39 @@ struct ShaderVariable
     value.u.z = z;
     value.u.w = w;
   }
+  bool operator==(const ShaderVariable &o) const
+  {
+    return rows == o.rows && columns == o.columns && name == o.name && type == o.type &&
+           displayAsHex == o.displayAsHex && !memcmp(&value, &o.value, sizeof(value)) &&
+           isStruct == o.isStruct && members == o.members;
+  }
+  bool operator<(const ShaderVariable &o) const
+  {
+    if(!(rows == o.rows))
+      return rows < o.rows;
+    if(!(columns == o.columns))
+      return columns < o.columns;
+    if(!(name == o.name))
+      return name < o.name;
+    if(!(type == o.type))
+      return type < o.type;
+    if(!(displayAsHex == o.displayAsHex))
+      return displayAsHex < o.displayAsHex;
+    if(memcmp(&value, &o.value, sizeof(value)) < 0)
+      return true;
+    if(!(isStruct == o.isStruct))
+      return isStruct < o.isStruct;
+    if(!(members == o.members))
+      return members < o.members;
+    return false;
+  }
 
   DOCUMENT("The number of rows in this matrix.");
   uint32_t rows;
   DOCUMENT("The number of columns in this matrix.");
   uint32_t columns;
   DOCUMENT("The name of this variable.");
-  rdctype::str name;
+  rdcstr name;
 
   DOCUMENT("The :class:`basic type <VarType>` of this variable.");
   VarType type;
@@ -188,7 +213,7 @@ struct ShaderVariable
   bool isStruct;
 
   DOCUMENT("The members of this variable as a list of :class:`ShaderValue`.");
-  rdctype::array<ShaderVariable> members;
+  rdcarray<ShaderVariable> members;
 };
 
 DECLARE_REFLECTION_STRUCT(ShaderVariable);
@@ -198,14 +223,34 @@ with all mutable variable contents.
 )");
 struct ShaderDebugState
 {
+  DOCUMENT("");
+  bool operator==(const ShaderDebugState &o) const
+  {
+    return registers == o.registers && outputs == o.outputs && indexableTemps == o.indexableTemps &&
+           nextInstruction == o.nextInstruction && flags == o.flags;
+  }
+  bool operator<(const ShaderDebugState &o) const
+  {
+    if(!(registers == o.registers))
+      return registers < o.registers;
+    if(!(outputs == o.outputs))
+      return outputs < o.outputs;
+    if(!(indexableTemps == o.indexableTemps))
+      return indexableTemps < o.indexableTemps;
+    if(!(nextInstruction == o.nextInstruction))
+      return nextInstruction < o.nextInstruction;
+    if(!(flags == o.flags))
+      return flags < o.flags;
+    return false;
+  }
   DOCUMENT("The temporary variables for this shader as a list of :class:`ShaderValue`.");
-  rdctype::array<ShaderVariable> registers;
+  rdcarray<ShaderVariable> registers;
   DOCUMENT("The output variables for this shader as a list of :class:`ShaderValue`.");
-  rdctype::array<ShaderVariable> outputs;
+  rdcarray<ShaderVariable> outputs;
 
   DOCUMENT(
       "Indexable temporary variables for this shader as a list of :class:`ShaderValue` lists.");
-  rdctype::array<rdctype::array<ShaderVariable> > indexableTemps;
+  rdcarray<ShaderVariable> indexableTemps;
 
   DOCUMENT(R"(The next instruction to be executed after this state. The initial state before any
 shader execution happened will have ``nextInstruction == 0``.)");
@@ -224,18 +269,18 @@ change with shader execution.
 struct ShaderDebugTrace
 {
   DOCUMENT("The input variables for this shader as a list of :class:`ShaderValue`.");
-  rdctype::array<ShaderVariable> inputs;
+  rdcarray<ShaderVariable> inputs;
   DOCUMENT(R"(Constant variables for this shader as a list of :class:`ShaderValue` lists.
 
 Each entry in this list corresponds to a constant block with the same index in the
-:data:`ShaderBindpointMapping.ConstantBlocks` list, which can be used to look up the metadata.
+:data:`ShaderBindpointMapping.constantBlocks` list, which can be used to look up the metadata.
 )");
-  rdctype::array<rdctype::array<ShaderVariable> > cbuffers;
+  rdcarray<ShaderVariable> constantBlocks;
 
   DOCUMENT(R"(A list of :class:`ShaderDebugState` states representing the state after each
 instruction was executed
 )");
-  rdctype::array<ShaderDebugState> states;
+  rdcarray<ShaderDebugState> states;
 };
 
 DECLARE_REFLECTION_STRUCT(ShaderDebugTrace);
@@ -249,61 +294,88 @@ between shader stages.
 )");
 struct SigParameter
 {
-  SigParameter()
-      : semanticIndex(0),
-        needSemanticIndex(false),
-        regIndex(0),
-        systemValue(ShaderBuiltin::Undefined),
-        compType(CompType::Float),
-        regChannelMask(0),
-        channelUsedMask(0),
-        compCount(0),
-        stream(0),
-        arrayIndex(~0U)
+  DOCUMENT("");
+  bool operator==(const SigParameter &o) const
   {
+    return varName == o.varName && semanticName == o.semanticName &&
+           semanticIdxName == o.semanticIdxName && semanticIndex == o.semanticIndex &&
+           regIndex == o.regIndex && systemValue == o.systemValue && compType == o.compType &&
+           regChannelMask == o.regChannelMask && channelUsedMask == o.channelUsedMask &&
+           needSemanticIndex == o.needSemanticIndex && compCount == o.compCount &&
+           stream == o.stream && arrayIndex == o.arrayIndex;
+  }
+  bool operator<(const SigParameter &o) const
+  {
+    if(!(varName == o.varName))
+      return varName < o.varName;
+    if(!(semanticName == o.semanticName))
+      return semanticName < o.semanticName;
+    if(!(semanticIdxName == o.semanticIdxName))
+      return semanticIdxName < o.semanticIdxName;
+    if(!(semanticIndex == o.semanticIndex))
+      return semanticIndex < o.semanticIndex;
+    if(!(regIndex == o.regIndex))
+      return regIndex < o.regIndex;
+    if(!(systemValue == o.systemValue))
+      return systemValue < o.systemValue;
+    if(!(compType == o.compType))
+      return compType < o.compType;
+    if(!(regChannelMask == o.regChannelMask))
+      return regChannelMask < o.regChannelMask;
+    if(!(channelUsedMask == o.channelUsedMask))
+      return channelUsedMask < o.channelUsedMask;
+    if(!(needSemanticIndex == o.needSemanticIndex))
+      return needSemanticIndex < o.needSemanticIndex;
+    if(!(compCount == o.compCount))
+      return compCount < o.compCount;
+    if(!(stream == o.stream))
+      return stream < o.stream;
+    if(!(arrayIndex == o.arrayIndex))
+      return arrayIndex < o.arrayIndex;
+    return false;
   }
 
   DOCUMENT("The name of this variable - may not be present in the metadata for all APIs.");
-  rdctype::str varName;
+  rdcstr varName;
   DOCUMENT("The semantic name of this variable, if the API uses semantic matching for bindings.");
-  rdctype::str semanticName;
+  rdcstr semanticName;
   DOCUMENT("The combined semantic name and index.");
-  rdctype::str semanticIdxName;
+  rdcstr semanticIdxName;
   DOCUMENT("The semantic index of this variable - see :data:`semanticName`.");
-  uint32_t semanticIndex;
+  uint32_t semanticIndex = 0;
 
   DOCUMENT(R"(The index of the shader register/binding used to store this signature element.
 
 This may be :data:`NoIndex` if the element is system-generated and not consumed by another shader
 stage. See :data:`systemValue`.
 )");
-  uint32_t regIndex;
+  uint32_t regIndex = 0;
   DOCUMENT("The :class:`ShaderBuiltin` value that this element contains.");
-  ShaderBuiltin systemValue;
+  ShaderBuiltin systemValue = ShaderBuiltin::Undefined;
 
   DOCUMENT("The :class:`component type <CompType>` of data that this element stores.");
-  CompType compType;
+  CompType compType = CompType::Float;
 
   DOCUMENT(R"(A bitmask indicating which components in the shader register are stored, for APIs that
 pack signatures together.
 )");
-  uint8_t regChannelMask;
+  uint8_t regChannelMask = 0;
   DOCUMENT(R"(A bitmask indicating which components in the shader register are actually used by the
 shader itself, for APIs that pack signatures together.
 )");
-  uint8_t channelUsedMask;
+  uint8_t channelUsedMask = 0;
 
   DOCUMENT("A convenience flag - ``True`` if the semantic name is unique and no index is needed.");
-  bool needSemanticIndex;
+  bool needSemanticIndex = false;
 
   DOCUMENT("The number of components used to store this element. See :data:`compType`.");
-  uint32_t compCount;
+  uint32_t compCount = 0;
   DOCUMENT(
       "Selects a stream for APIs that provide multiple output streams for the same named output.");
-  uint32_t stream;
+  uint32_t stream = 0;
 
   DOCUMENT("If this element is part of an array, indicates the index, or :data:`NoIndex` if not.");
-  uint32_t arrayIndex;
+  uint32_t arrayIndex = ~0U;
 
   static const uint32_t NoIndex = ~0U;
 };
@@ -315,20 +387,45 @@ struct ShaderConstant;
 DOCUMENT("Describes the storage characteristics for a basic :class:`ShaderConstant` in memory.");
 struct ShaderVariableDescriptor
 {
+  DOCUMENT("");
+  bool operator==(const ShaderVariableDescriptor &o) const
+  {
+    return type == o.type && rows == o.rows && columns == o.columns &&
+           rowMajorStorage == o.rowMajorStorage && elements == o.elements &&
+           arrayByteStride == o.arrayByteStride && name == o.name;
+  }
+  bool operator<(const ShaderVariableDescriptor &o) const
+  {
+    if(!(type == o.type))
+      return type < o.type;
+    if(!(rows == o.rows))
+      return rows < o.rows;
+    if(!(columns == o.columns))
+      return columns < o.columns;
+    if(!(rowMajorStorage == o.rowMajorStorage))
+      return rowMajorStorage < o.rowMajorStorage;
+    if(!(elements == o.elements))
+      return elements < o.elements;
+    if(!(arrayByteStride == o.arrayByteStride))
+      return arrayByteStride < o.arrayByteStride;
+    if(!(name == o.name))
+      return name < o.name;
+    return false;
+  }
   DOCUMENT("The :class:`VarType` that this basic constant stores.");
   VarType type;
   DOCUMENT("The number of rows in this matrix.");
   uint8_t rows;
   DOCUMENT("The number of columns in this matrix.");
-  uint8_t cols;
+  uint8_t columns;
   DOCUMENT("``True`` if the matrix is stored as row major instead of column major.");
   bool rowMajorStorage;
   DOCUMENT("The number of elements in the array, or 1 if it's not an array.");
   uint32_t elements;
   DOCUMENT("The number of bytes between the start of one element in the array and the next.");
-  uint32_t arrayStride;
+  uint32_t arrayByteStride;
   DOCUMENT("The name of the type of this constant, e.g. a ``struct`` name.");
-  rdctype::str name;
+  rdcstr name;
 };
 
 DECLARE_REFLECTION_STRUCT(ShaderVariableDescriptor);
@@ -336,11 +433,24 @@ DECLARE_REFLECTION_STRUCT(ShaderVariableDescriptor);
 DOCUMENT("Describes the type and members of a :class:`ShaderConstant`.");
 struct ShaderVariableType
 {
+  DOCUMENT("");
+  bool operator==(const ShaderVariableType &o) const
+  {
+    return descriptor == o.descriptor && members == o.members;
+  }
+  bool operator<(const ShaderVariableType &o) const
+  {
+    if(!(descriptor == o.descriptor))
+      return descriptor < o.descriptor;
+    if(!(members == o.members))
+      return members < o.members;
+    return false;
+  }
   DOCUMENT("The :class:`ShaderVariableDescriptor` that describes the current constant.");
   ShaderVariableDescriptor descriptor;
 
   DOCUMENT("A list of :class:`ShaderConstant` with any members that this constant may contain.");
-  rdctype::array<ShaderConstant> members;
+  rdcarray<ShaderConstant> members;
 };
 
 DECLARE_REFLECTION_STRUCT(ShaderVariableType);
@@ -348,6 +458,16 @@ DECLARE_REFLECTION_STRUCT(ShaderVariableType);
 DOCUMENT("Describes the offset of a constant in memory in terms of 16 byte vectors.");
 struct ShaderRegister
 {
+  DOCUMENT("");
+  bool operator==(const ShaderRegister &o) const { return vec == o.vec && comp == o.comp; }
+  bool operator<(const ShaderRegister &o) const
+  {
+    if(!(vec == o.vec))
+      return vec < o.vec;
+    if(!(comp == o.comp))
+      return comp < o.comp;
+    return false;
+  }
   DOCUMENT("The index of the 16 byte vector where this register begins");
   uint32_t vec;
   DOCUMENT("The 4 byte component within that vector where this register begins");
@@ -359,8 +479,25 @@ DECLARE_REFLECTION_STRUCT(ShaderRegister);
 DOCUMENT("Contains the detail of a constant within a :class:`ConstantBlock` in memory.");
 struct ShaderConstant
 {
+  DOCUMENT("");
+  bool operator==(const ShaderConstant &o) const
+  {
+    return name == o.name && reg == o.reg && defaultValue == o.defaultValue && type == o.type;
+  }
+  bool operator<(const ShaderConstant &o) const
+  {
+    if(!(name == o.name))
+      return name < o.name;
+    if(!(reg == o.reg))
+      return reg < o.reg;
+    if(!(defaultValue == o.defaultValue))
+      return defaultValue < o.defaultValue;
+    if(!(type == o.type))
+      return type < o.type;
+    return false;
+  }
   DOCUMENT("The name of this constant");
-  rdctype::str name;
+  rdcstr name;
   DOCUMENT(
       "A :class:`ShaderRegister` describing where this constant is offset from the start of the "
       "block");
@@ -380,12 +517,32 @@ information.
 )");
 struct ConstantBlock
 {
+  DOCUMENT("");
+  bool operator==(const ConstantBlock &o) const
+  {
+    return name == o.name && variables == o.variables && bindPoint == o.bindPoint &&
+           byteSize == o.byteSize && bufferBacked == o.bufferBacked;
+  }
+  bool operator<(const ConstantBlock &o) const
+  {
+    if(!(name == o.name))
+      return name < o.name;
+    if(!(variables == o.variables))
+      return variables < o.variables;
+    if(!(bindPoint == o.bindPoint))
+      return bindPoint < o.bindPoint;
+    if(!(byteSize == o.byteSize))
+      return byteSize < o.byteSize;
+    if(!(bufferBacked == o.bufferBacked))
+      return bufferBacked < o.bufferBacked;
+    return false;
+  }
   DOCUMENT("The name of this constant block, may be empty on some APIs.");
-  rdctype::str name;
+  rdcstr name;
   DOCUMENT("The constants contained within this block as a list of :class:`ShaderConstant`.");
-  rdctype::array<ShaderConstant> variables;
+  rdcarray<ShaderConstant> variables;
   DOCUMENT(R"(The bindpoint for this block. This is an index in the
-:data:`ShaderBindpointMapping.ConstantBlocks` list.
+:data:`ShaderBindpointMapping.constantBlocks` list.
 )");
   int32_t bindPoint;
   DOCUMENT("The total number of bytes consumed by all of the constants contained in this block.");
@@ -407,11 +564,24 @@ relevant.
 )");
 struct ShaderSampler
 {
+  DOCUMENT("");
+  bool operator==(const ShaderSampler &o) const
+  {
+    return name == o.name && bindPoint == o.bindPoint;
+  }
+  bool operator<(const ShaderSampler &o) const
+  {
+    if(!(name == o.name))
+      return name < o.name;
+    if(!(bindPoint == o.bindPoint))
+      return bindPoint < o.bindPoint;
+    return false;
+  }
   DOCUMENT("The name of this sampler.");
-  rdctype::str name;
+  rdcstr name;
 
   DOCUMENT(R"(The bindpoint for this block. This is an index in either the
-:data:`ShaderBindpointMapping.Samplers` list.
+:data:`ShaderBindpointMapping.samplers` list.
 )");
   int32_t bindPoint;
 };
@@ -426,62 +596,153 @@ directly by means of the API resource binding system.
 )");
 struct ShaderResource
 {
-  DOCUMENT("The :class:`TextureDim` that describes the type of this resource.");
-  TextureDim resType;
+  DOCUMENT("");
+  bool operator==(const ShaderResource &o) const
+  {
+    return resType == o.resType && name == o.name && variableType == o.variableType &&
+           bindPoint == o.bindPoint && isTexture == o.isTexture && isReadOnly == o.isReadOnly;
+  }
+  bool operator<(const ShaderResource &o) const
+  {
+    if(!(resType == o.resType))
+      return resType < o.resType;
+    if(!(name == o.name))
+      return name < o.name;
+    if(!(variableType == o.variableType))
+      return variableType < o.variableType;
+    if(!(bindPoint == o.bindPoint))
+      return bindPoint < o.bindPoint;
+    if(!(isTexture == o.isTexture))
+      return isTexture < o.isTexture;
+    if(!(isReadOnly == o.isReadOnly))
+      return isReadOnly < o.isReadOnly;
+    return false;
+  }
+  DOCUMENT("The :class:`TextureType` that describes the type of this resource.");
+  TextureType resType;
 
   DOCUMENT("The name of this resource.");
-  rdctype::str name;
+  rdcstr name;
 
   DOCUMENT("A :class:`ShaderVariableType` describing type of each element of this resource.");
   ShaderVariableType variableType;
 
   DOCUMENT(R"(The bindpoint for this block. This is an index in either the
-:data:`ShaderBindpointMapping.ReadOnlyResources` list or
-:data:`ShaderBindpointMapping.ReadWriteResources` list as appropriate (see :data:`IsReadOnly`).
+:data:`ShaderBindpointMapping.readOnlyResources` list or
+:data:`ShaderBindpointMapping.readWriteResources` list as appropriate (see :data:`isReadOnly`).
 )");
   int32_t bindPoint;
 
-  DOCUMENT(R"(``True`` if this resource is a texture, otherwise it is a buffer or sampler (see
-:data:`IsSampler`).
-)");
-  bool IsTexture;
+  DOCUMENT("``True`` if this resource is a texture, otherwise it is a buffer.");
+  bool isTexture;
   DOCUMENT(R"(``True`` if this resource is available to the shader for reading only, otherwise it is
 able to be read from and written to arbitrarily.
 )");
-  bool IsReadOnly;
+  bool isReadOnly;
 };
 
 DECLARE_REFLECTION_STRUCT(ShaderResource);
 
+DOCUMENT("Describes an entry point in a shader.");
+struct ShaderEntryPoint
+{
+  DOCUMENT("");
+  bool operator==(const ShaderEntryPoint &o) const { return name == o.name && stage == o.stage; }
+  bool operator<(const ShaderEntryPoint &o) const
+  {
+    if(!(name == o.name))
+      return name < o.name;
+    if(!(stage == o.stage))
+      return stage < o.stage;
+    return false;
+  }
+  DOCUMENT("The name of the entry point.");
+  rdcstr name;
+
+  DOCUMENT("The :class:`ShaderStage` for this entry point .");
+  ShaderStage stage;
+};
+
+DECLARE_REFLECTION_STRUCT(ShaderEntryPoint);
+
+DOCUMENT("Contains a single flag used at compile-time on a shader.");
+struct ShaderCompileFlag
+{
+  DOCUMENT("");
+  bool operator==(const ShaderCompileFlag &o) const { return name == o.name && value == o.value; }
+  bool operator<(const ShaderCompileFlag &o) const
+  {
+    if(!(name == o.name))
+      return name < o.name;
+    if(!(value == o.value))
+      return value < o.value;
+    return false;
+  }
+  DOCUMENT("The name of the compile flag.");
+  rdcstr name;
+
+  DOCUMENT("The value of the compile flag.");
+  rdcstr value;
+};
+
+DECLARE_REFLECTION_STRUCT(ShaderCompileFlag);
+
 DOCUMENT("Contains the information about the compilation environment of a shader");
 struct ShaderCompileFlags
 {
-  DOCUMENT(R"(A list of tuples, where each tuple is a pair of flagName, flagValue.
+  DOCUMENT(R"(A list of :class:`ShaderCompileFlag`.
 
 Each entry is an API or compiler specific flag used to compile this shader originally.
 )");
-  rdctype::array<rdctype::pair<rdctype::str, rdctype::str> > flags;
+  rdcarray<ShaderCompileFlag> flags;
 };
+
+DECLARE_REFLECTION_STRUCT(ShaderCompileFlags);
+
+DOCUMENT("Contains a source file available in a debug-compiled shader.");
+struct ShaderSourceFile
+{
+  DOCUMENT("");
+  bool operator==(const ShaderSourceFile &o) const
+  {
+    return filename == o.filename && contents == o.contents;
+  }
+  bool operator<(const ShaderSourceFile &o) const
+  {
+    if(!(filename == o.filename))
+      return filename < o.filename;
+    if(!(contents == o.contents))
+      return contents < o.contents;
+    return false;
+  }
+  DOCUMENT("The filename of this source file.");
+  rdcstr filename;
+
+  DOCUMENT("The actual contents of the file.");
+  rdcstr contents;
+};
+
+DECLARE_REFLECTION_STRUCT(ShaderSourceFile);
 
 DOCUMENT(R"(Contains the information about a shader contained within API-specific debugging
 information attached to the shader.
 
 Primarily this means the embedded original source files.
 )");
-struct ShaderDebugChunk
+struct ShaderDebugInfo
 {
-  ShaderDebugChunk() {}
+  ShaderDebugInfo() {}
   DOCUMENT("A :class:`ShaderCompileFlags` containing the flags used to compile this shader.");
   ShaderCompileFlags compileFlags;
 
-  DOCUMENT(R"(A list of tuples, where each tuple is a pair of filename, source code.
+  DOCUMENT(R"(A list of :class:`ShaderSourceFile`.
 
 The first entry in the list is always the file where the entry point is.
 )");
-  rdctype::array<rdctype::pair<rdctype::str, rdctype::str> > files;
+  rdcarray<ShaderSourceFile> files;
 };
 
-DECLARE_REFLECTION_STRUCT(ShaderDebugChunk);
+DECLARE_REFLECTION_STRUCT(ShaderDebugInfo);
 
 DOCUMENT(R"(The reflection and metadata fully describing a shader.
 
@@ -492,40 +753,49 @@ and resource binding scheme.
 struct ShaderReflection
 {
   DOCUMENT("The :class:`ResourceId` of this shader.");
-  ResourceId ID;
+  ResourceId resourceId;
 
   DOCUMENT("The entry point in the shader for this reflection, if multiple entry points exist.");
-  rdctype::str EntryPoint;
+  rdcstr entryPoint;
 
   DOCUMENT(
-      "A :class:`ShaderDebugChunk` containing any embedded debugging information in this shader.");
-  ShaderDebugChunk DebugInfo;
+      "The :class:`ShaderStage` that this shader corresponds to, if multiple entry points exist.");
+  ShaderStage stage;
 
-  DOCUMENT("A raw ``bytes`` dump of the original shader, encoded in API specific binary form.");
-  rdctype::array<byte> RawBytes;
+  DOCUMENT(
+      "A :class:`ShaderDebugInfo` containing any embedded debugging information in this shader.");
+  ShaderDebugInfo debugInfo;
+
+  DOCUMENT("The :class:`ShaderEncoding` of this shader. See :data:`rawBytes`.");
+  ShaderEncoding encoding;
+
+  DOCUMENT(R"(A raw ``bytes`` dump of the original shader, encoded in the form denoted by
+:data:`encoding`.
+)");
+  bytebuf rawBytes;
 
   DOCUMENT("The 3D dimensions of a compute workgroup, for compute shaders.");
-  uint32_t DispatchThreadsDimension[3];
+  uint32_t dispatchThreadsDimension[3];
 
   DOCUMENT("A list of :class:`SigParameter` with the shader's input signature.");
-  rdctype::array<SigParameter> InputSig;
+  rdcarray<SigParameter> inputSignature;
   DOCUMENT("A list of :class:`SigParameter` with the shader's output signature.");
-  rdctype::array<SigParameter> OutputSig;
+  rdcarray<SigParameter> outputSignature;
 
   DOCUMENT("A list of :class:`ConstantBlock` with the shader's constant bindings.");
-  rdctype::array<ConstantBlock> ConstantBlocks;
+  rdcarray<ConstantBlock> constantBlocks;
 
   DOCUMENT("A list of :class:`ShaderSampler` with the shader's samplers.");
-  rdctype::array<ShaderSampler> Samplers;
+  rdcarray<ShaderSampler> samplers;
 
   DOCUMENT("A list of :class:`ShaderResource` with the shader's read-only resources.");
-  rdctype::array<ShaderResource> ReadOnlyResources;
+  rdcarray<ShaderResource> readOnlyResources;
   DOCUMENT("A list of :class:`ShaderResource` with the shader's read-write resources.");
-  rdctype::array<ShaderResource> ReadWriteResources;
+  rdcarray<ShaderResource> readWriteResources;
 
   // TODO expand this to encompass shader subroutines.
   DOCUMENT("A list of strings with the shader's interfaces. Largely an unused API feature.");
-  rdctype::array<rdctype::str> Interfaces;
+  rdcarray<rdcstr> interfaces;
 };
 
 DECLARE_REFLECTION_STRUCT(ShaderReflection);
@@ -534,9 +804,10 @@ DOCUMENT(R"(Declares the binding information for a single resource binding.
 
 See :class:`ShaderBindpointMapping` for how this mapping works in detail.
 )");
-struct BindpointMap
+struct Bindpoint
 {
-  BindpointMap()
+  DOCUMENT("");
+  Bindpoint()
   {
     bindset = 0;
     bind = 0;
@@ -544,7 +815,7 @@ struct BindpointMap
     arraySize = 1;
   }
 
-  BindpointMap(int32_t s, int32_t b)
+  Bindpoint(int32_t s, int32_t b)
   {
     bindset = s;
     bind = b;
@@ -552,13 +823,13 @@ struct BindpointMap
     arraySize = 1;
   }
 
-  bool operator<(const BindpointMap &o) const
+  bool operator<(const Bindpoint &o) const
   {
-    if(bindset != o.bindset)
+    if(!(bindset == o.bindset))
       return bindset < o.bindset;
     return bind < o.bind;
   }
-
+  bool operator==(const Bindpoint &o) const { return bindset == o.bindset && bind == o.bind; }
   DOCUMENT("The binding set.");
   int32_t bindset;
   DOCUMENT("The binding index.");
@@ -570,7 +841,7 @@ struct BindpointMap
   bool used;
 };
 
-DECLARE_REFLECTION_STRUCT(BindpointMap);
+DECLARE_REFLECTION_STRUCT(Bindpoint);
 
 DOCUMENT(R"(This structure goes hand in hand with :class:`ShaderReflection` to determine how to map
 from bindpoint indices in the resource lists there to API-specific binding points. The ``bindPoint``
@@ -580,62 +851,62 @@ API registers, indices, or slots.
 
 API specific details:
 
-* Direct3D11 - All :data:`BindpointMap.bindset` values are 0 as D3D11 has no notion of sets, and the
+* Direct3D11 - All :data:`Bindpoint.bindset` values are 0 as D3D11 has no notion of sets, and the
   only namespacing that exists is by shader stage and object type. Mostly this already exists with
   the constant block, read only and read write resource lists.
 
-  :data:`BindpointMap.arraySize` is likewise unused as D3D11 doesn't have arrayed resource bindings.
+  :data:`Bindpoint.arraySize` is likewise unused as D3D11 doesn't have arrayed resource bindings.
 
-  :data:`BindpointMap.bind` refers to the register/slot binding within the appropriate type (SRVs for
+  :data:`Bindpoint.bind` refers to the register/slot binding within the appropriate type (SRVs for
   read-only resources, UAV for read-write resources, samplers/constant buffers in each type).
 
-* OpenGL - Similarly to D3D11, :data:`BindpointMap.bindset` and :data:`BindpointMap.arraySize` are
+* OpenGL - Similarly to D3D11, :data:`Bindpoint.bindset` and :data:`Bindpoint.arraySize` are
   unused as OpenGL does not have true binding sets or array resource binds.
 
-  For OpenGL there may be many more duplicate :class:`BindpointMap` objects as the
-  :data:`BindpointMap.bind` refers to the index in the type-specific list, which is much more
+  For OpenGL there may be many more duplicate :class:`Bindpoint` objects as the
+  :data:`Bindpoint.bind` refers to the index in the type-specific list, which is much more
   granular on OpenGL. E.g. ``0`` may refer to images, storage buffers, and atomic buffers all within
-  the :data:`ReadWriteResources` list. The index is the uniform value of the binding. Since no
+  the :data:`readWriteResources` list. The index is the uniform value of the binding. Since no
   objects are namespaced by shader stage, the same value in two shaders refers to the same binding.
 
 * Direct3D12 - Since D3D12 doesn't have true resource arrays (they are linearised into sequential
-  registers) :data:`BindpointMap.arraySize` is not used.
+  registers) :data:`Bindpoint.arraySize` is not used.
 
-  :data:`BindpointMap.bindset` corresponds to register spaces, with :data:`BindpointMap.bind` then
+  :data:`Bindpoint.bindset` corresponds to register spaces, with :data:`Bindpoint.bind` then
   mapping to the register within that space. The root signature then maps these registers to
   descriptors.
 
-* Vulkan - For Vulkan :data:`BindpointMap.bindset` corresponds to the index of the descriptor set,
-  and :data:`BindpointMap.bind` refers to the index of the descriptor within that set.
-  :data:`BindpointMap.arraySize` also is used as descriptors in Vulkan can be true arrays, bound all
+* Vulkan - For Vulkan :data:`Bindpoint.bindset` corresponds to the index of the descriptor set,
+  and :data:`Bindpoint.bind` refers to the index of the descriptor within that set.
+  :data:`Bindpoint.arraySize` also is used as descriptors in Vulkan can be true arrays, bound all
   at once to a single binding.
 )");
 struct ShaderBindpointMapping
 {
   DOCUMENT(R"(This maps input attributes as a simple swizzle on the
-:data:`ShaderReflection.InputSig` indices for APIs where this mapping is mutable at runtime.
+:data:`ShaderReflection.inputSignature` indices for APIs where this mapping is mutable at runtime.
 )");
-  rdctype::array<int> InputAttributes;
+  rdcarray<int> inputAttributes;
 
-  DOCUMENT(R"(Provides a list of :class:`BindpointMap` entries for remapping the
-:data:`ShaderReflection.ConstantBlocks` list.
+  DOCUMENT(R"(Provides a list of :class:`Bindpoint` entries for remapping the
+:data:`ShaderReflection.constantBlocks` list.
 )");
-  rdctype::array<BindpointMap> ConstantBlocks;
+  rdcarray<Bindpoint> constantBlocks;
 
-  DOCUMENT(R"(Provides a list of :class:`BindpointMap` entries for remapping the
-:data:`ShaderReflection.Samplers` list.
+  DOCUMENT(R"(Provides a list of :class:`Bindpoint` entries for remapping the
+:data:`ShaderReflection.samplers` list.
 )");
-  rdctype::array<BindpointMap> Samplers;
+  rdcarray<Bindpoint> samplers;
 
-  DOCUMENT(R"(Provides a list of :class:`BindpointMap` entries for remapping the
-:data:`ShaderReflection.ReadOnlyResources` list.
+  DOCUMENT(R"(Provides a list of :class:`Bindpoint` entries for remapping the
+:data:`ShaderReflection.readOnlyResources` list.
 )");
-  rdctype::array<BindpointMap> ReadOnlyResources;
+  rdcarray<Bindpoint> readOnlyResources;
 
-  DOCUMENT(R"(Provides a list of :class:`BindpointMap` entries for remapping the
-:data:`ShaderReflection.ReadWriteResources` list.
+  DOCUMENT(R"(Provides a list of :class:`Bindpoint` entries for remapping the
+:data:`ShaderReflection.readWriteResources` list.
 )");
-  rdctype::array<BindpointMap> ReadWriteResources;
+  rdcarray<Bindpoint> readWriteResources;
 };
 
 DECLARE_REFLECTION_STRUCT(ShaderBindpointMapping);

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,13 +25,21 @@
 
 #include "../gl_driver.h"
 #include "common/common.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 
-bool WrappedOpenGL::Serialise_glGenSamplers(GLsizei n, GLuint *samplers)
+static constexpr uint32_t numParams(GLenum pname)
 {
-  SERIALISE_ELEMENT(ResourceId, id, GetResourceManager()->GetID(SamplerRes(GetCtx(), *samplers)));
+  return pname == eGL_TEXTURE_BORDER_COLOR ? 4U : 1U;
+}
 
-  if(m_State == READING)
+template <typename SerialiserType>
+bool WrappedOpenGL::Serialise_glGenSamplers(SerialiserType &ser, GLsizei n, GLuint *samplers)
+{
+  SERIALISE_ELEMENT_LOCAL(sampler, GetResourceManager()->GetID(SamplerRes(GetCtx(), *samplers)));
+
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
   {
     GLuint real = 0;
     m_Real.glGenSamplers(1, &real);
@@ -41,7 +49,9 @@ bool WrappedOpenGL::Serialise_glGenSamplers(GLsizei n, GLuint *samplers)
     GLResource res = SamplerRes(GetCtx(), real);
 
     ResourceId live = m_ResourceManager->RegisterResource(res);
-    GetResourceManager()->AddLiveResource(id, res);
+    GetResourceManager()->AddLiveResource(sampler, res);
+
+    AddResource(sampler, ResourceType::Sampler, "Sampler");
   }
 
   return true;
@@ -49,20 +59,21 @@ bool WrappedOpenGL::Serialise_glGenSamplers(GLsizei n, GLuint *samplers)
 
 void WrappedOpenGL::glGenSamplers(GLsizei count, GLuint *samplers)
 {
-  m_Real.glGenSamplers(count, samplers);
+  SERIALISE_TIME_CALL(m_Real.glGenSamplers(count, samplers));
 
   for(GLsizei i = 0; i < count; i++)
   {
     GLResource res = SamplerRes(GetCtx(), samplers[i]);
     ResourceId id = GetResourceManager()->RegisterResource(res);
 
-    if(m_State >= WRITING)
+    if(IsCaptureMode(m_State))
     {
       Chunk *chunk = NULL;
 
       {
-        SCOPED_SERIALISE_CONTEXT(GEN_SAMPLERS);
-        Serialise_glGenSamplers(1, samplers + i);
+        USE_SCRATCH_SERIALISER();
+        SCOPED_SERIALISE_CHUNK(gl_CurChunk);
+        Serialise_glGenSamplers(ser, 1, samplers + i);
 
         chunk = scope.Get();
       }
@@ -79,11 +90,14 @@ void WrappedOpenGL::glGenSamplers(GLsizei count, GLuint *samplers)
   }
 }
 
-bool WrappedOpenGL::Serialise_glCreateSamplers(GLsizei n, GLuint *samplers)
+template <typename SerialiserType>
+bool WrappedOpenGL::Serialise_glCreateSamplers(SerialiserType &ser, GLsizei n, GLuint *samplers)
 {
-  SERIALISE_ELEMENT(ResourceId, id, GetResourceManager()->GetID(SamplerRes(GetCtx(), *samplers)));
+  SERIALISE_ELEMENT_LOCAL(sampler, GetResourceManager()->GetID(SamplerRes(GetCtx(), *samplers)));
 
-  if(m_State == READING)
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
   {
     GLuint real = 0;
     m_Real.glCreateSamplers(1, &real);
@@ -91,7 +105,9 @@ bool WrappedOpenGL::Serialise_glCreateSamplers(GLsizei n, GLuint *samplers)
     GLResource res = SamplerRes(GetCtx(), real);
 
     ResourceId live = m_ResourceManager->RegisterResource(res);
-    GetResourceManager()->AddLiveResource(id, res);
+    GetResourceManager()->AddLiveResource(sampler, res);
+
+    AddResource(sampler, ResourceType::Sampler, "Sampler");
   }
 
   return true;
@@ -99,20 +115,21 @@ bool WrappedOpenGL::Serialise_glCreateSamplers(GLsizei n, GLuint *samplers)
 
 void WrappedOpenGL::glCreateSamplers(GLsizei count, GLuint *samplers)
 {
-  m_Real.glCreateSamplers(count, samplers);
+  SERIALISE_TIME_CALL(m_Real.glCreateSamplers(count, samplers));
 
   for(GLsizei i = 0; i < count; i++)
   {
     GLResource res = SamplerRes(GetCtx(), samplers[i]);
     ResourceId id = GetResourceManager()->RegisterResource(res);
 
-    if(m_State >= WRITING)
+    if(IsCaptureMode(m_State))
     {
       Chunk *chunk = NULL;
 
       {
-        SCOPED_SERIALISE_CONTEXT(CREATE_SAMPLERS);
-        Serialise_glCreateSamplers(1, samplers + i);
+        USE_SCRATCH_SERIALISER();
+        SCOPED_SERIALISE_CHUNK(gl_CurChunk);
+        Serialise_glCreateSamplers(ser, 1, samplers + i);
 
         chunk = scope.Get();
       }
@@ -129,73 +146,63 @@ void WrappedOpenGL::glCreateSamplers(GLsizei count, GLuint *samplers)
   }
 }
 
-bool WrappedOpenGL::Serialise_glBindSampler(GLuint unit, GLuint sampler)
+template <typename SerialiserType>
+bool WrappedOpenGL::Serialise_glBindSampler(SerialiserType &ser, GLuint unit, GLuint samplerHandle)
 {
-  SERIALISE_ELEMENT(uint32_t, Unit, unit);
-  SERIALISE_ELEMENT(ResourceId, id, sampler
-                                        ? GetResourceManager()->GetID(SamplerRes(GetCtx(), sampler))
-                                        : ResourceId());
+  SERIALISE_ELEMENT(unit);
+  SERIALISE_ELEMENT_LOCAL(sampler, SamplerRes(GetCtx(), samplerHandle));
 
-  if(m_State < WRITING)
-  {
-    if(id == ResourceId())
-    {
-      m_Real.glBindSampler(Unit, 0);
-    }
-    else
-    {
-      GLResource res = GetResourceManager()->GetLiveResource(id);
-      m_Real.glBindSampler(Unit, res.name);
-    }
-  }
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+    m_Real.glBindSampler(unit, sampler.name);
 
   return true;
 }
 
 void WrappedOpenGL::glBindSampler(GLuint unit, GLuint sampler)
 {
-  m_Real.glBindSampler(unit, sampler);
+  SERIALISE_TIME_CALL(m_Real.glBindSampler(unit, sampler));
 
-  if(m_State == WRITING_CAPFRAME)
+  if(IsActiveCapturing(m_State))
   {
-    SCOPED_SERIALISE_CONTEXT(BIND_SAMPLER);
-    Serialise_glBindSampler(unit, sampler);
+    USE_SCRATCH_SERIALISER();
+    SCOPED_SERIALISE_CHUNK(gl_CurChunk);
+    Serialise_glBindSampler(ser, unit, sampler);
 
     m_ContextRecord->AddChunk(scope.Get());
     GetResourceManager()->MarkResourceFrameReferenced(SamplerRes(GetCtx(), sampler), eFrameRef_Read);
   }
 }
 
-bool WrappedOpenGL::Serialise_glBindSamplers(GLuint first, GLsizei count, const GLuint *samplers)
+template <typename SerialiserType>
+bool WrappedOpenGL::Serialise_glBindSamplers(SerialiserType &ser, GLuint first, GLsizei count,
+                                             const GLuint *samplerHandles)
 {
-  SERIALISE_ELEMENT(uint32_t, First, first);
-  SERIALISE_ELEMENT(int32_t, Count, count);
+  // can't serialise arrays of GL handles since they're not wrapped or typed :(.
+  std::vector<GLResource> samplers;
 
-  GLuint *samps = NULL;
-  if(m_State <= EXECUTING)
-    samps = new GLuint[Count];
-
-  for(int32_t i = 0; i < Count; i++)
+  if(ser.IsWriting())
   {
-    SERIALISE_ELEMENT(ResourceId, id,
-                      samplers && samplers[i]
-                          ? GetResourceManager()->GetID(SamplerRes(GetCtx(), samplers[i]))
-                          : ResourceId());
-
-    if(m_State <= EXECUTING)
-    {
-      if(id != ResourceId())
-        samps[i] = GetResourceManager()->GetLiveResource(id).name;
-      else
-        samps[i] = 0;
-    }
+    samplers.reserve(count);
+    for(int32_t i = 0; i < count; i++)
+      samplers.push_back(SamplerRes(GetCtx(), samplerHandles[i]));
   }
 
-  if(m_State <= EXECUTING)
-  {
-    m_Real.glBindSamplers(First, Count, samps);
+  SERIALISE_ELEMENT(first);
+  SERIALISE_ELEMENT(count);
+  SERIALISE_ELEMENT(samplers);
 
-    delete[] samps;
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+  {
+    std::vector<GLuint> samps;
+    samps.reserve(count);
+    for(int32_t i = 0; i < count; i++)
+      samps.push_back(samplers[i].name);
+
+    m_Real.glBindSamplers(first, count, samps.data());
   }
 
   return true;
@@ -203,12 +210,13 @@ bool WrappedOpenGL::Serialise_glBindSamplers(GLuint first, GLsizei count, const 
 
 void WrappedOpenGL::glBindSamplers(GLuint first, GLsizei count, const GLuint *samplers)
 {
-  m_Real.glBindSamplers(first, count, samplers);
+  SERIALISE_TIME_CALL(m_Real.glBindSamplers(first, count, samplers));
 
-  if(m_State == WRITING_CAPFRAME)
+  if(IsActiveCapturing(m_State))
   {
-    SCOPED_SERIALISE_CONTEXT(BIND_SAMPLERS);
-    Serialise_glBindSamplers(first, count, samplers);
+    USE_SCRATCH_SERIALISER();
+    SCOPED_SERIALISE_CHUNK(gl_CurChunk);
+    Serialise_glBindSamplers(ser, first, count, samplers);
 
     m_ContextRecord->AddChunk(scope.Get());
     for(GLsizei i = 0; i < count; i++)
@@ -218,54 +226,50 @@ void WrappedOpenGL::glBindSamplers(GLuint first, GLsizei count, const GLuint *sa
   }
 }
 
-bool WrappedOpenGL::Serialise_glSamplerParameteri(GLuint sampler, GLenum pname, GLint param)
+template <typename SerialiserType>
+bool WrappedOpenGL::Serialise_glSamplerParameteri(SerialiserType &ser, GLuint samplerHandle,
+                                                  GLenum pname, GLint param)
 {
-  SERIALISE_ELEMENT(ResourceId, id, GetResourceManager()->GetID(SamplerRes(GetCtx(), sampler)));
-  SERIALISE_ELEMENT(GLenum, PName, pname);
-
-  int32_t ParamValue = 0;
+  SERIALISE_ELEMENT_LOCAL(sampler, SamplerRes(GetCtx(), samplerHandle));
+  SERIALISE_ELEMENT(pname);
 
   RDCCOMPILE_ASSERT(sizeof(int32_t) == sizeof(GLenum),
                     "int32_t isn't the same size as GLenum - aliased serialising will break");
   // special case a few parameters to serialise their value as an enum, not an int
-  if(PName == GL_TEXTURE_WRAP_S || PName == GL_TEXTURE_WRAP_T || PName == GL_TEXTURE_WRAP_R ||
-     PName == GL_TEXTURE_MIN_FILTER || PName == GL_TEXTURE_MAG_FILTER ||
-     PName == GL_TEXTURE_COMPARE_MODE || PName == GL_TEXTURE_COMPARE_FUNC)
+  if(pname == GL_TEXTURE_WRAP_S || pname == GL_TEXTURE_WRAP_T || pname == GL_TEXTURE_WRAP_R ||
+     pname == GL_TEXTURE_MIN_FILTER || pname == GL_TEXTURE_MAG_FILTER ||
+     pname == GL_TEXTURE_COMPARE_MODE || pname == GL_TEXTURE_COMPARE_FUNC)
   {
-    SERIALISE_ELEMENT(GLenum, Param, (GLenum)param);
-
-    ParamValue = (int32_t)Param;
+    SERIALISE_ELEMENT_TYPED(GLenum, param);
   }
   else
   {
-    SERIALISE_ELEMENT(int32_t, Param, param);
-
-    ParamValue = Param;
+    SERIALISE_ELEMENT(param);
   }
 
-  if(m_State < WRITING)
-  {
-    GLResource res = GetResourceManager()->GetLiveResource(id);
-    m_Real.glSamplerParameteri(res.name, PName, ParamValue);
-  }
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+    m_Real.glSamplerParameteri(sampler.name, pname, param);
 
   return true;
 }
 
 void WrappedOpenGL::glSamplerParameteri(GLuint sampler, GLenum pname, GLint param)
 {
-  m_Real.glSamplerParameteri(sampler, pname, param);
+  SERIALISE_TIME_CALL(m_Real.glSamplerParameteri(sampler, pname, param));
 
   // CLAMP isn't supported (border texels gone), assume they meant CLAMP_TO_EDGE
   if(param == eGL_CLAMP)
     param = eGL_CLAMP_TO_EDGE;
 
-  if(m_State >= WRITING)
+  if(IsCaptureMode(m_State))
   {
-    SCOPED_SERIALISE_CONTEXT(SAMPLER_PARAMETERI);
-    Serialise_glSamplerParameteri(sampler, pname, param);
+    USE_SCRATCH_SERIALISER();
+    SCOPED_SERIALISE_CHUNK(gl_CurChunk);
+    Serialise_glSamplerParameteri(ser, sampler, pname, param);
 
-    if(m_State == WRITING_IDLE)
+    if(IsBackgroundCapturing(m_State))
     {
       GetResourceManager()->GetResourceRecord(SamplerRes(GetCtx(), sampler))->AddChunk(scope.Get());
     }
@@ -278,35 +282,37 @@ void WrappedOpenGL::glSamplerParameteri(GLuint sampler, GLenum pname, GLint para
   }
 }
 
-bool WrappedOpenGL::Serialise_glSamplerParameterf(GLuint sampler, GLenum pname, GLfloat param)
+template <typename SerialiserType>
+bool WrappedOpenGL::Serialise_glSamplerParameterf(SerialiserType &ser, GLuint samplerHandle,
+                                                  GLenum pname, GLfloat param)
 {
-  SERIALISE_ELEMENT(ResourceId, id, GetResourceManager()->GetID(SamplerRes(GetCtx(), sampler)));
-  SERIALISE_ELEMENT(GLenum, PName, pname);
-  SERIALISE_ELEMENT(float, Param, param);
+  SERIALISE_ELEMENT_LOCAL(sampler, SamplerRes(GetCtx(), samplerHandle));
+  SERIALISE_ELEMENT(pname);
+  SERIALISE_ELEMENT(param);
 
-  if(m_State < WRITING)
-  {
-    GLResource res = GetResourceManager()->GetLiveResource(id);
-    m_Real.glSamplerParameterf(res.name, PName, Param);
-  }
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+    m_Real.glSamplerParameterf(sampler.name, pname, param);
 
   return true;
 }
 
 void WrappedOpenGL::glSamplerParameterf(GLuint sampler, GLenum pname, GLfloat param)
 {
-  m_Real.glSamplerParameterf(sampler, pname, param);
+  SERIALISE_TIME_CALL(m_Real.glSamplerParameterf(sampler, pname, param));
 
   // CLAMP isn't supported (border texels gone), assume they meant CLAMP_TO_EDGE
   if(param == (float)eGL_CLAMP)
     param = (float)eGL_CLAMP_TO_EDGE;
 
-  if(m_State >= WRITING)
+  if(IsCaptureMode(m_State))
   {
-    SCOPED_SERIALISE_CONTEXT(SAMPLER_PARAMETERF);
-    Serialise_glSamplerParameterf(sampler, pname, param);
+    USE_SCRATCH_SERIALISER();
+    SCOPED_SERIALISE_CHUNK(gl_CurChunk);
+    Serialise_glSamplerParameterf(ser, sampler, pname, param);
 
-    if(m_State == WRITING_IDLE)
+    if(IsBackgroundCapturing(m_State))
     {
       GetResourceManager()->GetResourceRecord(SamplerRes(GetCtx(), sampler))->AddChunk(scope.Get());
     }
@@ -319,39 +325,38 @@ void WrappedOpenGL::glSamplerParameterf(GLuint sampler, GLenum pname, GLfloat pa
   }
 }
 
-bool WrappedOpenGL::Serialise_glSamplerParameteriv(GLuint sampler, GLenum pname, const GLint *params)
+template <typename SerialiserType>
+bool WrappedOpenGL::Serialise_glSamplerParameteriv(SerialiserType &ser, GLuint samplerHandle,
+                                                   GLenum pname, const GLint *params)
 {
-  SERIALISE_ELEMENT(ResourceId, id, GetResourceManager()->GetID(SamplerRes(GetCtx(), sampler)));
-  SERIALISE_ELEMENT(GLenum, PName, pname);
-  const size_t nParams = (PName == eGL_TEXTURE_BORDER_COLOR ? 4U : 1U);
-  SERIALISE_ELEMENT_ARR(int32_t, Params, params, nParams);
+  SERIALISE_ELEMENT_LOCAL(sampler, SamplerRes(GetCtx(), samplerHandle));
+  SERIALISE_ELEMENT(pname);
+  SERIALISE_ELEMENT_ARRAY(params, FIXED_COUNT(numParams(pname)));
 
-  if(m_State < WRITING)
-  {
-    GLResource res = GetResourceManager()->GetLiveResource(id);
-    m_Real.glSamplerParameteriv(res.name, PName, Params);
-  }
+  SERIALISE_CHECK_READ_ERRORS();
 
-  delete[] Params;
+  if(IsReplayingAndReading())
+    m_Real.glSamplerParameteriv(sampler.name, pname, params);
 
   return true;
 }
 
 void WrappedOpenGL::glSamplerParameteriv(GLuint sampler, GLenum pname, const GLint *params)
 {
-  m_Real.glSamplerParameteriv(sampler, pname, params);
+  SERIALISE_TIME_CALL(m_Real.glSamplerParameteriv(sampler, pname, params));
 
   GLint clamptoedge[4] = {eGL_CLAMP_TO_EDGE};
   // CLAMP isn't supported (border texels gone), assume they meant CLAMP_TO_EDGE
   if(*params == eGL_CLAMP)
     params = clamptoedge;
 
-  if(m_State >= WRITING)
+  if(IsCaptureMode(m_State))
   {
-    SCOPED_SERIALISE_CONTEXT(SAMPLER_PARAMETERIV);
-    Serialise_glSamplerParameteriv(sampler, pname, params);
+    USE_SCRATCH_SERIALISER();
+    SCOPED_SERIALISE_CHUNK(gl_CurChunk);
+    Serialise_glSamplerParameteriv(ser, sampler, pname, params);
 
-    if(m_State == WRITING_IDLE)
+    if(IsBackgroundCapturing(m_State))
     {
       GetResourceManager()->GetResourceRecord(SamplerRes(GetCtx(), sampler))->AddChunk(scope.Get());
     }
@@ -364,39 +369,38 @@ void WrappedOpenGL::glSamplerParameteriv(GLuint sampler, GLenum pname, const GLi
   }
 }
 
-bool WrappedOpenGL::Serialise_glSamplerParameterfv(GLuint sampler, GLenum pname, const GLfloat *params)
+template <typename SerialiserType>
+bool WrappedOpenGL::Serialise_glSamplerParameterfv(SerialiserType &ser, GLuint samplerHandle,
+                                                   GLenum pname, const GLfloat *params)
 {
-  SERIALISE_ELEMENT(ResourceId, id, GetResourceManager()->GetID(SamplerRes(GetCtx(), sampler)));
-  SERIALISE_ELEMENT(GLenum, PName, pname);
-  const size_t nParams = (PName == eGL_TEXTURE_BORDER_COLOR ? 4U : 1U);
-  SERIALISE_ELEMENT_ARR(float, Params, params, nParams);
+  SERIALISE_ELEMENT_LOCAL(sampler, SamplerRes(GetCtx(), samplerHandle));
+  SERIALISE_ELEMENT(pname);
+  SERIALISE_ELEMENT_ARRAY(params, FIXED_COUNT(numParams(pname)));
 
-  if(m_State < WRITING)
-  {
-    GLResource res = GetResourceManager()->GetLiveResource(id);
-    m_Real.glSamplerParameterfv(res.name, PName, Params);
-  }
+  SERIALISE_CHECK_READ_ERRORS();
 
-  delete[] Params;
+  if(IsReplayingAndReading())
+    m_Real.glSamplerParameterfv(sampler.name, pname, params);
 
   return true;
 }
 
 void WrappedOpenGL::glSamplerParameterfv(GLuint sampler, GLenum pname, const GLfloat *params)
 {
-  m_Real.glSamplerParameterfv(sampler, pname, params);
+  SERIALISE_TIME_CALL(m_Real.glSamplerParameterfv(sampler, pname, params));
 
   GLfloat clamptoedge[4] = {(float)eGL_CLAMP_TO_EDGE};
   // CLAMP isn't supported (border texels gone), assume they meant CLAMP_TO_EDGE
   if(*params == (float)eGL_CLAMP)
     params = clamptoedge;
 
-  if(m_State >= WRITING)
+  if(IsCaptureMode(m_State))
   {
-    SCOPED_SERIALISE_CONTEXT(SAMPLER_PARAMETERFV);
-    Serialise_glSamplerParameterfv(sampler, pname, params);
+    USE_SCRATCH_SERIALISER();
+    SCOPED_SERIALISE_CHUNK(gl_CurChunk);
+    Serialise_glSamplerParameterfv(ser, sampler, pname, params);
 
-    if(m_State == WRITING_IDLE)
+    if(IsBackgroundCapturing(m_State))
     {
       GetResourceManager()->GetResourceRecord(SamplerRes(GetCtx(), sampler))->AddChunk(scope.Get());
     }
@@ -409,39 +413,38 @@ void WrappedOpenGL::glSamplerParameterfv(GLuint sampler, GLenum pname, const GLf
   }
 }
 
-bool WrappedOpenGL::Serialise_glSamplerParameterIiv(GLuint sampler, GLenum pname, const GLint *params)
+template <typename SerialiserType>
+bool WrappedOpenGL::Serialise_glSamplerParameterIiv(SerialiserType &ser, GLuint samplerHandle,
+                                                    GLenum pname, const GLint *params)
 {
-  SERIALISE_ELEMENT(ResourceId, id, GetResourceManager()->GetID(SamplerRes(GetCtx(), sampler)));
-  SERIALISE_ELEMENT(GLenum, PName, pname);
-  const size_t nParams = (PName == eGL_TEXTURE_BORDER_COLOR ? 4U : 1U);
-  SERIALISE_ELEMENT_ARR(int32_t, Params, params, nParams);
+  SERIALISE_ELEMENT_LOCAL(sampler, SamplerRes(GetCtx(), samplerHandle));
+  SERIALISE_ELEMENT(pname);
+  SERIALISE_ELEMENT_ARRAY(params, FIXED_COUNT(numParams(pname)));
 
-  if(m_State < WRITING)
-  {
-    GLResource res = GetResourceManager()->GetLiveResource(id);
-    m_Real.glSamplerParameterIiv(res.name, PName, Params);
-  }
+  SERIALISE_CHECK_READ_ERRORS();
 
-  delete[] Params;
+  if(IsReplayingAndReading())
+    m_Real.glSamplerParameterIiv(sampler.name, pname, params);
 
   return true;
 }
 
 void WrappedOpenGL::glSamplerParameterIiv(GLuint sampler, GLenum pname, const GLint *params)
 {
-  m_Real.glSamplerParameterIiv(sampler, pname, params);
+  SERIALISE_TIME_CALL(m_Real.glSamplerParameterIiv(sampler, pname, params));
 
   GLint clamptoedge[4] = {eGL_CLAMP_TO_EDGE};
   // CLAMP isn't supported (border texels gone), assume they meant CLAMP_TO_EDGE
   if(*params == eGL_CLAMP)
     params = clamptoedge;
 
-  if(m_State >= WRITING)
+  if(IsCaptureMode(m_State))
   {
-    SCOPED_SERIALISE_CONTEXT(SAMPLER_PARAMETERIIV);
-    Serialise_glSamplerParameterIiv(sampler, pname, params);
+    USE_SCRATCH_SERIALISER();
+    SCOPED_SERIALISE_CHUNK(gl_CurChunk);
+    Serialise_glSamplerParameterIiv(ser, sampler, pname, params);
 
-    if(m_State == WRITING_IDLE)
+    if(IsBackgroundCapturing(m_State))
     {
       GetResourceManager()->GetResourceRecord(SamplerRes(GetCtx(), sampler))->AddChunk(scope.Get());
     }
@@ -454,40 +457,38 @@ void WrappedOpenGL::glSamplerParameterIiv(GLuint sampler, GLenum pname, const GL
   }
 }
 
-bool WrappedOpenGL::Serialise_glSamplerParameterIuiv(GLuint sampler, GLenum pname,
-                                                     const GLuint *params)
+template <typename SerialiserType>
+bool WrappedOpenGL::Serialise_glSamplerParameterIuiv(SerialiserType &ser, GLuint samplerHandle,
+                                                     GLenum pname, const GLuint *params)
 {
-  SERIALISE_ELEMENT(ResourceId, id, GetResourceManager()->GetID(SamplerRes(GetCtx(), sampler)));
-  SERIALISE_ELEMENT(GLenum, PName, pname);
-  const size_t nParams = (PName == eGL_TEXTURE_BORDER_COLOR ? 4U : 1U);
-  SERIALISE_ELEMENT_ARR(uint32_t, Params, params, nParams);
+  SERIALISE_ELEMENT_LOCAL(sampler, SamplerRes(GetCtx(), samplerHandle));
+  SERIALISE_ELEMENT(pname);
+  SERIALISE_ELEMENT_ARRAY(params, FIXED_COUNT(numParams(pname)));
 
-  if(m_State < WRITING)
-  {
-    GLResource res = GetResourceManager()->GetLiveResource(id);
-    m_Real.glSamplerParameterIuiv(res.name, PName, Params);
-  }
+  SERIALISE_CHECK_READ_ERRORS();
 
-  delete[] Params;
+  if(IsReplayingAndReading())
+    m_Real.glSamplerParameterIuiv(sampler.name, pname, params);
 
   return true;
 }
 
 void WrappedOpenGL::glSamplerParameterIuiv(GLuint sampler, GLenum pname, const GLuint *params)
 {
-  m_Real.glSamplerParameterIuiv(sampler, pname, params);
+  SERIALISE_TIME_CALL(m_Real.glSamplerParameterIuiv(sampler, pname, params));
 
   GLuint clamptoedge[4] = {eGL_CLAMP_TO_EDGE};
   // CLAMP isn't supported (border texels gone), assume they meant CLAMP_TO_EDGE
   if(*params == eGL_CLAMP)
     params = clamptoedge;
 
-  if(m_State >= WRITING)
+  if(IsCaptureMode(m_State))
   {
-    SCOPED_SERIALISE_CONTEXT(SAMPLER_PARAMETERIUIV);
-    Serialise_glSamplerParameterIuiv(sampler, pname, params);
+    USE_SCRATCH_SERIALISER();
+    SCOPED_SERIALISE_CHUNK(gl_CurChunk);
+    Serialise_glSamplerParameterIuiv(ser, sampler, pname, params);
 
-    if(m_State == WRITING_IDLE)
+    if(IsBackgroundCapturing(m_State))
     {
       GetResourceManager()->GetResourceRecord(SamplerRes(GetCtx(), sampler))->AddChunk(scope.Get());
     }
@@ -515,3 +516,20 @@ void WrappedOpenGL::glDeleteSamplers(GLsizei n, const GLuint *ids)
 
   m_Real.glDeleteSamplers(n, ids);
 }
+
+INSTANTIATE_FUNCTION_SERIALISED(void, glGenSamplers, GLsizei n, GLuint *samplers);
+INSTANTIATE_FUNCTION_SERIALISED(void, glCreateSamplers, GLsizei n, GLuint *samplers);
+INSTANTIATE_FUNCTION_SERIALISED(void, glBindSampler, GLuint unit, GLuint sampler);
+INSTANTIATE_FUNCTION_SERIALISED(void, glBindSamplers, GLuint first, GLsizei count,
+                                const GLuint *samplers);
+INSTANTIATE_FUNCTION_SERIALISED(void, glSamplerParameteri, GLuint sampler, GLenum pname, GLint param);
+INSTANTIATE_FUNCTION_SERIALISED(void, glSamplerParameterf, GLuint sampler, GLenum pname,
+                                GLfloat param);
+INSTANTIATE_FUNCTION_SERIALISED(void, glSamplerParameteriv, GLuint sampler, GLenum pname,
+                                const GLint *params);
+INSTANTIATE_FUNCTION_SERIALISED(void, glSamplerParameterfv, GLuint sampler, GLenum pname,
+                                const GLfloat *params);
+INSTANTIATE_FUNCTION_SERIALISED(void, glSamplerParameterIiv, GLuint sampler, GLenum pname,
+                                const GLint *params);
+INSTANTIATE_FUNCTION_SERIALISED(void, glSamplerParameterIuiv, GLuint sampler, GLenum pname,
+                                const GLuint *params);

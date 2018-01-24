@@ -26,12 +26,12 @@ struct callbackContext
   callbackContext(QProcessList &l) : list(l) {}
   QProcessList &list;
 
-  PFN_GETWINDOWTHREADPROCESSID GetWindowThreadProcessId;
-  PFN_GETWINDOW GetWindow;
-  PFN_ISWINDOWVISIBLE IsWindowVisible;
-  PFN_GETWINDOWTEXTLENGTHW GetWindowTextLengthW;
-  PFN_GETWINDOWTEXTW GetWindowTextW;
-  PFN_ENUMWINDOWS EnumWindows;
+  PFN_GETWINDOWTHREADPROCESSID GetWindowThreadProcessId = NULL;
+  PFN_GETWINDOW GetWindow = NULL;
+  PFN_ISWINDOWVISIBLE IsWindowVisible = NULL;
+  PFN_GETWINDOWTEXTLENGTHW GetWindowTextLengthW = NULL;
+  PFN_GETWINDOWTEXTW GetWindowTextW = NULL;
+  PFN_ENUMWINDOWS EnumWindows = NULL;
 };
 };
 
@@ -120,6 +120,7 @@ QProcessList QProcessInfo::enumerate()
 #include <QDir>
 #include <QProcess>
 #include <QRegExp>
+#include <QStandardPaths>
 #include <QTextStream>
 
 QProcessList QProcessInfo::enumerate()
@@ -140,7 +141,7 @@ QProcessList QProcessInfo::enumerate()
       QProcessInfo info;
       info.setPid(pid);
 
-      QDir processDir(QStringLiteral("/proc") + f);
+      QDir processDir(QStringLiteral("/proc/") + f);
 
       // default to the exe symlink if valid
       QFileInfo exe(processDir.absoluteFilePath(QStringLiteral("exe")));
@@ -212,6 +213,15 @@ QProcessList QProcessInfo::enumerate()
 
     QList<QByteArray> windowlist;
 
+    QString inPath = QStandardPaths::findExecutable(QStringLiteral("xdotool"));
+
+    if(inPath.isEmpty())
+    {
+      // add a fake window title to the first process to indicate that xdotool is missing
+      if(!ret.isEmpty())
+        ret[0].setWindowTitle(QStringLiteral("Window titles not available - install `xdotool`"));
+    }
+    else
     {
       QProcess process;
       process.start(QStringLiteral("xdotool"), params);
@@ -334,6 +344,11 @@ QProcessList QProcessInfo::enumerate()
 }
 
 #endif
+
+QProcessInfo::QProcessInfo()
+{
+  m_pid = 0;
+}
 
 uint32_t QProcessInfo::pid() const
 {

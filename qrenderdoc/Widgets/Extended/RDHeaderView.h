@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -67,6 +67,7 @@ public:
   void setCustomSizing(bool sizing) { m_customSizing = sizing; }
   int pinnedWidth() { return m_pinnedWidth; }
 public slots:
+  void setRootIndex(const QModelIndex &index) override;
   void headerDataChanged(Qt::Orientation orientation, int logicalFirst, int logicalLast);
   void columnsInserted(const QModelIndex &parent, int first, int last);
   void rowsChanged(const QModelIndex &parent, int first, int last);
@@ -91,7 +92,7 @@ protected:
 
   QPair<ResizeType, int> checkResizing(QMouseEvent *event);
   QPair<ResizeType, int> m_resizeState;
-  int m_cursorPos;
+  int m_cursorPos = -1;
 
   void cacheSections();
   void resizeSectionsWithHints();
@@ -121,7 +122,7 @@ protected:
   int m_pinnedColumns = 0;
 
   int m_movingSection = -1;
-  QLabel *m_sectionPreview;
+  QLabel *m_sectionPreview = NULL;
   int m_sectionPreviewOffset = 0;
 };
 

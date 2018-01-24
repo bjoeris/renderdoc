@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,10 +33,7 @@ class WrappedOpenGL;
 class GLResourceManager : public ResourceManager<GLResource, GLResource, GLResourceRecord>
 {
 public:
-  GLResourceManager(LogState state, Serialiser *ser, WrappedOpenGL *gl)
-      : ResourceManager(state, ser), m_GL(gl), m_SyncName(1)
-  {
-  }
+  GLResourceManager(WrappedOpenGL *gl);
   ~GLResourceManager() {}
   void Shutdown()
   {
@@ -93,6 +90,26 @@ public:
     m_CurrentResourceIds.clear();
 
     ResourceManager::Shutdown();
+  }
+
+  void DeleteContext(void *context)
+  {
+    size_t count = 0;
+    for(auto it = m_CurrentResourceIds.begin(); it != m_CurrentResourceIds.end(); it++)
+    {
+      if(it->first.Context == context)
+      {
+        ++count;
+        ResourceId res = it->second;
+        MarkCleanResource(res);
+        if(HasResourceRecord(res))
+          GetResourceRecord(res)->Delete(this);
+        ReleaseCurrentResource(it->second);
+        it = m_CurrentResourceIds.erase(it);
+      }
+    }
+    RDCDEBUG("Removed %zu/%zu resources belonging to context %p", count,
+             m_CurrentResourceIds.size(), context);
   }
 
   inline void RemoveResourceRecord(ResourceId id)
@@ -209,8 +226,14 @@ public:
   void MarkVAOReferenced(GLResource res, FrameRefType ref, bool allowFake0 = false);
   void MarkFBOReferenced(GLResource res, FrameRefType ref);
 
-  bool Prepare_InitialState(GLResource res, byte *blob);
-  bool Serialise_InitialState(ResourceId resid, GLResource res);
+  template <typename SerialiserType>
+  bool Serialise_InitialState(SerialiserType &ser, ResourceId resid, GLResource res);
+
+  void ContextPrepare_InitialState(GLResource res);
+  bool Serialise_InitialState(WriteSerialiser &ser, ResourceId resid, GLResource res)
+  {
+    return Serialise_InitialState<WriteSerialiser>(ser, resid, res);
+  }
 
 private:
   bool SerialisableResource(ResourceId id, GLResourceRecord *record);
@@ -219,6 +242,7 @@ private:
   bool Force_InitialState(GLResource res, bool prepare);
   bool Need_InitialStateChunk(GLResource res);
   bool Prepare_InitialState(GLResource res);
+  uint32_t GetSize_InitialState(ResourceId resid, GLResource res);
 
   void CreateTextureImage(GLuint tex, GLenum internalFormat, GLenum textype, GLint dim, GLint width,
                           GLint height, GLint depth, GLint samples, int mips);
@@ -238,5 +262,6 @@ private:
   map<ResourceId, std::string> m_Names;
   volatile int64_t m_SyncName;
 
+  CaptureState m_State;
   WrappedOpenGL *m_GL;
 };

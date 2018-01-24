@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -70,7 +70,7 @@ public:
 
   DWORD m_fvf;
 
-  int m_width;
-  int m_height;
+  int m_width = 0;
+  int m_height = 0;
   WrappedD3DDevice8 *m_WrappedDevice;
 };

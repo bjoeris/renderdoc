@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -31,8 +31,8 @@
 #include "core/core.h"
 #include "maths/camera.h"
 #include "maths/formatpacking.h"
-#include "replay/type_helpers.h"
-#include "serialise/string_utils.h"
+#include "miniz/miniz.h"
+#include "strings/string_utils.h"
 
 // these entry points are for the replay/analysis side - not for the application.
 
@@ -229,84 +229,76 @@ extern "C" RENDERDOC_API const char *RENDERDOC_CC RENDERDOC_GetLogFile()
   return RDCGETLOGFILE();
 }
 
-extern "C" RENDERDOC_API void RENDERDOC_CC
-RENDERDOC_InitGlobalEnv(GlobalEnvironment env, const rdctype::array<rdctype::str> &args)
+extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_InitGlobalEnv(GlobalEnvironment env,
+                                                                   const rdcarray<rdcstr> &args)
 {
   std::vector<std::string> argsVec;
   argsVec.reserve(args.size());
-  for(const rdctype::str &a : args)
+  for(const rdcstr &a : args)
     argsVec.push_back(a.c_str());
 
   RenderDoc::Inst().ProcessGlobalEnvironment(env, argsVec);
-}
 
-extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_TriggerExceptionHandler(void *exceptionPtrs,
-                                                                             bool crashed)
-{
   if(RenderDoc::Inst().GetCrashHandler() == NULL)
     return;
 
-  if(exceptionPtrs)
+  for(const rdcstr &s : args)
   {
-    RenderDoc::Inst().GetCrashHandler()->WriteMinidump(exceptionPtrs);
-  }
-  else
-  {
-    if(!crashed)
+    if(s == "--crash")
     {
-      RDCLOG("Writing crash log");
-    }
-
-    RenderDoc::Inst().GetCrashHandler()->WriteMinidump();
-
-    if(!crashed)
-    {
-      RenderDoc::Inst().RecreateCrashHandler();
+      RenderDoc::Inst().UnloadCrashHandler();
+      return;
     }
   }
+
+  RenderDoc::Inst().RecreateCrashHandler();
 }
 
-extern "C" RENDERDOC_API ReplaySupport RENDERDOC_CC RENDERDOC_SupportLocalReplay(
-    const char *logfile, rdctype::str *driver, rdctype::str *recordMachineIdent)
+extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_CreateBugReport(const char *logfile,
+                                                                     const char *dumpfile,
+                                                                     rdcstr &report)
 {
-  ICaptureFile *file = RENDERDOC_OpenCaptureFile(logfile);
+  mz_zip_archive zip;
+  RDCEraseEl(zip);
 
-  if(driver)
-    *driver = file->DriverName();
+  report = FileIO::GetTempFolderFilename() + "/renderdoc_report.zip";
 
-  if(recordMachineIdent)
-    *recordMachineIdent = file->RecordedMachineIdent();
+  FileIO::Delete(report.c_str());
 
-  ReplaySupport support = file->LocalReplaySupport();
+  mz_zip_writer_init_file(&zip, report.c_str(), 0);
 
-  file->Shutdown();
+  if(dumpfile && dumpfile[0])
+    mz_zip_writer_add_file(&zip, "minidump.dmp", dumpfile, NULL, 0, MZ_BEST_COMPRESSION);
 
-  return support;
-}
-
-extern "C" RENDERDOC_API ReplayStatus RENDERDOC_CC
-RENDERDOC_CreateReplayRenderer(const char *logfile, float *progress, IReplayController **rend)
-{
-  ICaptureFile *file = RENDERDOC_OpenCaptureFile(logfile);
-
-  ReplayStatus ret = file->OpenStatus();
-
-  if(ret != ReplayStatus::Succeeded)
+  if(logfile && logfile[0])
   {
-    file->Shutdown();
-    return ret;
+    std::string contents = FileIO::logfile_readall(logfile);
+    mz_zip_writer_add_mem(&zip, "error.log", contents.data(), contents.length(), MZ_BEST_COMPRESSION);
   }
 
-  std::tie(ret, *rend) = file->OpenCapture(progress);
+  mz_zip_writer_finalize_archive(&zip);
+  mz_zip_writer_end(&zip);
+}
 
-  file->Shutdown();
+extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_RegisterMemoryRegion(void *base, size_t size)
+{
+  ICrashHandler *handler = RenderDoc::Inst().GetCrashHandler();
 
-  return ret;
+  if(handler)
+    handler->RegisterMemoryRegion(base, size);
+}
+
+extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_UnregisterMemoryRegion(void *base)
+{
+  ICrashHandler *handler = RenderDoc::Inst().GetCrashHandler();
+
+  if(handler)
+    handler->UnregisterMemoryRegion(base);
 }
 
 extern "C" RENDERDOC_API uint32_t RENDERDOC_CC
 RENDERDOC_ExecuteAndInject(const char *app, const char *workingDir, const char *cmdLine,
-                           const rdctype::array<EnvironmentModification> &env, const char *logfile,
+                           const rdcarray<EnvironmentModification> &env, const char *logfile,
                            const CaptureOptions &opts, bool waitForExit)
 {
   return Process::LaunchAndInjectIntoProcess(app, workingDir, cmdLine, env, logfile, opts,
@@ -341,37 +333,20 @@ extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_CanGlobalHook()
 }
 
 extern "C" RENDERDOC_API uint32_t RENDERDOC_CC
-RENDERDOC_InjectIntoProcess(uint32_t pid, const rdctype::array<EnvironmentModification> &env,
+RENDERDOC_InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
                             const char *logfile, const CaptureOptions &opts, bool waitForExit)
 {
   return Process::InjectIntoProcess(pid, env, logfile, opts, waitForExit != 0);
 }
 
-extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_GetThumbnail(const char *filename,
-                                                                  FileType type, uint32_t maxsize,
-                                                                  rdctype::array<byte> *buf)
-{
-  ICaptureFile *file = RENDERDOC_OpenCaptureFile(filename);
-
-  if(file->OpenStatus() != ReplayStatus::Succeeded)
-  {
-    file->Shutdown();
-    return false;
-  }
-
-  *buf = file->GetThumbnail(type, maxsize);
-  file->Shutdown();
-  return true;
-}
-
 extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_FreeArrayMem(const void *mem)
 {
-  rdctype::array<char>::deallocate(mem);
+  free((void *)mem);
 }
 
 extern "C" RENDERDOC_API void *RENDERDOC_CC RENDERDOC_AllocArrayMem(uint64_t sz)
 {
-  return rdctype::array<char>::allocate((size_t)sz);
+  return malloc((size_t)sz);
 }
 
 extern "C" RENDERDOC_API uint32_t RENDERDOC_CC RENDERDOC_EnumerateRemoteTargets(const char *host,
@@ -425,22 +400,28 @@ extern "C" RENDERDOC_API uint32_t RENDERDOC_CC RENDERDOC_GetDefaultRemoteServerP
   return RenderDoc_RemoteServerPort;
 }
 
-extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_BecomeRemoteServer(const char *listenhost,
-                                                                        uint32_t port,
-                                                                        volatile bool *killReplay)
+extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_BecomeRemoteServer(
+    const char *listenhost, uint32_t port, RENDERDOC_KillCallback killReplay,
+    RENDERDOC_PreviewWindowCallback previewWindow)
 {
-  bool dummy = false;
-
-  if(killReplay == NULL)
-    killReplay = &dummy;
-
   if(listenhost == NULL || listenhost[0] == 0)
     listenhost = "0.0.0.0";
+
+  // ensure a sensible default if no callback is provided, that just never kills
+  if(!killReplay)
+    killReplay = []() { return false; };
+
+  // ditto for preview windows
+  if(!previewWindow)
+    previewWindow = [](bool, const rdcarray<WindowingSystem> &) {
+      WindowingData ret = {WindowingSystem::Unknown};
+      return ret;
+    };
 
   if(port == 0)
     port = RENDERDOC_GetDefaultRemoteServerPort();
 
-  RenderDoc::Inst().BecomeRemoteServer(listenhost, (uint16_t)port, *killReplay);
+  RenderDoc::Inst().BecomeRemoteServer(listenhost, (uint16_t)port, killReplay, previewWindow);
 }
 
 extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_StartSelfHostCapture(const char *dllname)
@@ -490,8 +471,7 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_EndSelfHostCapture(const ch
 }
 
 extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_NeedVulkanLayerRegistration(
-    VulkanLayerFlags *flagsPtr, rdctype::array<rdctype::str> *myJSONsPtr,
-    rdctype::array<rdctype::str> *otherJSONsPtr)
+    VulkanLayerFlags *flagsPtr, rdcarray<rdcstr> *myJSONsPtr, rdcarray<rdcstr> *otherJSONsPtr)
 {
   VulkanLayerFlags flags = VulkanLayerFlags::NoFlags;
   std::vector<std::string> myJSONs;
@@ -504,14 +484,14 @@ extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_NeedVulkanLayerRegistration
 
   if(myJSONsPtr)
   {
-    create_array(*myJSONsPtr, myJSONs.size());
+    myJSONsPtr->resize(myJSONs.size());
     for(size_t i = 0; i < myJSONs.size(); i++)
       (*myJSONsPtr)[i] = myJSONs[i];
   }
 
   if(otherJSONsPtr)
   {
-    create_array(*otherJSONsPtr, otherJSONs.size());
+    otherJSONsPtr->resize(otherJSONs.size());
     for(size_t i = 0; i < otherJSONs.size(); i++)
       (*otherJSONsPtr)[i] = otherJSONs[i];
   }
@@ -522,6 +502,98 @@ extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_NeedVulkanLayerRegistration
 extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_UpdateVulkanLayerRegistration(bool systemLevel)
 {
   RenderDoc::Inst().UpdateVulkanLayerRegistration(systemLevel);
+}
+
+extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_UpdateInstalledVersionNumber()
+{
+#if ENABLED(RDOC_WIN32)
+  HKEY key = NULL;
+
+  LSTATUS ret =
+      RegCreateKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+                      0, NULL, 0, KEY_READ | KEY_WRITE, NULL, &key, NULL);
+
+  if(ret != ERROR_SUCCESS)
+  {
+    if(key)
+      RegCloseKey(key);
+
+    return;
+  }
+
+  bool done = false;
+
+  char guidName[256] = {};
+  for(DWORD idx = 0; ret == ERROR_SUCCESS && !done; idx++)
+  {
+    // enumerate all the uninstall keys
+    ret = RegEnumKeyA(key, idx, guidName, sizeof(guidName) - 1);
+
+    if(ret == ERROR_NO_MORE_ITEMS)
+    {
+      break;
+    }
+    else if(ret != ERROR_SUCCESS)
+    {
+      break;
+    }
+
+    // open the key as we'll need it for RegSetValueExA
+    HKEY subkey = NULL;
+    ret = RegCreateKeyExA(key, guidName, 0, NULL, 0, KEY_READ | KEY_WRITE, NULL, &subkey, NULL);
+
+    if(ret == ERROR_SUCCESS && subkey)
+    {
+      char DisplayName[256] = {};
+      char Publisher[256] = {};
+      DWORD len = sizeof(DisplayName) - 1;
+
+      // fetch DisplayName and Publisher values
+      ret = RegGetValueA(subkey, NULL, "DisplayName", RRF_RT_ANY, NULL, DisplayName, &len);
+
+      // allow the value to silently not exist
+      if(ret != ERROR_SUCCESS)
+      {
+        DisplayName[0] = 0;
+        ret = ERROR_SUCCESS;
+      }
+
+      len = sizeof(Publisher) - 1;
+      ret = RegGetValueA(subkey, NULL, "Publisher", RRF_RT_ANY, NULL, Publisher, &len);
+
+      if(ret != ERROR_SUCCESS)
+      {
+        Publisher[0] = 0;
+        ret = ERROR_SUCCESS;
+      }
+
+      // if this is our key, set the version number
+      if(!strcmp(DisplayName, "RenderDoc") && !strcmp(Publisher, "Baldur Karlsson"))
+      {
+        DWORD Version = (RENDERDOC_VERSION_MAJOR << 24) | (RENDERDOC_VERSION_MINOR << 16);
+        DWORD VersionMajor = RENDERDOC_VERSION_MAJOR;
+        DWORD VersionMinor = RENDERDOC_VERSION_MINOR;
+        std::string DisplayVersion = MAJOR_MINOR_VERSION_STRING ".0";
+
+        RegSetValueExA(subkey, "Version", 0, REG_DWORD, (const BYTE *)&Version, sizeof(Version));
+        RegSetValueExA(subkey, "VersionMajor", 0, REG_DWORD, (const BYTE *)&VersionMajor,
+                       sizeof(VersionMajor));
+        RegSetValueExA(subkey, "VersionMinor", 0, REG_DWORD, (const BYTE *)&VersionMinor,
+                       sizeof(VersionMinor));
+        RegSetValueExA(subkey, "DisplayVersion", 0, REG_SZ, (const BYTE *)DisplayVersion.c_str(),
+                       (DWORD)DisplayVersion.size() + 1);
+        done = true;
+      }
+    }
+
+    if(subkey)
+      RegCloseKey(subkey);
+  }
+
+  if(key)
+    RegCloseKey(key);
+
+#endif
 }
 
 static std::string ResourceFormatName(const ResourceFormat &fmt)
@@ -561,7 +633,7 @@ static std::string ResourceFormatName(const ResourceFormat &fmt)
         break;
       case ResourceFormatType::R11G11B10: return "R11G11B10_FLOAT";
       case ResourceFormatType::R5G6B5: return fmt.bgraOrder ? "R5G6B5_UNORM" : "B5G6R5_UNORM";
-      case ResourceFormatType::R5G5B5A1: return fmt.bgraOrder ? "R5G5B5A1_UNORM" : "R5G5B5A1_UNORM";
+      case ResourceFormatType::R5G5B5A1: return fmt.bgraOrder ? "R5G5B5A1_UNORM" : "B5G5R5A1_UNORM";
       case ResourceFormatType::R9G9B9E5: return "R9G9B9E5_FLOAT";
       case ResourceFormatType::R4G4B4A4: return fmt.bgraOrder ? "R4G4B4A4_UNORM" : "B4G4R4A4_UNORM";
       case ResourceFormatType::R4G4: return "R4G4_UNORM";
@@ -570,6 +642,7 @@ static std::string ResourceFormatName(const ResourceFormat &fmt)
       case ResourceFormatType::D32S8: return "D32S8";
       case ResourceFormatType::S8: return "S8";
       case ResourceFormatType::YUV: return "YUV";
+      case ResourceFormatType::PVRTC: return "PVRTC";
     }
   }
   else if(fmt.compType == CompType::Depth)
@@ -612,7 +685,7 @@ static std::string ResourceFormatName(const ResourceFormat &fmt)
 }
 
 extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_ResourceFormatName(const ResourceFormat &fmt,
-                                                                        rdctype::str &name)
+                                                                        rdcstr &name)
 {
   name = ResourceFormatName(fmt);
 }

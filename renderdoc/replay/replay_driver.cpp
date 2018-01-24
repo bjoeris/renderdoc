@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -24,9 +24,37 @@
 
 #include "replay_driver.h"
 #include "maths/formatpacking.h"
+#include "serialise/serialiser.h"
+
+template <>
+std::string DoStringise(const RemapTexture &el)
+{
+  BEGIN_ENUM_STRINGISE(RemapTexture);
+  {
+    STRINGISE_ENUM_CLASS(NoRemap)
+    STRINGISE_ENUM_CLASS(RGBA8)
+    STRINGISE_ENUM_CLASS(RGBA16)
+    STRINGISE_ENUM_CLASS(RGBA32)
+    STRINGISE_ENUM_CLASS(D32S8)
+  }
+  END_ENUM_STRINGISE();
+}
+
+template <typename SerialiserType>
+void DoSerialise(SerialiserType &ser, GetTextureDataParams &el)
+{
+  SERIALISE_MEMBER(forDiskSave);
+  SERIALISE_MEMBER(typeHint);
+  SERIALISE_MEMBER(resolve);
+  SERIALISE_MEMBER(remap);
+  SERIALISE_MEMBER(blackPoint);
+  SERIALISE_MEMBER(whitePoint);
+}
+
+INSTANTIATE_SERIALISE_TYPE(GetTextureDataParams);
 
 DrawcallDescription *SetupDrawcallPointers(vector<DrawcallDescription *> *drawcallTable,
-                                           rdctype::array<DrawcallDescription> &draws,
+                                           rdcarray<DrawcallDescription> &draws,
                                            DrawcallDescription *parent,
                                            DrawcallDescription *&previous)
 {
@@ -36,15 +64,15 @@ DrawcallDescription *SetupDrawcallPointers(vector<DrawcallDescription *> *drawca
   {
     DrawcallDescription *draw = &draws[i];
 
-    draw->parent = parent ? parent->eventID : 0;
+    draw->parent = parent ? parent->eventId : 0;
 
-    if(draw->children.count > 0)
+    if(!draw->children.empty())
     {
       if(drawcallTable)
       {
-        RDCASSERT(drawcallTable->empty() || draw->eventID > drawcallTable->back()->eventID);
-        drawcallTable->resize(RDCMAX(drawcallTable->size(), size_t(draw->eventID + 1)));
-        (*drawcallTable)[draw->eventID] = draw;
+        RDCASSERT(drawcallTable->empty() || draw->eventId > drawcallTable->back()->eventId);
+        drawcallTable->resize(RDCMAX(drawcallTable->size(), size_t(draw->eventId + 1)));
+        (*drawcallTable)[draw->eventId] = draw;
       }
 
       ret = SetupDrawcallPointers(drawcallTable, draw->children, draw, previous);
@@ -57,22 +85,22 @@ DrawcallDescription *SetupDrawcallPointers(vector<DrawcallDescription *> *drawca
 
       if(drawcallTable)
       {
-        RDCASSERT(drawcallTable->empty() || draw->eventID > drawcallTable->back()->eventID);
-        drawcallTable->resize(RDCMAX(drawcallTable->size(), size_t(draw->eventID + 1)));
-        (*drawcallTable)[draw->eventID] = draw;
+        RDCASSERT(drawcallTable->empty() || draw->eventId > drawcallTable->back()->eventId);
+        drawcallTable->resize(RDCMAX(drawcallTable->size(), size_t(draw->eventId + 1)));
+        (*drawcallTable)[draw->eventId] = draw;
       }
     }
     else
     {
       if(previous != NULL)
-        previous->next = draw->eventID;
-      draw->previous = previous ? previous->eventID : 0;
+        previous->next = draw->eventId;
+      draw->previous = previous ? previous->eventId : 0;
 
       if(drawcallTable)
       {
-        RDCASSERT(drawcallTable->empty() || draw->eventID > drawcallTable->back()->eventID);
-        drawcallTable->resize(RDCMAX(drawcallTable->size(), size_t(draw->eventID + 1)));
-        (*drawcallTable)[draw->eventID] = draw;
+        RDCASSERT(drawcallTable->empty() || draw->eventId > drawcallTable->back()->eventId);
+        drawcallTable->resize(RDCMAX(drawcallTable->size(), size_t(draw->eventId + 1)));
+        (*drawcallTable)[draw->eventId] = draw;
       }
 
       ret = previous = draw;
@@ -80,6 +108,98 @@ DrawcallDescription *SetupDrawcallPointers(vector<DrawcallDescription *> *drawca
   }
 
   return ret;
+}
+
+void PatchLineStripIndexBufer(const DrawcallDescription *draw, uint16_t *idx16, uint32_t *idx32,
+                              std::vector<uint32_t> &patchedIndices)
+{
+  const uint32_t restart = 0xffffffff;
+
+#define IDX_VALUE(offs) (idx16 ? idx16[index + offs] : (idx32 ? idx32[index + offs] : index + offs))
+
+  switch(draw->topology)
+  {
+    case Topology::TriangleList:
+    {
+      for(uint32_t index = 0; index + 3 <= draw->numIndices; index += 3)
+      {
+        patchedIndices.push_back(IDX_VALUE(0));
+        patchedIndices.push_back(IDX_VALUE(1));
+        patchedIndices.push_back(IDX_VALUE(2));
+        patchedIndices.push_back(IDX_VALUE(0));
+        patchedIndices.push_back(restart);
+      }
+      break;
+    }
+    case Topology::TriangleStrip:
+    {
+      // we decompose into individual triangles. This will mean the shared lines will be overwritten
+      // twice but it's a simple algorithm and otherwise decomposing a tristrip into a line strip
+      // would need some more complex handling (you could two pairs of triangles in a single strip
+      // by changing the winding, but then you'd need to restart and jump back, and handle a
+      // trailing single triangle, etc).
+      for(uint32_t index = 0; index + 3 <= draw->numIndices; index++)
+      {
+        patchedIndices.push_back(IDX_VALUE(0));
+        patchedIndices.push_back(IDX_VALUE(1));
+        patchedIndices.push_back(IDX_VALUE(2));
+        patchedIndices.push_back(IDX_VALUE(0));
+        patchedIndices.push_back(restart);
+      }
+      break;
+    }
+    case Topology::TriangleFan:
+    {
+      uint32_t index = 0;
+      uint32_t base = IDX_VALUE(0);
+      index++;
+
+      // this would be easier to do as a line list and just do base -> 1, 1 -> 2 lines for each
+      // triangle then a base -> 2 for the last one. However I would be amazed if this code ever
+      // runs except in an artificial test, so let's go with the simple and easy to understand
+      // solution.
+      for(; index + 2 <= draw->numIndices; index++)
+      {
+        patchedIndices.push_back(base);
+        patchedIndices.push_back(IDX_VALUE(0));
+        patchedIndices.push_back(IDX_VALUE(1));
+        patchedIndices.push_back(base);
+        patchedIndices.push_back(restart);
+      }
+      break;
+    }
+    case Topology::TriangleList_Adj:
+    {
+      // skip the adjacency values
+      for(uint32_t index = 0; index + 6 <= draw->numIndices; index += 6)
+      {
+        patchedIndices.push_back(IDX_VALUE(0));
+        patchedIndices.push_back(IDX_VALUE(2));
+        patchedIndices.push_back(IDX_VALUE(4));
+        patchedIndices.push_back(IDX_VALUE(0));
+        patchedIndices.push_back(restart);
+      }
+      break;
+    }
+    case Topology::TriangleStrip_Adj:
+    {
+      // skip the adjacency values
+      for(uint32_t index = 0; index + 6 <= draw->numIndices; index += 2)
+      {
+        patchedIndices.push_back(IDX_VALUE(0));
+        patchedIndices.push_back(IDX_VALUE(2));
+        patchedIndices.push_back(IDX_VALUE(4));
+        patchedIndices.push_back(IDX_VALUE(0));
+        patchedIndices.push_back(restart);
+      }
+      break;
+    }
+    default:
+      RDCERR("Unsupported topology %s for line-list patching", ToStr(draw->topology).c_str());
+      return;
+  }
+
+#undef IDX_VALUE
 }
 
 FloatVector HighlightCache::InterpretVertex(byte *data, uint32_t vert, const MeshDisplay &cfg,
@@ -106,11 +226,11 @@ FloatVector HighlightCache::InterpretVertex(byte *data, uint32_t vert, const Mes
 {
   FloatVector ret(0.0f, 0.0f, 0.0f, 1.0f);
 
-  data += vert * cfg.position.stride;
+  data += vert * cfg.position.vertexByteStride;
 
   float *out = &ret.x;
 
-  const ResourceFormat &fmt = cfg.position.fmt;
+  const ResourceFormat &fmt = cfg.position.format;
 
   if(fmt.type == ResourceFormatType::R10G10B10A2)
   {
@@ -169,19 +289,20 @@ FloatVector HighlightCache::InterpretVertex(byte *data, uint32_t vert, const Mes
   return ret;
 }
 
-void HighlightCache::CacheHighlightingData(uint32_t eventID, const MeshDisplay &cfg)
+void HighlightCache::CacheHighlightingData(uint32_t eventId, const MeshDisplay &cfg)
 {
-  if(EID != eventID || cfg.type != stage || cfg.position.buf != buf || cfg.position.offset != offs)
+  if(EID != eventId || cfg.type != stage || cfg.position.vertexResourceId != buf ||
+     cfg.position.vertexByteOffset != offs)
   {
-    EID = eventID;
-    buf = cfg.position.buf;
-    offs = cfg.position.offset;
+    EID = eventId;
+    buf = cfg.position.vertexResourceId;
+    offs = cfg.position.vertexByteOffset;
     stage = cfg.type;
 
-    uint32_t bytesize = cfg.position.idxByteWidth;
-    uint64_t maxIndex = cfg.position.numVerts - 1;
+    uint32_t bytesize = cfg.position.indexByteStride;
+    uint64_t maxIndex = cfg.position.numIndices - 1;
 
-    if(cfg.position.idxByteWidth == 0 || stage == MeshDataStage::GSOut)
+    if(cfg.position.indexByteStride == 0 || stage == MeshDataStage::GSOut)
     {
       indices.clear();
       idxData = false;
@@ -190,16 +311,16 @@ void HighlightCache::CacheHighlightingData(uint32_t eventID, const MeshDisplay &
     {
       idxData = true;
 
-      vector<byte> idxdata;
-      if(cfg.position.idxbuf != ResourceId())
-        driver->GetBufferData(cfg.position.idxbuf, cfg.position.idxoffs,
-                              cfg.position.numVerts * bytesize, idxdata);
+      bytebuf idxdata;
+      if(cfg.position.indexResourceId != ResourceId())
+        driver->GetBufferData(cfg.position.indexResourceId, cfg.position.indexByteOffset,
+                              cfg.position.numIndices * bytesize, idxdata);
 
       uint8_t *idx8 = (uint8_t *)&idxdata[0];
       uint16_t *idx16 = (uint16_t *)&idxdata[0];
       uint32_t *idx32 = (uint32_t *)&idxdata[0];
 
-      uint32_t numIndices = RDCMIN(cfg.position.numVerts, uint32_t(idxdata.size() / bytesize));
+      uint32_t numIndices = RDCMIN(cfg.position.numIndices, uint32_t(idxdata.size() / bytesize));
 
       indices.resize(numIndices);
 
@@ -250,8 +371,8 @@ void HighlightCache::CacheHighlightingData(uint32_t eventID, const MeshDisplay &
       }
     }
 
-    driver->GetBufferData(cfg.position.buf, cfg.position.offset,
-                          (maxIndex + 1) * cfg.position.stride, vertexData);
+    driver->GetBufferData(cfg.position.vertexResourceId, cfg.position.vertexByteOffset,
+                          (maxIndex + 1) * cfg.position.vertexByteStride, vertexData);
   }
 }
 
@@ -266,16 +387,16 @@ bool HighlightCache::FetchHighlightPositions(const MeshDisplay &cfg, FloatVector
   byte *dataEnd = data + vertexData.size();
 
   uint32_t idx = cfg.highlightVert;
-  Topology meshtopo = cfg.position.topo;
+  Topology meshtopo = cfg.position.topology;
 
   activeVertex = InterpretVertex(data, idx, cfg, dataEnd, true, valid);
 
   uint32_t primRestart = 0;
   if(IsStrip(meshtopo))
   {
-    if(cfg.position.idxByteWidth == 1)
+    if(cfg.position.indexByteStride == 1)
       primRestart = 0xff;
-    else if(cfg.position.idxByteWidth == 2)
+    else if(cfg.position.indexByteStride == 2)
       primRestart = 0xffff;
     else
       primRestart = 0xffffffff;
@@ -425,7 +546,7 @@ bool HighlightCache::FetchHighlightPositions(const MeshDisplay &cfg, FloatVector
     // Triangle strip with adjacency is the most complex topology, as
     // we need to handle the ends separately where the pattern breaks.
 
-    uint32_t numidx = cfg.position.numVerts;
+    uint32_t numidx = cfg.position.numIndices;
 
     if(numidx < 6)
     {
@@ -562,7 +683,7 @@ bool HighlightCache::FetchHighlightPositions(const MeshDisplay &cfg, FloatVector
   }
   else if(meshtopo >= Topology::PatchList)
   {
-    uint32_t dim = PatchList_Count(cfg.position.topo);
+    uint32_t dim = PatchList_Count(cfg.position.topology);
 
     uint32_t v0 = uint32_t(idx / dim) * dim;
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  * 
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -92,14 +92,18 @@ void main(void)
 	{
 		// by convention display 1D textures as 100 high
 		if(scr2.x < 0.0f || scr2.x > 1.0f || scr2.y < 0.0f || scr2.y > 100.0f)
-		   discard;
+		{
+			color_out = vec4(0, 0, 0, 0);
+			return;
+		}
 	}
 	else
 	{
 		if(scr2.x < 0.0f || scr2.y < 0.0f ||
 		   scr2.x > 1.0f || scr2.y > 1.0f)
 		{
-			discard;
+			color_out = vec4(0, 0, 0, 0);
+			return;
 		}
 	}
 

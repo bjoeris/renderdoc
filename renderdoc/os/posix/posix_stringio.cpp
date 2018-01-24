@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -39,7 +39,7 @@
 #include "api/app/renderdoc_app.h"
 #include "common/threading.h"
 #include "os/os_specific.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 
 using std::string;
 
@@ -153,8 +153,17 @@ string GetReplayAppFilename()
   }
 
   // if it's not in the same directory, try in a sibling /bin
-  // e.g. /foo/bar/lib/librenderdoc.so -> /foo/bar/bin/qrenderdoc
-  replay = path + "/../bin/qrenderdoc";
+  //
+  // start from our path
+  replay = path + "/";
+
+// if there's a custom lib subfolder, go up one (e.g. /usr/lib/renderdoc/librenderdoc.so)
+#if defined(RENDERDOC_LIB_SUBFOLDER)
+  replay += "../";
+#endif
+
+  // leave the lib/ folder, and go into bin/
+  replay += "../bin/qrenderdoc";
 
   f = FileIO::fopen(replay.c_str(), "r");
   if(f)
@@ -246,17 +255,17 @@ uint64_t GetModifiedTimestamp(const string &filename)
   return 0;
 }
 
-void Copy(const char *from, const char *to, bool allowOverwrite)
+bool Copy(const char *from, const char *to, bool allowOverwrite)
 {
   if(from[0] == 0 || to[0] == 0)
-    return;
+    return false;
 
   FILE *ff = ::fopen(from, "r");
 
   if(!ff)
   {
     RDCERR("Can't open source file for copy '%s'", from);
-    return;
+    return false;
   }
 
   FILE *tf = ::fopen(to, "r");
@@ -266,7 +275,7 @@ void Copy(const char *from, const char *to, bool allowOverwrite)
     RDCERR("Destination file for non-overwriting copy '%s' already exists", from);
     ::fclose(ff);
     ::fclose(tf);
-    return;
+    return false;
   }
 
   if(tf)
@@ -278,6 +287,7 @@ void Copy(const char *from, const char *to, bool allowOverwrite)
   {
     ::fclose(ff);
     RDCERR("Can't open destination file for copy '%s'", to);
+    return false;
   }
 
   char buffer[BUFSIZ];
@@ -290,6 +300,19 @@ void Copy(const char *from, const char *to, bool allowOverwrite)
 
   ::fclose(ff);
   ::fclose(tf);
+
+  return true;
+}
+
+bool Move(const char *from, const char *to, bool allowOverwrite)
+{
+  if(exists(to))
+  {
+    if(!allowOverwrite)
+      return false;
+  }
+
+  return ::rename(from, to) == 0;
 }
 
 void Delete(const char *path)
@@ -425,6 +448,18 @@ bool feof(FILE *f)
   return ::feof(f) != 0;
 }
 
+void ftruncateat(FILE *f, uint64_t length)
+{
+  ::fflush(f);
+  int fd = ::fileno(f);
+  ::ftruncate(fd, (off_t)length);
+}
+
+bool fflush(FILE *f)
+{
+  return ::fflush(f) == 0;
+}
+
 int fclose(FILE *f)
 {
   return ::fclose(f);
@@ -445,7 +480,30 @@ void ReleaseFDAfterFork()
 {
   // we do NOT release the shared lock here, since the file descriptor is shared so we'd be
   // releasing the parent process's lock. Just close our file descriptor
-  close(logfileFD);
+  if(logfileFD >= 0)
+    close(logfileFD);
+}
+
+std::string logfile_readall(const char *filename)
+{
+  FILE *f = FileIO::fopen(filename, "r");
+
+  std::string ret;
+
+  if(f == NULL)
+    return ret;
+
+  FileIO::fseek64(f, 0, SEEK_END);
+  uint64_t size = FileIO::ftell64(f);
+  FileIO::fseek64(f, 0, SEEK_SET);
+
+  ret.resize((size_t)size);
+
+  FileIO::fread(&ret[0], 1, ret.size(), f);
+
+  FileIO::fclose(f);
+
+  return ret;
 }
 
 bool logfile_open(const char *filename)
@@ -465,13 +523,13 @@ bool logfile_open(const char *filename)
 
 void logfile_append(const char *msg, size_t length)
 {
-  if(logfileFD)
+  if(logfileFD >= 0)
     write(logfileFD, msg, (unsigned int)length);
 }
 
 void logfile_close(const char *filename)
 {
-  if(logfileFD)
+  if(logfileFD >= 0)
   {
     // release our shared lock
     int err = flock(logfileFD, LOCK_UN | LOCK_NB);

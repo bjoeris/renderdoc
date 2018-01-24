@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -55,6 +55,8 @@ public:
   static void GlobalInit();
   static void GlobalShutdown();
 
+  bool CheckInterfaces();
+
   QString versionString();
 
   template <typename T>
@@ -71,7 +73,7 @@ public:
     const char *typeName = typeid(*const_cast<QtObjectType *>(object)).name();
 
     // forward non-template part on
-    PyObject *obj = QtObjectToPython(NULL, typeName, object);
+    PyObject *obj = QtObjectToPython(typeName, object);
 
     if(obj)
       setPyGlobal(varName, obj);
@@ -82,11 +84,10 @@ public:
                      -1, {});
   }
 
-  static PyObject *QWidgetToPy(PyObject *self, QWidget *widget)
-  {
-    return QtObjectToPython(self, "QWidget", widget);
-  }
+  static PyObject *QWidgetToPy(QWidget *widget) { return QtObjectToPython("QWidget", widget); }
   static QWidget *QWidgetFromPy(PyObject *widget);
+
+  QStringList completionOptions(QString base);
 
   void setThreadBlocking(bool block) { m_Block = block; }
   bool threadBlocking() { return m_Block; }
@@ -100,8 +101,8 @@ signals:
   void textOutput(bool isStdError, const QString &output);
 
 public slots:
-  void executeString(const QString &source, bool interactive = false);
-  void executeString(const QString &filename, const QString &source, bool interactive = false);
+  void executeString(const QString &source);
+  void executeString(const QString &filename, const QString &source);
   void executeFile(const QString &filename);
   void setGlobal(const char *varName, const char *typeName, void *object);
   void setPyGlobal(const char *varName, PyObject *object);
@@ -117,6 +118,9 @@ private:
   // globals are set into and any scripts execute in
   PyObject *context_namespace = NULL;
 
+  // a rlcompleter.Completer object used for tab-completion
+  PyObject *m_Completer = NULL;
+
   // this is set during an execute, so we can identify when a callback happens within our execute or
   // not
   PyThreadState *m_State = NULL;
@@ -131,9 +135,9 @@ private:
 
   bool m_Block = false;
 
-  static PyObject *QtObjectToPython(PyObject *self, const char *typeName, QObject *object);
+  static PyObject *QtObjectToPython(const char *typeName, QObject *object);
 
-  QTimer *outputTicker;
+  QTimer *outputTicker = NULL;
   QMutex outputMutex;
   QString outstr, errstr;
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,7 @@
 #pragma once
 
 #include <QFrame>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
 namespace Ui
 {
@@ -34,6 +34,7 @@ class VulkanPipelineStateViewer;
 
 class QXmlStreamWriter;
 
+class RDLabel;
 class RDTreeWidget;
 class RDTreeWidgetItem;
 class PipelineStateViewer;
@@ -45,7 +46,7 @@ struct SamplerData
   RDTreeWidgetItem *node;
 };
 
-class VulkanPipelineStateViewer : public QFrame, public ILogViewer
+class VulkanPipelineStateViewer : public QFrame, public ICaptureViewer
 {
   Q_OBJECT
 
@@ -54,10 +55,10 @@ public:
                                      QWidget *parent = 0);
   ~VulkanPipelineStateViewer();
 
-  void OnLogfileLoaded();
-  void OnLogfileClosed();
-  void OnSelectedEventChanged(uint32_t eventID) {}
-  void OnEventChanged(uint32_t eventID);
+  void OnCaptureLoaded();
+  void OnCaptureClosed();
+  void OnSelectedEventChanged(uint32_t eventId) {}
+  void OnEventChanged(uint32_t eventId);
 
 private slots:
   // automatic slots
@@ -73,7 +74,6 @@ private slots:
 
   // manual slots
   void shaderView_clicked();
-  void shaderLabel_clicked(QMouseEvent *event);
   void shaderEdit_clicked();
 
   void shaderSave_clicked();
@@ -94,9 +94,9 @@ private:
   void addConstantBlockRow(ShaderReflection *shaderDetails, const VKPipe::Shader &stage,
                            int bindset, int bind, const VKPipe::Pipeline &pipe, RDTreeWidget *ubos);
 
-  void setShaderState(const VKPipe::Shader &stage, const VKPipe::Pipeline &pipe, QLabel *shader,
+  void setShaderState(const VKPipe::Shader &stage, const VKPipe::Pipeline &pipe, RDLabel *shader,
                       RDTreeWidget *res, RDTreeWidget *ubo);
-  void clearShaderState(QLabel *shader, RDTreeWidget *res, RDTreeWidget *ubo);
+  void clearShaderState(RDLabel *shader, RDTreeWidget *res, RDTreeWidget *ubo);
   void setState();
   void clearState();
 
@@ -104,11 +104,8 @@ private:
   void setEmptyRow(RDTreeWidgetItem *node);
   void highlightIABind(int slot);
 
-  QString formatMembers(int indent, const QString &nameprefix,
-                        const rdctype::array<ShaderConstant> &vars);
+  QString formatMembers(int indent, const QString &nameprefix, const rdcarray<ShaderConstant> &vars);
   const VKPipe::Shader *stageForSender(QWidget *widget);
-
-  QString disassembleSPIRV(const ShaderReflection *shaderDetails);
 
   template <typename viewType>
   void setViewDetails(RDTreeWidgetItem *node, const viewType &view, TextureDescription *tex);
@@ -121,8 +118,8 @@ private:
   void exportHTML(QXmlStreamWriter &xml, const VKPipe::VertexInput &vi);
   void exportHTML(QXmlStreamWriter &xml, const VKPipe::InputAssembly &ia);
   void exportHTML(QXmlStreamWriter &xml, const VKPipe::Shader &sh);
-  void exportHTML(QXmlStreamWriter &xml, const VKPipe::Raster &rs);
-  void exportHTML(QXmlStreamWriter &xml, const VKPipe::ColorBlend &cb);
+  void exportHTML(QXmlStreamWriter &xml, const VKPipe::Rasterizer &rs);
+  void exportHTML(QXmlStreamWriter &xml, const VKPipe::ColorBlendState &cb);
   void exportHTML(QXmlStreamWriter &xml, const VKPipe::DepthStencil &ds);
   void exportHTML(QXmlStreamWriter &xml, const VKPipe::CurrentPass &pass);
 

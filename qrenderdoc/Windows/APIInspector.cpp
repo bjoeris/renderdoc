@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,7 +23,6 @@
  ******************************************************************************/
 
 #include "APIInspector.h"
-#include <QRegularExpression>
 #include "ui_APIInspector.h"
 
 Q_DECLARE_METATYPE(APIEvent);
@@ -34,6 +33,7 @@ APIInspector::APIInspector(ICaptureContext &ctx, QWidget *parent)
   ui->setupUi(this);
 
   ui->apiEvents->setColumns({lit("EID"), tr("Event")});
+  ui->apiEvents->header()->resizeSection(0, 150);
 
   ui->splitter->setCollapsible(1, true);
   ui->splitter->setSizes({1, 0});
@@ -46,45 +46,45 @@ APIInspector::APIInspector(ICaptureContext &ctx, QWidget *parent)
   handle->setIndex(1);
   handle->setCollapsed(true);
 
-  m_Ctx.AddLogViewer(this);
+  m_Ctx.AddCaptureViewer(this);
 }
 
 APIInspector::~APIInspector()
 {
   m_Ctx.BuiltinWindowClosed(this);
-  m_Ctx.RemoveLogViewer(this);
+  m_Ctx.RemoveCaptureViewer(this);
   delete ui;
 }
 
-void APIInspector::OnLogfileLoaded()
+void APIInspector::OnCaptureLoaded()
 {
 }
 
-void APIInspector::OnLogfileClosed()
+void APIInspector::OnCaptureClosed()
 {
   ui->apiEvents->clear();
   ui->callstack->clear();
 }
 
-void APIInspector::OnSelectedEventChanged(uint32_t eventID)
+void APIInspector::OnSelectedEventChanged(uint32_t eventId)
 {
   ui->apiEvents->clearSelection();
 
   fillAPIView();
 }
 
-void APIInspector::addCallstack(rdctype::array<rdctype::str> calls)
+void APIInspector::addCallstack(rdcarray<rdcstr> calls)
 {
   ui->callstack->setUpdatesEnabled(false);
   ui->callstack->clear();
 
-  if(calls.count == 1 && calls[0].count == 0)
+  if(calls.size() == 1 && calls[0].isEmpty())
   {
     ui->callstack->addItem(tr("Symbols not loaded. Tools -> Resolve Symbols."));
   }
   else
   {
-    for(rdctype::str &s : calls)
+    for(rdcstr &s : calls)
       ui->callstack->addItem(s);
   }
   ui->callstack->setUpdatesEnabled(true);
@@ -99,13 +99,23 @@ void APIInspector::on_apiEvents_itemSelectionChanged()
 
   APIEvent ev = node->tag().value<APIEvent>();
 
-  if(ev.callstack.count > 0)
+  if(!ev.callstack.isEmpty())
   {
-    m_Ctx.Replay().AsyncInvoke([this, ev](IReplayController *r) {
-      rdctype::array<rdctype::str> trace = r->GetResolve(ev.callstack);
+    if(m_Ctx.Replay().GetCaptureAccess())
+    {
+      m_Ctx.Replay().AsyncInvoke([this, ev](IReplayController *) {
+        rdcarray<rdcstr> stack = m_Ctx.Replay().GetCaptureAccess()->GetResolve(ev.callstack);
 
-      GUIInvoke::call([this, trace]() { addCallstack(trace); });
-    });
+        GUIInvoke::call([this, stack]() { addCallstack(stack); });
+      });
+    }
+    else
+    {
+      ui->callstack->setUpdatesEnabled(false);
+      ui->callstack->clear();
+      ui->callstack->addItem(tr("Callstack resolution not available."));
+      ui->callstack->setUpdatesEnabled(true);
+    }
   }
   else
   {
@@ -121,38 +131,29 @@ void APIInspector::fillAPIView()
   ui->apiEvents->setUpdatesEnabled(false);
   ui->apiEvents->clear();
 
-  QRegularExpression rgxopen(lit("^\\s*{"));
-  QRegularExpression rgxclose(lit("^\\s*}"));
-
+  const SDFile &file = m_Ctx.GetStructuredFile();
   const DrawcallDescription *draw = m_Ctx.CurSelectedDrawcall();
 
-  if(draw != NULL && draw->events.count > 0)
+  if(draw != NULL && !draw->events.isEmpty())
   {
     for(const APIEvent &ev : draw->events)
     {
-      QStringList lines = QString(ev.eventDesc).split(lit("\n"), QString::SkipEmptyParts);
+      RDTreeWidgetItem *root = new RDTreeWidgetItem({QString::number(ev.eventId), QString()});
 
-      RDTreeWidgetItem *root = new RDTreeWidgetItem({QString::number(ev.eventID), lines[0]});
-
-      int i = 1;
-
-      if(i < lines.count() && lines[i].trimmed() == lit("{"))
-        i++;
-
-      QList<RDTreeWidgetItem *> nodestack;
-      nodestack.push_back(root);
-
-      for(; i < lines.count(); i++)
+      if(ev.chunkIndex < file.chunks.size())
       {
-        if(rgxopen.match(lines[i]).hasMatch())
-          nodestack.push_back(nodestack.back()->child(nodestack.back()->childCount() - 1));
-        else if(rgxclose.match(lines[i]).hasMatch())
-          nodestack.pop_back();
-        else if(!nodestack.empty())
-          nodestack.back()->addChild(new RDTreeWidgetItem({QString(), lines[i].trimmed()}));
+        SDChunk *chunk = file.chunks[ev.chunkIndex];
+
+        root->setText(1, chunk->name);
+
+        addStructuredObjects(root, chunk->data.children, false);
+      }
+      else
+      {
+        root->setText(1, tr("Invalid chunk index %1").arg(ev.chunkIndex));
       }
 
-      if(ev.eventID == draw->eventID)
+      if(ev.eventId == draw->eventId)
         root->setBold(true);
 
       root->setTag(QVariant::fromValue(ev));
@@ -162,5 +163,6 @@ void APIInspector::fillAPIView()
       ui->apiEvents->setSelectedItem(root);
     }
   }
+
   ui->apiEvents->setUpdatesEnabled(true);
 }

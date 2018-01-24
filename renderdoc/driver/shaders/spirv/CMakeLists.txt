@@ -91,8 +91,11 @@ endif()
 set(sources
     spirv_common.cpp
     spirv_common.h
+    spirv_editor.h
+    spirv_editor.cpp
     spirv_compile.cpp
     spirv_disassemble.cpp
+    spirv_stringise.cpp
     ${glslang_sources})
 
 add_definitions(-DAMD_EXTENSIONS)

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,7 @@ namespace Android
 {
 bool IsHostADB(const char *hostname);
 uint32_t StartAndroidPackageForCapture(const char *host, const char *package);
-Process::ProcessResult adbExecCommand(const std::string &deviceID, const std::string &args);
+Process::ProcessResult adbExecCommand(const std::string &deviceID, const std::string &args,
+                                      const string &workDir = ".");
 void extractDeviceIDAndIndex(const std::string &hostname, int &index, std::string &deviceID);
 };

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -39,10 +39,6 @@ struct IReplayController;
 class LambdaThread;
 class RemoteHost;
 
-// simple helper for the common case of 'we just need to run this on the render thread
-#define INVOKE_MEMFN(function) \
-  m_Ctx.Replay().AsyncInvoke([this](IReplayController *r) { function(r); });
-
 class ReplayManager : public IReplayManager
 {
   Q_DECLARE_TR_FUNCTIONS(ReplayManager);
@@ -51,8 +47,8 @@ public:
   ReplayManager();
   ~ReplayManager();
 
-  void OpenCapture(const QString &logfile, float *progress);
-  void DeleteCapture(const QString &logfile, bool local);
+  void OpenCapture(const QString &capturefile, RENDERDOC_ProgressCallback progress);
+  void DeleteCapture(const rdcstr &capturefile, bool local);
 
   bool IsRunning();
   ReplayStatus GetCreateStatus() { return m_CreateStatus; }
@@ -62,7 +58,7 @@ public:
   // processed.
   // the manager processes only the request on the top of the queue, so when a new tagged invoke
   // comes in, we remove any other requests in the queue before it that have the same tag
-  void AsyncInvoke(const QString &tag, InvokeCallback m);
+  void AsyncInvoke(const rdcstr &tag, InvokeCallback m);
   void AsyncInvoke(InvokeCallback m);
   void BlockInvoke(InvokeCallback m);
 
@@ -75,16 +71,29 @@ public:
   void ShutdownServer();
   void PingRemote();
 
+  ICaptureAccess *GetCaptureAccess()
+  {
+    if(m_Remote)
+      return m_Remote;
+    if(m_CaptureFile)
+      return m_CaptureFile;
+    return NULL;
+  }
+
+  // may return NULL if the capture file is not open locally. Consider using ICaptureAccess above to
+  // work whether local or remote.
+  ICaptureFile *GetCaptureFile() { return m_CaptureFile; }
+  void ReopenCaptureFile(const QString &path);
   const RemoteHost *CurrentRemote() { return m_RemoteHost; }
-  uint32_t ExecuteAndInject(const QString &exe, const QString &workingDir, const QString &cmdLine,
-                            const QList<EnvironmentModification> &env, const QString &logfile,
+  uint32_t ExecuteAndInject(const rdcstr &exe, const rdcstr &workingDir, const rdcstr &cmdLine,
+                            const rdcarray<EnvironmentModification> &env, const rdcstr &capturefile,
                             CaptureOptions opts);
 
-  QStringList GetRemoteSupport();
+  rdcarray<rdcstr> GetRemoteSupport();
   void GetHomeFolder(bool synchronous, DirectoryBrowseCallback cb);
-  void ListFolder(QString path, bool synchronous, DirectoryBrowseCallback cb);
-  QString CopyCaptureToRemote(const QString &localpath, QWidget *window);
-  void CopyCaptureFromRemote(const QString &remotepath, const QString &localpath, QWidget *window);
+  void ListFolder(const rdcstr &path, bool synchronous, DirectoryBrowseCallback cb);
+  rdcstr CopyCaptureToRemote(const rdcstr &localpath, QWidget *window);
+  void CopyCaptureFromRemote(const rdcstr &remotepath, const rdcstr &localpath, QWidget *window);
 
 private:
   struct InvokeHandle
@@ -102,20 +111,16 @@ private:
     bool selfdelete;
   };
 
-  void run();
+  void run(int proxyRenderer, const QString &capturefile, RENDERDOC_ProgressCallback progress);
 
   QMutex m_RenderLock;
   QQueue<InvokeHandle *> m_RenderQueue;
   QWaitCondition m_RenderCondition;
 
+  ICaptureFile *m_CaptureFile = NULL;
   IReplayController *m_Renderer = NULL;
 
   void PushInvoke(InvokeHandle *cmd);
-
-  int m_ProxyRenderer;
-  QString m_ReplayHost;
-  QString m_Logfile;
-  float *m_Progress;
 
   QMutex m_RemoteLock;
   RemoteHost *m_RemoteHost = NULL;
@@ -123,5 +128,5 @@ private:
 
   volatile bool m_Running;
   LambdaThread *m_Thread;
-  ReplayStatus m_CreateStatus;
+  ReplayStatus m_CreateStatus = ReplayStatus::Succeeded;
 };

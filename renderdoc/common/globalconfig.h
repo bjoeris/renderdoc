@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -95,6 +95,13 @@
 
 #error "No platform configured in build system"
 
+#endif
+
+// is size_t a real separate type, not just typedef'd to uint32_t or uint64_t (or equivalent)?
+#if defined(RENDERDOC_PLATFORM_APPLE)
+#define RDOC_SIZET_SEP_TYPE OPTION_ON
+#else
+#define RDOC_SIZET_SEP_TYPE OPTION_OFF
 #endif
 
 #if defined(RENDERDOC_WINDOWING_XLIB)

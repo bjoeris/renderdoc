@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -69,7 +69,7 @@ protected:
     {
       bool ret = m_pDevice->GetResourceManager()->AddWrapper(this, real);
       if(!ret)
-        RDCERR("Error adding wrapper for type %s", ToStr::Get(__uuidof(NestedType)).c_str());
+        RDCERR("Error adding wrapper for type %s", ToStr(__uuidof(NestedType)).c_str());
     }
 
     m_pDevice->GetResourceManager()->AddCurrentResource(GetResourceID(), this);
@@ -239,7 +239,7 @@ public:
       }
       else
       {
-        RDCWARN("Unexpected guid %s", ToStr::Get(riid).c_str());
+        RDCWARN("Unexpected guid %s", ToStr(riid).c_str());
         SAFE_DELETE(dxgiWrapper);
       }
 
@@ -270,7 +270,7 @@ public:
       return m_pDevice->SetShaderDebugPath(this, (const char *)pData);
 
     if(guid == WKPDID_D3DDebugObjectName)
-      m_pDevice->SetResourceName(this, (const char *)pData);
+      m_pDevice->SetName(this, (const char *)pData);
 
     if(!m_pReal)
       return S_OK;
@@ -289,7 +289,7 @@ public:
   HRESULT STDMETHODCALLTYPE SetName(LPCWSTR Name)
   {
     string utf8 = StringFormat::Wide2UTF8(Name);
-    m_pDevice->SetResourceName(this, utf8.c_str());
+    m_pDevice->SetName(this, utf8.c_str());
 
     if(!m_pReal)
       return S_OK;
@@ -516,6 +516,13 @@ public:
     static const int AllocMaxByteSize = 8 * 1024 * 1024;
     ALLOCATE_WITH_WRAPPED_POOL(ShaderEntry, AllocPoolCount, AllocMaxByteSize);
 
+    static bool m_InternalResources;
+
+    static void InternalResources(bool internalResources)
+    {
+      m_InternalResources = internalResources;
+    }
+
     ShaderEntry(const D3D12_SHADER_BYTECODE &byteCode, WrappedID3D12Device *device)
         : WrappedDeviceChild12(NULL, device), m_Key(byteCode)
     {
@@ -525,6 +532,19 @@ public:
       m_DXBCFile = NULL;
 
       device->GetResourceManager()->AddLiveResource(GetResourceID(), this);
+
+      if(!m_InternalResources)
+      {
+        device->AddResource(GetResourceID(), ResourceType::Shader, "Shader");
+
+        ResourceDescription &desc = device->GetReplay()->GetResourceDesc(GetResourceID());
+        // this will be appended to in the function above.
+        desc.initialisationChunks.clear();
+
+        // since these don't have live IDs, let's use the first uint of the hash as the name. Slight
+        // chance of collision but not that bad.
+        desc.name = StringFormat::Fmt("Shader {%08x}", m_Key.hash[0]);
+      }
 
       m_Built = false;
     }
@@ -703,6 +723,10 @@ public:
       ShaderEntry::ReleaseShader(GS());
       ShaderEntry::ReleaseShader(PS());
 
+      SAFE_DELETE_ARRAY(graphics->InputLayout.pInputElementDescs);
+      SAFE_DELETE_ARRAY(graphics->StreamOutput.pSODeclaration);
+      SAFE_DELETE_ARRAY(graphics->StreamOutput.pBufferStrides);
+
       SAFE_DELETE(graphics);
     }
 
@@ -747,6 +771,8 @@ class WrappedID3D12Resource : public WrappedDeviceChild12<ID3D12Resource>
   static GPUAddressRangeTracker m_Addresses;
 
   bool resident;
+
+  WriteSerialiser &GetThreadSerialiser();
 
 public:
   static const int AllocPoolCount = 16384;
@@ -963,7 +989,7 @@ struct UnwrapHelper
 
 ALL_D3D12_TYPES;
 
-D3D12ResourceType IdentifyTypeByPtr(ID3D12DeviceChild *ptr);
+D3D12ResourceType IdentifyTypeByPtr(ID3D12Object *ptr);
 
 #define WRAPPING_DEBUG 0
 
@@ -1015,8 +1041,24 @@ D3D12ResourceRecord *GetRecord(ifaceptr obj)
 
 // specialisations that use the IsAlloc() function to identify the real type
 template <>
+ResourceId GetResID(ID3D12Object *ptr);
+template <>
+ID3D12Object *Unwrap(ID3D12Object *ptr);
+template <>
+D3D12ResourceRecord *GetRecord(ID3D12Object *ptr);
+
+template <>
 ResourceId GetResID(ID3D12DeviceChild *ptr);
 template <>
+ResourceId GetResID(ID3D12Pageable *ptr);
+template <>
+ResourceId GetResID(ID3D12CommandList *ptr);
+template <>
+ResourceId GetResID(ID3D12GraphicsCommandList *ptr);
+template <>
+ResourceId GetResID(ID3D12CommandQueue *ptr);
+template <>
 ID3D12DeviceChild *Unwrap(ID3D12DeviceChild *ptr);
+
 template <>
 D3D12ResourceRecord *GetRecord(ID3D12DeviceChild *ptr);

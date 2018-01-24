@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -34,6 +34,8 @@
 #include <QStack>
 #include <QToolTip>
 #include "Code/Interface/QRDInterface.h"
+#include "Code/QRDUtils.h"
+#include "Code/Resources.h"
 
 class RDTreeWidgetModel : public QAbstractItemModel
 {
@@ -41,7 +43,7 @@ public:
   RDTreeWidgetModel(RDTreeWidget *parent) : QAbstractItemModel(parent), widget(parent) {}
   QModelIndex indexForItem(RDTreeWidgetItem *item, int column) const
   {
-    if(item->m_parent == NULL)
+    if(item == NULL || item->m_parent == NULL)
       return QModelIndex();
 
     int row = item->m_parent->indexOfChild(item);
@@ -165,13 +167,12 @@ public:
     RDTreeWidgetItem *item = itemForIndex(index);
 
     // invisible root element has no data
-    if(!item->m_parent)
+    if(!item->m_parent || index.column() >= item->m_text.count())
       return QVariant();
 
     if(role == Qt::DisplayRole)
     {
-      if(index.column() < item->m_text.count())
-        return item->m_text[index.column()];
+      return item->m_text[index.column()];
     }
     else if(role == Qt::DecorationRole)
     {
@@ -183,8 +184,7 @@ public:
           return widget->m_normalHoverIcon;
       }
 
-      if(index.column() < item->m_icons.count())
-        return item->m_icons[index.column()];
+      return item->m_icons[index.column()];
     }
     else if(role == Qt::BackgroundRole)
     {
@@ -222,7 +222,21 @@ public:
       font.setBold(item->m_bold);
       return font;
     }
+    else if(role == Qt::TextAlignmentRole)
+    {
+      if(index.column() < widget->m_alignments.count())
+      {
+        Qt::Alignment align = widget->m_alignments[index.column()];
+
+        if(align != 0)
+          return QVariant(align);
+      }
+    }
     else if(role < 64 && item->m_customData & 1ULL << role)
+    {
+      return item->data(index.column(), role);
+    }
+    else if(role >= Qt::UserRole)
     {
       return item->data(index.column(), role);
     }
@@ -297,12 +311,23 @@ RDTreeWidgetItem::RDTreeWidgetItem(const QVariantList &values)
   for(const QVariant &v : values)
     m_text.push_back(v);
   m_icons.resize(m_text.size());
+
+  for(int i = 0; i < m_text.count(); i++)
+    RichResourceTextInitialise(m_text[i]);
 }
 
 RDTreeWidgetItem::RDTreeWidgetItem(const std::initializer_list<QVariant> &values)
 {
   m_text = values;
   m_icons.resize(m_text.size());
+
+  for(int i = 0; i < m_text.count(); i++)
+    RichResourceTextInitialise(m_text[i]);
+}
+
+void RDTreeWidgetItem::checkForResourceId(int col)
+{
+  RichResourceTextInitialise(m_text[col]);
 }
 
 RDTreeWidgetItem::~RDTreeWidgetItem()
@@ -369,13 +394,16 @@ void RDTreeWidgetItem::setData(int column, int role, const QVariant &value)
 
   dataVec.push_back(RoleData(role, value));
 
-  if(role < Qt::UserRole)
+  if(m_widget && role < Qt::UserRole)
     m_widget->m_model->itemChanged(this, {role});
 }
 
 void RDTreeWidgetItem::addChild(RDTreeWidgetItem *item)
 {
   int colCount = item->m_text.count();
+
+  if(m_widget && colCount < m_widget->m_headers.count())
+    qCritical() << "Item added with insufficient column data";
 
   // remove it from any previous parent
   if(item->m_parent)
@@ -409,6 +437,10 @@ void RDTreeWidgetItem::setWidget(RDTreeWidget *widget)
 {
   if(widget == m_widget)
     return;
+
+  QWidget *parent = widget;
+  while(parent)
+    parent = parent->parentWidget();
 
   // if the widget is different, we need to recurse to children
   m_widget = widget;
@@ -511,10 +543,122 @@ RDTreeWidgetItemIterator &RDTreeWidgetItemIterator::operator++()
   return *this;
 }
 
+RDTreeWidgetDelegate::RDTreeWidgetDelegate(RDTreeWidget *parent)
+    : m_widget(parent), RDTreeViewDelegate(parent)
+{
+}
+
+RDTreeWidgetDelegate::~RDTreeWidgetDelegate()
+{
+}
+
+void RDTreeWidgetDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option,
+                                 const QModelIndex &index) const
+{
+  RDTreeWidgetModel *model = m_widget->m_model;
+  if(index.isValid() && model == index.model())
+  {
+    RDTreeWidgetItem *item = model->itemForIndex(index);
+
+    if(index.column() < item->m_text.count())
+    {
+      QVariant v = item->m_text[index.column()];
+
+      if(RichResourceTextCheck(v))
+      {
+        // draw the item without text, so we get the proper background/selection/etc.
+        // we'd like to be able to use the parent delegate's paint here, but either it calls to
+        // QStyledItemDelegate which will re-fetch the text (bleh), or it calls to the manual
+        // delegate which could do anything. So for this case we just use the style and skip the
+        // delegate and hope it works out.
+        QStyleOptionViewItem opt = option;
+        QStyledItemDelegate::initStyleOption(&opt, index);
+        opt.text.clear();
+        m_widget->style()->drawControl(QStyle::CE_ItemViewItem, &opt, painter, m_widget);
+
+        painter->save();
+
+        RichResourceTextPaint(m_widget, painter, option.rect, option.font, option.palette,
+                              option.state & QStyle::State_MouseOver,
+                              m_widget->viewport()->mapFromGlobal(QCursor::pos()), v);
+
+        painter->restore();
+        return;
+      }
+    }
+  }
+
+  return RDTreeViewDelegate::paint(painter, option, index);
+}
+
+QSize RDTreeWidgetDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
+{
+  RDTreeWidgetModel *model = m_widget->m_model;
+  if(index.isValid() && model == index.model())
+  {
+    RDTreeWidgetItem *item = model->itemForIndex(index);
+
+    if(index.column() < item->m_text.count())
+    {
+      QVariant v = item->m_text[index.column()];
+
+      if(RichResourceTextCheck(v))
+        return QSize(RichResourceTextWidthHint(m_widget, v), option.fontMetrics.height());
+    }
+  }
+
+  return RDTreeViewDelegate::sizeHint(option, index);
+}
+
+bool RDTreeWidgetDelegate::editorEvent(QEvent *event, QAbstractItemModel *model,
+                                       const QStyleOptionViewItem &option, const QModelIndex &index)
+{
+  RDTreeWidgetModel *rdmodel = m_widget->m_model;
+  if(event->type() == QEvent::MouseButtonRelease && index.isValid() && rdmodel == model)
+  {
+    RDTreeWidgetItem *item = rdmodel->itemForIndex(index);
+
+    if(index.column() < item->m_text.count())
+    {
+      QVariant v = item->m_text[index.column()];
+
+      if(RichResourceTextCheck(v))
+      {
+        // ignore the return value, we always consume clicks on this cell
+        RichResourceTextMouseEvent(m_widget, v, option.rect, (QMouseEvent *)event);
+        return true;
+      }
+    }
+  }
+
+  return RDTreeViewDelegate::editorEvent(event, model, option, index);
+}
+
+bool RDTreeWidgetDelegate::linkHover(QMouseEvent *e, const QModelIndex &index)
+{
+  if(index.isValid())
+  {
+    RDTreeWidgetItem *item = m_widget->m_model->itemForIndex(index);
+
+    if(index.column() < item->m_text.count())
+    {
+      QVariant v = item->m_text[index.column()];
+
+      if(RichResourceTextCheck(v))
+        return RichResourceTextMouseEvent(m_widget, v, m_widget->visualRect(index), e);
+    }
+  }
+
+  return false;
+}
+
 RDTreeWidget::RDTreeWidget(QWidget *parent) : RDTreeView(parent)
 {
   // we'll call this ourselves in drawBranches()
   RDTreeView::enableBranchRectFill(false);
+
+  m_delegate = new RDTreeWidgetDelegate(this);
+  RDTreeView::setItemDelegate(m_delegate);
 
   header()->setSectionsMovable(false);
 
@@ -588,6 +732,24 @@ void RDTreeWidget::endUpdate()
   setUpdatesEnabled(true);
 }
 
+void RDTreeWidget::setColumnAlignment(int column, Qt::Alignment align)
+{
+  if(m_alignments.count() <= column)
+    m_alignments.resize(column + 1);
+
+  m_alignments[column] = align;
+}
+
+void RDTreeWidget::setItemDelegate(QAbstractItemDelegate *delegate)
+{
+  m_userDelegate = delegate;
+  m_delegate->setForwardDelegate(m_userDelegate);
+}
+
+QAbstractItemDelegate *RDTreeWidget::itemDelegate() const
+{
+  return m_userDelegate;
+}
 void RDTreeWidget::setColumns(const QStringList &columns)
 {
   m_headers = columns;
@@ -635,7 +797,6 @@ void RDTreeWidget::expandItem(RDTreeWidgetItem *item)
 {
   expand(m_model->indexForItem(item, 0));
 }
-
 void RDTreeWidget::expandAllItems(RDTreeWidgetItem *item)
 {
   expandItem(item);
@@ -688,9 +849,18 @@ void RDTreeWidget::mouseMoveEvent(QMouseEvent *e)
   RDTreeWidgetItem *newHover = m_model->itemForIndex(m_currentHoverIndex);
 
   if(m_currentHoverIndex.column() == m_hoverColumn && m_hoverHandCursor)
+  {
     setCursor(QCursor(Qt::PointingHandCursor));
+  }
+  else if(m_delegate->linkHover(e, m_currentHoverIndex))
+  {
+    m_model->itemChanged(m_model->itemForIndex(m_currentHoverIndex), {Qt::DecorationRole});
+    setCursor(QCursor(Qt::PointingHandCursor));
+  }
   else
+  {
     unsetCursor();
+  }
 
   if(oldHover == newHover)
     return;
@@ -710,7 +880,8 @@ void RDTreeWidget::mouseMoveEvent(QMouseEvent *e)
       // the documentation says:
       //
       // "If text is empty the tool tip is hidden. If the text is the same as the currently shown
-      // tooltip, the tip will not move. You can force moving by first hiding the tip with an empty
+      // tooltip, the tip will not move. You can force moving by first hiding the tip with an
+      // empty
       // text, and then showing the new tip at the new position."
       //
       // However the actual implementation has some kind of 'fading' check, so if you hide then
@@ -750,8 +921,6 @@ void RDTreeWidget::leaveEvent(QEvent *e)
     m_model->itemChanged(item, {Qt::DecorationRole, Qt::BackgroundRole, Qt::ForegroundRole});
   }
 
-  emit leave(e);
-
   RDTreeView::leaveEvent(e);
 }
 
@@ -788,7 +957,10 @@ void RDTreeWidget::keyPressEvent(QKeyEvent *e)
       RDTreeWidgetItem *item = m_model->itemForIndex(idx);
 
       for(int i = 0; i < qMin(colCount, item->m_text.count()); i++)
-        widths[i] = qMax(widths[i], item->m_text[i].toString().count());
+      {
+        QString text = item->m_text[i].toString();
+        widths[i] = qMax(widths[i], text.count());
+      }
     }
 
     // only align up to 50 characters so one really long item doesn't mess up the whole thing
@@ -803,7 +975,9 @@ void RDTreeWidget::keyPressEvent(QKeyEvent *e)
       for(int i = 0; i < qMin(colCount, item->m_text.count()); i++)
       {
         QString format = i == 0 ? QFormatStr("%1") : QFormatStr(" %1");
-        clipData += format.arg(item->m_text[i].toString(), -widths[i]);
+        QString text = item->m_text[i].toString();
+
+        clipData += format.arg(text, -widths[i]);
       }
 
       clipData += lit("\n");
@@ -818,13 +992,12 @@ void RDTreeWidget::keyPressEvent(QKeyEvent *e)
   {
     RDTreeView::keyPressEvent(e);
   }
-
-  emit(keyPress(e));
 }
 
 void RDTreeWidget::drawBranches(QPainter *painter, const QRect &rect, const QModelIndex &index) const
 {
-  // we do our own custom branch rendering to ensure the backgrounds for the +/- markers are filled
+  // we do our own custom branch rendering to ensure the backgrounds for the +/- markers are
+  // filled
   // (as otherwise they don't show up well over selection or background fills) as well as to draw
   // any vertical branch colors.
 
@@ -845,7 +1018,8 @@ void RDTreeWidget::drawBranches(QPainter *painter, const QRect &rect, const QMod
     parent = parent->parent();
   }
 
-  // fill in the background behind the lines for the whole row, since by default it doesn't show up
+  // fill in the background behind the lines for the whole row, since by default it doesn't show
+  // up
   // behind the tree lines.
 
   QRect allLinesRect(rect.left(), rect.top(), (parents.count() + 1) * indentation(), rect.height());
@@ -952,8 +1126,10 @@ void RDTreeWidget::beginAddChild(RDTreeWidgetItem *item)
     {
       m_queuedItem = item;
       // make an update of row 0. This will be a bit pessimistic if there are later data changes
-      // in a later row, but we're generally only changing data *or* adding children, not both, and
-      // in either case this is primarily about batching updates not providing a minimal update set
+      // in a later row, but we're generally only changing data *or* adding children, not both,
+      // and
+      // in either case this is primarily about batching updates not providing a minimal update
+      // set
       m_lowestIndex = qMakePair<int, int>(0, 0);
       m_highestIndex = qMakePair<int, int>(0, m_headers.count() - 1);
     }

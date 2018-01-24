@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,30 +27,50 @@
 // do not include any headers here, they must all be in QRDInterface.h
 #include "QRDInterface.h"
 
+struct ICaptureContext;
+
 DOCUMENT("Information about a single resource bound to a slot in an API-specific way.");
 struct BoundResource
 {
+  DOCUMENT("");
   BoundResource()
   {
-    Id = ResourceId();
-    HighestMip = -1;
-    FirstSlice = -1;
+    resourceId = ResourceId();
+    firstMip = -1;
+    firstSlice = -1;
     typeHint = CompType::Typeless;
   }
   BoundResource(ResourceId id)
   {
-    Id = id;
-    HighestMip = -1;
-    FirstSlice = -1;
+    resourceId = id;
+    firstMip = -1;
+    firstSlice = -1;
     typeHint = CompType::Typeless;
   }
 
+  bool operator==(const BoundResource &o) const
+  {
+    return resourceId == o.resourceId && firstMip == o.firstMip && firstSlice == o.firstSlice &&
+           typeHint == o.typeHint;
+  }
+  bool operator<(const BoundResource &o) const
+  {
+    if(resourceId != o.resourceId)
+      return resourceId < o.resourceId;
+    if(firstMip != o.firstMip)
+      return firstMip < o.firstMip;
+    if(firstSlice != o.firstSlice)
+      return firstSlice < o.firstSlice;
+    if(typeHint != o.typeHint)
+      return typeHint < o.typeHint;
+    return false;
+  }
   DOCUMENT("A :class:`~renderdoc.ResourceId` identifying the bound resource.");
-  ResourceId Id;
+  ResourceId resourceId;
   DOCUMENT("For textures, the highest mip level available on this binding, or -1 for all mips");
-  int HighestMip;
+  int firstMip;
   DOCUMENT("For textures, the first array slice available on this binding. or -1 for all slices.");
-  int FirstSlice;
+  int firstSlice;
   DOCUMENT(
       "For textures, a :class:`~renderdoc.CompType` hint for how to interpret typeless textures.");
   CompType typeHint;
@@ -58,15 +78,53 @@ struct BoundResource
 
 DECLARE_REFLECTION_STRUCT(BoundResource);
 
-DOCUMENT("Information about a single vertex buffer binding.");
+// TODO this should be replaced with an rdcmap
+DOCUMENT(R"(Contains all of the bound resources at a particular bindpoint. In APIs that don't
+support resource arrays, there will only be one bound resource.
+)");
+struct BoundResourceArray
+{
+  DOCUMENT("");
+  BoundResourceArray() = default;
+  BoundResourceArray(Bindpoint b) : bindPoint(b) {}
+  BoundResourceArray(Bindpoint b, const rdcarray<BoundResource> &r) : bindPoint(b), resources(r) {}
+  // for convenience for searching the array, we compare only using the BindPoint
+  bool operator==(const BoundResourceArray &o) const { return bindPoint == o.bindPoint; }
+  bool operator!=(const BoundResourceArray &o) const { return !(bindPoint == o.bindPoint); }
+  bool operator<(const BoundResourceArray &o) const { return bindPoint < o.bindPoint; }
+  DOCUMENT("The bind point for this array of bound resources.");
+  Bindpoint bindPoint;
+
+  DOCUMENT("The resources at this bind point");
+  rdcarray<BoundResource> resources;
+};
+
+DECLARE_REFLECTION_STRUCT(BoundResourceArray);
+
+DOCUMENT("Information about a single vertex or index buffer binding.");
 struct BoundVBuffer
 {
+  DOCUMENT("");
+  bool operator==(const BoundVBuffer &o) const
+  {
+    return resourceId == o.resourceId && byteOffset == o.byteOffset && byteStride == o.byteStride;
+  }
+  bool operator<(const BoundVBuffer &o) const
+  {
+    if(resourceId != o.resourceId)
+      return resourceId < o.resourceId;
+    if(byteOffset != o.byteOffset)
+      return byteOffset < o.byteOffset;
+    if(byteStride != o.byteStride)
+      return byteStride < o.byteStride;
+    return false;
+  }
   DOCUMENT("A :class:`~renderdoc.ResourceId` identifying the buffer.");
-  ResourceId Buffer;
-  DOCUMENT("The offset in bytes from the start of the buffer to the vertex data.");
-  uint64_t ByteOffset = 0;
-  DOCUMENT("The stride in bytes between the start of one vertex and the start of the next.");
-  uint32_t ByteStride = 0;
+  ResourceId resourceId;
+  DOCUMENT("The offset in bytes from the start of the buffer to the data.");
+  uint64_t byteOffset = 0;
+  DOCUMENT("The stride in bytes between the start of one element and the start of the next.");
+  uint32_t byteStride = 0;
 };
 
 DECLARE_REFLECTION_STRUCT(BoundVBuffer);
@@ -75,11 +133,11 @@ DOCUMENT("Information about a single constant buffer binding.");
 struct BoundCBuffer
 {
   DOCUMENT("A :class:`~renderdoc.ResourceId` identifying the buffer.");
-  ResourceId Buffer;
+  ResourceId resourceId;
   DOCUMENT("The offset in bytes from the start of the buffer to the constant data.");
-  uint64_t ByteOffset = 0;
+  uint64_t byteOffset = 0;
   DOCUMENT("The size in bytes for the constant buffer. Access outside this size returns 0.");
-  uint32_t ByteSize = 0;
+  uint32_t byteSize = 0;
 };
 
 DECLARE_REFLECTION_STRUCT(BoundCBuffer);
@@ -87,44 +145,62 @@ DECLARE_REFLECTION_STRUCT(BoundCBuffer);
 DOCUMENT("Information about a vertex input attribute feeding the vertex shader.");
 struct VertexInputAttribute
 {
+  DOCUMENT("");
+  bool operator==(const VertexInputAttribute &o) const
+  {
+    return name == o.name && vertexBuffer == o.vertexBuffer && byteOffset == o.byteOffset &&
+           perInstance == o.perInstance && instanceRate == o.instanceRate && format == o.format &&
+           !memcmp(&genericValue, &o.genericValue, sizeof(genericValue)) &&
+           genericEnabled == o.genericEnabled && used == o.used;
+  }
+  bool operator<(const VertexInputAttribute &o) const
+  {
+    if(name != o.name)
+      return name < o.name;
+    if(vertexBuffer != o.vertexBuffer)
+      return vertexBuffer < o.vertexBuffer;
+    if(byteOffset != o.byteOffset)
+      return byteOffset < o.byteOffset;
+    if(perInstance != o.perInstance)
+      return perInstance < o.perInstance;
+    if(instanceRate != o.instanceRate)
+      return instanceRate < o.instanceRate;
+    if(format != o.format)
+      return format < o.format;
+    if(memcmp(&genericValue, &o.genericValue, sizeof(genericValue)) < 0)
+      return true;
+    if(genericEnabled != o.genericEnabled)
+      return genericEnabled < o.genericEnabled;
+    if(used != o.used)
+      return used < o.used;
+    return false;
+  }
+
   DOCUMENT("The name of this input. This may be a variable name or a semantic name.");
-  QString Name;
+  rdcstr name;
   DOCUMENT("The index of the vertex buffer used to provide this attribute.");
-  int VertexBuffer;
+  int vertexBuffer;
   DOCUMENT("The byte offset from the start of the vertex data for this VB to this attribute.");
-  uint32_t RelativeByteOffset;
+  uint32_t byteOffset;
   DOCUMENT("``True`` if this attribute runs at instance rate.");
-  bool PerInstance;
-  DOCUMENT(R"(If :data:`PerInstance` is ``True``, the number of instances that source the same value
+  bool perInstance;
+  DOCUMENT(R"(If :data:`perInstance` is ``True``, the number of instances that source the same value
 from the vertex buffer before advancing to the next value.
 )");
-  int InstanceRate;
+  int instanceRate;
   DOCUMENT("A :class:`~renderdoc.ResourceFormat` with the interpreted format of this attribute.");
-  ResourceFormat Format;
+  ResourceFormat format;
   DOCUMENT(R"(A :class:`~renderdoc.PixelValue` with the generic value for this attribute if it has
 no VB bound.
 )");
-  PixelValue GenericValue;
+  PixelValue genericValue;
+  DOCUMENT("``True`` if this attribute is using :data:`genericValue` for its data.");
+  bool genericEnabled;
   DOCUMENT("``True`` if this attribute is enabled and used by the vertex shader.");
-  bool Used;
+  bool used;
 };
 
 DECLARE_REFLECTION_STRUCT(VertexInputAttribute);
-
-DOCUMENT("Information about a viewport.");
-struct Viewport
-{
-  DOCUMENT("The X co-ordinate of the viewport.");
-  float x;
-  DOCUMENT("The Y co-ordinate of the viewport.");
-  float y;
-  DOCUMENT("The width of the viewport.");
-  float width;
-  DOCUMENT("The height of the viewport.");
-  float height;
-};
-
-DECLARE_REFLECTION_STRUCT(Viewport);
 
 DOCUMENT(R"(An API-agnostic view of the common aspects of the pipeline state. This allows simple
 access to e.g. find out the bound resources or vertex buffers, or certain pipeline state which is
@@ -136,14 +212,14 @@ for the capture that's open.
 class CommonPipelineState
 {
 public:
-  CommonPipelineState() {}
+  CommonPipelineState(ICaptureContext &ctx) : m_Ctx(ctx) {}
   DOCUMENT(R"(Set the source API-specific states to read data from.
 
 :param ~renderdoc.APIProperties props: The properties of the current capture.
-:param ~renderdoc.D3D11_State d3d11: The D3D11 state.
-:param ~renderdoc.D3D12_State d3d12: The D3D11 state.
-:param ~renderdoc.GL_State gl: The OpenGL state.
-:param ~renderdoc.VK_State vk: The Vulkan state.
+:param ~renderdoc.D3D11State d3d11: The D3D11 state.
+:param ~renderdoc.D3D12State d3d12: The D3D11 state.
+:param ~renderdoc.GLState gl: The OpenGL state.
+:param ~renderdoc.VKState vk: The Vulkan state.
 )");
   void SetStates(APIProperties props, const D3D11Pipe::State *d3d11, const D3D12Pipe::State *d3d12,
                  const GLPipe::State *gl, const VKPipe::State *vk)
@@ -158,14 +234,14 @@ public:
   DOCUMENT(
       "The default :class:`~renderdoc.GraphicsAPI` to pretend to contain, if no capture is "
       "loaded.");
-  GraphicsAPI DefaultType = GraphicsAPI::D3D11;
+  GraphicsAPI defaultType = GraphicsAPI::D3D11;
 
   DOCUMENT(R"(Determines whether or not a capture is currently loaded.
 
 :return: A boolean indicating if a capture is currently loaded.
 :rtype: ``bool``
 )");
-  bool LogLoaded()
+  bool IsCaptureLoaded()
   {
     return m_D3D11 != NULL || m_D3D12 != NULL || m_GL != NULL || m_Vulkan != NULL;
   }
@@ -175,9 +251,9 @@ public:
 :return: A boolean indicating if a D3D11 capture is currently loaded.
 :rtype: ``bool``
 )");
-  bool IsLogD3D11()
+  bool IsCaptureD3D11()
   {
-    return LogLoaded() && m_APIProps.pipelineType == GraphicsAPI::D3D11 && m_D3D11 != NULL;
+    return IsCaptureLoaded() && m_APIProps.pipelineType == GraphicsAPI::D3D11 && m_D3D11 != NULL;
   }
 
   DOCUMENT(R"(Determines whether or not a D3D12 capture is currently loaded.
@@ -185,9 +261,9 @@ public:
 :return: A boolean indicating if a D3D12 capture is currently loaded.
 :rtype: ``bool``
 )");
-  bool IsLogD3D12()
+  bool IsCaptureD3D12()
   {
-    return LogLoaded() && m_APIProps.pipelineType == GraphicsAPI::D3D12 && m_D3D12 != NULL;
+    return IsCaptureLoaded() && m_APIProps.pipelineType == GraphicsAPI::D3D12 && m_D3D12 != NULL;
   }
 
   DOCUMENT(R"(Determines whether or not an OpenGL capture is currently loaded.
@@ -195,9 +271,9 @@ public:
 :return: A boolean indicating if an OpenGL capture is currently loaded.
 :rtype: ``bool``
 )");
-  bool IsLogGL()
+  bool IsCaptureGL()
   {
-    return LogLoaded() && m_APIProps.pipelineType == GraphicsAPI::OpenGL && m_GL != NULL;
+    return IsCaptureLoaded() && m_APIProps.pipelineType == GraphicsAPI::OpenGL && m_GL != NULL;
   }
 
   DOCUMENT(R"(Determines whether or not a Vulkan capture is currently loaded.
@@ -205,9 +281,9 @@ public:
 :return: A boolean indicating if a Vulkan capture is currently loaded.
 :rtype: ``bool``
 )");
-  bool IsLogVK()
+  bool IsCaptureVK()
   {
-    return LogLoaded() && m_APIProps.pipelineType == GraphicsAPI::Vulkan && m_Vulkan != NULL;
+    return IsCaptureLoaded() && m_APIProps.pipelineType == GraphicsAPI::Vulkan && m_Vulkan != NULL;
   }
 
   // add a bunch of generic properties that people can check to save having to see which pipeline
@@ -219,19 +295,19 @@ public:
 )");
   bool IsTessellationEnabled()
   {
-    if(LogLoaded())
+    if(IsCaptureLoaded())
     {
-      if(IsLogD3D11())
-        return m_D3D11 != NULL && m_D3D11->m_HS.Object != ResourceId();
+      if(IsCaptureD3D11())
+        return m_D3D11 != NULL && m_D3D11->hullShader.resourceId != ResourceId();
 
-      if(IsLogD3D12())
-        return m_D3D12 != NULL && m_D3D12->m_HS.Object != ResourceId();
+      if(IsCaptureD3D12())
+        return m_D3D12 != NULL && m_D3D12->hullShader.resourceId != ResourceId();
 
-      if(IsLogGL())
-        return m_GL != NULL && m_GL->m_TES.Object != ResourceId();
+      if(IsCaptureGL())
+        return m_GL != NULL && m_GL->tessEvalShader.shaderResourceId != ResourceId();
 
-      if(IsLogVK())
-        return m_Vulkan != NULL && m_Vulkan->m_TES.Object != ResourceId();
+      if(IsCaptureVK())
+        return m_Vulkan != NULL && m_Vulkan->tessEvalShader.resourceId != ResourceId();
     }
 
     return false;
@@ -242,13 +318,13 @@ public:
 :return: A boolean indicating if binding arrays of resources is supported.
 :rtype: ``bool``
 )");
-  bool SupportsResourceArrays() { return LogLoaded() && IsLogVK(); }
+  bool SupportsResourceArrays() { return IsCaptureLoaded() && IsCaptureVK(); }
   DOCUMENT(R"(Determines whether or not the current capture uses explicit barriers.
 
 :return: A boolean indicating if explicit barriers are used.
 :rtype: ``bool``
 )");
-  bool SupportsBarriers() { return LogLoaded() && (IsLogVK() || IsLogD3D12()); }
+  bool SupportsBarriers() { return IsCaptureLoaded() && (IsCaptureVK() || IsCaptureD3D12()); }
   DOCUMENT(R"(Determines whether or not the PostVS data is aligned in the typical fashion (ie.
 vectors not crossing ``float4`` boundaries). APIs that use stream-out or transform feedback have
 tightly packed data, but APIs that rewrite shaders to dump data might have these alignment
@@ -257,13 +333,13 @@ requirements.
 :return: A boolean indicating if post-VS data is aligned.
 :rtype: ``bool``
 )");
-  bool HasAlignedPostVSData() { return LogLoaded() && IsLogVK(); }
+  bool HasAlignedPostVSData() { return IsCaptureLoaded() && IsCaptureVK(); }
   DOCUMENT(R"(For APIs that have explicit barriers, retrieves the current layout of a resource.
 
 :return: The name of the current resource layout.
 :rtype: ``str``
 )");
-  QString GetResourceLayout(ResourceId id);
+  rdcstr GetResourceLayout(ResourceId id);
 
   DOCUMENT(R"(Retrieves a suitable two or three letter abbreviation of the given shader stage.
 
@@ -271,22 +347,30 @@ requirements.
 :return: The abbreviation of the stage.
 :rtype: ``str``
 )");
-  QString Abbrev(ShaderStage stage);
+  rdcstr Abbrev(ShaderStage stage);
   DOCUMENT(R"(Retrieves a suitable two or three letter abbreviation of the output stage. Typically
 'OM' or 'FBO'.
 
 :return: The abbreviation of the output stage.
 :rtype: ``str``
 )");
-  QString OutputAbbrev();
+  rdcstr OutputAbbrev();
 
   DOCUMENT(R"(Retrieves the viewport for a given index.
 
-:param int index: The viewport index to retrieve.
+:param int index: The index to retrieve.
 :return: The viewport for the given index.
-:rtype: Viewport
+:rtype: ~renderdoc.Viewport
 )");
   Viewport GetViewport(int index);
+
+  DOCUMENT(R"(Retrieves the scissor region for a given index.
+
+:param int index: The index to retrieve.
+:return: The scissor region for the given index.
+:rtype: ~renderdoc.Scissor
+)");
+  Scissor GetScissor(int index);
 
   DOCUMENT(R"(Retrieves the current bindpoint mapping for a shader stage.
 
@@ -308,6 +392,20 @@ This returns ``None`` if no shader is bound.
 )");
   const ShaderReflection *GetShaderReflection(ShaderStage stage);
 
+  DOCUMENT(R"(Retrieves the the compute pipeline state object, if applicable.
+
+:return: The object ID for the given pipeline object.
+:rtype: ~renderdoc.ResourceId
+)");
+  ResourceId GetComputePipelineObject();
+
+  DOCUMENT(R"(Retrieves the the graphics pipeline state object, if applicable.
+
+:return: The object ID for the given pipeline object.
+:rtype: ~renderdoc.ResourceId
+)");
+  ResourceId GetGraphicsPipelineObject();
+
   DOCUMENT(R"(Retrieves the name of the entry point function for a shader stage.
 
 For some APIs that don't distinguish by entry point, this may be empty.
@@ -316,7 +414,7 @@ For some APIs that don't distinguish by entry point, this may be empty.
 :return: The entry point name for the given shader.
 :rtype: ``str``
 )");
-  QString GetShaderEntryPoint(ShaderStage stage);
+  rdcstr GetShaderEntryPoint(ShaderStage stage);
 
   DOCUMENT(R"(Retrieves the object ID of the shader bound at a shader stage.
 
@@ -332,7 +430,7 @@ For some APIs that don't distinguish by entry point, this may be empty.
 :return: The object name for the given shader.
 :rtype: ``str``
 )");
-  QString GetShaderName(ShaderStage stage);
+  rdcstr GetShaderName(ShaderStage stage);
 
   DOCUMENT(R"(Retrieves the common file extension for high level shaders in the current API.
 
@@ -341,15 +439,14 @@ Typically this is ``glsl`` or ``hlsl``.
 :return: The file extension with no ``.``.
 :rtype: ``str``
 )");
-  QString GetShaderExtension();
+  rdcstr GetShaderExtension();
 
   DOCUMENT(R"(Retrieves the current index buffer binding.
 
-:return: A tuple with the buffer object bound to the index buffer slot, and the byte offset to the
-  start of the index data.
-:rtype: ``tuple`` of :class:`~renderdoc.ResourceId` and ``int``
+:return: A :class:`BoundVBuffer` with the index buffer details. The stride is always 0.
+:rtype: ``BoundVBuffer``
 )");
-  QPair<ResourceId, uint64_t> GetIBuffer();
+  BoundVBuffer GetIBuffer();
 
   DOCUMENT(R"(Determines whether or not primitive restart is enabled.
 
@@ -371,14 +468,14 @@ Typically this is ``glsl`` or ``hlsl``.
 :return: The list of bound vertex buffers.
 :rtype: ``list`` of :class:`BoundVBuffer`.
 )");
-  QVector<BoundVBuffer> GetVBuffers();
+  rdcarray<BoundVBuffer> GetVBuffers();
 
   DOCUMENT(R"(Retrieves the currently specified vertex attributes.
 
 :return: The list of current vertex attributes.
 :rtype: ``list`` of :class:`VertexInputAttribute`.
 )");
-  QVector<VertexInputAttribute> GetVertexInputs();
+  rdcarray<VertexInputAttribute> GetVertexInputs();
 
   DOCUMENT(R"(Retrieves the constant buffer at a given binding.
 
@@ -395,17 +492,17 @@ Typically this is ``glsl`` or ``hlsl``.
 
 :param ~renderdoc.ShaderStage stage: The shader stage to fetch from.
 :return: The currently bound read-only resoruces.
-:rtype: ``dict`` with :class:`~renderdoc.BindpointMap` keys, to lists of :class:`BoundResource`.
+:rtype: ``list`` of :class:`BoundResourceArray` entries
 )");
-  QMap<BindpointMap, QVector<BoundResource>> GetReadOnlyResources(ShaderStage stage);
+  rdcarray<BoundResourceArray> GetReadOnlyResources(ShaderStage stage);
 
   DOCUMENT(R"(Retrieves the read/write resources bound to a particular shader stage.
 
 :param ~renderdoc.ShaderStage stage: The shader stage to fetch from.
 :return: The currently bound read/write resoruces.
-:rtype: ``dict`` with :class:`~renderdoc.BindpointMap` keys, to lists of :class:`BoundResource`.
+:rtype: ``list`` of :class:`BoundResourceArray` entries
 )");
-  QMap<BindpointMap, QVector<BoundResource>> GetReadWriteResources(ShaderStage stage);
+  rdcarray<BoundResourceArray> GetReadWriteResources(ShaderStage stage);
 
   DOCUMENT(R"(Retrieves the read/write resources bound to the depth-stencil output.
 
@@ -414,12 +511,12 @@ Typically this is ``glsl`` or ``hlsl``.
 )");
   BoundResource GetDepthTarget();
 
-  DOCUMENT(R"(Retrieves the resources bound to the colour outputs.
+  DOCUMENT(R"(Retrieves the resources bound to the color outputs.
 
 :return: The currently bound output targets.
 :rtype: ``list`` of :class:`BoundResource`.
 )");
-  QVector<BoundResource> GetOutputTargets();
+  rdcarray<BoundResource> GetOutputTargets();
 
 private:
   const D3D11Pipe::State *m_D3D11 = NULL;
@@ -427,6 +524,8 @@ private:
   const GLPipe::State *m_GL = NULL;
   const VKPipe::State *m_Vulkan = NULL;
   APIProperties m_APIProps;
+
+  ICaptureContext &m_Ctx;
 
   const D3D11Pipe::Shader &GetD3D11Stage(ShaderStage stage);
   const D3D12Pipe::Shader &GetD3D12Stage(ShaderStage stage);

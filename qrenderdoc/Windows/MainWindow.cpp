@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,23 +28,26 @@
 #include <QFileInfo>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
 #include <QPixmapCache>
 #include <QProgressBar>
 #include <QProgressDialog>
 #include <QToolButton>
 #include <QToolTip>
-#include "Code/CaptureContext.h"
 #include "Code/QRDUtils.h"
 #include "Code/Resources.h"
 #include "Resources/resource.h"
 #include "Widgets/Extended/RDLabel.h"
 #include "Windows/Dialogs/AboutDialog.h"
 #include "Windows/Dialogs/CaptureDialog.h"
+#include "Windows/Dialogs/CrashDialog.h"
 #include "Windows/Dialogs/LiveCapture.h"
 #include "Windows/Dialogs/RemoteManager.h"
 #include "Windows/Dialogs/SettingsDialog.h"
 #include "Windows/Dialogs/SuggestRemoteDialog.h"
 #include "Windows/Dialogs/TipsDialog.h"
+#include "Windows/Dialogs/UpdateDialog.h"
 #include "ui_MainWindow.h"
 #include "version.h"
 
@@ -59,9 +62,17 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
 {
   ui->setupUi(this);
 
+  setProperty("ICaptureContext", QVariant::fromValue((void *)&ctx));
+
+#if !defined(Q_OS_WIN32)
+  // process injection is not supported on non-Windows, so remove the menu item rather than disable
+  // it without a clear way to communicate that it is never supported
+  ui->menu_File->removeAction(ui->action_Inject_into_Process);
+#endif
+
   QToolTip::setPalette(palette());
 
-  installEventFilter(this);
+  qApp->installEventFilter(this);
 
   setAcceptDrops(true);
 
@@ -97,6 +108,11 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
 
   QObject::connect(ui->action_Launch_Application_Window, &QAction::triggered, this,
                    &MainWindow::on_action_Launch_Application_triggered);
+
+  QObject::connect(ui->action_Clear_Capture_Files_History, &QAction::triggered, this,
+                   &MainWindow::ClearRecentCaptureFiles);
+  QObject::connect(ui->action_Clear_Capture_Settings_History, &QAction::triggered, this,
+                   &MainWindow::ClearRecentCaptureSettings);
 
   contextChooserMenu = new QMenu(this);
 
@@ -159,8 +175,110 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
 
   SetTitle();
 
-  PopulateRecentFiles();
-  PopulateRecentCaptures();
+#if defined(RELEASE)
+  ui->action_Send_Error_Report->setEnabled(true);
+#else
+  ui->action_Send_Error_Report->setEnabled(false);
+#endif
+
+  m_NetManager = new QNetworkAccessManager(this);
+
+  updateAction = new QAction(this);
+  updateAction->setText(tr("Update Available!"));
+  updateAction->setIcon(Icons::update());
+
+  QObject::connect(updateAction, &QAction::triggered, this, &MainWindow::updateAvailable_triggered);
+
+#if !defined(Q_OS_WIN32)
+  // update checks only happen on windows
+  {
+    QList<QAction *> actions = ui->menu_Help->actions();
+    int idx = actions.indexOf(ui->action_Check_for_Updates);
+    idx++;
+    if(idx < actions.count() && actions[idx]->isSeparator())
+      delete actions[idx];
+
+    delete ui->action_Check_for_Updates;
+    ui->action_Check_for_Updates = NULL;
+
+    delete updateAction;
+    updateAction = NULL;
+  }
+#endif
+
+  if(updateAction)
+  {
+    ui->menuBar->addAction(updateAction);
+    updateAction->setVisible(false);
+  }
+
+  PopulateRecentCaptureFiles();
+  PopulateRecentCaptureSettings();
+  PopulateReportedBugs();
+
+  CheckUpdates();
+
+  rdcarray<BugReport> bugs = m_Ctx.Config().CrashReport_ReportedBugs;
+  LambdaThread *bugupdate = new LambdaThread([this, bugs]() {
+    QDateTime now = QDateTime::currentDateTimeUtc();
+
+    // loop over all the bugs
+    for(const BugReport &b : bugs)
+    {
+      // check bugs every two days
+      qint64 diff = QDateTime(b.checkDate).secsTo(now);
+      if(diff > 2 * 24 * 60 * 60)
+      {
+        // update the check date on the stored bug
+        GUIInvoke::call([this, b, now]() {
+          for(BugReport &bug : m_Ctx.Config().CrashReport_ReportedBugs)
+          {
+            if(bug.reportId == b.reportId)
+            {
+              bug.checkDate = now;
+              break;
+            }
+          }
+          m_Ctx.Config().Save();
+
+          // call out to the status-check to see when the bug report was last updated
+          QNetworkReply *reply =
+              m_NetManager->get(QNetworkRequest(QUrl(QString(b.URL()) + lit("/check"))));
+
+          QObject::connect(reply, &QNetworkReply::finished, [this, reply, b]() {
+            QString response = QString::fromUtf8(reply->readAll());
+
+            if(response.isEmpty())
+              return;
+
+            // only look at the first line of the response
+            int idx = response.indexOf(QLatin1Char('\n'));
+
+            if(idx > 0)
+              response.truncate(idx);
+
+            QDateTime update = QDateTime::fromString(response, lit("yyyy-MM-dd HH:mm:ss"));
+
+            // if there's been an update since the last check, set unread
+            if(update.isValid() && update > b.checkDate)
+            {
+              for(BugReport &bug : m_Ctx.Config().CrashReport_ReportedBugs)
+              {
+                if(bug.reportId == b.reportId)
+                {
+                  bug.unreadUpdates = true;
+                  break;
+                }
+              }
+              PopulateReportedBugs();
+            }
+          });
+        });
+      }
+    }
+  });
+  bugupdate->selfDelete(true);
+  bugupdate->start();
 
   ui->toolWindowManager->setToolWindowCreateCallback([this](const QString &objectName) -> QWidget * {
     return m_Ctx.CreateBuiltinWindow(objectName);
@@ -169,6 +287,8 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
   ui->action_Start_Replay_Loop->setEnabled(false);
   ui->action_Resolve_Symbols->setEnabled(false);
   ui->action_Resolve_Symbols->setText(tr("Resolve Symbols"));
+
+  ui->action_Recompress_Capture->setEnabled(false);
 
   LambdaThread *th = new LambdaThread([this]() {
     m_Ctx.Config().AddAndroidHosts();
@@ -205,10 +325,11 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
   }
 #endif
 
-  m_Ctx.AddLogViewer(this);
+  m_Ctx.AddCaptureViewer(this);
 
-  ui->action_Save_Log->setEnabled(false);
-  ui->action_Close_Log->setEnabled(false);
+  ui->action_Save_Capture_Inplace->setEnabled(false);
+  ui->action_Save_Capture_As->setEnabled(false);
+  ui->action_Close_Capture->setEnabled(false);
 
   QList<QAction *> actions = ui->menuBar->actions();
 
@@ -234,6 +355,12 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
 
 MainWindow::~MainWindow()
 {
+  // explicitly delete our children here, so that the MainWindow is still alive while they are
+  // closing.
+
+  setUpdatesEnabled(false);
+  qDeleteAll(findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly));
+
   m_RemoteProbeSemaphore.acquire();
   m_RemoteProbe->wait();
   m_RemoteProbe->deleteLater();
@@ -247,7 +374,7 @@ QString MainWindow::GetLayoutPath(int layout)
   if(layout > 0)
     filename = lit("Layout%1.config").arg(layout);
 
-  return ConfigFilePath(filename);
+  return configFilePath(filename);
 }
 
 void MainWindow::on_action_Exit_triggered()
@@ -255,18 +382,26 @@ void MainWindow::on_action_Exit_triggered()
   this->close();
 }
 
-void MainWindow::on_action_Open_Log_triggered()
+void MainWindow::on_action_Open_Capture_triggered()
 {
-  if(!PromptCloseLog())
+  if(!PromptCloseCapture())
     return;
 
   QString filename = RDDialog::getOpenFileName(
-      this, tr("Select Logfile to open"), m_Ctx.Config().LastLogPath,
+      this, tr("Select file to open"), m_Ctx.Config().LastCaptureFilePath,
       tr("Capture Files (*.rdc);;Image Files (*.dds *.hdr *.exr *.bmp *.jpg "
-         "*.jpeg *.png *.tga *.gif *.psd;;All Files (*.*)"));
+         "*.jpeg *.png *.tga *.gif *.psd;;All Files (*)"));
 
   if(!filename.isEmpty())
     LoadFromFilename(filename, false);
+}
+
+void MainWindow::captureModified()
+{
+  // once the capture is modified, enable the save-in-place option. It might already have been
+  // enabled if this capture was a temporary one
+  if(m_Ctx.IsCaptureLoaded())
+    ui->action_Save_Capture_Inplace->setEnabled(true);
 }
 
 void MainWindow::LoadFromFilename(const QString &filename, bool temporary)
@@ -276,7 +411,7 @@ void MainWindow::LoadFromFilename(const QString &filename, bool temporary)
 
   if(ext == lit("rdc"))
   {
-    LoadLogfile(filename, temporary, true);
+    LoadCapture(filename, temporary, true);
   }
   else if(ext == lit("cap"))
   {
@@ -289,21 +424,22 @@ void MainWindow::LoadFromFilename(const QString &filename, bool temporary)
   else
   {
     // not a recognised filetype, see if we can load it anyway
-    LoadLogfile(filename, temporary, true);
+    LoadCapture(filename, temporary, true);
   }
 }
 
 void MainWindow::OnCaptureTrigger(const QString &exe, const QString &workingDir,
-                                  const QString &cmdLine, const QList<EnvironmentModification> &env,
-                                  CaptureOptions opts, std::function<void(LiveCapture *)> callback)
+                                  const QString &cmdLine,
+                                  const rdcarray<EnvironmentModification> &env, CaptureOptions opts,
+                                  std::function<void(LiveCapture *)> callback)
 {
-  if(!PromptCloseLog())
+  if(!PromptCloseCapture())
     return;
 
   LambdaThread *th = new LambdaThread([this, exe, workingDir, cmdLine, env, opts, callback]() {
-    QString logfile = m_Ctx.TempLogFilename(QFileInfo(exe).baseName());
+    QString capturefile = m_Ctx.TempCaptureFilename(QFileInfo(exe).baseName());
 
-    uint32_t ret = m_Ctx.Replay().ExecuteAndInject(exe, workingDir, cmdLine, env, logfile, opts);
+    uint32_t ret = m_Ctx.Replay().ExecuteAndInject(exe, workingDir, cmdLine, env, capturefile, opts);
 
     GUIInvoke::call([this, exe, ret, callback]() {
       if(ret == 0)
@@ -316,10 +452,9 @@ void MainWindow::OnCaptureTrigger(const QString &exe, const QString &workingDir,
       }
 
       LiveCapture *live = new LiveCapture(
-          m_Ctx,
-          m_Ctx.Replay().CurrentRemote() ? m_Ctx.Replay().CurrentRemote()->Hostname : QString(),
-          m_Ctx.Replay().CurrentRemote() ? m_Ctx.Replay().CurrentRemote()->Name() : QString(), ret,
-          this, this);
+          m_Ctx, m_Ctx.Replay().CurrentRemote() ? m_Ctx.Replay().CurrentRemote()->hostname : "",
+          m_Ctx.Replay().CurrentRemote() ? m_Ctx.Replay().CurrentRemote()->Name() : "", ret, this,
+          this);
       ShowLiveCapture(live);
       callback(live);
     });
@@ -329,25 +464,24 @@ void MainWindow::OnCaptureTrigger(const QString &exe, const QString &workingDir,
   th->wait(500);
   if(th->isRunning())
   {
-    ShowProgressDialog(this, tr("Launching %1, please wait...").arg(exe),
+    QString filename = QFileInfo(exe).fileName();
+    ShowProgressDialog(this, tr("Launching %1, please wait...").arg(filename),
                        [th]() { return !th->isRunning(); });
   }
   th->deleteLater();
 }
 
-void MainWindow::OnInjectTrigger(uint32_t PID, const QList<EnvironmentModification> &env,
+void MainWindow::OnInjectTrigger(uint32_t PID, const rdcarray<EnvironmentModification> &env,
                                  const QString &name, CaptureOptions opts,
                                  std::function<void(LiveCapture *)> callback)
 {
-  if(!PromptCloseLog())
+  if(!PromptCloseCapture())
     return;
 
-  rdctype::array<EnvironmentModification> envList = env.toVector().toStdVector();
+  LambdaThread *th = new LambdaThread([this, PID, env, name, opts, callback]() {
+    QString capturefile = m_Ctx.TempCaptureFilename(name);
 
-  LambdaThread *th = new LambdaThread([this, PID, envList, name, opts, callback]() {
-    QString logfile = m_Ctx.TempLogFilename(name);
-
-    uint32_t ret = RENDERDOC_InjectIntoProcess(PID, envList, logfile.toUtf8().data(), opts, false);
+    uint32_t ret = RENDERDOC_InjectIntoProcess(PID, env, capturefile.toUtf8().data(), opts, false);
 
     GUIInvoke::call([this, PID, ret, callback]() {
       if(ret == 0)
@@ -375,11 +509,11 @@ void MainWindow::OnInjectTrigger(uint32_t PID, const QList<EnvironmentModificati
   th->deleteLater();
 }
 
-void MainWindow::LoadLogfile(const QString &filename, bool temporary, bool local)
+void MainWindow::LoadCapture(const QString &filename, bool temporary, bool local)
 {
-  if(PromptCloseLog())
+  if(PromptCloseCapture())
   {
-    if(m_Ctx.LogLoading())
+    if(m_Ctx.IsCaptureLoading())
       return;
 
     QString driver;
@@ -387,16 +521,24 @@ void MainWindow::LoadLogfile(const QString &filename, bool temporary, bool local
     ReplaySupport support = ReplaySupport::Unsupported;
 
     bool remoteReplay =
-        !local || (m_Ctx.Replay().CurrentRemote() && m_Ctx.Replay().CurrentRemote()->Connected);
+        !local || (m_Ctx.Replay().CurrentRemote() && m_Ctx.Replay().CurrentRemote()->connected);
 
     if(local)
     {
-      ICaptureFile *file = RENDERDOC_OpenCaptureFile(filename.toUtf8().data());
+      ICaptureFile *file = RENDERDOC_OpenCaptureFile();
 
-      if(file->OpenStatus() != ReplayStatus::Succeeded)
+      ReplayStatus status = file->OpenFile(filename.toUtf8().data(), "rdc");
+
+      if(status != ReplayStatus::Succeeded)
       {
-        RDDialog::critical(NULL, tr("Error opening capture"),
-                           tr("Couldn't open file '%1'").arg(filename));
+        QString text = tr("Couldn't open file '%1'\n").arg(filename);
+        QString message = file->ErrorString();
+        if(message.isEmpty())
+          text += tr("%1").arg(ToQStr(status));
+        else
+          text += tr("%1: %2").arg(ToQStr(status)).arg(message);
+
+        RDDialog::critical(NULL, tr("Error opening capture"), text);
 
         file->Shutdown();
         return;
@@ -441,7 +583,7 @@ void MainWindow::LoadLogfile(const QString &filename, bool temporary, bool local
           }
 
           remoteReplay =
-              (m_Ctx.Replay().CurrentRemote() && m_Ctx.Replay().CurrentRemote()->Connected);
+              (m_Ctx.Replay().CurrentRemote() && m_Ctx.Replay().CurrentRemote()->connected);
 
           if(!remoteReplay)
           {
@@ -471,11 +613,11 @@ void MainWindow::LoadLogfile(const QString &filename, bool temporary, bool local
       {
         support = ReplaySupport::Unsupported;
 
-        QStringList remoteDrivers = m_Ctx.Replay().GetRemoteSupport();
+        rdcarray<rdcstr> remoteDrivers = m_Ctx.Replay().GetRemoteSupport();
 
-        for(const QString &d : remoteDrivers)
+        for(const rdcstr &d : remoteDrivers)
         {
-          if(driver == d)
+          if(driver == QString(d))
             support = ReplaySupport::Supported;
         }
       }
@@ -483,29 +625,29 @@ void MainWindow::LoadLogfile(const QString &filename, bool temporary, bool local
 
     QString origFilename = filename;
 
-    // if driver is empty something went wrong loading the log, let it be handled as usual
+    // if driver is empty something went wrong loading the capture, let it be handled as usual
     // below. Otherwise indicate that support is missing.
     if(!driver.isEmpty() && support == ReplaySupport::Unsupported)
     {
       if(remoteReplay)
       {
         QString remoteMessage =
-            tr("This log was captured with %1 and cannot be replayed on %2.\n\n")
+            tr("This capture was captured with %1 and cannot be replayed on %2.\n\n")
                 .arg(driver)
                 .arg(m_Ctx.Replay().CurrentRemote()->Name());
 
         remoteMessage += tr("Try selecting a different remote context in the status bar.");
 
-        RDDialog::critical(NULL, tr("Unsupported logfile type"), remoteMessage);
+        RDDialog::critical(NULL, tr("Unsupported capture driver"), remoteMessage);
       }
       else
       {
         QString remoteMessage =
-            tr("This log was captured with %1 and cannot be replayed locally.\n\n").arg(driver);
+            tr("This capture was captured with %1 and cannot be replayed locally.\n\n").arg(driver);
 
         remoteMessage += tr("Try selecting a remote context in the status bar.");
 
-        RDDialog::critical(NULL, tr("Unsupported logfile type"), remoteMessage);
+        RDDialog::critical(NULL, tr("Unsupported capture driver"), remoteMessage);
       }
 
       return;
@@ -518,7 +660,7 @@ void MainWindow::LoadLogfile(const QString &filename, bool temporary, bool local
       {
         fileToLoad = m_Ctx.Replay().CopyCaptureToRemote(filename, this);
 
-        // deliberately leave local as true so that we keep referring to the locally saved log
+        // deliberately leave local as true so that we keep referring to the locally saved capture
 
         // some error
         if(fileToLoad.isEmpty())
@@ -529,15 +671,24 @@ void MainWindow::LoadLogfile(const QString &filename, bool temporary, bool local
         }
       }
 
-      m_Ctx.LoadLogfile(fileToLoad, origFilename, temporary, local);
+      statusText->setText(tr("Loading %1...").arg(origFilename));
+
+      if(driver == lit("Image"))
+      {
+        ANALYTIC_SET(UIFeatures.ImageViewer, true);
+      }
+      else
+      {
+        ANALYTIC_ADDUNIQ(APIsUsed, driver);
+      }
+
+      m_Ctx.LoadCapture(fileToLoad, origFilename, temporary, local);
     }
 
     if(!remoteReplay)
     {
-      m_Ctx.Config().LastLogPath = QFileInfo(filename).absolutePath();
+      m_Ctx.Config().LastCaptureFilePath = QFileInfo(filename).absolutePath();
     }
-
-    statusText->setText(tr("Loading %1...").arg(origFilename));
   }
 }
 
@@ -552,6 +703,8 @@ void MainWindow::OpenCaptureConfigFile(const QString &filename, bool exe)
 
   if(!ui->toolWindowManager->toolWindows().contains(capDialog->Widget()))
     ui->toolWindowManager->addToolWindow(capDialog->Widget(), mainToolArea());
+
+  ToolWindowManager::raiseToolWindow(capDialog->Widget());
 }
 
 QString MainWindow::GetSavePath()
@@ -581,56 +734,20 @@ QString MainWindow::GetSavePath()
   return QString();
 }
 
-bool MainWindow::PromptSaveLog()
+bool MainWindow::PromptSaveCaptureAs()
 {
   QString saveFilename = GetSavePath();
 
   if(!saveFilename.isEmpty())
   {
-    if(m_Ctx.IsLogLocal() && !QFileInfo(m_Ctx.LogFilename()).exists())
-    {
-      RDDialog::critical(NULL, tr("File not found"),
-                         tr("Logfile %1 couldn't be found, cannot save.").arg(m_Ctx.LogFilename()));
-      return false;
-    }
-
-    bool success = false;
-    QString error;
-
-    if(m_Ctx.IsLogLocal())
-    {
-      // we copy the (possibly) temp log to the desired path, but the log item remains referring to
-      // the original path.
-      // This ensures that if the user deletes the saved path we can still open or re-save it.
-
-      // QFile::copy won't overwrite, so remove the destination first (the save dialog already
-      // prompted for overwrite)
-      QFile::remove(saveFilename);
-      success = QFile::copy(m_Ctx.LogFilename(), saveFilename);
-
-      error = tr("Couldn't save to %1").arg(saveFilename);
-    }
-    else
-    {
-      m_Ctx.Replay().CopyCaptureFromRemote(m_Ctx.LogFilename(), saveFilename, this);
-      success = QFile::exists(saveFilename);
-
-      error = tr("File couldn't be transferred from remote host");
-    }
+    bool success = m_Ctx.SaveCaptureTo(saveFilename);
 
     if(!success)
-    {
-      RDDialog::critical(NULL, tr("Error Saving"), error);
       return false;
-    }
 
-    AddRecentFile(m_Ctx.Config().RecentLogFiles, saveFilename, 10);
-    PopulateRecentFiles();
+    AddRecentFile(m_Ctx.Config().RecentCaptureFiles, saveFilename, 10);
+    PopulateRecentCaptureFiles();
     SetTitle(saveFilename);
-
-    // we don't prompt to save on closing - if the user deleted the log that we just saved, then
-    // that is up to them.
-    m_SavedTempLog = true;
 
     return true;
   }
@@ -638,34 +755,29 @@ bool MainWindow::PromptSaveLog()
   return false;
 }
 
-bool MainWindow::PromptCloseLog()
+bool MainWindow::PromptCloseCapture()
 {
-  if(!m_Ctx.LogLoaded())
+  if(!m_Ctx.IsCaptureLoaded())
     return true;
 
   QString deletepath;
-  bool loglocal = false;
+  bool caplocal = false;
 
-  if(m_OwnTempLog)
+  if(m_OwnTempCapture && m_Ctx.IsCaptureTemporary())
   {
-    QString temppath = m_Ctx.LogFilename();
-    loglocal = m_Ctx.IsLogLocal();
+    QString temppath = m_Ctx.GetCaptureFilename();
+    caplocal = m_Ctx.IsCaptureLocal();
 
-    QMessageBox::StandardButton res = QMessageBox::No;
-
-    // unless we've saved the log, prompt to save
-    if(!m_SavedTempLog)
-      res = RDDialog::question(NULL, tr("Unsaved log"), tr("Save this logfile?"),
-                               QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+    QMessageBox::StandardButton res =
+        RDDialog::question(NULL, tr("Unsaved capture"), tr("Save this capture?"),
+                           QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
 
     if(res == QMessageBox::Cancel)
-    {
       return false;
-    }
 
     if(res == QMessageBox::Yes)
     {
-      bool success = PromptSaveLog();
+      bool success = PromptSaveCaptureAs();
 
       if(!success)
       {
@@ -673,32 +785,79 @@ bool MainWindow::PromptCloseLog()
       }
     }
 
-    if(temppath != m_Ctx.LogFilename() || res == QMessageBox::No)
+    if(temppath != m_Ctx.GetCaptureFilename() || res == QMessageBox::No)
       deletepath = temppath;
-    m_OwnTempLog = false;
-    m_SavedTempLog = false;
+    m_OwnTempCapture = false;
+  }
+  else if(m_Ctx.GetCaptureModifications() != CaptureModifications::NoModifications)
+  {
+    QMessageBox::StandardButton res = QMessageBox::No;
+
+    QString text = tr("This capture has the following modifications:\n\n");
+
+    CaptureModifications mods = m_Ctx.GetCaptureModifications();
+
+    if(mods & CaptureModifications::Renames)
+      text += tr("Resources have been renamed.\n");
+    if(mods & CaptureModifications::Bookmarks)
+      text += tr("Bookmarks have been changed.\n");
+    if(mods & CaptureModifications::Notes)
+      text += tr("Capture notes have been changed.\n");
+
+    bool saveas = false;
+
+    if(m_Ctx.IsCaptureLocal())
+    {
+      text += tr("\nWould you like to save those changes to '%1'?").arg(m_Ctx.GetCaptureFilename());
+    }
+    else
+    {
+      saveas = true;
+      text +=
+          tr("\nThe capture is on a remote host, would you like to save these changes locally?");
+    }
+
+    res = RDDialog::question(NULL, tr("Save changes to capture?"), text,
+                             QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+
+    if(res == QMessageBox::Cancel)
+      return false;
+
+    if(res == QMessageBox::Yes)
+    {
+      bool success = false;
+
+      if(saveas)
+        success = PromptSaveCaptureAs();
+      else
+        success = m_Ctx.SaveCaptureTo(m_Ctx.GetCaptureFilename());
+
+      if(!success)
+        return false;
+    }
   }
 
-  CloseLogfile();
+  CloseCapture();
 
   if(!deletepath.isEmpty())
-    m_Ctx.Replay().DeleteCapture(deletepath, loglocal);
+    m_Ctx.Replay().DeleteCapture(deletepath, caplocal);
 
   return true;
 }
 
-void MainWindow::CloseLogfile()
+void MainWindow::CloseCapture()
 {
-  m_Ctx.CloseLogfile();
+  m_Ctx.CloseCapture();
 
-  ui->action_Save_Log->setEnabled(false);
+  ui->action_Save_Capture_Inplace->setEnabled(false);
+  ui->action_Save_Capture_As->setEnabled(false);
 }
 
 void MainWindow::SetTitle(const QString &filename)
 {
   QString prefix;
 
-  if(m_Ctx.LogLoaded())
+  if(m_Ctx.IsCaptureLoaded())
   {
     prefix = QFileInfo(filename).fileName();
     if(m_Ctx.APIProps().degraded)
@@ -714,7 +873,9 @@ void MainWindow::SetTitle(const QString &filename)
   if(RENDERDOC_STABLE_BUILD)
     text += lit(FULL_VERSION_STRING);
   else
-    text += tr("Unstable release (%1 - %2)").arg(lit(FULL_VERSION_STRING)).arg(lit(GIT_COMMIT_HASH));
+    text += tr("Unstable release (%1 - %2)")
+                .arg(lit(FULL_VERSION_STRING))
+                .arg(QString::fromLatin1(GitVersionHash));
 
   if(QString::fromLatin1(RENDERDOC_GetVersionString()) != lit(MAJOR_MINOR_VERSION_STRING))
     text += tr(" - !! VERSION MISMATCH DETECTED !!");
@@ -724,49 +885,297 @@ void MainWindow::SetTitle(const QString &filename)
 
 void MainWindow::SetTitle()
 {
-  SetTitle(m_Ctx.LogFilename());
+  SetTitle(m_Ctx.GetCaptureFilename());
 }
 
-void MainWindow::PopulateRecentFiles()
+bool MainWindow::HandleMismatchedVersions()
 {
-  ui->menu_Recent_Logs->clear();
-
-  ui->menu_Recent_Logs->setEnabled(false);
-
-  int idx = 1;
-  for(int i = m_Ctx.Config().RecentLogFiles.size() - 1; i >= 0; i--)
+  if(IsVersionMismatched())
   {
-    const QString &filename = m_Ctx.Config().RecentLogFiles[i];
-    ui->menu_Recent_Logs->addAction(QFormatStr("&%1 %2").arg(idx).arg(filename),
-                                    [this, filename] { recentLog(filename); });
-    idx++;
+    qCritical() << "Version mismatch between UI (" << lit(MAJOR_MINOR_VERSION_STRING) << ")"
+                << "and core"
+                << "(" << QString::fromUtf8(RENDERDOC_GetVersionString()) << ")";
 
-    ui->menu_Recent_Logs->setEnabled(true);
+#if !RENDERDOC_OFFICIAL_BUILD
+    RDDialog::critical(
+        this, tr("Unofficial build - mismatched versions"),
+        tr("You are running an unofficial build with mismatched core and UI versions.\n"
+           "Double check where you got your build from and do a sanity check!"));
+#else
+    QMessageBox::StandardButton res = RDDialog::critical(
+        this, tr("Mismatched versions"),
+        tr("RenderDoc has detected mismatched versions between its internal module and UI.\n"
+           "This is likely caused by a buggy update in the past which partially updated your "
+           "install."
+           "Likely because a program was running with renderdoc while the update happened.\n"
+           "You should reinstall RenderDoc immediately as this configuration is almost guaranteed "
+           "to crash.\n\n"
+           "Would you like to open the downloads page to reinstall?"),
+        QMessageBox::Yes | QMessageBox::No);
+
+    if(res == QMessageBox::Yes)
+      QDesktopServices::openUrl(QUrl(lit("https://renderdoc.org/builds")));
+
+    SetUpdateAvailable();
+#endif
+    return true;
   }
 
-  ui->menu_Recent_Logs->addSeparator();
-  ui->menu_Recent_Logs->addAction(ui->action_Clear_Log_History);
+  return false;
 }
 
-void MainWindow::PopulateRecentCaptures()
+bool MainWindow::IsVersionMismatched()
+{
+  return QString::fromLatin1(RENDERDOC_GetVersionString()) != lit(MAJOR_MINOR_VERSION_STRING);
+}
+
+void MainWindow::ClearRecentCaptureFiles()
+{
+  m_Ctx.Config().RecentCaptureFiles.clear();
+  PopulateRecentCaptureFiles();
+}
+
+void MainWindow::PopulateRecentCaptureFiles()
+{
+  ui->menu_Recent_Capture_Files->clear();
+
+  ui->menu_Recent_Capture_Files->setEnabled(false);
+
+  int idx = 1;
+  for(int i = m_Ctx.Config().RecentCaptureFiles.count() - 1; i >= 0; i--)
+  {
+    const QString &filename = m_Ctx.Config().RecentCaptureFiles[i];
+    ui->menu_Recent_Capture_Files->addAction(QFormatStr("&%1 %2").arg(idx).arg(filename),
+                                             [this, filename] { recentCaptureFile(filename); });
+    idx++;
+
+    ui->menu_Recent_Capture_Files->setEnabled(true);
+  }
+
+  ui->menu_Recent_Capture_Files->addSeparator();
+  ui->menu_Recent_Capture_Files->addAction(ui->action_Clear_Capture_Files_History);
+}
+
+void MainWindow::ClearRecentCaptureSettings()
+{
+  m_Ctx.Config().RecentCaptureSettings.clear();
+  PopulateRecentCaptureSettings();
+}
+
+void MainWindow::PopulateRecentCaptureSettings()
 {
   ui->menu_Recent_Capture_Settings->clear();
 
   ui->menu_Recent_Capture_Settings->setEnabled(false);
 
   int idx = 1;
-  for(int i = m_Ctx.Config().RecentCaptureSettings.size() - 1; i >= 0; i--)
+  for(int i = m_Ctx.Config().RecentCaptureSettings.count() - 1; i >= 0; i--)
   {
     const QString &filename = m_Ctx.Config().RecentCaptureSettings[i];
     ui->menu_Recent_Capture_Settings->addAction(QFormatStr("&%1 %2").arg(idx).arg(filename),
-                                                [this, filename] { recentCapture(filename); });
+                                                [this, filename] { recentCaptureSetting(filename); });
     idx++;
 
     ui->menu_Recent_Capture_Settings->setEnabled(true);
   }
 
   ui->menu_Recent_Capture_Settings->addSeparator();
-  ui->menu_Recent_Capture_Settings->addAction(ui->action_Clear_Log_History);
+  ui->menu_Recent_Capture_Settings->addAction(ui->action_Clear_Capture_Settings_History);
+}
+
+void MainWindow::PopulateReportedBugs()
+{
+  ui->menu_Reported_Bugs->clear();
+
+  ui->menu_Reported_Bugs->setEnabled(false);
+
+  bool unread = false;
+
+  int idx = 1;
+  for(int i = m_Ctx.Config().CrashReport_ReportedBugs.count() - 1; i >= 0; i--)
+  {
+    BugReport &bug = m_Ctx.Config().CrashReport_ReportedBugs[i];
+    QString fmt = tr("&%1: Bug reported at %2");
+
+    if(bug.unreadUpdates)
+      fmt = tr("&%1: (Update) Bug reported at %2");
+
+    QAction *action = ui->menu_Reported_Bugs->addAction(
+        fmt.arg(idx).arg(QDateTime(bug.submitDate).toString()), [this, i] {
+          BugReport &bug = m_Ctx.Config().CrashReport_ReportedBugs[i];
+
+          QDesktopServices::openUrl(QString(bug.URL()));
+
+          bug.unreadUpdates = false;
+          m_Ctx.Config().Save();
+
+          PopulateReportedBugs();
+        });
+    idx++;
+
+    if(bug.unreadUpdates)
+    {
+      action->setIcon(Icons::bug());
+      unread = true;
+    }
+
+    ui->menu_Reported_Bugs->setEnabled(true);
+  }
+
+  ui->menu_Reported_Bugs->addSeparator();
+  ui->menu_Reported_Bugs->addAction(ui->action_Clear_Reported_Bugs);
+
+  if(unread)
+  {
+    if(!m_Ctx.Config().CheckUpdate_UpdateAvailable)
+      ui->menu_Help->setIcon(Icons::bug());
+    ui->menu_Reported_Bugs->setIcon(Icons::bug());
+  }
+  else
+  {
+    if(!m_Ctx.Config().CheckUpdate_UpdateAvailable)
+      ui->menu_Help->setIcon(QIcon());
+    ui->menu_Reported_Bugs->setIcon(QIcon());
+  }
+}
+
+void MainWindow::CheckUpdates(bool forceCheck, UpdateResultMethod callback)
+{
+  if(!updateAction)
+    return;
+
+  bool mismatch = HandleMismatchedVersions();
+  if(mismatch)
+    return;
+
+  if(!forceCheck && !m_Ctx.Config().CheckUpdate_AllowChecks)
+  {
+    updateAction->setVisible(false);
+    if(callback)
+      callback(UpdateResult::Disabled);
+    return;
+  }
+
+#if RENDERDOC_OFFICIAL_BUILD
+  QDateTime today = QDateTime::currentDateTime();
+
+  // check by default every 2 days
+  QDateTime compare = today.addDays(-2);
+
+  // if there's already an update available, go down to checking every week.
+  if(m_Ctx.Config().CheckUpdate_UpdateAvailable)
+    compare = today.addDays(-7);
+
+  bool checkDue = compare.secsTo(m_Ctx.Config().CheckUpdate_LastUpdate) < 0;
+
+  if(m_Ctx.Config().CheckUpdate_UpdateAvailable)
+  {
+    // Mark an update available
+    SetUpdateAvailable();
+
+    // If we don't have a proper update response, or we're overdue for a check, then do it again.
+    // The reason for this is twofold: first, if someone has been delaying their updates for a long
+    // time then there might be a newer update available that we should refresh to, so we should
+    // find out and refresh the update status. The other reason is that when we get a positive
+    // response from the server we force-display the popup which means the user will get reminded
+    // every week or so that an update is pending.
+    if(m_Ctx.Config().CheckUpdate_UpdateResponse.isEmpty() || checkDue)
+    {
+      forceCheck = true;
+    }
+
+    // If we're not forcing a recheck, we're done.
+    if(!forceCheck)
+      return;
+  }
+
+  if(!forceCheck && checkDue)
+  {
+    if(callback)
+      callback(UpdateResult::Toosoon);
+    return;
+  }
+
+  m_Ctx.Config().CheckUpdate_LastUpdate = today;
+  m_Ctx.Config().Save();
+
+#if QT_POINTER_SIZE == 4
+  QString bitness = lit("32");
+#else
+  QString bitness = lit("64");
+#endif
+  QString versionCheck = lit(MAJOR_MINOR_VERSION_STRING);
+
+  statusText->setText(tr("Checking for updates..."));
+
+  statusProgress->setVisible(true);
+  statusProgress->setMinimumSize(QSize(200, 0));
+  statusProgress->setMinimum(0);
+  statusProgress->setMaximum(0);
+
+  // call out to the status-check to see when the bug report was last updated
+  QNetworkReply *req = m_NetManager->get(QNetworkRequest(QUrl(
+      lit("https://renderdoc.org/getupdateurl/%1/%2?htmlnotes=1").arg(bitness).arg(versionCheck))));
+
+  QObject::connect(req, OverloadedSlot<QNetworkReply::NetworkError>::of(&QNetworkReply::error),
+                   [this, req](QNetworkReply::NetworkError) {
+                     qCritical() << "Network error:" << req->errorString();
+                   });
+
+  QObject::connect(req, &QNetworkReply::finished, [this, req, callback]() {
+    QString response = QString::fromUtf8(req->readAll());
+
+    statusText->setText(QString());
+    statusProgress->setVisible(false);
+    statusProgress->setMaximum(1000);
+
+    if(response.isEmpty())
+    {
+      m_Ctx.Config().CheckUpdate_UpdateAvailable = false;
+      m_Ctx.Config().CheckUpdate_UpdateResponse = "";
+      m_Ctx.Config().Save();
+      SetNoUpdate();
+
+      if(callback)
+        callback(UpdateResult::Latest);
+
+      return;
+    }
+
+    m_Ctx.Config().CheckUpdate_UpdateAvailable = true;
+    m_Ctx.Config().CheckUpdate_UpdateResponse = response;
+    m_Ctx.Config().Save();
+    SetUpdateAvailable();
+    UpdatePopup();
+  });
+#else    //! RENDERDOC_OFFICIAL_BUILD
+  {
+    if(callback)
+      callback(UpdateResult::Unofficial);
+    return;
+  }
+#endif
+}
+
+void MainWindow::SetUpdateAvailable()
+{
+  if(updateAction)
+    updateAction->setVisible(true);
+}
+
+void MainWindow::SetNoUpdate()
+{
+  if(updateAction)
+    updateAction->setVisible(false);
+}
+
+void MainWindow::UpdatePopup()
+{
+  if(!m_Ctx.Config().CheckUpdate_UpdateAvailable || !m_Ctx.Config().CheckUpdate_AllowChecks)
+    return;
+
+  UpdateDialog update((QString)m_Ctx.Config().CheckUpdate_UpdateResponse);
+  RDDialog::show(&update);
 }
 
 void MainWindow::ShowLiveCapture(LiveCapture *live)
@@ -874,16 +1283,23 @@ void MainWindow::show()
         apiInspector,
         ToolWindowManager::AreaReference(ToolWindowManager::BottomOf,
                                          ui->toolWindowManager->areaOf(eventBrowser), 0.3f));
+
+    QWidget *timelineBar = m_Ctx.GetTimelineBar()->Widget();
+
+    ui->toolWindowManager->addToolWindow(
+        timelineBar,
+        ToolWindowManager::AreaReference(ToolWindowManager::TopWindowSide,
+                                         ui->toolWindowManager->areaOf(textureViewer), 0.2f));
   }
 
   QMainWindow::show();
 }
 
-void MainWindow::recentLog(const QString &filename)
+void MainWindow::recentCaptureFile(const QString &filename)
 {
   if(QFileInfo::exists(filename))
   {
-    LoadLogfile(filename, false, true);
+    LoadCapture(filename, false, true);
   }
   else
   {
@@ -893,14 +1309,14 @@ void MainWindow::recentLog(const QString &filename)
 
     if(res == QMessageBox::Yes)
     {
-      m_Ctx.Config().RecentLogFiles.removeOne(filename);
+      m_Ctx.Config().RecentCaptureFiles.removeOne(filename);
 
-      PopulateRecentFiles();
+      PopulateRecentCaptureFiles();
     }
   }
 }
 
-void MainWindow::recentCapture(const QString &filename)
+void MainWindow::recentCaptureSetting(const QString &filename)
 {
   if(QFileInfo::exists(filename))
   {
@@ -914,9 +1330,9 @@ void MainWindow::recentCapture(const QString &filename)
 
     if(res == QMessageBox::Yes)
     {
-      m_Ctx.Config().RecentLogFiles.removeOne(filename);
+      m_Ctx.Config().RecentCaptureSettings.removeOne(filename);
 
-      PopulateRecentFiles();
+      PopulateRecentCaptureSettings();
     }
   }
 }
@@ -926,17 +1342,19 @@ void MainWindow::setProgress(float val)
   if(val < 0.0f || val >= 1.0f)
   {
     statusProgress->setVisible(false);
+    statusText->setText(QString());
   }
   else
   {
     statusProgress->setVisible(true);
+    statusProgress->setMaximum(1000);
     statusProgress->setValue(1000 * val);
   }
 }
 
-void MainWindow::setLogHasErrors(bool errors)
+void MainWindow::setCaptureHasErrors(bool errors)
 {
-  QString filename = QFileInfo(m_Ctx.LogFilename()).fileName();
+  QString filename = QFileInfo(m_Ctx.GetCaptureFilename()).fileName();
   if(errors)
   {
     const QPixmap &del = Pixmaps::del(this);
@@ -962,12 +1380,14 @@ void MainWindow::setLogHasErrors(bool errors)
 
 void MainWindow::remoteProbe()
 {
-  if(!m_Ctx.LogLoaded() && !m_Ctx.LogLoading())
+  if(!m_Ctx.IsCaptureLoaded() && !m_Ctx.IsCaptureLoading())
   {
+    GUIInvoke::call([this] { m_Ctx.Config().AddAndroidHosts(); });
+
     for(RemoteHost *host : m_Ctx.Config().RemoteHosts)
     {
       // don't mess with a host we're connected to - this is handled anyway
-      if(host->Connected)
+      if(host->connected)
         continue;
 
       host->CheckStatus();
@@ -981,25 +1401,25 @@ void MainWindow::remoteProbe()
 
 void MainWindow::messageCheck()
 {
-  if(m_Ctx.LogLoaded())
+  if(m_Ctx.IsCaptureLoaded())
   {
     m_Ctx.Replay().AsyncInvoke([this](IReplayController *r) {
-      rdctype::array<DebugMessage> msgs = r->GetDebugMessages();
+      rdcarray<DebugMessage> msgs = r->GetDebugMessages();
 
       bool disconnected = false;
 
       if(m_Ctx.Replay().CurrentRemote())
       {
-        bool prev = m_Ctx.Replay().CurrentRemote()->ServerRunning;
+        bool prev = m_Ctx.Replay().CurrentRemote()->serverRunning;
 
         m_Ctx.Replay().PingRemote();
 
-        if(prev != m_Ctx.Replay().CurrentRemote()->ServerRunning)
+        if(prev != m_Ctx.Replay().CurrentRemote()->serverRunning)
           disconnected = true;
       }
 
       GUIInvoke::call([this, disconnected, msgs] {
-        // if we just got disconnected while replaying a log, alert the user.
+        // if we just got disconnected while replaying a capture, alert the user.
         if(disconnected)
         {
           RDDialog::critical(this, tr("Remote server disconnected"),
@@ -1009,7 +1429,7 @@ void MainWindow::messageCheck()
                                 "RenderDoc to reconnect and load the capture again"));
         }
 
-        if(m_Ctx.Replay().CurrentRemote() && !m_Ctx.Replay().CurrentRemote()->ServerRunning)
+        if(m_Ctx.Replay().CurrentRemote() && !m_Ctx.Replay().CurrentRemote()->serverRunning)
           contextChooser->setIcon(Icons::cross());
 
         if(!msgs.empty())
@@ -1022,17 +1442,17 @@ void MainWindow::messageCheck()
         else
           m_messageAlternate = false;
 
-        setLogHasErrors(!m_Ctx.DebugMessages().empty());
+        setCaptureHasErrors(!m_Ctx.DebugMessages().empty());
       });
     });
   }
-  else if(!m_Ctx.LogLoaded() && !m_Ctx.LogLoading())
+  else if(!m_Ctx.IsCaptureLoaded() && !m_Ctx.IsCaptureLoading())
   {
     if(m_Ctx.Replay().CurrentRemote())
       m_Ctx.Replay().PingRemote();
 
     GUIInvoke::call([this]() {
-      if(m_Ctx.Replay().CurrentRemote() && !m_Ctx.Replay().CurrentRemote()->ServerRunning)
+      if(m_Ctx.Replay().CurrentRemote() && !m_Ctx.Replay().CurrentRemote()->serverRunning)
       {
         contextChooser->setIcon(Icons::cross());
         contextChooser->setText(tr("Replay Context: %1").arg(tr("Local")));
@@ -1054,19 +1474,19 @@ void MainWindow::FillRemotesMenu(QMenu *menu, bool includeLocalhost)
     RemoteHost *host = m_Ctx.Config().RemoteHosts[i];
 
     // add localhost at the end
-    if(host->Hostname == lit("localhost"))
+    if(host->IsLocalhost())
       continue;
 
     QAction *action = new QAction(menu);
 
-    action->setIcon(host->ServerRunning && !host->VersionMismatch ? Icons::tick() : Icons::cross());
-    if(host->Connected)
+    action->setIcon(host->serverRunning && !host->versionMismatch ? Icons::tick() : Icons::cross());
+    if(host->connected)
       action->setText(tr("%1 (Connected)").arg(host->Name()));
-    else if(host->ServerRunning && host->VersionMismatch)
+    else if(host->serverRunning && host->versionMismatch)
       action->setText(tr("%1 (Bad Version)").arg(host->Name()));
-    else if(host->ServerRunning && host->Busy)
+    else if(host->serverRunning && host->busy)
       action->setText(tr("%1 (Busy)").arg(host->Name()));
-    else if(host->ServerRunning)
+    else if(host->serverRunning)
       action->setText(tr("%1 (Online)").arg(host->Name()));
     else
       action->setText(tr("%1 (Offline)").arg(host->Name()));
@@ -1074,7 +1494,7 @@ void MainWindow::FillRemotesMenu(QMenu *menu, bool includeLocalhost)
     action->setData(i);
 
     // don't allow switching to the connected host
-    if(host->Connected)
+    if(host->connected)
       action->setEnabled(false);
 
     menu->addAction(action);
@@ -1119,14 +1539,14 @@ void MainWindow::switchContext()
     // allow live captures to this host to stay open, that way
     // we can connect to a live capture, then switch into that
     // context
-    if(host && live->hostname() == host->Hostname)
+    if(host && live->hostname() == host->hostname)
       continue;
 
     if(!live->checkAllowClose())
       return;
   }
 
-  if(!PromptCloseLog())
+  if(!PromptCloseCapture())
     return;
 
   for(LiveCapture *live : m_LiveCaptures)
@@ -1134,7 +1554,7 @@ void MainWindow::switchContext()
     // allow live captures to this host to stay open, that way
     // we can connect to a live capture, then switch into that
     // context
-    if(host && live->hostname() == host->Hostname)
+    if(host && live->hostname() == host->hostname)
       continue;
 
     live->cleanItems();
@@ -1157,7 +1577,7 @@ void MainWindow::switchContext()
   else
   {
     contextChooser->setText(tr("Replay Context: %1").arg(host->Name()));
-    contextChooser->setIcon(host->ServerRunning ? Icons::connect() : Icons::disconnect());
+    contextChooser->setIcon(host->serverRunning ? Icons::connect() : Icons::disconnect());
 
     // disable until checking is done
     contextChooser->setEnabled(false);
@@ -1172,7 +1592,7 @@ void MainWindow::switchContext()
       // see if the server is up
       host->CheckStatus();
 
-      if(!host->ServerRunning && !host->RunCommand.isEmpty())
+      if(!host->serverRunning && !host->runCommand.isEmpty())
       {
         GUIInvoke::call([this]() { statusText->setText(tr("Running remote server command...")); });
 
@@ -1184,13 +1604,13 @@ void MainWindow::switchContext()
 
       ReplayStatus status = ReplayStatus::Succeeded;
 
-      if(host->ServerRunning && !host->Busy)
+      if(host->serverRunning && !host->busy)
       {
         status = m_Ctx.Replay().ConnectToRemoteServer(host);
       }
 
       GUIInvoke::call([this, host, status]() {
-        contextChooser->setIcon(host->ServerRunning && !host->Busy ? Icons::connect()
+        contextChooser->setIcon(host->serverRunning && !host->busy ? Icons::connect()
                                                                    : Icons::disconnect());
 
         if(status != ReplayStatus::Succeeded)
@@ -1199,22 +1619,22 @@ void MainWindow::switchContext()
           contextChooser->setText(tr("Replay Context: %1").arg(tr("Local")));
           statusText->setText(tr("Connection failed: %1").arg(ToQStr(status)));
         }
-        else if(host->VersionMismatch)
+        else if(host->versionMismatch)
         {
           statusText->setText(
               tr("Remote server is not running RenderDoc %1").arg(lit(FULL_VERSION_STRING)));
         }
-        else if(host->Busy)
+        else if(host->busy)
         {
           statusText->setText(tr("Remote server in use elsewhere"));
         }
-        else if(host->ServerRunning)
+        else if(host->serverRunning)
         {
           statusText->setText(tr("Remote server ready"));
         }
         else
         {
-          if(!host->RunCommand.isEmpty())
+          if(!host->runCommand.isEmpty())
             statusText->setText(tr("Remote server not running or failed to start"));
           else
             statusText->setText(tr("Remote server not running - no start command configured"));
@@ -1238,43 +1658,50 @@ void MainWindow::statusDoubleClicked(QMouseEvent *event)
   showDebugMessageView();
 }
 
-void MainWindow::OnLogfileLoaded()
+void MainWindow::OnCaptureLoaded()
 {
-  ui->action_Save_Log->setEnabled(true);
-  ui->action_Close_Log->setEnabled(true);
+  // at first only allow the default save for temporary captures. It should be disabled if we have
+  // loaded a 'permanent' capture from disk and haven't made any changes. It will be enabled as soon
+  // as any changes are made.
+  ui->action_Save_Capture_Inplace->setEnabled(m_Ctx.IsCaptureTemporary());
+  ui->action_Save_Capture_As->setEnabled(true);
+  ui->action_Close_Capture->setEnabled(true);
 
-  // don't allow changing context while log is open
+  // don't allow changing context while capture is open
   contextChooser->setEnabled(false);
 
   statusProgress->setVisible(false);
 
+  ui->action_Recompress_Capture->setEnabled(true);
+
   ui->action_Start_Replay_Loop->setEnabled(true);
 
-  setLogHasErrors(!m_Ctx.DebugMessages().empty());
+  setCaptureHasErrors(!m_Ctx.DebugMessages().empty());
 
-  m_Ctx.Replay().AsyncInvoke([this](IReplayController *r) {
-    bool hasResolver = r->HasCallstacks();
+  ui->action_Resolve_Symbols->setEnabled(false);
+
+  m_Ctx.Replay().AsyncInvoke([this](IReplayController *) {
+    bool hasResolver = m_Ctx.Replay().GetCaptureAccess()->HasCallstacks();
 
     GUIInvoke::call([this, hasResolver]() {
       ui->action_Resolve_Symbols->setEnabled(hasResolver);
       ui->action_Resolve_Symbols->setText(hasResolver ? tr("Resolve Symbols")
-                                                      : tr("Resolve Symbols - None in log"));
+                                                      : tr("Resolve Symbols - None in capture"));
     });
   });
 
-  ui->action_Save_Log->setEnabled(true);
-
   SetTitle();
 
-  PopulateRecentFiles();
+  PopulateRecentCaptureFiles();
 
   ToolWindowManager::raiseToolWindow(m_Ctx.GetEventBrowser()->Widget());
 }
 
-void MainWindow::OnLogfileClosed()
+void MainWindow::OnCaptureClosed()
 {
-  ui->action_Save_Log->setEnabled(false);
-  ui->action_Close_Log->setEnabled(false);
+  ui->action_Save_Capture_Inplace->setEnabled(false);
+  ui->action_Save_Capture_As->setEnabled(false);
+  ui->action_Close_Capture->setEnabled(false);
 
   ui->action_Start_Replay_Loop->setEnabled(false);
 
@@ -1287,10 +1714,12 @@ void MainWindow::OnLogfileClosed()
   ui->action_Resolve_Symbols->setEnabled(false);
   ui->action_Resolve_Symbols->setText(tr("Resolve Symbols"));
 
+  ui->action_Recompress_Capture->setEnabled(false);
+
   SetTitle();
 
-  // if the remote sever disconnected during log replay, resort back to a 'disconnected' state
-  if(m_Ctx.Replay().CurrentRemote() && !m_Ctx.Replay().CurrentRemote()->ServerRunning)
+  // if the remote sever disconnected during capture replay, resort back to a 'disconnected' state
+  if(m_Ctx.Replay().CurrentRemote() && !m_Ctx.Replay().CurrentRemote()->serverRunning)
   {
     statusText->setText(
         tr("Remote server disconnected. To attempt to reconnect please select it again."));
@@ -1299,11 +1728,11 @@ void MainWindow::OnLogfileClosed()
   }
 }
 
-void MainWindow::OnEventChanged(uint32_t eventID)
+void MainWindow::OnEventChanged(uint32_t eventId)
 {
 }
 
-void MainWindow::RegisterShortcut(const QString &shortcut, QWidget *widget, ShortcutCallback callback)
+void MainWindow::RegisterShortcut(const rdcstr &shortcut, QWidget *widget, ShortcutCallback callback)
 {
   QKeySequence ks = QKeySequence::fromString(shortcut);
 
@@ -1320,6 +1749,31 @@ void MainWindow::RegisterShortcut(const QString &shortcut, QWidget *widget, Shor
     }
 
     m_GlobalShortcutCallbacks[ks] = callback;
+  }
+}
+
+void MainWindow::UnregisterShortcut(const rdcstr &shortcut, QWidget *widget)
+{
+  if(widget)
+  {
+    if(shortcut.isEmpty())
+    {
+      // if no shortcut is specified, remove all shortcuts for this widget
+      for(QMap<QWidget *, ShortcutCallback> &sh : m_WidgetShortcutCallbacks)
+        sh.remove(widget);
+    }
+    else
+    {
+      QKeySequence ks = QKeySequence::fromString(shortcut);
+
+      m_WidgetShortcutCallbacks[ks].remove(widget);
+    }
+  }
+  else
+  {
+    QKeySequence ks = QKeySequence::fromString(shortcut);
+
+    m_GlobalShortcutCallbacks.remove(ks);
   }
 }
 
@@ -1368,14 +1822,35 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
   return QMainWindow::eventFilter(watched, event);
 }
 
-void MainWindow::on_action_Close_Log_triggered()
+void MainWindow::on_action_Close_Capture_triggered()
 {
-  PromptCloseLog();
+  PromptCloseCapture();
 }
 
-void MainWindow::on_action_Save_Log_triggered()
+void MainWindow::on_action_Save_Capture_Inplace_triggered()
 {
-  PromptSaveLog();
+  bool saved = false;
+
+  if(m_Ctx.IsCaptureTemporary() || !m_Ctx.IsCaptureLocal())
+  {
+    saved = PromptSaveCaptureAs();
+  }
+  else
+  {
+    if(m_Ctx.GetCaptureModifications() != CaptureModifications::NoModifications &&
+       m_Ctx.IsCaptureLocal())
+    {
+      saved = m_Ctx.SaveCaptureTo(m_Ctx.GetCaptureFilename());
+    }
+  }
+
+  if(saved)
+    ui->action_Save_Capture_Inplace->setEnabled(false);
+}
+
+void MainWindow::on_action_Save_Capture_As_triggered()
+{
+  PromptSaveCaptureAs();
 }
 
 void MainWindow::on_action_About_triggered()
@@ -1483,6 +1958,16 @@ void MainWindow::on_action_Errors_and_Warnings_triggered()
     ui->toolWindowManager->addToolWindow(debugMessages, mainToolArea());
 }
 
+void MainWindow::on_action_Comments_triggered()
+{
+  QWidget *comments = m_Ctx.GetCommentView()->Widget();
+
+  if(ui->toolWindowManager->toolWindows().contains(comments))
+    ToolWindowManager::raiseToolWindow(comments);
+  else
+    ui->toolWindowManager->addToolWindow(comments, mainToolArea());
+}
+
 void MainWindow::on_action_Statistics_Viewer_triggered()
 {
   QWidget *stats = m_Ctx.GetStatisticsViewer()->Widget();
@@ -1517,22 +2002,49 @@ void MainWindow::on_action_Python_Shell_triggered()
 
 void MainWindow::on_action_Resolve_Symbols_triggered()
 {
-  m_Ctx.Replay().AsyncInvoke([this](IReplayController *r) { r->InitResolver(); });
+  ANALYTIC_SET(UIFeatures.CallstackResolve, true);
 
-  ShowProgressDialog(this, tr("Please Wait - Resolving Symbols"), [this]() {
-    bool running = true;
-    m_Ctx.Replay().BlockInvoke(
-        [&running](IReplayController *r) { running = r->HasCallstacks() && !r->InitResolver(); });
-    return !running;
+  if(!m_Ctx.Replay().GetCaptureAccess())
+  {
+    RDDialog::critical(
+        this, tr("Not Available"),
+        tr("Callstack resolution is not available.\n\nCheck remote server connection."));
+    return;
+  }
+
+  float progress = 0.0f;
+  bool finished = false;
+
+  m_Ctx.Replay().AsyncInvoke([this, &progress, &finished](IReplayController *) {
+    bool success =
+        m_Ctx.Replay().GetCaptureAccess()->InitResolver([&progress](float p) { progress = p; });
+
+    if(!success)
+    {
+      RDDialog::critical(
+          this, tr("Error loading symbols"),
+          tr("Couldn't load symbols for callstack resolution.\n\nCheck diagnostic log in "
+             "Help menu for more details."));
+    }
+
+    finished = true;
   });
+
+  ShowProgressDialog(this, tr("Resolving symbols, please wait..."),
+                     [&finished]() { return finished; }, [&progress]() { return progress; });
 
   if(m_Ctx.HasAPIInspector())
     m_Ctx.GetAPIInspector()->Refresh();
 }
 
+void MainWindow::on_action_Recompress_Capture_triggered()
+{
+  m_Ctx.RecompressCapture();
+}
+
 void MainWindow::on_action_Start_Replay_Loop_triggered()
 {
-  if(!m_Ctx.LogLoaded())
+  if(!m_Ctx.IsCaptureLoaded())
     return;
 
   QDialog popup;
@@ -1566,23 +2078,23 @@ void MainWindow::on_action_Start_Replay_Loop_triggered()
 
   if(displayTex)
   {
-    id = displayTex->ID;
+    id = displayTex->resourceId;
     popup.resize((int)displayTex->width, (int)displayTex->height);
-    popup.setWindowTitle(
-        tr("Looping replay of %1 Displaying %2").arg(m_Ctx.LogFilename()).arg(displayTex->name));
+    popup.setWindowTitle(tr("Looping replay of %1 Displaying %2")
+                             .arg(m_Ctx.GetCaptureFilename())
+                             .arg(m_Ctx.GetResourceName(id)));
   }
   else
   {
     popup.resize(100, 100);
-    popup.setWindowTitle(
-        tr("Looping replay of %1 Displaying %2").arg(m_Ctx.LogFilename()).arg(tr("nothing")));
+    popup.setWindowTitle(tr("Looping replay of %1 Displaying %2")
+                             .arg(m_Ctx.GetCaptureFilename())
+                             .arg(tr("nothing")));
   }
 
-  WindowingSystem winSys = m_Ctx.CurWindowingSystem();
-  void *winData = m_Ctx.FillWindowingData(popup.winId());
+  WindowingData winData = m_Ctx.CreateWindowingData(popup.winId());
 
-  m_Ctx.Replay().AsyncInvoke(
-      [winSys, winData, id](IReplayController *r) { r->ReplayLoop(winSys, winData, id); });
+  m_Ctx.Replay().AsyncInvoke([winData, id](IReplayController *r) { r->ReplayLoop(winData, id); });
 
   RDDialog::show(&popup);
 
@@ -1612,7 +2124,6 @@ void MainWindow::on_action_Settings_triggered()
 void MainWindow::on_action_View_Documentation_triggered()
 {
   QFileInfo fi(QGuiApplication::applicationFilePath());
-  QDir curDir = QFileInfo(QGuiApplication::applicationFilePath()).absoluteDir();
 
   if(fi.absoluteDir().exists(lit("renderdoc.chm")))
     QDesktopServices::openUrl(
@@ -1628,17 +2139,17 @@ void MainWindow::on_action_View_Diagnostic_Log_File_triggered()
     QDesktopServices::openUrl(QUrl::fromLocalFile(logPath));
 }
 
-void MainWindow::on_action_Source_on_github_triggered()
+void MainWindow::on_action_Source_on_GitHub_triggered()
 {
   QDesktopServices::openUrl(QUrl::fromUserInput(lit("https://github.com/baldurk/renderdoc")));
 }
 
-void MainWindow::on_action_Build_Release_downloads_triggered()
+void MainWindow::on_action_Build_Release_Downloads_triggered()
 {
   QDesktopServices::openUrl(QUrl::fromUserInput(lit("https://renderdoc.org/builds")));
 }
 
-void MainWindow::on_actionShow_Tips_triggered()
+void MainWindow::on_action_Show_Tips_triggered()
 {
   TipsDialog tipsDialog(m_Ctx, this);
   RDDialog::show(&tipsDialog);
@@ -1652,6 +2163,86 @@ void MainWindow::on_action_Counter_Viewer_triggered()
     ToolWindowManager::raiseToolWindow(performanceCounterViewer);
   else
     ui->toolWindowManager->addToolWindow(performanceCounterViewer, mainToolArea());
+}
+
+void MainWindow::on_action_Resource_Inspector_triggered()
+{
+  QWidget *resourceInspector = m_Ctx.GetResourceInspector()->Widget();
+
+  if(ui->toolWindowManager->toolWindows().contains(resourceInspector))
+    ToolWindowManager::raiseToolWindow(resourceInspector);
+  else
+    ui->toolWindowManager->addToolWindow(resourceInspector, mainToolArea());
+}
+
+void MainWindow::on_action_Send_Error_Report_triggered()
+{
+  rdcstr report;
+  RENDERDOC_CreateBugReport(RENDERDOC_GetLogFile(), "", report);
+
+  QVariantMap json;
+
+  json[lit("version")] = lit(FULL_VERSION_STRING);
+  json[lit("gitcommit")] = QString::fromLatin1(GitVersionHash);
+  json[lit("replaycrash")] = 1;
+  json[lit("report")] = (QString)report;
+
+  CrashDialog crash(m_Ctx.Config(), json, this);
+
+  RDDialog::show(&crash);
+
+  m_Ctx.Config().Save();
+  PopulateReportedBugs();
+
+  QFile::remove(QString(report));
+}
+
+void MainWindow::on_action_Check_for_Updates_triggered()
+{
+  CheckUpdates(true, [this](UpdateResult updateResult) {
+    switch(updateResult)
+    {
+      case UpdateResult::Disabled:
+      case UpdateResult::Toosoon:
+      {
+        // won't happen, we forced the check
+        break;
+      }
+      case UpdateResult::Unofficial:
+      {
+        QMessageBox::StandardButton res =
+            RDDialog::question(this, tr("Unofficial build"),
+                               tr("You are running an unofficial build, not a stable release.\n"
+                                  "Updates are only available for installed release builds\n\n"
+                                  "Would you like to open the builds list in a browser?"));
+
+        if(res == QMessageBox::Yes)
+          QDesktopServices::openUrl(lit("https://renderdoc.org/builds"));
+        break;
+      }
+      case UpdateResult::Latest:
+      {
+        RDDialog::information(this, tr("Latest version"),
+                              tr("You are running the latest version."));
+        break;
+      }
+      case UpdateResult::Upgrade:
+      {
+        // CheckUpdates() will have shown a dialog for this
+        break;
+      }
+    }
+  });
+}
+
+void MainWindow::updateAvailable_triggered()
+{
+  bool mismatch = HandleMismatchedVersions();
+  if(mismatch)
+    return;
+
+  SetUpdateAvailable();
+  UpdatePopup();
 }
 
 void MainWindow::saveLayout_triggered()
@@ -1683,7 +2274,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     return;
   }
 
-  if(!PromptCloseLog())
+  if(!PromptCloseCapture())
   {
     event->ignore();
     return;
@@ -1730,7 +2321,11 @@ void MainWindow::dropEvent(QDropEvent *event)
 {
   QString fn = dragFilename(event->mimeData());
   if(!fn.isEmpty())
-    LoadFromFilename(fn, false);
+  {
+    // we defer this so we can return immediately and unblock whichever application dropped the
+    // item.
+    GUIInvoke::defer([this, fn]() { LoadFromFilename(fn, false); });
+  }
 }
 
 void MainWindow::LoadSaveLayout(QAction *action, bool save)

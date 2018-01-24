@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -175,12 +175,11 @@ private:
 
     if(riid != __uuidof(ID3D12Device) && riid != __uuidof(ID3D12Device1))
     {
-      RDCERR("Unsupported UUID %s for D3D12CreateDevice", ToStr::Get(riid).c_str());
+      RDCERR("Unsupported UUID %s for D3D12CreateDevice", ToStr(riid).c_str());
       return E_NOINTERFACE;
     }
 
-    RDCDEBUG("Call to Create_Internal Feature Level %x", MinimumFeatureLevel,
-             ToStr::Get(riid).c_str());
+    RDCDEBUG("Call to Create_Internal Feature Level %x", MinimumFeatureLevel, ToStr(riid).c_str());
 
     bool reading = RenderDoc::Inst().IsReplayApp();
 
@@ -194,7 +193,7 @@ private:
 #if ENABLED(RDOC_DEVEL)
         RenderDoc::Inst().IsReplayApp() ||
 #endif
-        (m_EnabledHooks && !reading && RenderDoc::Inst().GetCaptureOptions().APIValidation);
+        (m_EnabledHooks && !reading && RenderDoc::Inst().GetCaptureOptions().apiValidation);
 
     if(EnableDebugLayer)
     {
@@ -266,7 +265,7 @@ private:
 
     HRESULT ret = createFunc(pAdapter, MinimumFeatureLevel, riid, ppDevice);
 
-    RDCDEBUG("Called real createdevice... 0x%08x", ret);
+    RDCDEBUG("Called real createdevice... HRESULT: %s", ToStr(ret).c_str());
 
     if(SUCCEEDED(ret) && m_EnabledHooks && ppDevice)
     {
@@ -304,7 +303,7 @@ private:
     }
     else
     {
-      RDCDEBUG("failed. 0x%08x", ret);
+      RDCDEBUG("failed. HRESULT: %s", ToStr(ret).c_str());
     }
 
     m_InsideCreate = false;
@@ -330,7 +329,7 @@ private:
         releaseme->Release();
 
       RDCWARN("Unknown UUID passed to D3D12GetDebugInterface: %s. Real call %s succeed (%x).",
-              ToStr::Get(riid).c_str(), SUCCEEDED(real) ? "did" : "did not", real);
+              ToStr(riid).c_str(), SUCCEEDED(real) ? "did" : "did not", real);
 
       return E_NOINTERFACE;
     }

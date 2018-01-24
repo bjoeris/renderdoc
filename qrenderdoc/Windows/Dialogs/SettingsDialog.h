@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +32,7 @@ class SettingsDialog;
 }
 
 class QListWidgetItem;
+struct SPIRVDisassembler;
 
 struct ICaptureContext;
 
@@ -70,9 +71,12 @@ private slots:
   // shader viewer
   void on_ShaderViewer_FriendlyNaming_toggled(bool checked);
 
-  void on_browseExtDisasemble_clicked();
-  void on_externalDisassemblePath_textEdited(const QString &path);
-  void on_externalDisassemblerArgs_textEdited(const QString &args);
+  void on_addDisasm_clicked();
+  void on_deleteDisasm_clicked();
+  void on_disassemblers_itemSelectionChanged();
+  void on_disassemblers_cellChanged(int row, int column);
+  void on_disassemblers_keyPress(QKeyEvent *event);
+  void disassemblers_rowMoved(int logicalIndex, int oldVisualIndex, int newVisualIndex);
 
   // event browser
   void on_EventBrowser_TimeUnit_currentIndexChanged(int index);
@@ -82,11 +86,16 @@ private slots:
   void on_EventBrowser_ApplyColors_toggled(bool checked);
   void on_EventBrowser_ColorEventRow_toggled(bool checked);
 
+  // comments
+  void on_Comments_ShowOnLoad_toggled(bool checked);
+
   // android
   void on_browseTempCaptureDirectory_clicked();
-  void on_browseAdbPath_clicked();
+  void on_browseAndroidSDKPath_clicked();
+  void on_browseAndroidJDKPath_clicked();
   void on_Android_MaxConnectTimeout_valueChanged(double timeout);
-  void on_Android_AdbExecutablePath_textEdited(const QString &path);
+  void on_Android_SDKPath_textEdited(const QString &path);
+  void on_Android_JDKPath_textEdited(const QString &path);
   void on_Android_AutoPushLayerToApp_toggled(bool checked);
 
   // manual slots
@@ -95,6 +104,9 @@ private slots:
 private:
   Ui::SettingsDialog *ui;
 
+  void addDisassembler(const SPIRVDisassembler &disasm);
+
   ICaptureContext &m_Ctx;
   bool m_Init = false;
+  bool m_AddingDisassembler = false;
 };

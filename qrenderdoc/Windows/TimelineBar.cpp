@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +27,7 @@
 #include <QPainter>
 #include <QScrollBar>
 #include <QWheelEvent>
+#include "Code/QRDUtils.h"
 #include "Code/Resources.h"
 
 QPointF aliasAlign(QPointF pt)
@@ -49,7 +50,7 @@ QMargins uniformMargins(int m)
 TimelineBar::TimelineBar(ICaptureContext &ctx, QWidget *parent)
     : QAbstractScrollArea(parent), m_Ctx(ctx)
 {
-  m_Ctx.AddLogViewer(this);
+  m_Ctx.AddCaptureViewer(this);
 
   setMouseTracking(true);
 
@@ -68,25 +69,17 @@ TimelineBar::~TimelineBar()
 {
   m_Ctx.BuiltinWindowClosed(this);
 
-  m_Ctx.RemoveLogViewer(this);
+  m_Ctx.RemoveCaptureViewer(this);
 }
 
 void TimelineBar::HighlightResourceUsage(ResourceId id)
 {
+  m_ID = id;
   m_UsageEvents.clear();
-
-  TextureDescription *tex = m_Ctx.GetTexture(id);
-
-  if(tex)
-    m_UsageTarget = tex->name;
-
-  BufferDescription *buf = m_Ctx.GetBuffer(id);
-
-  if(buf)
-    m_UsageTarget = buf->name;
+  m_UsageTarget = m_Ctx.GetResourceName(id);
 
   m_Ctx.Replay().AsyncInvoke([this, id](IReplayController *r) {
-    rdctype::array<EventUsage> usage = r->GetUsage(id);
+    rdcarray<EventUsage> usage = r->GetUsage(id);
 
     GUIInvoke::call([this, usage]() {
       for(const EventUsage &u : usage)
@@ -98,22 +91,15 @@ void TimelineBar::HighlightResourceUsage(ResourceId id)
   viewport()->update();
 }
 
-void TimelineBar::HighlightHistory(ResourceId id, const QList<PixelModification> &history)
+void TimelineBar::HighlightHistory(ResourceId id, const rdcarray<PixelModification> &history)
 {
+  m_ID = id;
   m_HistoryTarget = QString();
   m_HistoryEvents.clear();
 
   if(id != ResourceId())
   {
-    TextureDescription *tex = m_Ctx.GetTexture(id);
-
-    if(tex)
-      m_HistoryTarget = tex->name;
-
-    BufferDescription *buf = m_Ctx.GetBuffer(id);
-
-    if(buf)
-      m_HistoryTarget = buf->name;
+    m_HistoryTarget = m_Ctx.GetResourceName(id);
 
     for(const PixelModification &mod : history)
       m_HistoryEvents << mod;
@@ -122,9 +108,14 @@ void TimelineBar::HighlightHistory(ResourceId id, const QList<PixelModification>
   viewport()->update();
 }
 
-void TimelineBar::OnLogfileClosed()
+void TimelineBar::OnCaptureClosed()
 {
   setWindowTitle(tr("Timeline"));
+
+  m_ID = ResourceId();
+  m_HistoryTarget = m_UsageTarget = QString();
+  m_HistoryEvents.clear();
+  m_UsageEvents.clear();
 
   m_Draws.clear();
   m_RootDraws.clear();
@@ -133,7 +124,7 @@ void TimelineBar::OnLogfileClosed()
   layout();
 }
 
-void TimelineBar::OnLogfileLoaded()
+void TimelineBar::OnCaptureLoaded()
 {
   setWindowTitle(tr("Timeline - Frame #%1").arg(m_Ctx.FrameInfo().frameNumber));
 
@@ -146,8 +137,13 @@ void TimelineBar::OnLogfileLoaded()
   layout();
 }
 
-void TimelineBar::OnEventChanged(uint32_t eventID)
+void TimelineBar::OnEventChanged(uint32_t eventId)
 {
+  if(!m_HistoryTarget.isEmpty())
+    m_HistoryTarget = m_Ctx.GetResourceName(m_ID);
+  if(!m_UsageTarget.isEmpty())
+    m_UsageTarget = m_Ctx.GetResourceName(m_ID);
+
   viewport()->update();
 }
 
@@ -262,7 +258,7 @@ void TimelineBar::mousePressEvent(QMouseEvent *e)
       {
         auto it = std::find_if(m_HistoryEvents.begin(), m_HistoryEvents.end(),
                                [this, eid](const PixelModification &mod) {
-                                 if(mod.eventID == eid)
+                                 if(mod.eventId == eid)
                                    return true;
 
                                  return false;
@@ -278,7 +274,7 @@ void TimelineBar::mousePressEvent(QMouseEvent *e)
       {
         auto it = std::find_if(m_UsageEvents.begin(), m_UsageEvents.end(),
                                [this, eid](const EventUsage &use) {
-                                 if(use.eventID == eid)
+                                 if(use.eventId == eid)
                                    return true;
 
                                  return false;
@@ -701,12 +697,12 @@ void TimelineBar::paintEvent(QPaintEvent *e)
       {
         QPointF pos;
 
-        pos.setX(offsetOf(mod.eventID) + m_eidWidth / 2 - triRadius);
+        pos.setX(offsetOf(mod.eventId) + m_eidWidth / 2 - triRadius);
         pos.setY(pipsRect.y());
 
         QPainterPath path = triangle.translated(aliasAlign(pos));
 
-        if(mod.passed())
+        if(mod.Passed())
           paths[HistoryPassed] = paths[HistoryPassed].united(path);
         else
           paths[HistoryFailed] = paths[HistoryFailed].united(path);
@@ -718,7 +714,7 @@ void TimelineBar::paintEvent(QPaintEvent *e)
       {
         QPointF pos;
 
-        pos.setX(offsetOf(use.eventID) + m_eidWidth / 2 - triRadius);
+        pos.setX(offsetOf(use.eventId) + m_eidWidth / 2 - triRadius);
         pos.setY(pipsRect.y());
 
         QPainterPath path = triangle.translated(aliasAlign(pos));
@@ -863,7 +859,6 @@ void TimelineBar::paintMarkers(QPainter &p, const QVector<Marker> &markers,
     if(elided == tooshort)
       elided = QString();
 
-    QRectF textRect = r;
     r.setLeft(qRound(r.left() + margin));
 
     p.drawText(r, elided, to);
@@ -928,19 +923,19 @@ qreal TimelineBar::offsetOf(uint32_t eid)
 }
 
 uint32_t TimelineBar::processDraws(QVector<Marker> &markers, QVector<uint32_t> &draws,
-                                   const rdctype::array<DrawcallDescription> &curDraws)
+                                   const rdcarray<DrawcallDescription> &curDraws)
 {
   uint32_t maxEID = 0;
 
   for(const DrawcallDescription &d : curDraws)
   {
-    if(d.children.count > 0)
+    if(!d.children.isEmpty())
     {
       markers.push_back(Marker());
       Marker &m = markers.back();
 
       m.name = d.name;
-      m.eidStart = d.eventID;
+      m.eidStart = d.eventId;
       m.eidEnd = processDraws(m.children, m.draws, d.children);
 
       maxEID = qMax(maxEID, m.eidEnd);
@@ -959,12 +954,12 @@ uint32_t TimelineBar::processDraws(QVector<Marker> &markers, QVector<uint32_t> &
     {
       if((d.flags & (DrawFlags::SetMarker | DrawFlags::APICalls)) != DrawFlags::SetMarker)
       {
-        m_Draws.push_back(d.eventID);
-        draws.push_back(d.eventID);
+        m_Draws.push_back(d.eventId);
+        draws.push_back(d.eventId);
       }
     }
 
-    maxEID = qMax(maxEID, d.eventID);
+    maxEID = qMax(maxEID, d.eventId);
   }
 
   return maxEID;

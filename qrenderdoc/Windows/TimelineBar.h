@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,9 +25,9 @@
 #pragma once
 
 #include <QAbstractScrollArea>
-#include "Code/CaptureContext.h"
+#include "Code/Interface/QRDInterface.h"
 
-class TimelineBar : public QAbstractScrollArea, public ITimelineBar, public ILogViewer
+class TimelineBar : public QAbstractScrollArea, public ITimelineBar, public ICaptureViewer
 {
   Q_OBJECT
 
@@ -40,12 +40,12 @@ public:
   // IStatisticsViewer
   QWidget *Widget() override { return this; }
   void HighlightResourceUsage(ResourceId id) override;
-  void HighlightHistory(ResourceId id, const QList<PixelModification> &history) override;
-  // ILogViewerForm
-  void OnLogfileLoaded() override;
-  void OnLogfileClosed() override;
-  void OnSelectedEventChanged(uint32_t eventID) override {}
-  void OnEventChanged(uint32_t eventID) override;
+  void HighlightHistory(ResourceId id, const rdcarray<PixelModification> &history) override;
+  // ICaptureViewer
+  void OnCaptureLoaded() override;
+  void OnCaptureClosed() override;
+  void OnSelectedEventChanged(uint32_t eventId) override {}
+  void OnEventChanged(uint32_t eventId) override;
 
 protected:
   void mousePressEvent(QMouseEvent *e) override;
@@ -75,6 +75,7 @@ private:
   QVector<uint32_t> m_RootDraws;
   QVector<uint32_t> m_Draws;
 
+  ResourceId m_ID;
   QString m_HistoryTarget;
   QList<PixelModification> m_HistoryEvents;
 
@@ -108,7 +109,7 @@ private:
   uint32_t eventAt(qreal x);
   qreal offsetOf(uint32_t eid);
   uint32_t processDraws(QVector<Marker> &markers, QVector<uint32_t> &draws,
-                        const rdctype::array<DrawcallDescription> &curDraws);
+                        const rdcarray<DrawcallDescription> &curDraws);
   void paintMarkers(QPainter &p, const QVector<Marker> &markers, const QVector<uint32_t> &draws,
                     QRectF markerRect);
   Marker *findMarker(QVector<Marker> &markers, QRectF markerRect, QPointF pos);

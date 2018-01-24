@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,7 +30,7 @@
 #include "driver/d3d11/d3d11_manager.h"
 #include "driver/shaders/dxbc/dxbc_inspect.h"
 
-enum ResourceType
+enum D3D11ResourceType
 {
   Resource_Unknown = 0,
   Resource_InputLayout,
@@ -60,7 +60,9 @@ enum ResourceType
   Resource_DeviceState,
 };
 
-ResourceType IdentifyTypeByPtr(IUnknown *ptr);
+DECLARE_REFLECTION_ENUM(D3D11ResourceType);
+
+D3D11ResourceType IdentifyTypeByPtr(IUnknown *ptr);
 ResourceId GetIDForDeviceChild(ID3D11DeviceChild *ptr);
 template <typename T>
 inline ResourceId GetIDForResource(T *ptr);
@@ -72,6 +74,15 @@ UINT GetByteSize(ID3D11Texture2D *tex, int SubResource);
 UINT GetByteSize(ID3D11Texture3D *tex, int SubResource);
 
 UINT GetMipForSubresource(ID3D11Resource *res, int Subresource);
+
+struct ResourcePitch
+{
+  UINT m_RowPitch;
+  UINT m_DepthPitch;
+};
+
+ResourcePitch GetResourcePitchForSubresource(ID3D11DeviceContext *ctx, ID3D11Resource *res,
+                                             int Subresource);
 
 template <typename derived, typename base>
 bool CanQuery(base *b)
@@ -114,7 +125,7 @@ protected:
 
     bool ret = m_pDevice->GetResourceManager()->AddWrapper(this, real);
     if(!ret)
-      RDCERR("Error adding wrapper for type %s", ToStr::Get(__uuidof(NestedType)).c_str());
+      RDCERR("Error adding wrapper for type %s", ToStr(__uuidof(NestedType)).c_str());
 
     m_pDevice->GetResourceManager()->AddCurrentResource(GetResourceID(), this);
   }
@@ -259,7 +270,7 @@ public:
       }
       else
       {
-        RDCWARN("Unexpected guid %s", ToStr::Get(riid).c_str());
+        RDCWARN("Unexpected guid %s", ToStr(riid).c_str());
         SAFE_DELETE(dxgiWrapper);
       }
 
@@ -1226,7 +1237,7 @@ public:
 
     if(SUCCEEDED(hr) && real)
     {
-      *ppInstance = m_pDevice->GetClassInstance(pClassInstanceName, InstanceIndex, this, real);
+      *ppInstance = m_pDevice->GetClassInstance(pClassInstanceName, InstanceIndex, this, &real);
     }
     else
     {
@@ -1262,7 +1273,7 @@ public:
     {
       *ppInstance =
           m_pDevice->CreateClassInstance(pClassTypeName, ConstantBufferOffset, ConstantVectorOffset,
-                                         TextureOffset, SamplerOffset, this, real);
+                                         TextureOffset, SamplerOffset, this, &real);
     }
     else
     {
@@ -1310,8 +1321,8 @@ public:
 
   WrappedID3D11DeviceContext *GetContext() { return m_pContext; }
   bool IsCaptured() { return m_Successful; }
-  void SetReferences(set<ResourceId> &refs) { m_References.swap(refs); }
-  void SetDirtyResources(set<ResourceId> &dirty) { m_Dirty.swap(dirty); }
+  void SwapReferences(set<ResourceId> &refs) { m_References.swap(refs); }
+  void SwapDirtyResources(set<ResourceId> &dirty) { m_Dirty.swap(dirty); }
   void MarkDirtyResources(D3D11ResourceManager *manager)
   {
     for(auto it = m_Dirty.begin(); it != m_Dirty.end(); ++it)

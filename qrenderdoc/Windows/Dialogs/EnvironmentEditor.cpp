@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -149,7 +149,7 @@ void EnvironmentEditor::on_addUpdate_clicked()
   EnvironmentModification mod;
   mod.name = ui->name->text().toUtf8().data();
   mod.value = ui->value->text().toUtf8().data();
-  mod.sep = (EnvSep)ui->separator->currentIndex();
+  mod.sep = (EnvSep)qMax(0, ui->separator->currentIndex());
 
   if(ui->appendValue->isChecked())
     mod.mod = EnvMod::Append;
@@ -170,7 +170,12 @@ void EnvironmentEditor::on_deleteButton_clicked()
   if(!sel)
     return;
 
-  delete ui->variables->takeTopLevelItem(ui->variables->indexOfTopLevelItem(sel));
+  int idx = ui->variables->indexOfTopLevelItem(sel);
+
+  if(idx >= 0)
+    delete ui->variables->takeTopLevelItem(idx);
+  else
+    qCritical() << "Can't find item to delete";
 
   on_name_textChanged(ui->name->text());
 }

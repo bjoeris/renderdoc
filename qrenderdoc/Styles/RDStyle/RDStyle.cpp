@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -69,6 +69,8 @@ static const int MenuBarIconSize = 16;
 
 static const int TabWidgetBorder = 1;
 static const int TabMargin = 4;
+static const int TabMinWidth = 120;
+static const int TabMaxWidth = 250;
 };
 
 namespace Animation
@@ -593,6 +595,12 @@ QSize RDStyle::sizeFromContents(ContentsType type, const QStyleOption *opt, cons
 
     return ret;
   }
+  else if(type == CT_TabBarTab)
+  {
+    // have a maximum size for tabs
+    return size.boundedTo(QSize(Constants::TabMaxWidth, INT_MAX))
+        .expandedTo(QSize(Constants::TabMinWidth, 0));
+  }
   else if(type == CT_CheckBox || type == CT_RadioButton)
   {
     const QStyleOptionButton *button = qstyleoption_cast<const QStyleOptionButton *>(opt);
@@ -646,7 +654,7 @@ QSize RDStyle::sizeFromContents(ContentsType type, const QStyleOption *opt, cons
 
     return ret;
   }
-  else if(type == CT_MenuBarItem || type == CT_MenuItem)
+  else if(type == CT_MenuItem)
   {
     QSize ret = size;
 
@@ -655,13 +663,27 @@ QSize RDStyle::sizeFromContents(ContentsType type, const QStyleOption *opt, cons
 
     const QStyleOptionMenuItem *menuitem = qstyleoption_cast<const QStyleOptionMenuItem *>(opt);
 
-    if(type == CT_MenuItem && menuitem->maxIconWidth)
-    {
-      // add room for an icon
+    // add room for an icon
+    if(menuitem->maxIconWidth)
       ret.setWidth(ret.width() + Constants::MenuBarMargin + menuitem->maxIconWidth);
-    }
 
     return ret;
+  }
+  else if(type == CT_MenuBarItem)
+  {
+    const QStyleOptionMenuItem *menuitem = qstyleoption_cast<const QStyleOptionMenuItem *>(opt);
+    int iconSize = pixelMetric(QStyle::PM_SmallIconSize, opt, widget);
+    QSize sz = menuitem->fontMetrics.size(Qt::TextShowMnemonic, menuitem->text);
+
+    if(!menuitem->icon.isNull())
+    {
+      sz.setWidth(sz.width() + Constants::MenuBarMargin + iconSize);
+      sz = sz.expandedTo(QSize(1, iconSize));
+    }
+
+    sz += QSize(Constants::MenuBarMargin * 2, Constants::MenuBarMargin);
+
+    return sz;
   }
   else if(type == CT_MenuBar || type == CT_Menu)
   {
@@ -712,6 +734,9 @@ int RDStyle::pixelMetric(PixelMetric metric, const QStyleOption *opt, const QWid
   if(metric == PM_TabBarTabOverlap)
     return 0;
 
+  if(metric == PM_TabBarTabHSpace)
+    return Constants::TabMargin;
+
   return RDTweakedNativeStyle::pixelMetric(metric, opt, widget);
 }
 
@@ -749,8 +774,7 @@ int RDStyle::styleHint(StyleHint stylehint, const QStyleOption *opt, const QWidg
     return 1;
 
   if(stylehint == SH_Menu_FlashTriggeredItem || stylehint == SH_Menu_KeyboardSearch ||
-     stylehint == SH_Menu_FadeOutOnHide || stylehint == SH_Menu_AllowActiveAndDisabled ||
-     stylehint == SH_Menu_Scrollable)
+     stylehint == SH_Menu_FadeOutOnHide || stylehint == SH_Menu_AllowActiveAndDisabled)
     return 0;
 
   if(stylehint == SH_Menu_SubMenuPopupDelay || stylehint == SH_Menu_SubMenuSloppyCloseTimeout)
@@ -765,6 +789,12 @@ int RDStyle::styleHint(StyleHint stylehint, const QStyleOption *opt, const QWidg
 
   if(stylehint == SH_Menu_SubMenuSloppySelectOtherActions)
     return 1;
+
+  if(stylehint == QStyle::SH_ItemView_ArrowKeysNavigateIntoChildren)
+    return 1;
+
+  if(stylehint == QStyle::SH_TabBar_ElideMode)
+    return Qt::ElideRight;
 
   return RDTweakedNativeStyle::styleHint(stylehint, opt, widget, returnData);
 }
@@ -1601,6 +1631,23 @@ void RDStyle::drawControl(ControlElement control, const QStyleOption *opt, QPain
     }
 
     rect.adjust(Constants::MenuBarMargin, 0, -Constants::MenuBarMargin, 0);
+
+    if(!menuitem->icon.isNull())
+    {
+      int iconSize = pixelMetric(QStyle::PM_SmallIconSize, opt, widget);
+
+      QPixmap pix = menuitem->icon.pixmap(
+          iconSize, iconSize, (menuitem->state & State_Enabled) ? QIcon::Normal : QIcon::Disabled);
+
+      if(!pix.isNull())
+      {
+        QRectF iconRect = rect;
+        iconRect.setWidth(iconSize);
+        drawItemPixmap(p, iconRect.toRect(), Qt::AlignCenter | Qt::AlignTop | Qt::TextHideMnemonic,
+                       pix);
+        rect.adjust(iconSize + Constants::MenuBarMargin, 0, 0, 0);
+      }
+    }
 
     if(menuitem->menuItemType == QStyleOptionMenuItem::Normal)
     {

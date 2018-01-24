@@ -1,7 +1,7 @@
 /******************************************************************************
 * The MIT License (MIT)
 *
-* Copyright (c) 2016-2017 Baldur Karlsson
+* Copyright (c) 2016-2018 Baldur Karlsson
 *
 * Permission is hereby granted, free of charge, to any person obtaining a copy
 * of this software and associated documentation files (the "Software"), to deal
@@ -24,10 +24,17 @@
 
 #include "d3d9_common.h"
 
-ReplayStatus D3D9_CreateReplayDevice(const char *logfile, IReplayDriver **driver)
+// disabled until capture is actually supported, so we can actually tell programmatically that the
+// API is unsupported. E.g. when we detect the API and let the user know, but disable a capture
+// button.
+#if 0
+
+ReplayStatus D3D9_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
 {
   RDCERR("D3D9 captures are not currently supported");
   return ReplayStatus::APIUnsupported;
 }
 
-static DriverRegistration D3D9DriverRegistration(RDC_D3D9, "D3D9", &D3D9_CreateReplayDevice);
+static DriverRegistration D3D9DriverRegistration(RDCDriver::D3D9, &D3D9_CreateReplayDevice);
+
+#endif

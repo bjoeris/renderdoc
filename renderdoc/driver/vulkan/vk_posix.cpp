@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -198,7 +198,7 @@ VkResult WrappedVulkan::vkCreateXcbSurfaceKHR(VkInstance instance,
                                               VkSurfaceKHR *pSurface)
 {
   // should not come in here at all on replay
-  RDCASSERT(m_State >= WRITING);
+  RDCASSERT(IsCaptureMode(m_State));
 
   VkResult ret =
       ObjDisp(instance)->CreateXcbSurfaceKHR(Unwrap(instance), pCreateInfo, pAllocator, pSurface);
@@ -275,7 +275,7 @@ VkResult WrappedVulkan::vkCreateXlibSurfaceKHR(VkInstance instance,
                                                VkSurfaceKHR *pSurface)
 {
   // should not come in here at all on replay
-  RDCASSERT(m_State >= WRITING);
+  RDCASSERT(IsCaptureMode(m_State));
 
   VkResult ret =
       ObjDisp(instance)->CreateXlibSurfaceKHR(Unwrap(instance), pCreateInfo, pAllocator, pSurface);
@@ -320,7 +320,7 @@ VkResult WrappedVulkan::vkCreateAndroidSurfaceKHR(VkInstance instance,
                                                   VkSurfaceKHR *pSurface)
 {
   // should not come in here at all on replay
-  RDCASSERT(m_State >= WRITING);
+  RDCASSERT(IsCaptureMode(m_State));
 
   VkResult ret = ObjDisp(instance)->CreateAndroidSurfaceKHR(Unwrap(instance), pCreateInfo,
                                                             pAllocator, pSurface);

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -78,7 +78,7 @@ private:
     None,
     White,
     Black,
-  } m_DragMode;
+  } m_DragMode = DraggingMode::None;
 
   QVector<uint32_t> m_HistogramData;
   float m_HistogramMin = 0.0f;

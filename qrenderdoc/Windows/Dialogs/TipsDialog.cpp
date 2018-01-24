@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 #include "TipsDialog.h"
+#include "Code/QRDUtils.h"
 #include "ui_TipsDialog.h"
 
 #include <stdlib.h>

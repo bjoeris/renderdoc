@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2014-2017 Baldur Karlsson
+ * Copyright (c) 2014-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -131,10 +131,10 @@ void WrappedID3D11DeviceContext::SetMarkerInt(LPCWSTR pLabel, INT Data)
 
 void WrappedID3D11DeviceContext::BeginEventInt(LPCWSTR pLabel, INT Data)
 {
-  PushEvent(0, pLabel);
+  PushMarker(0, pLabel);
 }
 
 void WrappedID3D11DeviceContext::EndEvent()
 {
-  PopEvent();
+  PopMarker();
 }

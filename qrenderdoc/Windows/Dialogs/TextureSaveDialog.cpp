@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,12 +25,11 @@
 #include "TextureSaveDialog.h"
 #include <QColorDialog>
 #include <QFileInfo>
-#include "Code/CaptureContext.h"
 #include "Code/QRDUtils.h"
 #include "ui_TextureSaveDialog.h"
 
-TextureSaveDialog::TextureSaveDialog(const TextureDescription &t, const TextureSave &s,
-                                     QWidget *parent)
+TextureSaveDialog::TextureSaveDialog(const TextureDescription &t, bool enableOverlaySelection,
+                                     const TextureSave &s, QWidget *parent)
     : QDialog(parent), ui(new Ui::TextureSaveDialog)
 {
   setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
@@ -47,13 +46,20 @@ TextureSaveDialog::TextureSaveDialog(const TextureDescription &t, const TextureS
   ui->blackPoint->setFont(Formatter::PreferredFont());
   ui->whitePoint->setFont(Formatter::PreferredFont());
 
+  if(!enableOverlaySelection)
+    ui->texSelectionGroup->hide();
+
   QObject::connect(&typingTimer, &QTimer::timeout, [this] { SetFiletypeFromFilename(); });
 
   ui->fileFormat->clear();
 
   QStringList strs;
   for(FileType i : values<FileType>())
+  {
+    if(i == FileType::Raw)
+      continue;
     strs << ToQStr(i);
+  }
 
   ui->fileFormat->addItems(strs);
 
@@ -127,15 +133,20 @@ TextureSaveDialog::TextureSaveDialog(const TextureDescription &t, const TextureS
 
   ui->gridWidth->setMaximum(tex.depth * tex.arraysize * tex.msSamp);
 
-  ui->mipGroup->setVisible(tex.mips > 1);
+  SetOptionsVisible(true);
+}
 
-  ui->sampleGroup->setVisible(tex.msSamp > 1);
+void TextureSaveDialog::SetOptionsVisible(bool visible)
+{
+  ui->mipGroup->setVisible(visible && tex.mips > 1);
 
-  ui->sliceGroup->setVisible(tex.depth > 1 || tex.arraysize > 1 || tex.msSamp > 1);
+  ui->sampleGroup->setVisible(visible && tex.msSamp > 1);
+
+  ui->sliceGroup->setVisible(visible && (tex.depth > 1 || tex.arraysize > 1 || tex.msSamp > 1));
 
   if(saveData.destType != FileType::DDS)
   {
-    ui->cubeCruciform->setEnabled(tex.cubemap && tex.arraysize == 6);
+    ui->cubeCruciform->setEnabled(visible && tex.cubemap && tex.arraysize == 6);
 
     if(!ui->oneSlice->isChecked() && !ui->cubeCruciform->isEnabled())
       ui->mapSlicesToGrid->setChecked(true);
@@ -189,9 +200,21 @@ void TextureSaveDialog::SetFilenameFromFiletype()
   }
 }
 
+void TextureSaveDialog::on_mainTex_clicked()
+{
+  SetOptionsVisible(true);
+  m_saveOverlayInsteadOfSelectedTexture = false;
+}
+
+void TextureSaveDialog::on_overlayTex_clicked()
+{
+  SetOptionsVisible(false);
+  m_saveOverlayInsteadOfSelectedTexture = true;
+}
+
 void TextureSaveDialog::on_fileFormat_currentIndexChanged(int index)
 {
-  saveData.destType = (FileType)ui->fileFormat->currentIndex();
+  saveData.destType = (FileType)qMax(0, ui->fileFormat->currentIndex());
 
   ui->jpegCompression->setEnabled(saveData.destType == FileType::JPG);
 
@@ -273,7 +296,7 @@ void TextureSaveDialog::on_oneMip_toggled(bool checked)
 
 void TextureSaveDialog::on_mipSelect_currentIndexChanged(int index)
 {
-  saveData.mip = index;
+  saveData.mip = qMax(0, index);
 }
 
 void TextureSaveDialog::on_mapSampleArray_toggled(bool checked)
@@ -344,7 +367,7 @@ void TextureSaveDialog::on_oneSample_toggled(bool checked)
 
 void TextureSaveDialog::on_sampleSelect_currentIndexChanged(int index)
 {
-  saveData.sample.sampleIndex = (uint32_t)index;
+  saveData.sample.sampleIndex = (uint32_t)qMax(0, index);
 }
 
 void TextureSaveDialog::on_exportAllSlices_toggled(bool checked)
@@ -466,7 +489,7 @@ void TextureSaveDialog::on_cubeCruciform_toggled(bool checked)
 
 void TextureSaveDialog::on_sliceSelect_currentIndexChanged(int index)
 {
-  saveData.slice.sliceIndex = index;
+  saveData.slice.sliceIndex = qMax(0, index);
 }
 
 void TextureSaveDialog::on_gridWidth_valueChanged(double arg1)
@@ -488,7 +511,7 @@ void TextureSaveDialog::on_alphaCol_clicked()
 
 void TextureSaveDialog::on_alphaMap_currentIndexChanged(int index)
 {
-  saveData.alpha = (AlphaMapping)index;
+  saveData.alpha = (AlphaMapping)qMax(0, index);
 
   ui->alphaCol->setEnabled(saveData.alpha == AlphaMapping::BlendToColor);
 }
@@ -529,7 +552,6 @@ void TextureSaveDialog::on_browse_clicked()
   QString filename =
       RDDialog::getSaveFileName(this, tr("Save Texture As"), QString(), filter, selectedFilter);
 
-  QFileInfo checkFile(filename);
   if(!filename.isEmpty())
   {
     ui->filename->setText(filename);
@@ -546,7 +568,7 @@ void TextureSaveDialog::on_filename_textEdited(const QString &arg1)
 
 void TextureSaveDialog::on_saveCancelButtons_accepted()
 {
-  saveData.alpha = (AlphaMapping)ui->alphaMap->currentIndex();
+  saveData.alpha = (AlphaMapping)qMax(0, ui->alphaMap->currentIndex());
 
   if(saveData.alpha == AlphaMapping::BlendToCheckerboard)
   {
@@ -556,7 +578,7 @@ void TextureSaveDialog::on_saveCancelButtons_accepted()
   if(ui->exportAllMips->isChecked())
     saveData.mip = -1;
   else
-    saveData.mip = (int)ui->mipSelect->currentIndex();
+    saveData.mip = (int)qMax(0, ui->mipSelect->currentIndex());
 
   if(ui->resolveSamples->isChecked())
   {
@@ -570,7 +592,7 @@ void TextureSaveDialog::on_saveCancelButtons_accepted()
   }
   else
   {
-    saveData.sample.sampleIndex = (uint)ui->sampleSelect->currentIndex();
+    saveData.sample.sampleIndex = (uint)qMax(0, ui->sampleSelect->currentIndex());
     saveData.sample.mapToArray = false;
   }
 
@@ -578,7 +600,7 @@ void TextureSaveDialog::on_saveCancelButtons_accepted()
   {
     saveData.slice.cubeCruciform = saveData.slice.slicesAsGrid = false;
     saveData.slice.sliceGridWidth = 1;
-    saveData.slice.sliceIndex = (int)ui->sliceSelect->currentIndex();
+    saveData.slice.sliceIndex = (int)qMax(0, ui->sliceSelect->currentIndex());
   }
   else
   {
@@ -597,7 +619,7 @@ void TextureSaveDialog::on_saveCancelButtons_accepted()
     }
   }
 
-  saveData.destType = (FileType)ui->fileFormat->currentIndex();
+  saveData.destType = (FileType)qMax(0, ui->fileFormat->currentIndex());
   saveData.jpegQuality = (int)ui->jpegCompression->value();
 
   bool ok = false;

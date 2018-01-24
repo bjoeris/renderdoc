@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -28,6 +28,8 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPixmap>
+#include <QPointer>
+#include "Code/QRDUtils.h"
 
 /////////////////////////////////////////////////////////////////////////////////
 //
@@ -364,7 +366,7 @@ void RDHeaderView::cacheSectionMinSizes()
 
 void RDHeaderView::resizeSectionsWithHints()
 {
-  if(m_sectionMinSizes.count() == 0)
+  if(m_sectionMinSizes.count() == 0 || m_sectionStretchHintTotal <= 0)
     return;
 
   QVector<int> sizes = m_sectionMinSizes;
@@ -441,22 +443,6 @@ void RDHeaderView::resizeSectionsWithHints()
         }
       }
     }
-
-    for(int pix = 0; pix < available; pix++)
-    {
-      int minSection = 0;
-      for(int i = 1; i < sizes.count(); i++)
-      {
-        // don't assign any space to sections with negative hints
-        if(i < m_sectionStretchHints.count() && m_sectionStretchHints[i] <= 0)
-          continue;
-
-        if(sizes[i] < sizes[minSection])
-          minSection = i;
-      }
-
-      sizes[minSection]++;
-    }
   }
 
   resizeSections(sizes.toList());
@@ -481,6 +467,25 @@ void RDHeaderView::setColumnStretchHints(const QList<int> &hints)
 
   cacheSectionMinSizes();
   resizeSectionsWithHints();
+}
+
+void RDHeaderView::setRootIndex(const QModelIndex &index)
+{
+  QHeaderView::setRootIndex(index);
+
+  // need to enqueue this after the root index is actually processed (this function is called
+  // *before* the root index changes).
+  if(!m_sectionStretchHints.isEmpty())
+  {
+    QPointer<RDHeaderView> ptr;
+    GUIInvoke::defer([ptr]() {
+      if(ptr)
+      {
+        ptr->cacheSectionMinSizes();
+        ptr->resizeSectionsWithHints();
+      }
+    });
+  }
 }
 
 void RDHeaderView::headerDataChanged(Qt::Orientation orientation, int logicalFirst, int logicalLast)
@@ -835,7 +840,6 @@ void RDHeaderView::paintSection(QPainter *painter, const QRect &rect, int sectio
   else
     opt.state &= ~(QStyle::State_Active | QStyle::State_HasFocus);
 
-  QVariant textAlignment = m->headerData(section, orientation(), Qt::TextAlignmentRole);
   opt.rect = rect;
   opt.section = section;
   opt.textAlignment = defaultAlignment();

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,9 +32,19 @@
 
 #define OS_DEBUG_BREAK() raise(SIGTRAP)
 
-#define GetEmbeddedResource(filename) \
-  string(&CONCAT(data_, filename)[0], \
-         &CONCAT(data_, filename)[0] + CONCAT(CONCAT(data_, filename), _len))
+struct EmbeddedResourceType
+{
+  EmbeddedResourceType(const unsigned char *b, int l) : base(b), len(l) {}
+  const unsigned char *base;
+  int len;
+  std::string Get() const { return std::string(base, base + len); }
+};
+
+#define EmbeddedResource(filename) \
+  EmbeddedResourceType(&CONCAT(data_, filename)[0], CONCAT(CONCAT(data_, filename), _len))
+
+#define GetEmbeddedResource(filename) EmbeddedResource(filename).Get()
+#define GetDynamicEmbeddedResource(resource) resource.Get()
 
 namespace OSUtility
 {
@@ -64,13 +74,13 @@ namespace Bits
 {
 inline uint32_t CountLeadingZeroes(uint32_t value)
 {
-  return __builtin_clz(value);
+  return value == 0 ? 32 : __builtin_clz(value);
 }
 
 #if ENABLED(RDOC_X64)
 inline uint64_t CountLeadingZeroes(uint64_t value)
 {
-  return __builtin_clzl(value);
+  return value == 0 ? 64 : __builtin_clzl(value);
 }
 #endif
 };

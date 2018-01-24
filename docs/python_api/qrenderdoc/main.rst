@@ -19,10 +19,10 @@ Replay Manager
   :members:
   :undoc-members:
 
-LogViewer Interface
--------------------
+CaptureViewer Interface
+------------------------
 
-.. autoclass:: qrenderdoc.LogViewer
+.. autoclass:: qrenderdoc.CaptureViewer
   :members:
   :undoc-members:
 
@@ -34,7 +34,16 @@ Utilities
   :undoc-members:
   :exclude-members: enum_constants__, 
 
+.. autoclass:: qrenderdoc.CaptureModifications
+  :members:
+  :undoc-members:
+  :exclude-members: enum_constants__, 
+
 .. autoclass:: qrenderdoc.CaptureSettings
+  :members:
+  :undoc-members:
+
+.. autoclass:: qrenderdoc.EventBookmark
   :members:
   :undoc-members:
 

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -63,14 +63,16 @@ vector<GPUCounter> GLReplay::EnumerateCounters()
   return ret;
 }
 
-void GLReplay::DescribeCounter(GPUCounter counterID, CounterDescription &desc)
+CounterDescription GLReplay::DescribeCounter(GPUCounter counterID)
 {
-  desc.counterID = counterID;
+  CounterDescription desc = {};
+
+  desc.counter = counterID;
   // FFBA5548-FBF8-405D-BA18-F0329DA370A0
-  desc.uuid.bytes[0] = 0xFFBA5548;
-  desc.uuid.bytes[1] = 0xFBF8405D;
-  desc.uuid.bytes[2] = 0xBA18F032;
-  desc.uuid.bytes[3] = 0x9DA370A0 ^ (uint32_t)counterID;
+  desc.uuid.words[0] = 0xFFBA5548;
+  desc.uuid.words[1] = 0xFBF8405D;
+  desc.uuid.words[2] = 0xBA18F032;
+  desc.uuid.words[3] = 0x9DA370A0 ^ (uint32_t)counterID;
 
   switch(counterID)
   {
@@ -174,19 +176,20 @@ void GLReplay::DescribeCounter(GPUCounter counterID, CounterDescription &desc)
       desc.unit = CounterUnit::Absolute;
       break;
   }
+
+  return desc;
 }
 
 struct GPUQueries
 {
   GLuint obj[ENUM_ARRAY_SIZE(GPUCounter)];
-  uint32_t eventID;
+  uint32_t eventId;
 };
 
 struct GLCounterContext
 {
   uint32_t eventStart;
   vector<GPUQueries> queries;
-  int reuseIdx;
 };
 
 GLenum glCounters[] = {
@@ -206,7 +209,7 @@ GLenum glCounters[] = {
     eGL_COMPUTE_SHADER_INVOCATIONS_ARB             // GPUCounter::CSInvocations
 };
 
-void GLReplay::FillTimers(GLCounterContext &ctx, const DrawcallTreeNode &drawnode,
+void GLReplay::FillTimers(GLCounterContext &ctx, const DrawcallDescription &drawnode,
                           const vector<GPUCounter> &counters)
 {
   if(drawnode.children.empty())
@@ -214,38 +217,31 @@ void GLReplay::FillTimers(GLCounterContext &ctx, const DrawcallTreeNode &drawnod
 
   for(size_t i = 0; i < drawnode.children.size(); i++)
   {
-    const DrawcallDescription &d = drawnode.children[i].draw;
+    const DrawcallDescription &d = drawnode.children[i];
     FillTimers(ctx, drawnode.children[i], counters);
 
-    if(d.events.count == 0)
+    if(d.events.empty())
       continue;
 
     GPUQueries *queries = NULL;
 
     {
-      if(ctx.reuseIdx == -1)
-      {
-        ctx.queries.push_back(GPUQueries());
+      ctx.queries.push_back(GPUQueries());
 
-        queries = &ctx.queries.back();
-        queries->eventID = d.eventID;
-        for(auto q : indices<GPUCounter>())
-          queries->obj[q] = 0;
+      queries = &ctx.queries.back();
+      queries->eventId = d.eventId;
+      for(auto q : indices<GPUCounter>())
+        queries->obj[q] = 0;
 
-        for(uint32_t c = 0; c < counters.size(); c++)
-        {
-          m_pDriver->glGenQueries(1, &queries->obj[(uint32_t)counters[c]]);
-          if(m_pDriver->glGetError())
-            queries->obj[(uint32_t)counters[c]] = 0;
-        }
-      }
-      else
+      for(uint32_t c = 0; c < counters.size(); c++)
       {
-        queries = &ctx.queries[ctx.reuseIdx++];
+        m_pDriver->glGenQueries(1, &queries->obj[(uint32_t)counters[c]]);
+        if(m_pDriver->glGetError())
+          queries->obj[(uint32_t)counters[c]] = 0;
       }
     }
 
-    m_pDriver->ReplayLog(ctx.eventStart, d.eventID, eReplay_WithoutDraw);
+    m_pDriver->ReplayLog(ctx.eventStart, d.eventId, eReplay_WithoutDraw);
 
     // Reverse order so that Timer counter is queried the last.
     for(int32_t q = uint32_t(GPUCounter::Count) - 1; q >= 0; q--)
@@ -259,13 +255,13 @@ void GLReplay::FillTimers(GLCounterContext &ctx, const DrawcallTreeNode &drawnod
         }
       }
 
-    m_pDriver->ReplayLog(ctx.eventStart, d.eventID, eReplay_OnlyDraw);
+    m_pDriver->ReplayLog(ctx.eventStart, d.eventId, eReplay_OnlyDraw);
 
     for(auto q : indices<GPUCounter>())
       if(queries->obj[q])
         m_pDriver->glEndQuery(glCounters[q]);
 
-    ctx.eventStart = d.eventID + 1;
+    ctx.eventStart = d.eventId + 1;
   }
 }
 
@@ -282,54 +278,49 @@ vector<CounterResult> GLReplay::FetchCounters(const vector<GPUCounter> &counters
   MakeCurrentReplayContext(&m_ReplayCtx);
 
   GLCounterContext ctx;
+  ctx.eventStart = 0;
 
-  for(int loop = 0; loop < 1; loop++)
+  m_pDriver->SetFetchCounters(true);
+  FillTimers(ctx, m_pDriver->GetRootDraw(), counters);
+  m_pDriver->SetFetchCounters(false);
+
+  double nanosToSecs = 1.0 / 1000000000.0;
+
+  GLuint prevbind = 0;
+  m_pDriver->glGetIntegerv(eGL_QUERY_BUFFER_BINDING, (GLint *)&prevbind);
+  m_pDriver->glBindBuffer(eGL_QUERY_BUFFER, 0);
+
+  for(size_t i = 0; i < ctx.queries.size(); i++)
   {
-    ctx.eventStart = 0;
-    ctx.reuseIdx = loop == 0 ? -1 : 0;
-    m_pDriver->SetFetchCounters(true);
-    FillTimers(ctx, m_pDriver->GetRootDraw(), counters);
-    m_pDriver->SetFetchCounters(false);
-
-    double nanosToSecs = 1.0 / 1000000000.0;
-
-    GLuint prevbind = 0;
-    m_pDriver->glGetIntegerv(eGL_QUERY_BUFFER_BINDING, (GLint *)&prevbind);
-    m_pDriver->glBindBuffer(eGL_QUERY_BUFFER, 0);
-
-    for(size_t i = 0; i < ctx.queries.size(); i++)
+    for(uint32_t c = 0; c < counters.size(); c++)
     {
-      for(uint32_t c = 0; c < counters.size(); c++)
+      if(ctx.queries[i].obj[(uint32_t)counters[c]])
       {
-        if(ctx.queries[i].obj[(uint32_t)counters[c]])
+        GLuint64 data = 0;
+        m_pDriver->glGetQueryObjectui64v(ctx.queries[i].obj[(uint32_t)counters[c]],
+                                         eGL_QUERY_RESULT, &data);
+
+        double duration = double(data) * nanosToSecs;
+
+        if(m_pDriver->glGetError())
         {
-          GLuint64 data = 0;
-          m_pDriver->glGetQueryObjectui64v(ctx.queries[i].obj[(uint32_t)counters[c]],
-                                           eGL_QUERY_RESULT, &data);
+          data = (uint64_t)-1;
+          duration = -1;
+        }
 
-          double duration = double(data) * nanosToSecs;
-
-          if(m_pDriver->glGetError())
-          {
-            data = (uint64_t)-1;
-            duration = -1;
-          }
-
-          if(counters[c] == GPUCounter::EventGPUDuration)
-          {
-            ret.push_back(
-                CounterResult(ctx.queries[i].eventID, GPUCounter::EventGPUDuration, duration));
-          }
-          else
-            ret.push_back(CounterResult(ctx.queries[i].eventID, counters[c], data));
+        if(counters[c] == GPUCounter::EventGPUDuration)
+        {
+          ret.push_back(CounterResult(ctx.queries[i].eventId, GPUCounter::EventGPUDuration, duration));
         }
         else
-          ret.push_back(CounterResult(ctx.queries[i].eventID, counters[c], (uint64_t)-1));
+          ret.push_back(CounterResult(ctx.queries[i].eventId, counters[c], data));
       }
+      else
+        ret.push_back(CounterResult(ctx.queries[i].eventId, counters[c], (uint64_t)-1));
     }
-
-    m_pDriver->glBindBuffer(eGL_QUERY_BUFFER, prevbind);
   }
+
+  m_pDriver->glBindBuffer(eGL_QUERY_BUFFER, prevbind);
 
   for(size_t i = 0; i < ctx.queries.size(); i++)
     for(uint32_t c = 0; c < counters.size(); c++)

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -58,47 +58,17 @@ PyTypeObject **SbkPySide2_QtWidgetsTypes = NULL;
 #include "Code/QRDUtils.h"
 #include "PythonContext.h"
 
+// exported by generated files, used to check interface compliance
+bool CheckCoreInterface();
+bool CheckQtInterface();
+
 // defined in SWIG-generated renderdoc_python.cpp
-extern "C" PyObject *PyInit__renderdoc(void);
+extern "C" PyObject *PyInit_renderdoc(void);
 extern "C" PyObject *PassObjectToPython(const char *type, void *obj);
 // this one is in qrenderdoc_python.cpp
-extern "C" PyObject *PyInit__qrenderdoc(void);
-extern "C" PyObject *WrapBareQWidget(PyObject *, QWidget *);
+extern "C" PyObject *PyInit_qrenderdoc(void);
+extern "C" PyObject *WrapBareQWidget(QWidget *);
 extern "C" QWidget *UnwrapBareQWidget(PyObject *);
-
-#ifdef WIN32
-
-// on Win32 the renderdoc.py is compiled in as a windows resource. Extract and return
-#include <windows.h>
-#include "Resources/resource.h"
-
-QByteArray GetResourceContents(int resource)
-{
-  HRSRC res = FindResource(NULL, MAKEINTRESOURCE(resource), MAKEINTRESOURCE(TYPE_EMBED));
-  HGLOBAL data = LoadResource(NULL, res);
-
-  if(!data)
-    return QByteArray();
-
-  DWORD resSize = SizeofResource(NULL, res);
-  const char *resData = (const char *)LockResource(data);
-
-  return QByteArray(resData, (int)resSize);
-}
-
-#define GetWrapperModule(name) GetResourceContents(name##_py_module)
-
-#else
-
-// Otherwise it's compiled in via include-bin which converts to a .c with extern array
-extern unsigned char renderdoc_py[];
-extern unsigned int renderdoc_py_len;
-extern unsigned char qrenderdoc_py[];
-extern unsigned int qrenderdoc_py_len;
-
-#define GetWrapperModule(name) QByteArray((const char *)name##_py, (int)name##_py_len);
-
-#endif
 
 // little utility function to convert a PyObject * that we know is a string to a QString
 static inline QString ToQStr(PyObject *value)
@@ -225,8 +195,8 @@ void PythonContext::GlobalInit()
   // for the exception signal
   qRegisterMetaType<QList<QString>>("QList<QString>");
 
-  PyImport_AppendInittab("_renderdoc", &PyInit__renderdoc);
-  PyImport_AppendInittab("_qrenderdoc", &PyInit__qrenderdoc);
+  PyImport_AppendInittab("_renderdoc", &PyInit_renderdoc);
+  PyImport_AppendInittab("_qrenderdoc", &PyInit_qrenderdoc);
 
 #if defined(STATIC_QRENDERDOC)
   // add the location where our libs will be for statically-linked python installs
@@ -247,43 +217,6 @@ void PythonContext::GlobalInit()
 
   PyEval_InitThreads();
 
-  QByteArray renderdoc_py_src = GetWrapperModule(renderdoc);
-
-  if(renderdoc_py_src.isEmpty())
-  {
-    qCritical() << "renderdoc.py wrapper is corrupt/empty. Check build configuration to ensure "
-                   "SWIG compiled properly with python support.";
-    return;
-  }
-
-  QByteArray qrenderdoc_py_src = GetWrapperModule(qrenderdoc);
-
-  if(qrenderdoc_py_src.isEmpty())
-  {
-    qCritical() << "qrenderdoc.py wrapper is corrupt/empty. Check build configuration to ensure "
-                   "SWIG compiled properly with python support.";
-    return;
-  }
-
-  PyObject *renderdoc_py_compiled =
-      Py_CompileString(renderdoc_py_src.data(), "renderdoc.py", Py_file_input);
-
-  if(!renderdoc_py_compiled)
-  {
-    qCritical() << "Failed to compile renderdoc.py wrapper, python will not be available";
-    return;
-  }
-
-  PyObject *qrenderdoc_py_compiled =
-      Py_CompileString(qrenderdoc_py_src.data(), "qrenderdoc.py", Py_file_input);
-
-  if(!qrenderdoc_py_compiled)
-  {
-    Py_DecRef(renderdoc_py_compiled);
-    qCritical() << "Failed to compile qrenderdoc.py wrapper, python will not be available";
-    return;
-  }
-
   OutputRedirectorType.tp_name = "renderdoc_output_redirector";
   OutputRedirectorType.tp_basicsize = sizeof(OutputRedirector);
   OutputRedirectorType.tp_flags = Py_TPFLAGS_DEFAULT;
@@ -298,18 +231,8 @@ void PythonContext::GlobalInit()
 
   PyObject *main_module = PyImport_AddModule("__main__");
 
-  // for compatibility with earlier versions of python that took a char * instead of const char *
-  char renderdoc_name[] = "renderdoc";
-  char qrenderdoc_name[] = "qrenderdoc";
-
-  PyObject *rdoc_module = PyImport_ExecCodeModule(renderdoc_name, renderdoc_py_compiled);
-  PyObject *qrdoc_module = PyImport_ExecCodeModule(qrenderdoc_name, qrenderdoc_py_compiled);
-
-  Py_XDECREF(renderdoc_py_compiled);
-  Py_XDECREF(qrenderdoc_py_compiled);
-
-  PyModule_AddObject(main_module, "renderdoc", rdoc_module);
-  PyModule_AddObject(main_module, "qrenderdoc", qrdoc_module);
+  PyModule_AddObject(main_module, "renderdoc", PyImport_ImportModule("_renderdoc"));
+  PyModule_AddObject(main_module, "qrenderdoc", PyImport_ImportModule("_qrenderdoc"));
 
   main_dict = PyModule_GetDict(main_module);
 
@@ -318,6 +241,18 @@ void PythonContext::GlobalInit()
 
   // import sys
   PyDict_SetItemString(main_dict, "sys", PyImport_ImportModule("sys"));
+
+  PyObject *rlcompleter = PyImport_ImportModule("rlcompleter");
+
+  if(rlcompleter)
+  {
+    PyDict_SetItemString(main_dict, "rlcompleter", rlcompleter);
+  }
+  else
+  {
+    // ignore a failed import
+    PyErr_Clear();
+  }
 
   // sysobj = sys
   PyObject *sysobj = PyDict_GetItemString(main_dict, "sys");
@@ -406,9 +341,7 @@ PythonContext::PythonContext(QObject *parent) : QObject(parent)
   // clone our own local context
   context_namespace = PyDict_Copy(main_dict);
 
-  QString typeStr;
-  QString valueStr;
-  QList<QString> frames;
+  PyObject *rlcompleter = PyDict_GetItemString(main_dict, "rlcompleter");
 
   // for compatibility with earlier versions of python that took a char * instead of const char *
   char noparams[1] = "";
@@ -425,6 +358,40 @@ PythonContext::PythonContext(QObject *parent) : QObject(parent)
     Py_DECREF(redirector);
   }
 
+  if(rlcompleter)
+  {
+    PyObject *Completer = PyObject_GetAttrString(rlcompleter, "Completer");
+
+    if(Completer)
+    {
+      // create a completer for our context's namespace
+      m_Completer = PyObject_CallFunction(Completer, "O", context_namespace);
+
+      if(m_Completer)
+      {
+        PyDict_SetItemString(context_namespace, "_renderdoc_completer", m_Completer);
+      }
+      else
+      {
+        QString typeStr;
+        QString valueStr;
+        int finalLine = -1;
+        QList<QString> frames;
+        FetchException(typeStr, valueStr, finalLine, frames);
+
+        // failure is not fatal
+        qWarning() << "Couldn't create completion object. " << typeStr << ": " << valueStr;
+        PyErr_Clear();
+      }
+    }
+
+    Py_DecRef(Completer);
+  }
+  else
+  {
+    m_Completer = NULL;
+  }
+
   // release the GIL again
   PyGILState_Release(gil);
 
@@ -439,8 +406,25 @@ PythonContext::PythonContext(QObject *parent) : QObject(parent)
 
 PythonContext::~PythonContext()
 {
+  PyGILState_STATE gil = PyGILState_Ensure();
+  if(m_Completer)
+    Py_DecRef(m_Completer);
+  PyGILState_Release(gil);
+
   // do a final tick to gather any remaining output
   outputTick();
+}
+
+bool PythonContext::CheckInterfaces()
+{
+  bool errors = false;
+
+  PyGILState_STATE gil = PyGILState_Ensure();
+  errors |= CheckCoreInterface();
+  errors |= CheckQtInterface();
+  PyGILState_Release(gil);
+
+  return errors;
 }
 
 void PythonContext::Finish()
@@ -455,6 +439,9 @@ void PythonContext::Finish()
 
 void PythonContext::GlobalShutdown()
 {
+  if(!initialised())
+    return;
+
   // must happen on the UI thread
   if(qApp->thread() != QThread::currentThread())
   {
@@ -473,7 +460,7 @@ QString PythonContext::versionString()
   return QFormatStr("%1.%2.%3").arg(PY_MAJOR_VERSION).arg(PY_MINOR_VERSION).arg(PY_MICRO_VERSION);
 }
 
-void PythonContext::executeString(const QString &filename, const QString &source, bool interactive)
+void PythonContext::executeString(const QString &filename, const QString &source)
 {
   if(!initialised())
   {
@@ -489,8 +476,9 @@ void PythonContext::executeString(const QString &filename, const QString &source
 
   PyGILState_STATE gil = PyGILState_Ensure();
 
-  PyObject *compiled = Py_CompileString(source.toUtf8().data(), filename.toUtf8().data(),
-                                        interactive ? Py_single_input : Py_file_input);
+  PyObject *compiled =
+      Py_CompileString(source.toUtf8().data(), filename.toUtf8().data(),
+                       source.count(QLatin1Char('\n')) == 0 ? Py_single_input : Py_file_input);
 
   PyObject *ret = NULL;
 
@@ -543,9 +531,9 @@ void PythonContext::executeString(const QString &filename, const QString &source
     emit exception(typeStr, valueStr, finalLine, frames);
 }
 
-void PythonContext::executeString(const QString &source, bool interactive)
+void PythonContext::executeString(const QString &source)
 {
-  executeString(lit("<interactive.py>"), source, interactive);
+  executeString(lit("<interactive.py>"), source);
 }
 
 void PythonContext::executeFile(const QString &filename)
@@ -642,7 +630,78 @@ QWidget *PythonContext::QWidgetFromPy(PyObject *widget)
 #endif
 }
 
-PyObject *PythonContext::QtObjectToPython(PyObject *self, const char *typeName, QObject *object)
+QStringList PythonContext::completionOptions(QString base)
+{
+  QStringList ret;
+
+  if(!m_Completer)
+    return ret;
+
+  QByteArray bytes = base.toUtf8();
+  const char *input = (const char *)bytes.data();
+
+  PyGILState_STATE gil = PyGILState_Ensure();
+
+  PyObject *completeFunction = PyObject_GetAttrString(m_Completer, "complete");
+
+  int idx = 0;
+  PyObject *opt = NULL;
+  do
+  {
+    opt = PyObject_CallFunction(completeFunction, "si", input, idx);
+
+    if(opt && opt != Py_None)
+    {
+      QString optstr = ToQStr(opt);
+
+      bool add = true;
+
+      // little hack, remove some of the ugly swig template instantiations that we can't avoid.
+      if(optstr.contains(lit("renderdoc.rdcarray")) || optstr.contains(lit("renderdoc.rdcstr")) ||
+         optstr.contains(lit("renderdoc.bytebuf")))
+        add = false;
+
+      if(add)
+        ret << optstr;
+    }
+
+    idx++;
+  } while(opt && opt != Py_None);
+
+  // extra hack, remove the swig object functions/data but ONLY if we find a sure-fire identifier
+  // (thisown) since otherwise we could remove append from a list object
+  bool containsSwigInternals = false;
+  for(const QString &optstr : ret)
+  {
+    if(optstr.contains(lit(".thisown")))
+    {
+      containsSwigInternals = true;
+      break;
+    }
+  }
+
+  if(containsSwigInternals)
+  {
+    for(int i = 0; i < ret.count();)
+    {
+      if(ret[i].endsWith(lit(".acquire(")) || ret[i].endsWith(lit(".append(")) ||
+         ret[i].endsWith(lit(".disown(")) || ret[i].endsWith(lit(".next(")) ||
+         ret[i].endsWith(lit(".own(")) || ret[i].endsWith(lit(".this")) ||
+         ret[i].endsWith(lit(".thisown")))
+        ret.removeAt(i);
+      else
+        i++;
+    }
+  }
+
+  Py_DecRef(completeFunction);
+
+  PyGILState_Release(gil);
+
+  return ret;
+}
+
+PyObject *PythonContext::QtObjectToPython(const char *typeName, QObject *object)
 {
 #if PYSIDE2_ENABLED
   if(!initialised())
@@ -651,8 +710,8 @@ PyObject *PythonContext::QtObjectToPython(PyObject *self, const char *typeName, 
   if(!SbkPySide2_QtCoreTypes || !SbkPySide2_QtGuiTypes || !SbkPySide2_QtWidgetsTypes)
   {
     QWidget *w = qobject_cast<QWidget *>(object);
-    if(self && w)
-      return WrapBareQWidget(self, w);
+    if(w)
+      return WrapBareQWidget(w);
 
     Py_RETURN_NONE;
   }
@@ -664,8 +723,8 @@ PyObject *PythonContext::QtObjectToPython(PyObject *self, const char *typeName, 
   return obj;
 #else
   QWidget *w = qobject_cast<QWidget *>(object);
-  if(self && w)
-    return WrapBareQWidget(self, w);
+  if(w)
+    return WrapBareQWidget(w);
 
   Py_RETURN_NONE;
 #endif
@@ -857,4 +916,14 @@ extern "C" void SetThreadBlocking(PyObject *global_handle, bool block)
   OutputRedirector *redirector = (OutputRedirector *)global_handle;
   if(redirector && redirector->context)
     return redirector->context->setThreadBlocking(block);
+}
+
+extern "C" QWidget *QWidgetFromPy(PyObject *widget)
+{
+  return PythonContext::QWidgetFromPy(widget);
+}
+
+extern "C" PyObject *QWidgetToPy(QWidget *widget)
+{
+  return PythonContext::QWidgetToPy(widget);
 }

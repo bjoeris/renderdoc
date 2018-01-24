@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2017 Baldur Karlsson
+ * Copyright (c) 2017-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -38,8 +38,6 @@ namespace GCNISA
 {
 void GetTargets(GraphicsAPI api, std::vector<std::string> &targets);
 
-std::string Disassemble(const DXBC::DXBCFile *dxbc, const std::string &target);
-std::string Disassemble(const SPVModule *spv, const std::string &entry, const std::string &target);
-std::string Disassemble(ShaderStage stage, const std::vector<std::string> &glsl,
+std::string Disassemble(ShaderEncoding api, ShaderStage stage, const bytebuf &shaderBytes,
                         const std::string &target);
 };

@@ -33,6 +33,8 @@
         <file>arrow_undo@2x.png</file>
         <file>asterisk_orange.png</file>
         <file>asterisk_orange@2x.png</file>
+        <file>bug.png</file>
+        <file>bug@2x.png</file>
         <file>chart_curve.png</file>
         <file>chart_curve@2x.png</file>
         <file>checkerboard.png</file>
@@ -81,6 +83,10 @@
         <file>house@2x.png</file>
         <file>information.png</file>
         <file>information@2x.png</file>
+        <file>link.png</file>
+        <file>link@2x.png</file>
+        <file>page_go.png</file>
+        <file>page_go@2x.png</file>
         <file>page_white_code.png</file>
         <file>page_white_code@2x.png</file>
         <file>page_white_database.png</file>
@@ -91,6 +97,8 @@
         <file>page_white_edit@2x.png</file>
         <file>page_white_link.png</file>
         <file>page_white_link@2x.png</file>
+        <file>page_white_stack.png</file>
+        <file>page_white_stack@2x.png</file>
         <file>plugin_add.png</file>
         <file>plugin_add@2x.png</file>
         <file>save.png</file>
@@ -101,6 +109,8 @@
         <file>time@2x.png</file>
         <file>timeline_marker.png</file>
         <file>timeline_marker@2x.png</file>
+        <file>update.png</file>
+        <file>update@2x.png</file>
         <file>upfolder.png</file>
         <file>upfolder@2x.png</file>
         <file>wand.png</file>

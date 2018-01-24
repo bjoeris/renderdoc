@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -55,7 +55,14 @@ bool IsUIntFormat(DXGI_FORMAT f);
 bool IsTypelessFormat(DXGI_FORMAT f);
 bool IsIntFormat(DXGI_FORMAT f);
 bool IsSRGBFormat(DXGI_FORMAT f);
+bool IsYUVFormat(DXGI_FORMAT f);
 
 // not technically DXGI, but makes more sense to have it here common between D3D versions
 Topology MakePrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY Topo);
 D3D_PRIMITIVE_TOPOLOGY MakeD3DPrimitiveTopology(Topology Topo);
+
+DECLARE_REFLECTION_STRUCT(DXGI_SAMPLE_DESC);
+DECLARE_REFLECTION_STRUCT(IID);
+DECLARE_REFLECTION_ENUM(DXGI_FORMAT);
+DECLARE_REFLECTION_ENUM(D3D_FEATURE_LEVEL);
+DECLARE_REFLECTION_ENUM(D3D_DRIVER_TYPE);

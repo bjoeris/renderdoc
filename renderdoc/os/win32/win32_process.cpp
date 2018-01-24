@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2015-2017 Baldur Karlsson
+ * Copyright (c) 2015-2018 Baldur Karlsson
  * Copyright (c) 2014 Crytek
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -31,7 +31,7 @@
 #include <string>
 #include "core/core.h"
 #include "os/os_specific.h"
-#include "serialise/string_utils.h"
+#include "strings/string_utils.h"
 
 using std::string;
 
@@ -133,10 +133,12 @@ void Process::ApplyEnvironmentModification()
       {
         if(!value.empty())
         {
+          std::string prep = m.value;
           if(m.sep == EnvSep::Platform || m.sep == EnvSep::SemiColon)
-            value += ";";
+            prep += ";";
           else if(m.sep == EnvSep::Colon)
-            value += ":";
+            prep += ":";
+          value = prep + value;
         }
         else
         {
@@ -155,9 +157,16 @@ void Process::ApplyEnvironmentModification()
 
 const char *Process::GetEnvVariable(const char *name)
 {
+  DWORD ret = GetEnvironmentVariableA(name, NULL, 0);
+  if(ret == 0 && GetLastError() == ERROR_ENVVAR_NOT_FOUND)
+    return NULL;
+
   static char buf[1024] = {};
-  size_t reqSize = 1024;
-  getenv_s(&reqSize, buf, name);
+  if(ret >= 1024)
+    RDCERR("Static buffer insufficiently sized");
+
+  RDCEraseEl(buf);
+  GetEnvironmentVariableA(name, buf, RDCMIN((DWORD)1023U, ret));
   return buf;
 }
 
@@ -315,7 +324,7 @@ uintptr_t FindRemoteDLL(DWORD pid, wstring libName)
 
     numModules++;
 
-    if(wcsstr(modnameLower, libName.c_str()))
+    if(wcsstr(modnameLower, libName.c_str()) == modnameLower)
     {
       ret = (uintptr_t)me32.modBaseAddr;
     }
@@ -334,7 +343,7 @@ uintptr_t FindRemoteDLL(DWORD pid, wstring libName)
     {
       RDCERR(
           "Error injecting into remote process with PID %u which is no longer available.\n"
-          "Possibly the process has crashed during early startup?",
+          "Possibly the process has crashed during early startup, or is missing DLLs to run?",
           pid);
     }
     else
@@ -489,7 +498,7 @@ static PROCESS_INFORMATION RunProcess(const char *app, const char *workingDir, c
   return pi;
 }
 
-uint32_t Process::InjectIntoProcess(uint32_t pid, const rdctype::array<EnvironmentModification> &env,
+uint32_t Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
                                     const char *logfile, const CaptureOptions &opts, bool waitForExit)
 {
   wstring wlogfile = logfile == NULL ? L"" : StringFormat::UTF82Wide(logfile);
@@ -499,7 +508,7 @@ uint32_t Process::InjectIntoProcess(uint32_t pid, const rdctype::array<Environme
                       PROCESS_VM_WRITE | PROCESS_VM_READ | SYNCHRONIZE,
                   FALSE, pid);
 
-  if(opts.DelayForDebugger > 0)
+  if(opts.delayForDebugger > 0)
   {
     RDCDEBUG("Waiting for debugger attach to %lu", pid);
     uint32_t timeout = 0;
@@ -513,14 +522,14 @@ uint32_t Process::InjectIntoProcess(uint32_t pid, const rdctype::array<Environme
       Sleep(10);
       timeout += 10;
 
-      if(timeout > opts.DelayForDebugger * 1000)
+      if(timeout > opts.delayForDebugger * 1000)
         break;
     }
 
     if(debuggerAttached)
       RDCDEBUG("Debugger attach detected after %.2f s", float(timeout) / 1000.0f);
     else
-      RDCDEBUG("Timed out waiting for debugger, gave up after %u s", opts.DelayForDebugger);
+      RDCDEBUG("Timed out waiting for debugger, gave up after %u s", opts.delayForDebugger);
   }
 
   RDCLOG("Injecting renderdoc into process %lu", pid);
@@ -531,7 +540,7 @@ uint32_t Process::InjectIntoProcess(uint32_t pid, const rdctype::array<Environme
 
   wchar_t renderdocPathLower[MAX_PATH] = {0};
   memcpy(renderdocPathLower, renderdocPath, MAX_PATH * sizeof(wchar_t));
-  for(size_t i = 0; renderdocPathLower[i] && i < MAX_PATH; i++)
+  for(size_t i = 0; i < MAX_PATH && renderdocPathLower[i]; i++)
   {
     // lowercase
     if(renderdocPathLower[i] >= 'A' && renderdocPathLower[i] <= 'Z')
@@ -982,7 +991,7 @@ uint32_t Process::LaunchScript(const char *script, const char *workingDir, const
 
 uint32_t Process::LaunchAndInjectIntoProcess(const char *app, const char *workingDir,
                                              const char *cmdLine,
-                                             const rdctype::array<EnvironmentModification> &env,
+                                             const rdcarray<EnvironmentModification> &env,
                                              const char *logfile, const CaptureOptions &opts,
                                              bool waitForExit)
 {
@@ -1260,7 +1269,7 @@ static GlobalHookData *globalHook = NULL;
 
 // a thread we run in the background just to keep the pipes open and wait until we're ready to stop
 // the global hook.
-static void GlobalHookThread(void *)
+static void GlobalHookThread()
 {
   // keep looping doing an atomic compare-exchange to check that finished is still 0
   while(Atomic::CmpExch32(&globalHook->finished, 0, 0) == 0)
@@ -1387,7 +1396,8 @@ bool Process::StartGlobalHook(const char *pathmatch, const char *logfile, const 
   pSec.nLength = sizeof(pSec);
   tSec.nLength = sizeof(tSec);
 
-  wchar_t *paramsAlloc = new wchar_t[2048];
+  std::wstring paramsAlloc;
+  paramsAlloc.resize(2048);
 
   // serialise to string with two chars per byte
   string optstr;
@@ -1407,7 +1417,7 @@ bool Process::StartGlobalHook(const char *pathmatch, const char *logfile, const 
   std::string debugLogfile = RDCGETLOGFILE();
   wstring wdebugLogfile = StringFormat::UTF82Wide(debugLogfile);
 
-  _snwprintf_s(paramsAlloc, 2047, 2047,
+  _snwprintf_s(&paramsAlloc[0], 2047, 2047,
                L"\"%ls\" globalhook --match \"%ls\" --logfile \"%ls\" --debuglog \"%ls\" "
                L"--capopts \"%hs\"",
                cmdpathNative.c_str(), wpathmatch.c_str(), wlogfile.c_str(), wdebugLogfile.c_str(),
@@ -1452,7 +1462,7 @@ bool Process::StartGlobalHook(const char *pathmatch, const char *logfile, const 
   }
 
   // launch the process
-  BOOL retValue = CreateProcessW(NULL, paramsAlloc, &pSec, &tSec, true, 0, NULL, NULL, &si, &pi);
+  BOOL retValue = CreateProcessW(NULL, &paramsAlloc[0], &pSec, &tSec, true, 0, NULL, NULL, &si, &pi);
 
   // we don't need this end anymore, the child has it
   CloseHandle(childEnd);
@@ -1468,11 +1478,15 @@ bool Process::StartGlobalHook(const char *pathmatch, const char *logfile, const 
   CloseHandle(pi.hThread);
   CloseHandle(pi.hProcess);
 
+  RDCEraseEl(pi);
+
 // repeat the process for the Wow32 renderdoccmd
 #if ENABLED(RDOC_X64)
-  _snwprintf_s(paramsAlloc, 2047, 2047,
-               L"\"%ls\" globalhook --match \"%ls\" --log \"%ls\" --capopts \"%hs\"",
-               cmdpathWow32.c_str(), wpathmatch.c_str(), wlogfile.c_str(), optstr.c_str());
+  _snwprintf_s(&paramsAlloc[0], 2047, 2047,
+               L"\"%ls\" globalhook --match \"%ls\" --logfile \"%ls\" --debuglog \"%ls\" "
+               L"--capopts \"%hs\"",
+               cmdpathWow32.c_str(), wpathmatch.c_str(), wlogfile.c_str(), wdebugLogfile.c_str(),
+               optstr.c_str());
 
   paramsAlloc[2047] = 0;
 
@@ -1504,7 +1518,7 @@ bool Process::StartGlobalHook(const char *pathmatch, const char *logfile, const 
     si.hStdInput = childEnd;
   }
 
-  retValue = CreateProcessW(NULL, paramsAlloc, &pSec, &tSec, true, 0, NULL, NULL, &si, &pi);
+  retValue = CreateProcessW(NULL, &paramsAlloc[0], &pSec, &tSec, true, 0, NULL, NULL, &si, &pi);
 
   // we don't need this end anymore
   CloseHandle(childEnd);
@@ -1526,7 +1540,7 @@ bool Process::StartGlobalHook(const char *pathmatch, const char *logfile, const 
   globalHook = new GlobalHookData;
   *globalHook = hookdata;
 
-  globalHook->pipeThread = Threading::CreateThread(&GlobalHookThread, NULL);
+  globalHook->pipeThread = Threading::CreateThread(&GlobalHookThread);
 
   return true;
 }

@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2017 Baldur Karlsson
+ * Copyright (c) 2016-2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,11 +25,10 @@
 #include "vk_core.h"
 #include "vk_replay.h"
 
-void VulkanReplay::OutputWindow::SetWindowHandle(WindowingSystem system, void *data)
+void VulkanReplay::OutputWindow::SetWindowHandle(WindowingData window)
 {
-  RDCASSERT(system == WindowingSystem::Android, system);
-  wnd = (ANativeWindow *)data;
-  m_WindowSystem = system;
+  RDCASSERT(window.system == WindowingSystem::Android, window.system);
+  wnd = window.android.window;
 }
 
 void VulkanReplay::OutputWindow::CreateSurface(VkInstance inst)
