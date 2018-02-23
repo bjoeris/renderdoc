@@ -144,7 +144,7 @@ message(STATUS "Building RenderDoc version ${RENDERDOC_VERSION}")
 
 if(APPLE)
     message(STATUS "Disabling Vulkan driver on apple")
-	set(ENABLE_VULKAN OFF CACHE BOOL "" FORCE)
+    set(ENABLE_VULKAN OFF CACHE BOOL "" FORCE)
 endif()
 
 if(ANDROID)
@@ -203,6 +203,7 @@ endif()
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -fstrict-aliasing")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gline-tables-only -fno-omit-frame-pointer")
 
     set(warning_flags
         -Wall
