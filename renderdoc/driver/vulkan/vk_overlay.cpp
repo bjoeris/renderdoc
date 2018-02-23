@@ -347,7 +347,7 @@ void VulkanDebugManager::PatchLineStripIndexBuffer(const DrawcallDescription *dr
   // we just patch up to 32-bit since we'll be adding more indices and we might overflow 16-bit.
   std::vector<uint32_t> patchedIndices;
 
-  PatchLineStripIndexBufer(draw, idx16, idx32, patchedIndices);
+  ::PatchLineStripIndexBuffer(draw, NULL, idx16, idx32, patchedIndices);
 
   indexBuffer.Create(m_pDriver, m_Device, patchedIndices.size() * sizeof(uint32_t), 1,
                      GPUBuffer::eGPUBufferIBuffer);
@@ -396,6 +396,17 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeHint, Debu
   VulkanShaderCache *shaderCache = m_pDriver->GetShaderCache();
 
   VulkanCreationInfo::Image &iminfo = m_pDriver->m_CreationInfo.m_Image[texid];
+
+  // bail out if the framebuffer dimensions don't match the current framebuffer, or draws will fail.
+  // This is an order-of-operations problem, if the overlay is set when the event is changed it is
+  // refreshed before the UI layer can update the current texture.
+  {
+    const VulkanCreationInfo::Framebuffer &fb =
+        m_pDriver->m_CreationInfo.m_Framebuffer[m_pDriver->m_RenderState.framebuffer];
+
+    if(fb.width != iminfo.extent.width || fb.height != iminfo.extent.height)
+      return GetResID(m_Overlay.Image);
+  }
 
   VkCommandBuffer cmd = m_pDriver->GetNextCmd();
 
@@ -2172,7 +2183,7 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeHint, Debu
               if(fmt.indexResourceId != ResourceId())
               {
                 VkBuffer ib =
-                    m_pDriver->GetResourceManager()->GetCurrentHandle<VkBuffer>(fmt.indexResourceId);
+                    m_pDriver->GetResourceManager()->GetLiveHandle<VkBuffer>(fmt.indexResourceId);
 
                 vt->CmdBindIndexBuffer(Unwrap(cmd), Unwrap(ib), fmt.indexByteOffset, idxtype);
                 vt->CmdDrawIndexed(Unwrap(cmd), fmt.numIndices, 1, 0, fmt.baseVertex, 0);

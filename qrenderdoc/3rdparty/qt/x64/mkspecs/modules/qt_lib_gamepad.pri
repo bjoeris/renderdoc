@@ -1,4 +1,4 @@
-QT.gamepad.VERSION = 5.9.0
+QT.gamepad.VERSION = 5.9.4
 QT.gamepad.name = QtGamepad
 QT.gamepad.module = Qt5Gamepad
 QT.gamepad.libs = $$QT_MODULE_LIB_BASE

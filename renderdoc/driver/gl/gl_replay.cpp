@@ -603,7 +603,7 @@ rdcarray<ShaderEntryPoint> GLReplay::GetShaderEntryPoints(ResourceId shader)
   return {{"main", MakeShaderStage(shaderDetails.type)}};
 }
 
-ShaderReflection *GLReplay::GetShader(ResourceId shader, string entryPoint)
+ShaderReflection *GLReplay::GetShader(ResourceId shader, ShaderEntryPoint entry)
 {
   auto &shaderDetails = m_pDriver->m_Shaders[shader];
 
@@ -852,9 +852,7 @@ void GLReplay::SavePipelineState()
   {
     stages[i]->programResourceId = stages[i]->shaderResourceId = ResourceId();
     stages[i]->reflection = NULL;
-    stages[i]->bindpointMapping.constantBlocks.clear();
-    stages[i]->bindpointMapping.readOnlyResources.clear();
-    stages[i]->bindpointMapping.readWriteResources.clear();
+    stages[i]->bindpointMapping = ShaderBindpointMapping();
   }
 
   if(curProg == 0)
@@ -881,7 +879,8 @@ void GLReplay::SavePipelineState()
         if(pipeDetails.stageShaders[i] != ResourceId())
         {
           curProg = rm->GetCurrentResource(pipeDetails.stagePrograms[i]).name;
-          stages[i]->reflection = refls[i] = GetShader(pipeDetails.stageShaders[i], "");
+          stages[i]->reflection = refls[i] =
+              GetShader(pipeDetails.stageShaders[i], ShaderEntryPoint());
           GetBindpointMapping(gl.GetHookset(), curProg, (int)i, refls[i],
                               stages[i]->bindpointMapping);
           mappings[i] = &stages[i]->bindpointMapping;
@@ -907,7 +906,7 @@ void GLReplay::SavePipelineState()
     {
       if(progDetails.stageShaders[i] != ResourceId())
       {
-        stages[i]->reflection = refls[i] = GetShader(progDetails.stageShaders[i], "");
+        stages[i]->reflection = refls[i] = GetShader(progDetails.stageShaders[i], ShaderEntryPoint());
         GetBindpointMapping(gl.GetHookset(), curProg, (int)i, refls[i], stages[i]->bindpointMapping);
         mappings[i] = &stages[i]->bindpointMapping;
 
@@ -936,6 +935,8 @@ void GLReplay::SavePipelineState()
     if(feedback != 0)
       pipe.transformFeedback.feedbackResourceId =
           rm->GetOriginalID(rm->GetID(FeedbackRes(ctx, feedback)));
+    else
+      pipe.transformFeedback.feedbackResourceId = ResourceId();
 
     GLint maxCount = 0;
     gl.glGetIntegerv(eGL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS, &maxCount);
@@ -1747,9 +1748,8 @@ void GLReplay::SavePipelineState()
   pipe.hints.polySmoothingEnabled = rs.Enabled[GLRenderState::eEnabled_PolySmooth];
 }
 
-void GLReplay::FillCBufferValue(WrappedOpenGL &gl, GLuint prog, bool bufferBacked, bool rowMajor,
-                                uint32_t offs, uint32_t matStride, const bytebuf &data,
-                                ShaderVariable &outVar)
+void GLReplay::FillCBufferValue(WrappedOpenGL &gl, GLuint prog, bool bufferBacked, uint32_t offs,
+                                uint32_t matStride, const bytebuf &data, ShaderVariable &outVar)
 {
   const byte *bufdata = data.empty() ? NULL : &data[offs];
   size_t datasize = data.size() - offs;
@@ -1767,7 +1767,7 @@ void GLReplay::FillCBufferValue(WrappedOpenGL &gl, GLuint prog, bool bufferBacke
       uint32_t majorsize = outVar.columns;
       uint32_t minorsize = outVar.rows;
 
-      if(rowMajor)
+      if(outVar.rowMajor)
       {
         majorsize = outVar.rows;
         minorsize = outVar.columns;
@@ -1802,7 +1802,7 @@ void GLReplay::FillCBufferValue(WrappedOpenGL &gl, GLuint prog, bool bufferBacke
     }
   }
 
-  if(!rowMajor)
+  if(!outVar.rowMajor)
   {
     if(outVar.type != VarType::Double)
     {
@@ -1838,6 +1838,7 @@ void GLReplay::FillCBufferVariables(WrappedOpenGL &gl, GLuint prog, bool bufferB
     var.rows = desc.rows;
     var.columns = desc.columns;
     var.type = desc.type;
+    var.rowMajor = desc.rowMajorStorage;
 
     if(!variables[i].type.members.empty())
     {
@@ -1901,8 +1902,7 @@ void GLReplay::FillCBufferVariables(WrappedOpenGL &gl, GLuint prog, bool bufferB
 
         if(desc.elements == 0)
         {
-          FillCBufferValue(gl, prog, bufferBacked, desc.rowMajorStorage ? true : false, values[0],
-                           values[1], data, var);
+          FillCBufferValue(gl, prog, bufferBacked, values[0], values[1], data, var);
         }
         else
         {
@@ -1912,8 +1912,7 @@ void GLReplay::FillCBufferVariables(WrappedOpenGL &gl, GLuint prog, bool bufferB
             ShaderVariable el = var;
             el.name = StringFormat::Fmt("%s[%u]", var.name.c_str(), a);
 
-            FillCBufferValue(gl, prog, bufferBacked, desc.rowMajorStorage ? true : false,
-                             values[0] + values[2] * a, values[1], data, el);
+            FillCBufferValue(gl, prog, bufferBacked, values[0] + values[2] * a, values[1], data, el);
 
             el.isStruct = false;
 
@@ -2497,17 +2496,21 @@ void GLReplay::BuildCustomShader(string source, string entry, const ShaderCompil
   }
 
   const char *src = source.c_str();
-  GLuint shaderprog = gl.glCreateShaderProgramv(shtype, 1, &src);
+  GLuint shader = gl.glCreateShader(shtype);
+
+  gl.glShaderSource(shader, 1, &src, NULL);
+
+  gl.glCompileShader(shader);
 
   GLint status = 0;
-  gl.glGetProgramiv(shaderprog, eGL_LINK_STATUS, &status);
+  gl.glGetShaderiv(shader, eGL_COMPILE_STATUS, &status);
 
   if(errors)
   {
     GLint len = 1024;
-    gl.glGetProgramiv(shaderprog, eGL_INFO_LOG_LENGTH, &len);
+    gl.glGetShaderiv(shader, eGL_INFO_LOG_LENGTH, &len);
     char *buffer = new char[len + 1];
-    gl.glGetProgramInfoLog(shaderprog, len, NULL, buffer);
+    gl.glGetShaderInfoLog(shader, len, NULL, buffer);
     buffer[len] = 0;
     *errors = buffer;
     delete[] buffer;
@@ -2516,7 +2519,7 @@ void GLReplay::BuildCustomShader(string source, string entry, const ShaderCompil
   if(status == 0)
     *id = ResourceId();
   else
-    *id = m_pDriver->GetResourceManager()->GetID(ProgramRes(m_pDriver->GetCtx(), shaderprog));
+    *id = m_pDriver->GetResourceManager()->GetID(ShaderRes(m_pDriver->GetCtx(), shader));
 }
 
 ResourceId GLReplay::ApplyCustomShader(ResourceId shader, ResourceId texid, uint32_t mip,

@@ -714,14 +714,15 @@ This happens either locally, or on the remote server, depending on whether a con
   the program.
 :param str capturefile: The location to save any captures, if running locally.
 :param CaptureOptions opts: The capture options to use when injecting into the program.
-:return: The ident where the new application is listening for target control, or 0 if something went
-  wrong.
-:rtype: ``int``
+:return: The :class:`ExecuteResult` indicating both the status of the operation (success or failure)
+  and any reason for failure, or else the ident where the new application is listening for target
+  control if everything succeeded.
+:rtype: ExecuteResult
 )");
-  virtual uint32_t ExecuteAndInject(const rdcstr &exe, const rdcstr &workingDir,
-                                    const rdcstr &cmdLine,
-                                    const rdcarray<EnvironmentModification> &env,
-                                    const rdcstr &capturefile, CaptureOptions opts) = 0;
+  virtual ExecuteResult ExecuteAndInject(const rdcstr &exe, const rdcstr &workingDir,
+                                         const rdcstr &cmdLine,
+                                         const rdcarray<EnvironmentModification> &env,
+                                         const rdcstr &capturefile, CaptureOptions opts) = 0;
 
   DOCUMENT(R"(Retrieve a list of drivers that the current remote server supports.
 
@@ -757,8 +758,8 @@ blocking fashion on the current thread.
   DOCUMENT(R"(Copy a capture from the local machine to the remote host.
 
 :param str localpath: The path on the local machine to copy from.
-:return: The path on the local machine where the file was saved, or empty if something went wrong.
 :param QWidget window: A handle to the window to use when showing a progress bar.
+:return: The path on the local machine where the file was saved, or empty if something went wrong.
 :rtype: ``str``
 )");
   virtual rdcstr CopyCaptureToRemote(const rdcstr &localpath, QWidget *window) = 0;
@@ -771,6 +772,17 @@ blocking fashion on the current thread.
 )");
   virtual void CopyCaptureFromRemote(const rdcstr &remotepath, const rdcstr &localpath,
                                      QWidget *window) = 0;
+
+  DOCUMENT(R"(Return the amount of time that the currently active command on the replay thread has
+been executing for.
+
+This can be used to identify if a command is long-running to display a progress bar or notification.
+
+:return: The time in seconds that the current command has been executing for, or 0.0 if no command
+  is executing.
+:rtype: ``float``
+)");
+  virtual float GetCurrentProcessingTime() = 0;
 
   DOCUMENT(R"(Make a tagged non-blocking invoke call onto the replay thread.
 
@@ -878,10 +890,10 @@ a new dock window or moving an existing dock window.
   window and using that as the main area, then adding to the left of that. In the default layout
   this is where the event browser is placed.
 
-.. data:: ConstantBufferArea
+.. data:: TransientPopupArea
 
-  The new dock window is docked with other constant buffer views, if they exist, or to the right
-  of the existing window if there are none open.
+  The new dock window is docked with other similar transient views like constant buffer or pixel
+  history windows, if they exist, or else docked to the right of the main window.
 )");
 enum class DockReference : int
 {
@@ -902,7 +914,7 @@ enum class DockReference : int
   // extra values here
   MainToolArea,
   LeftToolArea,
-  ConstantBufferArea,
+  TransientPopupArea,
 };
 
 DOCUMENT(R"(Details any changes that have been made to a capture in the UI which can be saved to
@@ -1005,6 +1017,30 @@ time.
 
   DOCUMENT("Close the currently open capture file.");
   virtual void CloseCapture() = 0;
+
+  DOCUMENT(R"(Imports a capture file from a non-native format, via conversion to temporary rdc.
+
+This converts the file to a specified temporary .rdc and loads it, closing any existing capture.
+
+The capture must be available locally, if it's not this function will fail.
+
+:param CaptureFileFormat fmt: The capture file format to import from.
+:param str importfile: The path to import from.
+:param str rdcfile: The temporary path to save the rdc file to.
+:return: ``True`` if the import operation was successful and the capture was loaded.
+:rtype: ``bool``
+)");
+  virtual bool ImportCapture(const CaptureFileFormat &fmt, const rdcstr &importfile,
+                             const rdcstr &rdcfile) = 0;
+
+  DOCUMENT(R"(Exports the current capture file to a given path with a specified capture file format.
+
+The capture must be available locally, if it's not this function will fail.
+
+:param CaptureFileFormat fmt: The capture file format to export to.
+:param str exportfile: The path to export the capture file to.
+)");
+  virtual void ExportCapture(const CaptureFileFormat &fmt, const rdcstr &exportfile) = 0;
 
   DOCUMENT(R"(Move the current replay to a new event in the capture.
 

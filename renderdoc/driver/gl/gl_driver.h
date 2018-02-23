@@ -53,7 +53,7 @@ struct GLInitParams
   uint32_t height;
 
   // check if a frame capture section version is supported
-  static const uint64_t CurrentVersion = 0x19;
+  static const uint64_t CurrentVersion = 0x1A;
   static bool IsSupportedVersion(uint64_t ver);
 };
 
@@ -288,7 +288,7 @@ private:
 
   struct ShaderData
   {
-    ShaderData() : type(eGL_NONE), prog(0) {}
+    ShaderData() : type(eGL_NONE), prog(0), version(0) {}
     GLenum type;
     vector<string> sources;
     vector<string> includepaths;
@@ -296,6 +296,7 @@ private:
     std::string disassembly;
     ShaderReflection reflection;
     GLuint prog;
+    int version;
 
     void Compile(WrappedOpenGL &gl, ResourceId id, GLuint realShader);
   };
@@ -349,6 +350,9 @@ private:
   GLsizeiptr m_FakeIdxSize;
 
   ResourceId m_FakeVAOID;
+  ResourceId m_FBO0_ID;
+
+  uint32_t m_InitChunkIndex = 0;
 
   bool ProcessChunk(ReadSerialiser &ser, GLChunk chunk);
   ReplayStatus ContextReplayLog(CaptureState readType, uint32_t startEventID, uint32_t endEventID,
@@ -895,12 +899,12 @@ public:
                                 GLbitfield mask, GLenum filter);
 
   template <typename SerialiserType>
-  bool Serialise_glCreateShader(SerialiserType &ser, GLuint real, GLenum type);
+  bool Serialise_glCreateShader(SerialiserType &ser, GLenum type, GLuint real);
   GLuint glCreateShader(GLenum type);
 
   template <typename SerialiserType>
-  bool Serialise_glCreateShaderProgramv(SerialiserType &ser, GLuint real, GLenum type,
-                                        GLsizei count, const GLchar *const *strings);
+  bool Serialise_glCreateShaderProgramv(SerialiserType &ser, GLenum type, GLsizei count,
+                                        const GLchar *const *strings, GLuint real);
   GLuint glCreateShaderProgramv(GLenum type, GLsizei count, const GLchar *const *strings);
 
   template <typename SerialiserType>

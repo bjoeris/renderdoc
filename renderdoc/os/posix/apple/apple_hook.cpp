@@ -39,3 +39,29 @@ bool PosixHookDetect(const char *identifier)
 void PosixHookLibrary(const char *name, dlopenCallback cb)
 {
 }
+
+// android only hooking functions, not used on apple
+PosixScopedSuppressHooking::PosixScopedSuppressHooking()
+{
+}
+
+PosixScopedSuppressHooking::~PosixScopedSuppressHooking()
+{
+}
+
+void PosixHookApply()
+{
+}
+
+void PosixHookReapply()
+{
+}
+
+void PosixHookFunction(char const *, void *)
+{
+}
+
+void *PosixGetFunction(void *handle, const char *name)
+{
+  return dlsym(handle, name);
+}

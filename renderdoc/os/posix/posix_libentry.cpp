@@ -28,14 +28,6 @@
 
 void dlopen_hook_init();
 
-void readCapOpts(const char *str, CaptureOptions *opts)
-{
-  // serialise from string with two chars per byte
-  byte *b = (byte *)opts;
-  for(size_t i = 0; i < sizeof(CaptureOptions); i++)
-    *(b++) = (byte(str[i * 2 + 0] - 'a') << 4) | byte(str[i * 2 + 1] - 'a');
-}
-
 // DllMain equivalent
 void library_loaded()
 {
@@ -56,22 +48,22 @@ void library_loaded()
   {
     RenderDoc::Inst().Initialise();
 
-    char *logfile = getenv("RENDERDOC_LOGFILE");
-    char *opts = getenv("RENDERDOC_CAPTUREOPTS");
+    const char *logfile = Process::GetEnvVariable("RENDERDOC_LOGFILE");
+    const char *opts = Process::GetEnvVariable("RENDERDOC_CAPTUREOPTS");
 
     if(opts)
     {
-      string optstr = opts;
-
       CaptureOptions optstruct;
-      readCapOpts(optstr.c_str(), &optstruct);
+      optstruct.DecodeFromString(opts);
+
+      RDCLOG("Using delay for debugger %u", optstruct.delayForDebugger);
 
       RenderDoc::Inst().SetCaptureOptions(optstruct);
     }
 
     if(logfile)
     {
-      RenderDoc::Inst().SetLogFile(logfile);
+      RenderDoc::Inst().SetCaptureFileTemplate(logfile);
     }
 
     RDCLOG("Loading into %s", curfile.c_str());
@@ -87,3 +79,10 @@ struct init
 {
   init() { library_loaded(); }
 } do_init;
+
+// we want to be sure the constructor and library_loaded are included even when this is in a static
+// library, so we have this global function that does nothing but takes the address.
+extern "C" __attribute__((visibility("default"))) void *force_include_libentry()
+{
+  return &do_init;
+}

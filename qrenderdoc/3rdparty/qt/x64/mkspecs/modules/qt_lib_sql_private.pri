@@ -1,14 +1,11 @@
-QT.sql_private.VERSION = 5.9.0
+QT.sql_private.VERSION = 5.9.4
 QT.sql_private.name = QtSql
 QT.sql_private.module =
 QT.sql_private.libs = $$QT_MODULE_LIB_BASE
-QT.sql_private.includes = $$QT_MODULE_INCLUDE_BASE/QtSql/5.9.0 $$QT_MODULE_INCLUDE_BASE/QtSql/5.9.0/QtSql
+QT.sql_private.includes = $$QT_MODULE_INCLUDE_BASE/QtSql/5.9.4 $$QT_MODULE_INCLUDE_BASE/QtSql/5.9.4/QtSql
 QT.sql_private.frameworks =
 QT.sql_private.depends = core_private sql
 QT.sql_private.uses =
 QT.sql_private.module_config = v2 internal_module
 QT.sql_private.enabled_features =
-QT.sql_private.disabled_features = system-sqlite
-QMAKE_LIBS_MYSQL = -llibmysql
-QMAKE_LIBS_ODBC = -lodbc32
-QMAKE_LIBS_PSQL = -llibpq -lws2_32 -ladvapi32
+QT.sql_private.disabled_features =

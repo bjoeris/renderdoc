@@ -210,6 +210,9 @@ void ShaderViewer::editShader(bool customShader, const QString &entryPoint, cons
   ui->snippets->setVisible(customShader);
 
   // hide debugging toolbar buttons
+  ui->debugSep->hide();
+  ui->runBack->hide();
+  ui->run->hide();
   ui->stepBack->hide();
   ui->stepNext->hide();
   ui->runToCursor->hide();
@@ -242,8 +245,10 @@ void ShaderViewer::editShader(bool customShader, const QString &entryPoint, cons
         m_FindState = FindState();
     });
 
-    m_Ctx.GetMainWindow()->RegisterShortcut(QKeySequence(QKeySequence::Save).toString(), this,
-                                            [this]() { on_save_clicked(); });
+    m_Ctx.GetMainWindow()->RegisterShortcut(QKeySequence(QKeySequence::Refresh).toString(), this,
+                                            [this]() { on_refresh_clicked(); });
+    ui->refresh->setToolTip(ui->refresh->toolTip() +
+                            lit(" (%1)").arg(QKeySequence(QKeySequence::Refresh).toString()));
 
     QWidget *w = (QWidget *)scintilla;
     w->setProperty("filename", kv.first);
@@ -297,7 +302,6 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
 
   if(!shader || !bind)
     m_Trace = NULL;
-  updateWindowTitle();
 
   if(shader)
   {
@@ -339,6 +343,8 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
     });
   }
 
+  updateWindowTitle();
+
   // we always want to highlight words/registers
   QObject::connect(m_DisassemblyView, &ScintillaEdit::buttonReleased, this,
                    &ShaderViewer::disassembly_buttonReleased);
@@ -348,15 +354,15 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
   {
     if(m_Stage == ShaderStage::Vertex)
     {
-      ANALYTIC_SET(UIFeatures.ShaderDebug.Vertex, true);
+      ANALYTIC_SET(ShaderDebug.Vertex, true);
     }
     else if(m_Stage == ShaderStage::Pixel)
     {
-      ANALYTIC_SET(UIFeatures.ShaderDebug.Pixel, true);
+      ANALYTIC_SET(ShaderDebug.Pixel, true);
     }
     else if(m_Stage == ShaderStage::Compute)
     {
-      ANALYTIC_SET(UIFeatures.ShaderDebug.Compute, true);
+      ANALYTIC_SET(ShaderDebug.Compute, true);
     }
 
     m_DisassemblyView->usePopUp(SC_POPUP_NEVER);
@@ -407,6 +413,9 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
     ToolWindowManager::raiseToolWindow(sel);
   }
 
+  // hide edit buttons
+  ui->editSep->hide();
+  ui->refresh->hide();
   ui->snippets->hide();
 
   if(trace)
@@ -505,6 +514,9 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
     ui->constants->hide();
 
     // hide debugging toolbar buttons
+    ui->debugSep->hide();
+    ui->runBack->hide();
+    ui->run->hide();
     ui->stepBack->hide();
     ui->stepNext->hide();
     ui->runToCursor->hide();
@@ -597,12 +609,17 @@ void ShaderViewer::updateWindowTitle()
 {
   if(m_ShaderDetails)
   {
+    QString shaderName = m_Ctx.GetResourceName(m_ShaderDetails->resourceId);
+
+    // if the shader is currently bound, look up the name through the pipeline state. This is purely
+    // for the benefit of D3D12 which doesn't have separate shader objects
+    if(m_Ctx.CurPipelineState().GetShader(m_Stage) == m_ShaderDetails->resourceId)
+      shaderName = m_Ctx.CurPipelineState().GetShaderName(m_Stage);
+
     if(m_Trace)
-      setWindowTitle(QFormatStr("Debugging %1 - %2")
-                         .arg(m_Ctx.CurPipelineState().GetShaderName(m_Stage))
-                         .arg(m_DebugContext));
+      setWindowTitle(QFormatStr("Debugging %1 - %2").arg(shaderName).arg(m_DebugContext));
     else
-      setWindowTitle(m_Ctx.CurPipelineState().GetShaderName(m_Stage));
+      setWindowTitle(shaderName);
   }
 }
 
@@ -2105,7 +2122,7 @@ void ShaderViewer::on_findReplace_clicked()
   m_FindReplace->takeFocus();
 }
 
-void ShaderViewer::on_save_clicked()
+void ShaderViewer::on_refresh_clicked()
 {
   if(m_Trace)
   {

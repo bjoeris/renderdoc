@@ -79,6 +79,7 @@ bool WrappedID3D12CommandQueue::Serialise_ExecuteCommandLists(SerialiserType &se
 {
   ID3D12CommandQueue *pQueue = this;
   SERIALISE_ELEMENT(pQueue);
+  SERIALISE_ELEMENT(NumCommandLists);
   SERIALISE_ELEMENT_ARRAY(ppCommandLists, NumCommandLists);
 
   {
@@ -175,8 +176,8 @@ bool WrappedID3D12CommandQueue::Serialise_ExecuteCommandLists(SerialiserType &se
 
         // add a fake marker
         DrawcallDescription draw;
-        draw.name = StringFormat::Fmt("=> %s[%u]: ID3D12CommandList(%s)", basename.c_str(), c,
-                                      ToStr(cmd).c_str());
+        draw.name =
+            StringFormat::Fmt("=> %s[%u]: Reset(%s)", basename.c_str(), c, ToStr(cmd).c_str());
         draw.flags = DrawFlags::PassBoundary | DrawFlags::BeginPass;
         m_Cmd.AddEvent();
 
@@ -330,7 +331,7 @@ void STDMETHODCALLTYPE WrappedID3D12CommandQueue::ExecuteCommandLists(
   if(!m_MarkedActive)
   {
     m_MarkedActive = true;
-    RenderDoc::Inst().AddActiveDriver(RDCDriver::Vulkan, false);
+    RenderDoc::Inst().AddActiveDriver(RDCDriver::D3D12, false);
   }
 
   if(IsActiveCapturing(m_State))
@@ -552,6 +553,8 @@ template <typename SerialiserType>
 bool WrappedID3D12CommandQueue::Serialise_Signal(SerialiserType &ser, ID3D12Fence *pFence,
                                                  UINT64 Value)
 {
+  ID3D12CommandQueue *pQueue = this;
+  SERIALISE_ELEMENT(pQueue);
   SERIALISE_ELEMENT(pFence);
   SERIALISE_ELEMENT(Value);
 
@@ -588,6 +591,8 @@ HRESULT STDMETHODCALLTYPE WrappedID3D12CommandQueue::Signal(ID3D12Fence *pFence,
 template <typename SerialiserType>
 bool WrappedID3D12CommandQueue::Serialise_Wait(SerialiserType &ser, ID3D12Fence *pFence, UINT64 Value)
 {
+  ID3D12CommandQueue *pQueue = this;
+  SERIALISE_ELEMENT(pQueue);
   SERIALISE_ELEMENT(pFence);
   SERIALISE_ELEMENT(Value);
 

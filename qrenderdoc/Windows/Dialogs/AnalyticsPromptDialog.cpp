@@ -23,6 +23,8 @@
  ******************************************************************************/
 
 #include "AnalyticsPromptDialog.h"
+#include <QDesktopServices>
+#include <QUrl>
 #include "Code/Interface/QRDInterface.h"
 #include "ui_AnalyticsPromptDialog.h"
 
@@ -30,6 +32,8 @@ AnalyticsPromptDialog::AnalyticsPromptDialog(PersistantConfig &cfg, QWidget *par
     : QDialog(parent), ui(new Ui::AnalyticsPromptDialog), m_Config(cfg)
 {
   ui->setupUi(this);
+
+  setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 }
 
 AnalyticsPromptDialog::~AnalyticsPromptDialog()
@@ -61,5 +65,17 @@ void AnalyticsPromptDialog::on_optOut_toggled(bool checked)
   {
     m_Config.Analytics_ManualCheck = false;
     m_Config.Analytics_TotalOptOut = true;
+  }
+}
+
+void AnalyticsPromptDialog::on_label_linkActivated(const QString &link)
+{
+  if(link == lit("#documentreport"))
+  {
+    Analytics::DocumentReport();
+  }
+  else
+  {
+    QDesktopServices::openUrl(QUrl(link));
   }
 }

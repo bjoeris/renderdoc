@@ -24,6 +24,7 @@
 
 #include "dxgi_common.h"
 #include "common/common.h"
+#include "common/threading.h"
 #include "serialise/serialiser.h"
 
 UINT GetFormatBPP(DXGI_FORMAT f)
@@ -1338,6 +1339,34 @@ D3D_PRIMITIVE_TOPOLOGY MakeD3DPrimitiveTopology(Topology Topo)
   return D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
 }
 
+void WarnUnknownGUID(const char *name, REFIID riid)
+{
+  static Threading::CriticalSection lock;
+  // we use a vector here, because the number of *distinct* unknown GUIDs encountered is likely to
+  // be low (e.g. less than 10).
+  static std::vector<std::pair<IID, int> > warned;
+
+  {
+    SCOPED_LOCK(lock);
+
+    for(std::pair<IID, int> &w : warned)
+    {
+      if(w.first == riid)
+      {
+        w.second++;
+        if(w.second > 5)
+          return;
+
+        RDCWARN("Querying %s for interface: %s", name, ToStr(riid).c_str());
+        return;
+      }
+    }
+
+    RDCWARN("Querying %s for interface: %s", name, ToStr(riid).c_str());
+    warned.push_back(std::make_pair(riid, 1));
+  }
+}
+
 Topology MakePrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY Topo)
 {
   switch(Topo)
@@ -1957,8 +1986,8 @@ void DoSerialise(SerialiserType &ser, RECT &el)
 {
   // avoid serialising 'long' directly as we pretend it's only used for HRESULT
   SERIALISE_MEMBER_TYPED(int32_t, left);
-  SERIALISE_MEMBER_TYPED(int32_t, right);
   SERIALISE_MEMBER_TYPED(int32_t, top);
+  SERIALISE_MEMBER_TYPED(int32_t, right);
   SERIALISE_MEMBER_TYPED(int32_t, bottom);
 }
 

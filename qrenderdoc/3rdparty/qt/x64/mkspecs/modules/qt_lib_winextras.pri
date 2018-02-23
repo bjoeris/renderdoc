@@ -1,4 +1,4 @@
-QT.winextras.VERSION = 5.9.0
+QT.winextras.VERSION = 5.9.4
 QT.winextras.name = QtWinExtras
 QT.winextras.module = Qt5WinExtras
 QT.winextras.libs = $$QT_MODULE_LIB_BASE

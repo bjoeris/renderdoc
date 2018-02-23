@@ -50,6 +50,8 @@ EnvironmentEditor::EnvironmentEditor(QWidget *parent)
 {
   ui->setupUi(this);
 
+  setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
+
   auto commitLambda = [this](QKeyEvent *event) {
     if(event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
       on_addUpdate_clicked();
@@ -122,12 +124,10 @@ void EnvironmentEditor::on_variables_keyPress(QKeyEvent *event)
 void EnvironmentEditor::on_variables_currentItemChanged(RDTreeWidgetItem *current,
                                                         RDTreeWidgetItem *previous)
 {
-  RDTreeWidgetItem *sel = ui->variables->selectedItem();
-
-  if(!sel)
+  if(!current)
     return;
 
-  EnvironmentModification mod = sel->tag().value<EnvironmentModification>();
+  EnvironmentModification mod = current->tag().value<EnvironmentModification>();
 
   if(!mod.value.empty())
   {

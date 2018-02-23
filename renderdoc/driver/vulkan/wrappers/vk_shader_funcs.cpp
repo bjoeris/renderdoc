@@ -99,7 +99,8 @@ bool WrappedVulkan::Serialise_vkCreatePipelineLayout(SerialiserType &ser, VkDevi
 {
   SERIALISE_ELEMENT(device);
   SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
-  SERIALISE_ELEMENT_LOCAL(PipelineLayout, GetResID(*pPipelineLayout));
+  SERIALISE_ELEMENT_OPT(pAllocator);
+  SERIALISE_ELEMENT_LOCAL(PipelineLayout, GetResID(*pPipelineLayout)).TypedAs("VkPipelineLayout");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -204,7 +205,8 @@ bool WrappedVulkan::Serialise_vkCreateShaderModule(SerialiserType &ser, VkDevice
 {
   SERIALISE_ELEMENT(device);
   SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
-  SERIALISE_ELEMENT_LOCAL(ShaderModule, GetResID(*pShaderModule));
+  SERIALISE_ELEMENT_OPT(pAllocator);
+  SERIALISE_ELEMENT_LOCAL(ShaderModule, GetResID(*pShaderModule)).TypedAs("VkShaderModule");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -301,7 +303,8 @@ bool WrappedVulkan::Serialise_vkCreatePipelineCache(SerialiserType &ser, VkDevic
 {
   SERIALISE_ELEMENT(device);
   SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
-  SERIALISE_ELEMENT_LOCAL(PipelineCache, GetResID(*pPipelineCache));
+  SERIALISE_ELEMENT_OPT(pAllocator);
+  SERIALISE_ELEMENT_LOCAL(PipelineCache, GetResID(*pPipelineCache)).TypedAs("VkPipelineCache");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -388,8 +391,10 @@ bool WrappedVulkan::Serialise_vkCreateGraphicsPipelines(
 {
   SERIALISE_ELEMENT(device);
   SERIALISE_ELEMENT(pipelineCache);
+  SERIALISE_ELEMENT(count);
   SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfos);
-  SERIALISE_ELEMENT_LOCAL(Pipeline, GetResID(*pPipelines));
+  SERIALISE_ELEMENT_OPT(pAllocator);
+  SERIALISE_ELEMENT_LOCAL(Pipeline, GetResID(*pPipelines)).TypedAs("VkPipeline");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -568,8 +573,10 @@ bool WrappedVulkan::Serialise_vkCreateComputePipelines(SerialiserType &ser, VkDe
 {
   SERIALISE_ELEMENT(device);
   SERIALISE_ELEMENT(pipelineCache);
+  SERIALISE_ELEMENT(count);
   SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfos);
-  SERIALISE_ELEMENT_LOCAL(Pipeline, GetResID(*pPipelines));
+  SERIALISE_ELEMENT_OPT(pAllocator);
+  SERIALISE_ELEMENT_LOCAL(Pipeline, GetResID(*pPipelines)).TypedAs("VkPipeline");
 
   SERIALISE_CHECK_READ_ERRORS();
 

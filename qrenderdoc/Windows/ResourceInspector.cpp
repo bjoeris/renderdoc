@@ -113,8 +113,6 @@ ResourceInspector::ResourceInspector(ICaptureContext &ctx, QWidget *parent)
   m_FilterModel->setSourceModel(m_ResourceModel);
   m_FilterModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
   m_FilterModel->setFilterRole(FilterRole);
-  m_FilterModel->setSortCaseSensitivity(Qt::CaseInsensitive);
-  m_FilterModel->setSortRole(Qt::DisplayRole);
 
   ui->resourceList->setModel(m_FilterModel);
 
@@ -166,7 +164,6 @@ void ResourceInspector::Inspect(ResourceId id)
   m_Entries.clear();
 
   m_ResourceModel->reset();
-  m_FilterModel->sort(0);
 
   if(m_Ctx.HasResourceCustomName(id))
     ui->resetName->show();
@@ -205,6 +202,7 @@ void ResourceInspector::Inspect(ResourceId id)
             RDTreeWidgetItem *item =
                 new RDTreeWidgetItem({text, ToQStr(use, m_Ctx.APIProps().pipelineType)});
             item->setData(0, ResourceIdRole, QVariant(endEID));
+            item->setData(1, ResourceIdRole, QVariant(endEID));
 
             ui->resourceUsage->addTopLevelItem(item);
           });
@@ -282,7 +280,6 @@ void ResourceInspector::OnCaptureLoaded()
   ui->renameResource->setEnabled(true);
 
   m_ResourceModel->reset();
-  m_FilterModel->sort(0);
 }
 
 void ResourceInspector::OnCaptureClosed()
@@ -308,7 +305,6 @@ void ResourceInspector::OnEventChanged(uint32_t eventId)
   Inspect(m_Resource);
 
   m_ResourceModel->reset();
-  m_FilterModel->sort(0);
 }
 
 void ResourceInspector::on_renameResource_clicked()
@@ -376,6 +372,8 @@ void ResourceInspector::resource_doubleClicked(const QModelIndex &index)
 {
   ResourceId id = index.model()->data(index, ResourceIdRole).value<ResourceId>();
   Inspect(id);
+
+  HighlightUsage();
 }
 
 void ResourceInspector::on_viewContents_clicked()
@@ -435,4 +433,20 @@ void ResourceInspector::on_resourceUsage_doubleClicked(const QModelIndex &index)
 {
   uint32_t eid = index.model()->data(index, ResourceIdRole).value<uint32_t>();
   m_Ctx.SetEventID({}, eid, eid);
+}
+
+void ResourceInspector::enterEvent(QEvent *event)
+{
+  HighlightUsage();
+}
+
+void ResourceInspector::showEvent(QShowEvent *event)
+{
+  HighlightUsage();
+}
+
+void ResourceInspector::HighlightUsage()
+{
+  if(m_Resource != ResourceId() && m_Ctx.HasTimelineBar())
+    m_Ctx.GetTimelineBar()->HighlightResourceUsage(m_Resource);
 }

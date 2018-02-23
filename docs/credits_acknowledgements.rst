@@ -110,7 +110,19 @@ The following libraries and components are incorporated into RenderDoc, listed h
 
 * `AOSP <https://source.android.com/>`_ - Copyright (c) 2006-2016, The Android Open Source Project, distributed under the Apache 2.0 License.
 
-  Used to simplify Android workflows by distributing some tools from the android SDK.
+  Used to simplify Android workflows by distributing some tools from the android SDK, as well as patching android manifest files to enable debugging.
+
+* `interceptor-lib <https://github.com/google/gapid>`_ - Copyright (c) 2017, Google Inc., distributed under the Apache 2.0 License.
+
+  Taken from the GAPID project, used to inject hooks into android library functions if LLVM is available at build-time.
+
+* `LLVM <http://llvm.org/>`_ - Copyright (c) 2003-2017 University of Illinois at Urbana-Champaign, distributed under the University of Illinois/NCSA Open Source License.
+
+  Used to support interceptor-lib to inject hooks into android library functions.
+
+* `OpenSSL <https://www.openssl.org/>`_ - Copyright (c) 1998-2018 The OpenSSL Project. Copyright (C) 1995-1998 Eric Young. Distributed under the double license of the OpenSSL and SSLeay licenses.
+
+  Used to connect securely to RenderDoc's servers for update checks and bug reports.
 
 Thanks
 ------

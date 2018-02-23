@@ -214,11 +214,6 @@ void Process::ApplyEnvironmentModification()
   modifications.clear();
 }
 
-const char *Process::GetEnvVariable(const char *name)
-{
-  return getenv(name);
-}
-
 static void CleanupStringArray(char **arr, char **invalid)
 {
   if(arr != invalid)
@@ -409,15 +404,16 @@ static pid_t RunProcess(const char *app, const char *workingDir, const char *cmd
   return childPid;
 }
 
-uint32_t Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
-                                    const char *logfile, const CaptureOptions &opts, bool waitForExit)
+ExecuteResult Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
+                                         const char *logfile, const CaptureOptions &opts,
+                                         bool waitForExit)
 {
   RDCUNIMPLEMENTED("Injecting into already running processes on linux");
-  return 0;
+  return {ReplayStatus::InjectionFailed, 0};
 }
 
 uint32_t Process::LaunchProcess(const char *app, const char *workingDir, const char *cmdLine,
-                                ProcessResult *result)
+                                bool internal, ProcessResult *result)
 {
   if(app == NULL || app[0] == 0)
   {
@@ -469,24 +465,24 @@ uint32_t Process::LaunchProcess(const char *app, const char *workingDir, const c
 }
 
 uint32_t Process::LaunchScript(const char *script, const char *workingDir, const char *argList,
-                               ProcessResult *result)
+                               bool internal, ProcessResult *result)
 {
   // Change parameters to invoke command interpreter
   string args = "-lc \"" + string(script) + " " + string(argList) + "\"";
 
-  return LaunchProcess("bash", workingDir, args.c_str(), result);
+  return LaunchProcess("bash", workingDir, args.c_str(), internal, result);
 }
 
-uint32_t Process::LaunchAndInjectIntoProcess(const char *app, const char *workingDir,
-                                             const char *cmdLine,
-                                             const rdcarray<EnvironmentModification> &envList,
-                                             const char *logfile, const CaptureOptions &opts,
-                                             bool waitForExit)
+ExecuteResult Process::LaunchAndInjectIntoProcess(const char *app, const char *workingDir,
+                                                  const char *cmdLine,
+                                                  const rdcarray<EnvironmentModification> &envList,
+                                                  const char *logfile, const CaptureOptions &opts,
+                                                  bool waitForExit)
 {
   if(app == NULL || app[0] == 0)
   {
     RDCERR("Invalid empty 'app'");
-    return 0;
+    return {ReplayStatus::InternalError, 0};
   }
 
   // turn environment string to a UTF-8 map
@@ -516,16 +512,7 @@ uint32_t Process::LaunchAndInjectIntoProcess(const char *app, const char *workin
 #endif
   }
 
-  string optstr;
-  {
-    optstr.reserve(sizeof(CaptureOptions) * 2 + 1);
-    byte *b = (byte *)&opts;
-    for(size_t i = 0; i < sizeof(CaptureOptions); i++)
-    {
-      optstr.push_back(char('a' + ((b[i] >> 4) & 0xf)));
-      optstr.push_back(char('a' + ((b[i]) & 0xf)));
-    }
-  }
+  string optstr = opts.EncodeAsString();
 
   modifications.push_back(EnvironmentModification(EnvMod::Append, EnvSep::Platform,
                                                   "LD_LIBRARY_PATH", binpath.c_str()));
@@ -610,7 +597,7 @@ uint32_t Process::LaunchAndInjectIntoProcess(const char *app, const char *workin
   }
 
   CleanupStringArray(envp, NULL);
-  return ret;
+  return {ret == 0 ? ReplayStatus::InjectionFailed : ReplayStatus::Succeeded, (uint32_t)ret};
 }
 
 bool Process::StartGlobalHook(const char *pathmatch, const char *logfile, const CaptureOptions &opts)

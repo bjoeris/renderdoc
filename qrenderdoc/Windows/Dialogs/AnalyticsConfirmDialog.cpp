@@ -23,7 +23,11 @@
  ******************************************************************************/
 
 #include "AnalyticsConfirmDialog.h"
+#include <QDesktopServices>
 #include <QFontDatabase>
+#include <QPushButton>
+#include <QUrl>
+#include "Code/Interface/QRDInterface.h"
 #include "ui_AnalyticsConfirmDialog.h"
 
 AnalyticsConfirmDialog::AnalyticsConfirmDialog(QString report, QWidget *parent)
@@ -31,11 +35,28 @@ AnalyticsConfirmDialog::AnalyticsConfirmDialog(QString report, QWidget *parent)
 {
   ui->setupUi(this);
 
+  setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
+
   ui->analyticsReport->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
   ui->analyticsReport->setText(report);
+
+  QObject::connect(ui->buttonBox->button(QDialogButtonBox::Discard), &QPushButton::clicked, this,
+                   &AnalyticsConfirmDialog::reject);
 }
 
 AnalyticsConfirmDialog::~AnalyticsConfirmDialog()
 {
   delete ui;
+}
+
+void AnalyticsConfirmDialog::on_label_linkActivated(const QString &link)
+{
+  if(link == lit("#documentreport"))
+  {
+    Analytics::DocumentReport();
+  }
+  else
+  {
+    QDesktopServices::openUrl(QUrl(link));
+  }
 }

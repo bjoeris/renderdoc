@@ -50,10 +50,10 @@
 // Once the report is sent, the database is reset and begins the next period.
 
 // this is the root switch that can turn off *all* analytics code globally
-#define RENDERDOC_ANALYTICS_ENABLE 0
+#define RENDERDOC_ANALYTICS_ENABLE 1
 
 // we don't want any of this to be accessible to script, only code.
-#if !defined(SWIG)
+#if !defined(SWIG) && !defined(SWIG_GENERATED)
 
 // We also compile out all of the code if analytics are disabled so there's not even a code
 // reference to where the data is collected.
@@ -81,7 +81,11 @@ struct AnalyticsAverage
   QVariant toVariant(bool reporting) const
   {
     if(reporting)
+    {
+      if(Count == 0)
+        return 0.0;
       return Total / double(Count);
+    }
 
     QVariantMap ret;
     ret[lit("Total")] = Total;
@@ -102,17 +106,24 @@ struct ICaptureContext;
 #endif
 
 // we declare the analystics data struct here, this contains the information we're storing
-// If you add anything to this struct, make sure to update AnalyticsSerialise.
+// If you add anything to this struct, make sure to update AnalyticsSerialise, and
+// AnalyticsDocumentation.
 struct Analytics
 {
   // utility function - loads the analytics from disk and initialise the Analytics::db member.
   static void Load();
+  // utility function - explicitly disables the analytics and sets it into a black-hole mode that
+  // does nothing.
+  static void Disable();
   // utility function - performs any UI-level prompting, such as asking the user if they want to
   // opt-out, or manually vetting a report for uploading.
   static void Prompt(ICaptureContext &ctx, PersistantConfig &config);
   // the singleton instance of analytics. May be NULL if analytics aren't initialised or have been
   // opted-out from.
   static Analytics *db;
+
+  // utility function - displays an annotated report documenting what each member means
+  static void DocumentReport();
 
   // Function to save the analytics to disk, if it's been initialised. Every set macro below will
   // call this after the data is set to flush it to disk.
@@ -142,9 +153,6 @@ struct Analytics
     // A human readable name of the operating system.
     QString OSVersion;
 
-    // A list of which GPU vendors have been used for replay
-    QStringList GPUVendors;
-
     // Either 32 or 64 indicating which bit-depth the UI is running as
     int Bitness = 0;
 
@@ -154,16 +162,22 @@ struct Analytics
     // whether an official build has been run - whether distributed from the RenderDoc website or
     // through a linux distribution
     bool OfficialBuildRun = false;
-  } Environment;
 
-  // Counts which unique days in the last month the program was run
-  bool DaysUsed[32] = {0};
+    // Counts which unique days in the last month the program was run
+    bool DaysUsed[32] = {0};
+  } Metadata;
 
-  // how long do captures take to load, on average
-  AnalyticsAverage LoadTime;
+  struct
+  {
+    // how long do captures take to load, on average
+    AnalyticsAverage LoadTime;
+  } Performance;
 
   // which APIs have been used
-  QStringList APIsUsed;
+  QStringList APIs;
+
+  // A list of which GPU vendors have been used for replay
+  QStringList GPUVendors;
 
   // which UI features have been used, as a simple yes/no
   struct
@@ -179,48 +193,44 @@ struct Analytics
     bool CustomTextureVisualise = false;
     bool ImageViewer = false;
     bool CaptureComments = false;
-
-    struct
-    {
-      bool EventBrowser = false;
-      bool PipelineState = false;
-      bool MeshOutput = false;
-      bool RawBuffer = false;
-      bool TextureSave = false;
-      bool ShaderSave = false;
-    } Export;
-
-    struct
-    {
-      bool Vertex = false;
-      bool Pixel = false;
-      bool Compute = false;
-    } ShaderDebug;
-
-    struct
-    {
-      bool Drawcall = false;
-      bool Wireframe = false;
-      bool Depth = false;
-      bool Stencil = false;
-      bool BackfaceCull = false;
-      bool ViewportScissor = false;
-      bool NaN = false;
-      bool Clipping = false;
-      bool ClearBeforePass = false;
-      bool ClearBeforeDraw = false;
-      bool QuadOverdrawPass = false;
-      bool QuadOverdrawDraw = false;
-      bool TriangleSizePass = false;
-      bool TriangleSizeDraw = false;
-    } TextureDebugOverlays;
-
-    struct
-    {
-      bool Android = false;
-      bool NonAndroid = false;
-    } RemoteReplay;
+    bool AndroidRemoteReplay = false;
+    bool NonAndroidRemoteReplay = false;
   } UIFeatures;
+
+  struct
+  {
+    bool EventBrowser = false;
+    bool PipelineState = false;
+    bool MeshOutput = false;
+    bool RawBuffer = false;
+    bool Texture = false;
+    bool Shader = false;
+  } Export;
+
+  struct
+  {
+    bool Vertex = false;
+    bool Pixel = false;
+    bool Compute = false;
+  } ShaderDebug;
+
+  struct
+  {
+    bool Drawcall = false;
+    bool Wireframe = false;
+    bool Depth = false;
+    bool Stencil = false;
+    bool BackfaceCull = false;
+    bool ViewportScissor = false;
+    bool NaN = false;
+    bool Clipping = false;
+    bool ClearBeforePass = false;
+    bool ClearBeforeDraw = false;
+    bool QuadOverdrawPass = false;
+    bool QuadOverdrawDraw = false;
+    bool TriangleSizePass = false;
+    bool TriangleSizeDraw = false;
+  } TextureOverlays;
 
   // If some particular API specific features are seen in a capture, as a simple yes/no. See
   // APIProperties
@@ -300,8 +310,10 @@ struct ICaptureContext;
 
 namespace Analytics
 {
+void Disable();
 void Load();
 void Prompt(ICaptureContext &ctx, PersistantConfig &config);
+void DocumentReport();
 };
 
 #endif

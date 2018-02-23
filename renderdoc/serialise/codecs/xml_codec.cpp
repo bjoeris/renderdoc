@@ -30,8 +30,8 @@
 #include "3rdparty/pugixml/pugixml.hpp"
 
 static const char *typeNames[] = {
-    "chunk", "struct", "array", "null",  "buffer", "string",
-    "enum",  "uint",   "int",   "float", "bool",   "char",
+    "chunk", "struct", "array", "null", "buffer", "string",     "enum",
+    "uint",  "int",    "float", "bool", "char",   "ResourceId",
 };
 
 template <typename inttype>
@@ -190,7 +190,8 @@ static void Obj2XML(pugi::xml_node &parent, SDObject &child)
     obj.append_attribute("typename") = child.type.name.c_str();
 
   if(child.type.basetype == SDBasic::UnsignedInteger ||
-     child.type.basetype == SDBasic::SignedInteger || child.type.basetype == SDBasic::Float)
+     child.type.basetype == SDBasic::SignedInteger || child.type.basetype == SDBasic::Float ||
+     child.type.basetype == SDBasic::ResourceId)
   {
     obj.append_attribute("width") = child.type.byteSize;
   }
@@ -240,6 +241,7 @@ static void Obj2XML(pugi::xml_node &parent, SDObject &child)
 
     switch(child.type.basetype)
     {
+      case SDBasic::ResourceId:
       case SDBasic::Enum:
       case SDBasic::UnsignedInteger: obj.text() = child.data.basic.u; break;
       case SDBasic::SignedInteger: obj.text() = child.data.basic.i; break;
@@ -286,6 +288,9 @@ static ReplayStatus Structured2XML(const char *filename, const RDCFile &file, ui
       xThumbnail.text() = "thumb.jpg";
     }
   }
+
+  if(progress)
+    progress(StructuredProgress(0.1f));
 
   // write all other sections
   for(int i = 0; i < file.NumSections(); i++)
@@ -338,6 +343,9 @@ static ReplayStatus Structured2XML(const char *filename, const RDCFile &file, ui
     delete reader;
   }
 
+  if(progress)
+    progress(StructuredProgress(0.2f));
+
   pugi::xml_node xChunks = xRoot.append_child("chunks");
 
   xChunks.append_attribute("version") = version;
@@ -354,7 +362,7 @@ static ReplayStatus Structured2XML(const char *filename, const RDCFile &file, ui
       xChunk.append_attribute("threadID") = chunk->metadata.threadID;
     if(chunk->metadata.timestampMicro)
       xChunk.append_attribute("timestamp") = chunk->metadata.timestampMicro;
-    if(chunk->metadata.durationMicro)
+    if(chunk->metadata.durationMicro >= 0)
       xChunk.append_attribute("duration") = chunk->metadata.durationMicro;
     if(!chunk->metadata.callstack.empty())
     {
@@ -380,6 +388,9 @@ static ReplayStatus Structured2XML(const char *filename, const RDCFile &file, ui
       for(size_t o = 0; o < chunk->data.children.size(); o++)
         Obj2XML(xChunk, *chunk->data.children[o]);
     }
+
+    if(progress)
+      progress(StructuredProgress(0.2f + 0.8f * (float(c) / float(chunks.size()))));
   }
 
   xml_file_writer writer(filename);
@@ -404,8 +415,8 @@ static SDObject *XML2Obj(pugi::xml_node &obj)
     }
   }
 
-  if(ret->type.basetype == SDBasic::UnsignedInteger ||
-     ret->type.basetype == SDBasic::SignedInteger || ret->type.basetype == SDBasic::Float)
+  if(ret->type.basetype == SDBasic::UnsignedInteger || ret->type.basetype == SDBasic::SignedInteger ||
+     ret->type.basetype == SDBasic::Float || ret->type.basetype == SDBasic::ResourceId)
   {
     ret->type.byteSize = obj.attribute("width").as_uint();
   }
@@ -460,6 +471,7 @@ static SDObject *XML2Obj(pugi::xml_node &obj)
 
     switch(ret->type.basetype)
     {
+      case SDBasic::ResourceId:
       case SDBasic::Enum:
       case SDBasic::UnsignedInteger: ret->data.basic.u = obj.text().as_ullong(); break;
       case SDBasic::SignedInteger: ret->data.basic.i = obj.text().as_llong(); break;
@@ -693,7 +705,8 @@ static ReplayStatus Buffers2ZIP(const std::string &filename, const RDCFile &file
                                 const StructuredBufferList &buffers,
                                 RENDERDOC_ProgressCallback progress)
 {
-  std::string zipFile = filename + ".zip";
+  std::string zipFile = filename;
+  zipFile.erase(zipFile.size() - 4);    // remove the .xml, leave only the .zip
 
   mz_zip_archive zip;
   memset(&zip, 0, sizeof(zip));
@@ -708,8 +721,7 @@ static ReplayStatus Buffers2ZIP(const std::string &filename, const RDCFile &file
 
   for(size_t i = 0; i < buffers.size(); i++)
   {
-    mz_zip_writer_add_mem(&zip, GetBufferName(i).c_str(), buffers[i]->data(), buffers[i]->size(),
-                          MZ_BEST_COMPRESSION);
+    mz_zip_writer_add_mem(&zip, GetBufferName(i).c_str(), buffers[i]->data(), buffers[i]->size(), 2);
 
     if(progress)
       progress(BufferProgress(float(i) / float(buffers.size())));
@@ -725,13 +737,17 @@ static ReplayStatus Buffers2ZIP(const std::string &filename, const RDCFile &file
   return ReplayStatus::Succeeded;
 }
 
-static void ZIP2Buffers(const std::string &filename, StructuredBufferList &buffers,
+static bool ZIP2Buffers(const std::string &filename, StructuredBufferList &buffers,
                         RENDERDOC_ProgressCallback progress)
 {
-  std::string zipFile = filename + ".zip";
+  std::string zipFile = filename;
+  zipFile.erase(zipFile.size() - 4);    // remove the .xml, leave only the .zip
 
   if(!FileIO::exists(zipFile.c_str()))
-    return;
+  {
+    RDCERR("Expected to file zip for %s at %s", filename.c_str(), zipFile.c_str());
+    return false;
+  }
 
   mz_zip_archive zip;
   memset(&zip, 0, sizeof(zip));
@@ -776,13 +792,22 @@ static void ZIP2Buffers(const std::string &filename, StructuredBufferList &buffe
   }
 
   mz_zip_reader_end(&zip);
+
+  return true;
 }
 
 ReplayStatus importXMLZ(const char *filename, StreamReader &reader, RDCFile *rdc,
                         SDFile &structData, RENDERDOC_ProgressCallback progress)
 {
   if(filename)
-    ZIP2Buffers(filename, structData.buffers, progress);
+  {
+    bool success = ZIP2Buffers(filename, structData.buffers, progress);
+    if(!success)
+    {
+      RDCERR("Couldn't load zip to go with %s", filename);
+      return ReplayStatus::FileCorrupted;
+    }
+  }
 
   uint64_t len = reader.GetSize();
   char *buf = new char[(size_t)len + 1];
@@ -804,9 +829,26 @@ ReplayStatus exportXMLZ(const char *filename, const RDCFile &rdc, const SDFile &
   return Structured2XML(filename, rdc, structData.version, structData.chunks, progress);
 }
 
-static ConversionRegistration XMLConversionRegistration("xml", R"(XML+ZIP format.
+ReplayStatus exportXMLOnly(const char *filename, const RDCFile &rdc, const SDFile &structData,
+                           RENDERDOC_ProgressCallback progress)
+{
+  return Structured2XML(filename, rdc, structData.version, structData.chunks, progress);
+}
 
-Stores the structured data in an xml tree, with large buffer data stored in indexed blobs in
-similarly named zip file.
-)",
-                                                        &importXMLZ, &exportXMLZ);
+static ConversionRegistration XMLZIPConversionRegistration(
+    &importXMLZ, &exportXMLZ,
+    {
+        "zip.xml", "XML+ZIP capture",
+        R"(Stores the structured data in an xml tree, with large buffer data stored in indexed blobs in
+similarly named zip file.)",
+        true,
+    });
+
+static ConversionRegistration XMLOnlyConversionRegistration(
+    &exportXMLOnly,
+    {
+        "xml", "XML capture",
+        R"(Stores the structured data in an xml tree, with large buffer data omitted - that makes it
+easier to work with but it cannot then be imported.)",
+        false,
+    });

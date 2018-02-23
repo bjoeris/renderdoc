@@ -66,11 +66,15 @@ static const qreal ProgressRadius = 4.0;
 static const int MenuBarMargin = 6;
 static const int MenuSubmenuWidth = 8;
 static const int MenuBarIconSize = 16;
+static const int MenuBarMinimumWidth = 80;
 
 static const int TabWidgetBorder = 1;
 static const int TabMargin = 4;
-static const int TabMinWidth = 120;
+static const int TabMinWidth = 75;
 static const int TabMaxWidth = 250;
+
+static const int ItemHeaderMargin = 4;
+static const int ItemHeaderIconSize = 16;
 };
 
 namespace Animation
@@ -148,7 +152,7 @@ RDStyle::~RDStyle()
 {
 }
 
-void RDStyle::polish(QPalette &pal)
+void RDStyle::polishPalette(QPalette &pal) const
 {
   int h = 0, s = 0, v = 0;
 
@@ -202,7 +206,7 @@ void RDStyle::polish(QPalette &pal)
   pal.setColor(QPalette::HighlightedText, Qt::white);
 
   // links are based on the highlight colour
-  QColor link = highlight.lighter(105);
+  QColor link = m_Scheme == Light ? highlight.darker(125) : highlight.lighter(105);
   pal.setColor(QPalette::Link, link);
 
   // visited links are desaturated
@@ -268,6 +272,15 @@ void RDStyle::unpolish(QWidget *widget)
   QTabWidget *tabwidget = qobject_cast<QTabWidget *>(widget);
   if(tabwidget && tabwidget->inherits("ToolWindowManagerArea"))
     tabwidget->removeEventFilter(this);
+}
+
+QPalette RDStyle::standardPalette() const
+{
+  QPalette ret = RDTweakedNativeStyle::standardPalette();
+
+  polishPalette(ret);
+
+  return ret;
 }
 
 bool RDStyle::eventFilter(QObject *watched, QEvent *event)
@@ -497,7 +510,8 @@ QRect RDStyle::subElementRect(SubElement element, const QStyleOption *opt, const
   {
     return opt->rect;
   }
-  else if(element == QStyle::SE_RadioButtonIndicator || element == QStyle::SE_CheckBoxIndicator)
+  else if(element == QStyle::SE_RadioButtonIndicator || element == QStyle::SE_CheckBoxIndicator ||
+          element == QStyle::SE_ItemViewItemCheckIndicator)
   {
     QRect ret = opt->rect;
 
@@ -505,7 +519,7 @@ QRect RDStyle::subElementRect(SubElement element, const QStyleOption *opt, const
 
     int extra = ret.height() - Constants::CheckHeight;
 
-    ret.setTop((ret.height() - Constants::CheckHeight) / 2);
+    ret.setTop(ret.top() + extra / 2);
     ret.setHeight(Constants::CheckHeight);
 
     return ret;
@@ -569,6 +583,10 @@ QRect RDStyle::subElementRect(SubElement element, const QStyleOption *opt, const
 
     return ret;
   }
+  else if(element == QStyle::SE_HeaderLabel)
+  {
+    return opt->rect;
+  }
 
   return RDTweakedNativeStyle::subElementRect(element, opt, widget);
 }
@@ -599,7 +617,8 @@ QSize RDStyle::sizeFromContents(ContentsType type, const QStyleOption *opt, cons
   {
     // have a maximum size for tabs
     return size.boundedTo(QSize(Constants::TabMaxWidth, INT_MAX))
-        .expandedTo(QSize(Constants::TabMinWidth, 0));
+               .expandedTo(QSize(Constants::TabMinWidth, 0)) +
+           QSize(Constants::TabMargin * 2, 0);
   }
   else if(type == CT_CheckBox || type == CT_RadioButton)
   {
@@ -667,6 +686,8 @@ QSize RDStyle::sizeFromContents(ContentsType type, const QStyleOption *opt, cons
     if(menuitem->maxIconWidth)
       ret.setWidth(ret.width() + Constants::MenuBarMargin + menuitem->maxIconWidth);
 
+    ret = ret.expandedTo(QSize(Constants::MenuBarMinimumWidth, 0));
+
     return ret;
   }
   else if(type == CT_MenuBarItem)
@@ -688,6 +709,27 @@ QSize RDStyle::sizeFromContents(ContentsType type, const QStyleOption *opt, cons
   else if(type == CT_MenuBar || type == CT_Menu)
   {
     return size;
+  }
+  else if(type == CT_HeaderSection)
+  {
+    const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(opt);
+    int iconSize = pixelMetric(QStyle::PM_SmallIconSize, opt, widget);
+    QSize sz = header->fontMetrics.size(Qt::TextShowMnemonic, header->text);
+
+    if(!header->icon.isNull())
+    {
+      sz.setWidth(sz.width() + Constants::ItemHeaderMargin + iconSize);
+      sz = sz.expandedTo(QSize(1, iconSize));
+    }
+
+    if(header->sortIndicator != QStyleOptionHeader::None)
+    {
+      sz += QSize(Constants::ItemHeaderMargin + Constants::SpinButtonDim, 0);
+    }
+
+    sz += QSize(Constants::ItemHeaderMargin * 2, Constants::ItemHeaderMargin);
+
+    return sz;
   }
 
   return RDTweakedNativeStyle::sizeFromContents(type, opt, size, widget);
@@ -736,6 +778,12 @@ int RDStyle::pixelMetric(PixelMetric metric, const QStyleOption *opt, const QWid
 
   if(metric == PM_TabBarTabHSpace)
     return Constants::TabMargin;
+
+  if(metric == PM_IndicatorWidth)
+    return Constants::CheckWidth + Constants::CheckMargin;
+
+  if(metric == PM_IndicatorHeight)
+    return Constants::CheckHeight + Constants::CheckMargin;
 
   return RDTweakedNativeStyle::pixelMetric(metric, opt, widget);
 }
@@ -1325,6 +1373,24 @@ void RDStyle::drawPrimitive(PrimitiveElement element, const QStyleOption *opt, Q
 
     return;
   }
+  else if(element == PE_PanelItemViewItem)
+  {
+    const QStyleOptionViewItem *viewitem = qstyleoption_cast<const QStyleOptionViewItem *>(opt);
+
+    QPalette::ColorGroup group = QPalette::Normal;
+
+    if((widget && !widget->isEnabled()) || !(viewitem->state & QStyle::State_Enabled))
+      group = QPalette::Disabled;
+    else if(!(viewitem->state & QStyle::State_Active))
+      group = QPalette::Inactive;
+
+    if(viewitem->state & QStyle::State_Selected)
+      p->fillRect(viewitem->rect, viewitem->palette.brush(group, QPalette::Highlight));
+    else if(viewitem->backgroundBrush.style() != Qt::NoBrush)
+      p->fillRect(viewitem->rect, viewitem->backgroundBrush);
+
+    return;
+  }
 
   RDTweakedNativeStyle::drawPrimitive(element, opt, p, widget);
 }
@@ -1488,10 +1554,14 @@ void RDStyle::drawControl(ControlElement control, const QStyleOption *opt, QPain
   {
     const QStyleOptionFrame *frame = qstyleoption_cast<const QStyleOptionFrame *>(opt);
 
-    p->save();
-    p->setPen(QPen(outlineBrush(opt->palette), 1.0));
+    qreal lineWidth = qMax(1, frame->lineWidth);
 
-    QRectF rect = QRectF(opt->rect).adjusted(0.5, 0.5, -0.5, -0.5);
+    p->save();
+    p->setPen(QPen(opt->palette.brush(widget->foregroundRole()), lineWidth));
+
+    qreal adjust = 0.5 * lineWidth;
+
+    QRectF rect = QRectF(opt->rect).adjusted(adjust, adjust, -adjust, -adjust);
 
     QPainterPath path;
     path.addRoundedRect(rect, 1.0, 1.0);
@@ -1614,6 +1684,8 @@ void RDStyle::drawControl(ControlElement control, const QStyleOption *opt, QPain
 
     p->setPen(QPen(outlineBrush(opt->palette), 1.0));
 
+    QPalette::ColorRole textrole = QPalette::WindowText;
+
     QStyle::State mask = State_Enabled | State_Selected;
     if((opt->state & mask) == mask)
     {
@@ -1624,7 +1696,9 @@ void RDStyle::drawControl(ControlElement control, const QStyleOption *opt, QPain
 
       QPainterPath path;
       path.addRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius);
-      p->fillPath(path, opt->palette.brush(QPalette::Midlight));
+      p->fillPath(path, opt->palette.brush(QPalette::Highlight));
+
+      textrole = QPalette::HighlightedText;
 
       if(opt->state & State_Sunken)
         p->drawPath(path);
@@ -1643,7 +1717,7 @@ void RDStyle::drawControl(ControlElement control, const QStyleOption *opt, QPain
       {
         QRectF iconRect = rect;
         iconRect.setWidth(iconSize);
-        drawItemPixmap(p, iconRect.toRect(), Qt::AlignCenter | Qt::AlignTop | Qt::TextHideMnemonic,
+        drawItemPixmap(p, iconRect.toRect(), Qt::AlignCenter | Qt::AlignTop | Qt::TextShowMnemonic,
                        pix);
         rect.adjust(iconSize + Constants::MenuBarMargin, 0, 0, 0);
       }
@@ -1652,9 +1726,8 @@ void RDStyle::drawControl(ControlElement control, const QStyleOption *opt, QPain
     if(menuitem->menuItemType == QStyleOptionMenuItem::Normal)
     {
       p->setFont(menuitem->font);
-      drawItemText(p, rect.toRect(), Qt::AlignCenter | Qt::AlignTop | Qt::TextHideMnemonic,
-                   menuitem->palette, menuitem->state & State_Enabled, menuitem->text,
-                   QPalette::WindowText);
+      drawItemText(p, rect.toRect(), Qt::AlignCenter | Qt::AlignTop | Qt::TextShowMnemonic,
+                   menuitem->palette, menuitem->state & State_Enabled, menuitem->text, textrole);
     }
 
     p->restore();
@@ -1674,6 +1747,8 @@ void RDStyle::drawControl(ControlElement control, const QStyleOption *opt, QPain
 
     p->setPen(QPen(outlineBrush(opt->palette), 1.0));
 
+    QPalette::ColorRole textrole = QPalette::WindowText;
+
     QStyle::State mask = State_Enabled | State_Selected;
     if((opt->state & mask) == mask)
     {
@@ -1684,7 +1759,9 @@ void RDStyle::drawControl(ControlElement control, const QStyleOption *opt, QPain
 
       QPainterPath path;
       path.addRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius);
-      p->fillPath(path, opt->palette.brush(QPalette::Midlight));
+      p->fillPath(path, opt->palette.brush(QPalette::Highlight));
+
+      textrole = QPalette::HighlightedText;
 
       if(opt->state & State_Sunken)
         p->drawPath(path);
@@ -1726,20 +1803,18 @@ void RDStyle::drawControl(ControlElement control, const QStyleOption *opt, QPain
 
       if(tabIndex < 0)
       {
-        drawItemText(p, rect.toRect(), Qt::AlignLeft | Qt::AlignVCenter | Qt::TextHideMnemonic,
-                     menuitem->palette, menuitem->state & State_Enabled, menuitem->text,
-                     QPalette::WindowText);
+        drawItemText(p, rect.toRect(), Qt::AlignLeft | Qt::AlignVCenter | Qt::TextShowMnemonic,
+                     menuitem->palette, menuitem->state & State_Enabled, menuitem->text, textrole);
       }
       else
       {
         QString title = text.left(tabIndex);
         QString shortcut = text.mid(tabIndex + 1, -1);
 
-        drawItemText(p, rect.toRect(), Qt::AlignLeft | Qt::AlignVCenter | Qt::TextHideMnemonic,
-                     menuitem->palette, menuitem->state & State_Enabled, title, QPalette::WindowText);
-        drawItemText(p, rect.toRect(), Qt::AlignRight | Qt::AlignVCenter | Qt::TextHideMnemonic,
-                     menuitem->palette, menuitem->state & State_Enabled, shortcut,
-                     QPalette::WindowText);
+        drawItemText(p, rect.toRect(), Qt::AlignLeft | Qt::AlignVCenter | Qt::TextShowMnemonic,
+                     menuitem->palette, menuitem->state & State_Enabled, title, textrole);
+        drawItemText(p, rect.toRect(), Qt::AlignRight | Qt::AlignVCenter | Qt::TextShowMnemonic,
+                     menuitem->palette, menuitem->state & State_Enabled, shortcut, textrole);
       }
 
       if(menuitem->menuItemType == QStyleOptionMenuItem::SubMenu)
@@ -1850,6 +1925,80 @@ void RDStyle::drawControl(ControlElement control, const QStyleOption *opt, QPain
     drawItemText(p, rect.toRect().adjusted(Constants::TabMargin, 0, 0, 0),
                  Qt::AlignLeft | Qt::AlignTop | Qt::TextHideMnemonic, dockwidget->palette,
                  dockwidget->state & State_Enabled, dockwidget->title, QPalette::WindowText);
+
+    return;
+  }
+  else if(control == QStyle::CE_Header)
+  {
+    const QStyleOptionHeader *header = qstyleoption_cast<const QStyleOptionHeader *>(opt);
+
+    QRectF rect = QRectF(opt->rect).adjusted(0.0, 0.0, -0.5, -0.5);
+
+    p->save();
+
+    p->setPen(QPen(outlineBrush(opt->palette), 1.0));
+
+    p->fillRect(rect, opt->palette.brush(QPalette::Midlight));
+    p->drawLine(rect.bottomLeft(), rect.bottomRight());
+    p->drawLine(rect.topRight(), rect.bottomRight());
+
+    rect.adjust(Constants::ItemHeaderMargin, 0, -Constants::ItemHeaderMargin, 0);
+
+    // draw the icon, if it exists
+    if(!header->icon.isNull())
+    {
+      drawItemPixmap(
+          p, rect.toRect(), Qt::AlignLeft | Qt::AlignVCenter,
+          header->icon.pixmap(Constants::ItemHeaderIconSize, Constants::ItemHeaderIconSize,
+                              header->state & State_Enabled ? QIcon::Normal : QIcon::Disabled));
+    }
+
+    drawItemText(p, rect.toRect(), Qt::AlignLeft | Qt::AlignVCenter | Qt::TextHideMnemonic,
+                 header->palette, header->state & State_Enabled, header->text, QPalette::WindowText);
+
+    if(header->sortIndicator != QStyleOptionHeader::None)
+    {
+      p->setRenderHint(QPainter::Antialiasing);
+
+      qreal penWidth = 1.5;
+      p->setPen(QPen(opt->palette.brush(QPalette::WindowText), penWidth));
+
+      {
+        QRectF arrowRect = rect;
+        arrowRect.setLeft(arrowRect.right() - Constants::SpinButtonDim);
+
+        qreal yoffset = 2.5f;
+        if(header->sortIndicator == QStyleOptionHeader::SortDown)
+          yoffset = -yoffset;
+
+        qreal ycentre = arrowRect.center().y();
+
+        QPainterPath path;
+        QPolygonF poly;
+
+        QPointF pt;
+        pt.setX(arrowRect.left() + penWidth);
+        pt.setY(ycentre + yoffset);
+        poly << pt;
+
+        pt.setX(arrowRect.center().x());
+        if(header->sortIndicator == QStyleOptionHeader::SortDown)
+          pt.setY(ycentre - yoffset);
+        else
+          pt.setY(ycentre - yoffset);
+        poly << pt;
+
+        pt.setX(arrowRect.right() - penWidth);
+        pt.setY(ycentre + yoffset);
+        poly << pt;
+
+        path.addPolygon(poly);
+
+        p->drawPath(path);
+      }
+    }
+
+    p->restore();
 
     return;
   }

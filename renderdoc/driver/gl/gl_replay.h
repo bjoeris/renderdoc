@@ -103,7 +103,7 @@ public:
   TextureDescription GetTexture(ResourceId id);
 
   rdcarray<ShaderEntryPoint> GetShaderEntryPoints(ResourceId shader);
-  ShaderReflection *GetShader(ResourceId shader, string entryPoint);
+  ShaderReflection *GetShader(ResourceId shader, ShaderEntryPoint entry);
 
   vector<string> GetDisassemblyTargets();
   string DisassembleShader(ResourceId pipeline, const ShaderReflection *refl, const string &target);
@@ -237,15 +237,14 @@ public:
 
   bool IsReplayContext(void *ctx) { return m_ReplayCtx.ctx == NULL || ctx == m_ReplayCtx.ctx; }
 private:
-  void FillCBufferValue(WrappedOpenGL &gl, GLuint prog, bool bufferBacked, bool rowMajor,
-                        uint32_t offs, uint32_t matStride, const bytebuf &data,
-                        ShaderVariable &outVar);
+  void FillCBufferValue(WrappedOpenGL &gl, GLuint prog, bool bufferBacked, uint32_t offs,
+                        uint32_t matStride, const bytebuf &data, ShaderVariable &outVar);
   void FillCBufferVariables(WrappedOpenGL &gl, GLuint prog, bool bufferBacked, std::string prefix,
                             const rdcarray<ShaderConstant> &variables,
                             std::vector<ShaderVariable> &outvars, const bytebuf &data);
 
   void CreateCustomShaderTex(uint32_t w, uint32_t h);
-  void SetupOverlayPipeline(GLuint Program, GLuint Pipeline, GLuint fragProgram);
+  void CreateOverlayProgram(GLuint Program, GLuint Pipeline, GLuint fragShader);
 
   void CopyArrayToTex2DMS(GLuint destMS, GLuint srcArray, GLint width, GLint height,
                           GLint arraySize, GLint samples, GLenum intFormat);
@@ -305,8 +304,7 @@ private:
 
     GLuint outlineQuadProg;
 
-    GLuint texDisplayPipe;
-    GLuint texDisplayVSProg;
+    GLuint texDisplayVertexShader;
     GLuint texDisplayProg[3];    // float/uint/sint
 
     GLuint customFBO;
@@ -330,7 +328,7 @@ private:
 
     GLuint checkerProg;
 
-    GLuint fixedcolFSProg;
+    GLuint fixedcolFragShader;
 
     GLuint meshProg;
     GLuint meshgsProg;
@@ -352,12 +350,12 @@ private:
     GLuint pickPixelTex;
     GLuint pickPixelFBO;
 
-    GLuint quadoverdrawFSProg;
+    GLuint quadoverdrawFragShader;
     GLuint quadoverdrawResolveProg;
 
     GLuint overlayTex;
     GLuint overlayFBO;
-    GLuint overlayPipe;
+    GLuint overlayProg;
     GLint overlayTexWidth, overlayTexHeight, overlayTexSamples;
 
     GLuint UBOs[3];
@@ -391,10 +389,11 @@ private:
   void FillTimers(GLCounterContext &ctx, const DrawcallDescription &drawnode,
                   const vector<GPUCounter> &counters);
 
-  GLuint CreateShaderProgram(const vector<string> &vs, const vector<string> &fs,
-                             const vector<string> &gs);
-  GLuint CreateShaderProgram(const vector<string> &vs, const vector<string> &fs);
-  GLuint CreateCShaderProgram(const vector<string> &cs);
+  GLuint CreateShader(GLenum shaderType, const std::vector<std::string> &sources);
+  GLuint CreateShaderProgram(const std::vector<std::string> &vs, const std::vector<std::string> &fs,
+                             const std::vector<std::string> &gs);
+  GLuint CreateShaderProgram(const std::vector<std::string> &vs, const std::vector<std::string> &fs);
+  GLuint CreateCShaderProgram(const std::vector<std::string> &cs);
 
   void InitOutputWindow(OutputWindow &outwin);
   void CreateOutputWindowBackbuffer(OutputWindow &outwin, bool depth);

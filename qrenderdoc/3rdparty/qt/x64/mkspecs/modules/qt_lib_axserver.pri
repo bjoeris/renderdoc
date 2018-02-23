@@ -1,4 +1,4 @@
-QT.axserver.VERSION = 5.9.0
+QT.axserver.VERSION = 5.9.4
 QT.axserver.name = QtAxServer
 QT.axserver.module = Qt5AxServer
 QT.axserver.libs = $$QT_MODULE_LIB_BASE

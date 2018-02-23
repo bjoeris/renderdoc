@@ -1,8 +1,8 @@
-QT.nfc_private.VERSION = 5.9.0
+QT.nfc_private.VERSION = 5.9.4
 QT.nfc_private.name = QtNfc
 QT.nfc_private.module =
 QT.nfc_private.libs = $$QT_MODULE_LIB_BASE
-QT.nfc_private.includes = $$QT_MODULE_INCLUDE_BASE/QtNfc/5.9.0 $$QT_MODULE_INCLUDE_BASE/QtNfc/5.9.0/QtNfc
+QT.nfc_private.includes = $$QT_MODULE_INCLUDE_BASE/QtNfc/5.9.4 $$QT_MODULE_INCLUDE_BASE/QtNfc/5.9.4/QtNfc
 QT.nfc_private.frameworks =
 QT.nfc_private.depends = nfc
 QT.nfc_private.uses =

@@ -1,8 +1,8 @@
-QT.qtmultimediaquicktools_private.VERSION = 5.9.0
+QT.qtmultimediaquicktools_private.VERSION = 5.9.4
 QT.qtmultimediaquicktools_private.name = QtMultimediaQuick_p
 QT.qtmultimediaquicktools_private.module = Qt5MultimediaQuick_p
 QT.qtmultimediaquicktools_private.libs = $$QT_MODULE_LIB_BASE
-QT.qtmultimediaquicktools_private.includes = $$QT_MODULE_INCLUDE_BASE $$QT_MODULE_INCLUDE_BASE/QtMultimediaQuick_p $$QT_MODULE_INCLUDE_BASE/QtMultimediaQuick_p/5.9.0 $$QT_MODULE_INCLUDE_BASE/QtMultimediaQuick_p/5.9.0/QtMultimediaQuick_p
+QT.qtmultimediaquicktools_private.includes = $$QT_MODULE_INCLUDE_BASE $$QT_MODULE_INCLUDE_BASE/QtMultimediaQuick_p $$QT_MODULE_INCLUDE_BASE/QtMultimediaQuick_p/5.9.4 $$QT_MODULE_INCLUDE_BASE/QtMultimediaQuick_p/5.9.4/QtMultimediaQuick_p
 QT.qtmultimediaquicktools_private.frameworks =
 QT.qtmultimediaquicktools_private.bins = $$QT_MODULE_BIN_BASE
 QT.qtmultimediaquicktools_private.depends = core quick multimedia_private

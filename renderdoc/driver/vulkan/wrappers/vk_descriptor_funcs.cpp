@@ -163,7 +163,8 @@ bool WrappedVulkan::Serialise_vkCreateDescriptorPool(SerialiserType &ser, VkDevi
 {
   SERIALISE_ELEMENT(device);
   SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
-  SERIALISE_ELEMENT_LOCAL(DescriptorPool, GetResID(*pDescriptorPool));
+  SERIALISE_ELEMENT_OPT(pAllocator);
+  SERIALISE_ELEMENT_LOCAL(DescriptorPool, GetResID(*pDescriptorPool)).TypedAs("VkDescriptorPool");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -236,7 +237,8 @@ bool WrappedVulkan::Serialise_vkCreateDescriptorSetLayout(
 {
   SERIALISE_ELEMENT(device);
   SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
-  SERIALISE_ELEMENT_LOCAL(SetLayout, GetResID(*pSetLayout));
+  SERIALISE_ELEMENT_OPT(pAllocator);
+  SERIALISE_ELEMENT_LOCAL(SetLayout, GetResID(*pSetLayout)).TypedAs("VkDescriptorSetLayout");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -246,14 +248,18 @@ bool WrappedVulkan::Serialise_vkCreateDescriptorSetLayout(
 
     VkDescriptorSetLayoutBinding *bindings = (VkDescriptorSetLayoutBinding *)CreateInfo.pBindings;
 
-    // ensure any bindings available to the vertex shader are also available to compute. This is
-    // valid and changes nothing, but means we don't have to create a duplicate parallel 'computer
-    // friendly' descriptor set layout and pipeline layout.
+    // ensure any bindings available are also available to compute. This is valid and changes
+    // nothing, but means we don't have to create a duplicate parallel 'compute friendly' descriptor
+    // set layout and pipeline layout.
+    // Note that we apply this to all bindings, even ones that are fragment only, because otherwise
+    // dynamic buffer offsets could be indexed wrongly. Consider the case where we have binding 0 as
+    // a fragment UBO, and binding 1 as a vertex UBO. Then there are two dynamic offsets, and the
+    // second is the one we want to use with ours. If we only add the compute visibility bit to the
+    // second UBO, then suddenly it's the *first* offset that we must provide. Instead of trying to
+    // remap offsets to match, we simply make every binding compute visible so the ordering is still
+    // the same. Since compute and graphics are disjoint this is safe.
     for(uint32_t i = 0; i < CreateInfo.bindingCount; i++)
-    {
-      if(bindings[i].stageFlags & VK_SHADER_STAGE_VERTEX_BIT)
-        bindings[i].stageFlags |= VK_SHADER_STAGE_COMPUTE_BIT;
-    }
+      bindings[i].stageFlags |= VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDescriptorSetLayoutCreateInfo unwrapped = UnwrapInfo(&CreateInfo);
     VkResult ret =
@@ -373,7 +379,7 @@ bool WrappedVulkan::Serialise_vkAllocateDescriptorSets(SerialiserType &ser, VkDe
 {
   SERIALISE_ELEMENT(device);
   SERIALISE_ELEMENT_LOCAL(AllocateInfo, *pAllocateInfo);
-  SERIALISE_ELEMENT_LOCAL(DescriptorSet, GetResID(*pDescriptorSets));
+  SERIALISE_ELEMENT_LOCAL(DescriptorSet, GetResID(*pDescriptorSets)).TypedAs("VkDescriptorSet");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -739,7 +745,9 @@ bool WrappedVulkan::Serialise_vkUpdateDescriptorSets(SerialiserType &ser, VkDevi
                                                      const VkCopyDescriptorSet *pDescriptorCopies)
 {
   SERIALISE_ELEMENT(device);
+  SERIALISE_ELEMENT(writeCount);
   SERIALISE_ELEMENT_ARRAY(pDescriptorWrites, writeCount);
+  SERIALISE_ELEMENT(copyCount);
   SERIALISE_ELEMENT_ARRAY(pDescriptorCopies, copyCount);
 
   Serialise_DebugMessages(ser);

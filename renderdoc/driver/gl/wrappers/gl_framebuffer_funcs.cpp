@@ -30,8 +30,10 @@
 template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glGenFramebuffers(SerialiserType &ser, GLsizei n, GLuint *framebuffers)
 {
+  SERIALISE_ELEMENT(n);
   SERIALISE_ELEMENT_LOCAL(framebuffer,
-                          GetResourceManager()->GetID(FramebufferRes(GetCtx(), *framebuffers)));
+                          GetResourceManager()->GetID(FramebufferRes(GetCtx(), *framebuffers)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -90,8 +92,10 @@ template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glCreateFramebuffers(SerialiserType &ser, GLsizei n,
                                                    GLuint *framebuffers)
 {
+  SERIALISE_ELEMENT(n);
   SERIALISE_ELEMENT_LOCAL(framebuffer,
-                          GetResourceManager()->GetID(FramebufferRes(GetCtx(), *framebuffers)));
+                          GetResourceManager()->GetID(FramebufferRes(GetCtx(), *framebuffers)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -1579,7 +1583,8 @@ bool WrappedOpenGL::Serialise_glFramebufferDrawBuffersEXT(SerialiserType &ser,
                                                           const GLenum *bufs)
 {
   SERIALISE_ELEMENT_LOCAL(framebuffer, FramebufferRes(GetCtx(), framebufferHandle));
-  SERIALISE_ELEMENT_ARRAY(bufs, (uint32_t &)n);
+  SERIALISE_ELEMENT(n);
+  SERIALISE_ELEMENT_ARRAY(bufs, n);
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -1596,7 +1601,7 @@ bool WrappedOpenGL::Serialise_glFramebufferDrawBuffersEXT(SerialiserType &ser,
         buffers[i] = eGL_COLOR_ATTACHMENT0;
     }
 
-    m_Real.glFramebufferDrawBuffersEXT(framebuffer.name, n, bufs);
+    m_Real.glFramebufferDrawBuffersEXT(framebuffer.name ? framebuffer.name : m_FakeBB_FBO, n, bufs);
   }
 
   return true;
@@ -1818,8 +1823,9 @@ bool WrappedOpenGL::Serialise_glBlitNamedFramebuffer(SerialiserType &ser,
       ResourceId drawId = GetResourceManager()->GetID(drawFramebuffer);
 
       DrawcallDescription draw;
-      draw.name = StringFormat::Fmt("%s(%s, %s)", ToStr(gl_CurChunk).c_str(), ToStr(readId).c_str(),
-                                    ToStr(drawId).c_str());
+      draw.name = StringFormat::Fmt("%s(%s, %s)", ToStr(gl_CurChunk).c_str(),
+                                    ToStr(GetResourceManager()->GetOriginalID(readId)).c_str(),
+                                    ToStr(GetResourceManager()->GetOriginalID(drawId)).c_str());
       draw.flags |= DrawFlags::Resolve;
 
       GLint numCols = 8;
@@ -1991,8 +1997,10 @@ void WrappedOpenGL::glDeleteFramebuffers(GLsizei n, const GLuint *framebuffers)
 template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glGenRenderbuffers(SerialiserType &ser, GLsizei n, GLuint *renderbuffers)
 {
+  SERIALISE_ELEMENT(n);
   SERIALISE_ELEMENT_LOCAL(renderbuffer,
-                          GetResourceManager()->GetID(RenderbufferRes(GetCtx(), *renderbuffers)));
+                          GetResourceManager()->GetID(RenderbufferRes(GetCtx(), *renderbuffers)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -2053,8 +2061,10 @@ template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glCreateRenderbuffers(SerialiserType &ser, GLsizei n,
                                                     GLuint *renderbuffers)
 {
+  SERIALISE_ELEMENT(n);
   SERIALISE_ELEMENT_LOCAL(renderbuffer,
-                          GetResourceManager()->GetID(RenderbufferRes(GetCtx(), *renderbuffers)));
+                          GetResourceManager()->GetID(RenderbufferRes(GetCtx(), *renderbuffers)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 

@@ -211,11 +211,13 @@ VulkanTextRenderer::VulkanTextRenderer(WrappedVulkan *driver)
   VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
                                         VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
 
+  uint32_t vs_and_ps = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
   VkDescriptorSetLayoutBinding layoutBinding[] = {
-      {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, VK_SHADER_STAGE_ALL, NULL},
-      {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, NULL},
-      {2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, VK_SHADER_STAGE_ALL, NULL},
-      {3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
+      {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, vs_and_ps, NULL},
+      {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, vs_and_ps, NULL},
+      {2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, vs_and_ps, NULL},
+      {3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, vs_and_ps, NULL},
   };
 
   VkDescriptorSetLayoutCreateInfo descsetLayoutInfo = {
@@ -304,6 +306,10 @@ VulkanTextRenderer::VulkanTextRenderer(WrappedVulkan *driver)
     stbtt_BakeFontBitmap(ttfdata, 0, pixelHeight, buf, width, height, firstChar, numChars, chardata);
 
     m_FontCharSize = pixelHeight;
+#if ENABLED(RDOC_ANDROID)
+    m_FontCharSize *= 2.0f;
+#endif
+
     m_FontCharAspect = chardata->xadvance / pixelHeight;
 
     stbtt_fontinfo f = {0};

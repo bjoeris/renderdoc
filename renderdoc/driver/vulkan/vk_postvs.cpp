@@ -49,7 +49,7 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
 
   descSet = 0;
 
-  for(SPIRVIterator it = editor.BeginDecorations(), end = editor.EndDecorations(); it != end; ++it)
+  for(SPIRVIterator it = editor.BeginDecorations(), end = editor.EndDecorations(); it < end; ++it)
   {
     // we will use the descriptor set immediately after the last set statically used by the shader.
     // This means we don't have to worry about if the descriptor set layout declares more sets which
@@ -103,7 +103,7 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
   std::map<SPIRVId, SPIRVId> typeReplacements;
 
   // rewrite any inputs and outputs to be private storage class
-  for(SPIRVIterator it = editor.BeginTypes(), end = editor.EndTypes(); it != end; ++it)
+  for(SPIRVIterator it = editor.BeginTypes(), end = editor.EndTypes(); it < end; ++it)
   {
     // rewrite any input/output variables to private, and build up inputs/outputs list
     if(it.opcode() == spv::OpTypePointer)
@@ -185,6 +185,20 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
 
       if(mod)
         editor.PostModify(it);
+
+      // if we repointed this variable to an existing private declaration, we must also move it to
+      // the end of the section. The reason being that the private pointer type declared may be
+      // declared *after* this variable. There can't be any dependencies on this later in the
+      // section because it's a variable not a type, so it's safe to move to the end.
+      if(replIt != typeReplacements.end())
+      {
+        // make a copy of the opcode
+        SPIRVOperation op = SPIRVOperation::copy(it);
+        // remove the old one
+        editor.Remove(it);
+        // add it anew
+        editor.AddVariable(op);
+      }
     }
     else if(it.opcode() == spv::OpTypeFunction)
     {
@@ -246,7 +260,7 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
   }
 
   // detect builtin inputs or outputs, and remove builtin decorations
-  for(SPIRVIterator it = editor.BeginDecorations(), end = editor.EndDecorations(); it != end; ++it)
+  for(SPIRVIterator it = editor.BeginDecorations(), end = editor.EndDecorations(); it < end; ++it)
   {
     // remove any builtin decorations
     if(it.opcode() == spv::OpDecorate && it.word(2) == spv::DecorationBuiltIn)
@@ -286,6 +300,12 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
 
       if(outputs.find(id) != outputs.end() || inputs.find(id) != inputs.end())
         editor.Remove(it);
+    }
+
+    // remove all invariant decoreations
+    if(it.opcode() == spv::OpDecorate && it.word(2) == spv::DecorationInvariant)
+    {
+      editor.Remove(it);
     }
 
     if(it.opcode() == spv::OpDecorate && it.word(2) == spv::DecorationLocation)
@@ -329,7 +349,7 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
 
   RDCASSERT(entryID);
 
-  for(SPIRVIterator it = editor.BeginDebug(), end2 = editor.EndDebug(); it != end2; ++it)
+  for(SPIRVIterator it = editor.BeginDebug(), end2 = editor.EndDebug(); it < end2; ++it)
   {
     if(it.opcode() == spv::OpName &&
        (inputs.find(it.word(1)) != inputs.end() || outputs.find(it.word(1)) != outputs.end()))
@@ -623,9 +643,9 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
   // make a new entry point that will call the old function, then when it returns extract & write
   // the outputs.
   SPIRVId wrapperEntry = editor.MakeId();
-  // we set a debug name, but we don't rename the actual entry point since the API needs to hook up
-  // to it the same way.
-  editor.SetName(wrapperEntry, "RenderDoc_MeshFetch_Wrapper_Entrypoint");
+  // don't set a debug name, as some drivers get confused when this doesn't match the entry point
+  // name :(.
+  // editor.SetName(wrapperEntry, "RenderDoc_MeshFetch_Wrapper_Entrypoint");
 
   // we remove all entry points and just create one of our own.
   SPIRVIterator it = editor.BeginEntries();
@@ -653,7 +673,7 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
     ++it;
   }
 
-  for(SPIRVIterator end = editor.EndEntries(); it != end; ++it)
+  for(SPIRVIterator end = editor.EndEntries(); it < end; ++it)
     editor.Remove(it);
 
   editor.AddOperation(
@@ -860,8 +880,30 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
             ops.push_back(SPIRVOperation(spv::OpVectorShuffle, words));
           }
 
-          // *global = value
-          ops.push_back(SPIRVOperation(spv::OpStore, {ins[i].variableID, result}));
+          // not a composite type, we can store directly
+          if(patchData.inputs[i].accessChain.empty())
+          {
+            // *global = value
+            ops.push_back(SPIRVOperation(spv::OpStore, {ins[i].variableID, result}));
+          }
+          else
+          {
+            // for composite types we need to access chain first
+            uint32_t subElement = editor.MakeId();
+            std::vector<uint32_t> words = {ins[i].privatePtrID, subElement, patchData.inputs[i].ID};
+
+            for(uint32_t accessIdx : patchData.inputs[i].accessChain)
+            {
+              if(idxs[accessIdx] == 0)
+                idxs[accessIdx] = editor.AddConstantImmediate<uint32_t>((uint32_t)accessIdx);
+
+              words.push_back(idxs[accessIdx]);
+            }
+
+            ops.push_back(SPIRVOperation(spv::OpAccessChain, words));
+
+            ops.push_back(SPIRVOperation(spv::OpStore, {subElement, result}));
+          }
         }
       }
 
@@ -1194,7 +1236,8 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
   };
 
   std::vector<bool> attrIsInstanced;
-  std::vector<CompactedAttrBuffer> vbuffers;
+  CompactedAttrBuffer vbuffers[64];
+  RDCEraseEl(vbuffers);
 
   {
     VkWriteDescriptorSet descWrites[64];
@@ -1232,11 +1275,17 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
       GetBufferData(state.vbuffers[vb].buf, offs, len, origVBs[vb]);
     }
 
-    vbuffers.resize(vi->vertexAttributeDescriptionCount);
     for(uint32_t i = 0; i < vi->vertexAttributeDescriptionCount; i++)
     {
       const VkVertexInputAttributeDescription &attrDesc = vi->pVertexAttributeDescriptions[i];
       uint32_t attr = attrDesc.location;
+
+      RDCASSERT(attr < 64);
+      if(attr >= ARRAY_COUNT(vbuffers))
+      {
+        RDCERR("Attribute index too high! Resize array.");
+        continue;
+      }
 
       bool isInstanced = false;
       size_t stride = 1;
@@ -1328,7 +1377,8 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
 
       m_pDriver->vkCreateBufferView(dev, &info, NULL, &vbuffers[attr].view);
 
-      attrIsInstanced.push_back(isInstanced);
+      attrIsInstanced.resize(RDCMAX(attrIsInstanced.size(), size_t(attr + 1)));
+      attrIsInstanced[attr] = isInstanced;
 
       descWrites[numWrites].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
       descWrites[numWrites].dstSet = m_MeshFetchDescSet;
@@ -1338,7 +1388,7 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
         descWrites[numWrites].dstBinding = 3;
       else
         descWrites[numWrites].dstBinding = 2;
-      descWrites[numWrites].dstArrayElement = i;
+      descWrites[numWrites].dstArrayElement = attr;
       descWrites[numWrites].descriptorCount = 1;
       descWrites[numWrites].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
       descWrites[numWrites].pTexelBufferView = &vbuffers[attr].view;
@@ -1364,11 +1414,6 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
   ConvertToMeshOutputCompute(*refl, *pipeInfo.shaders[0].patchData,
                              pipeInfo.shaders[0].entryPoint.c_str(), attrIsInstanced, descSet,
                              drawcall, baseVertex, numFetchVerts, numVerts, modSpirv, bufStride);
-
-  if(bufStride == 0)
-    bufStride = 80;
-
-  FileIO::dump("T:/tmp/test.spv", modSpirv.data(), modSpirv.size() * 4);
 
   VkComputePipelineCreateInfo compPipeInfo = {VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
 

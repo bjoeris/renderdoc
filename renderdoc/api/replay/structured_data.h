@@ -81,6 +81,11 @@ DOCUMENT(R"(The basic irreducible type of an object. Every other more complex ty
 
   A single byte character. Wide/multi-byte characters are not supported (these would be stored as a
   string with 1 character and multiple bytes in UTF-8).
+
+.. data:: ResourceId
+
+  A ResourceId. Equivalent to (and stored as) an 8-byte unsigned integer, but specifically contains
+  the unique Id of a resource in a capture.
 )");
 enum class SDBasic : uint32_t
 {
@@ -96,6 +101,7 @@ enum class SDBasic : uint32_t
   Float,
   Boolean,
   Character,
+  ResourceId,
 };
 
 DECLARE_REFLECTION_ENUM(SDBasic);
@@ -124,6 +130,11 @@ DOCUMENT(R"(Bitfield flags that could be applied to a type.
 .. data:: NullString
 
   Special flag to indicate that this is a C-string which was NULL, not just empty.
+
+.. data:: FixedArray
+
+  Special flag to indicate that this is array was a fixed-size real array, rather than a complex
+  container type or a pointer & length.
 )");
 enum class SDTypeFlags : uint32_t
 {
@@ -132,6 +143,7 @@ enum class SDTypeFlags : uint32_t
   Hidden = 0x2,
   Nullable = 0x4,
   NullString = 0x8,
+  FixedArray = 0x10,
 };
 
 BITMASK_OPERATORS(SDTypeFlags);
@@ -217,8 +229,9 @@ conservative size estimate was used on creation to avoid seeking to fix-up the s
 
   DOCUMENT(R"(The duration in microseconds that this chunk took. This is the time for the actual
 work, not the serialising.
+Since 0 is a possible value for this (for extremely fast calls), -1 is the invalid/not present value.
 )");
-  uint64_t durationMicro = 0;
+  int64_t durationMicro = -1;
 
   DOCUMENT("The point in time when this chunk was recorded, in microseconds since program start.");
   uint64_t timestampMicro = 0;
@@ -250,9 +263,14 @@ union SDObjectPODData
   DOCUMENT("The value as a single byte character.");
   char c;
 
+  DOCUMENT("The value as a :class:`ResourceId`.");
+  ResourceId id;
+
   // mostly here just for debugging
   DOCUMENT("A useful alias of :data:`u` - the number of children when a struct/array.");
   uint64_t numChildren;
+
+  SDObjectPODData() : u(0) {}
 };
 
 DECLARE_REFLECTION_STRUCT(SDObjectPODData);
@@ -377,6 +395,7 @@ struct SDObject
       case SDBasic::Enum:
       case SDBasic::UnsignedInteger: return QVariant(qulonglong(data.basic.u));
       case SDBasic::SignedInteger: return QVariant(qlonglong(data.basic.i));
+      case SDBasic::ResourceId: return (QVariant)data.basic.id;
       case SDBasic::Float: return data.basic.d;
       case SDBasic::Boolean: return data.basic.b;
       case SDBasic::Character: return data.basic.c;
@@ -519,6 +538,16 @@ inline SDObject *makeSDObject(const char *name, const char *val)
   ret->type.basetype = SDBasic::String;
   ret->type.byteSize = strlen(val);
   ret->data.str = val;
+  return ret;
+}
+
+DOCUMENT("Make a structured object out of a ResourceId");
+inline SDObject *makeSDObject(const char *name, ResourceId val)
+{
+  SDObject *ret = new SDObject(name, "ResourceId");
+  ret->type.basetype = SDBasic::ResourceId;
+  ret->type.byteSize = 8;
+  ret->data.basic.id = val;
   return ret;
 }
 

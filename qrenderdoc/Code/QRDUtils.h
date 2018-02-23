@@ -162,6 +162,7 @@ void RegisterMetatypeConversions();
 struct Formatter
 {
   static void setParams(const PersistantConfig &config);
+  static void setPalette(QPalette palette);
   static void shutdown();
 
   static QString Format(double f, bool hex = false);
@@ -525,6 +526,8 @@ QStringList ParseArgsList(const QString &args);
 bool IsRunningAsAdmin();
 bool RunProcessAsAdmin(const QString &fullExecutablePath, const QStringList &params,
                        std::function<void()> finishedCallback = std::function<void()>());
+
+void RevealFilenameInExternalFileBrowser(const QString &filePath);
 
 void ShowProgressDialog(QWidget *window, const QString &labelText, ProgressFinishedMethod finished,
                         ProgressUpdateMethod update = ProgressUpdateMethod());

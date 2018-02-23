@@ -73,7 +73,9 @@ public:
   bool SaveCaptureTo(const rdcstr &captureFile) override;
   void RecompressCapture() override;
   void CloseCapture() override;
-
+  bool ImportCapture(const CaptureFileFormat &fmt, const rdcstr &importfile,
+                     const rdcstr &rdcfile) override;
+  void ExportCapture(const CaptureFileFormat &fmt, const rdcstr &exportfile) override;
   void SetEventID(const rdcarray<ICaptureViewer *> &exclude, uint32_t selectedEventID,
                   uint32_t eventId, bool force = false) override;
 
@@ -268,14 +270,17 @@ private:
 
   void SaveChanges();
 
-  void SaveRenames();
+  bool SaveRenames();
   void LoadRenames(const QString &data);
 
-  void SaveBookmarks();
+  bool SaveBookmarks();
   void LoadBookmarks(const QString &data);
 
-  void SaveNotes();
+  bool SaveNotes();
   void LoadNotes(const QString &data);
+
+  void CacheResources();
+  rdcstr GetResourceName(const ResourceDescription *desc);
 
   float m_LoadProgress = 0.0f;
   float m_PostloadProgress = 0.0f;

@@ -570,6 +570,10 @@ WrappedOpenGL::WrappedOpenGL(const GLHookSet &funcs, GLPlatform &platform)
     m_FakeVAOID = GetResourceManager()->RegisterResource(VertexArrayRes(NULL, 0));
     GetResourceManager()->AddResourceRecord(m_FakeVAOID);
     GetResourceManager()->MarkDirtyResource(m_FakeVAOID);
+
+    // also register an ID for the backbuffer, so we can identify it properly.
+    m_FBO0_ID = GetResourceManager()->RegisterResource(FramebufferRes(NULL, 0));
+    GetResourceManager()->AddResourceRecord(m_FBO0_ID);
   }
   else
   {
@@ -607,12 +611,6 @@ void WrappedOpenGL::Initialise(GLInitParams &params, uint64_t sectionVersion)
 
   gl.glGenFramebuffers(1, &m_FakeBB_FBO);
   gl.glBindFramebuffer(eGL_FRAMEBUFFER, m_FakeBB_FBO);
-
-  // we'll add the chunk later when we re-process it.
-  ResourceId fboId = GetResourceManager()->GetID(FramebufferRes(GetCtx(), m_FakeBB_FBO));
-  AddResource(fboId, ResourceType::SwapchainImage, "");
-  GetReplay()->GetResourceDesc(fboId).initialisationChunks.clear();
-  GetReplay()->GetResourceDesc(fboId).SetCustomName("Default FBO");
 
   GLenum colfmt = eGL_RGBA8;
 
@@ -919,7 +917,7 @@ void WrappedOpenGL::ActivateContext(GLWindowingData winData)
       fetch.res.Context = winData.ctx;
       size_t before = m_QueuedInitialFetches.size();
       auto it = std::lower_bound(m_QueuedInitialFetches.begin(), m_QueuedInitialFetches.end(), fetch);
-      for(; it->res.Context == winData.ctx && it != m_QueuedInitialFetches.end();)
+      for(; it != m_QueuedInitialFetches.end() && it->res.Context == winData.ctx;)
       {
         GetResourceManager()->ContextPrepare_InitialState(it->res);
         it = m_QueuedInitialFetches.erase(it);
@@ -1472,7 +1470,7 @@ void WrappedOpenGL::CreateVRAPITextureSwapChain(GLuint tex, GLenum textureType, 
     }
 
     gl_CurChunk = GLChunk::glTexParameteri;
-    Common_glTextureParameteriEXT(record, textureType, eGL_TEXTURE_MAX_LEVEL, levels);
+    Common_glTextureParameteriEXT(record, textureType, eGL_TEXTURE_MAX_LEVEL, levels - 1);
   }
   else
   {
@@ -1560,10 +1558,10 @@ void WrappedOpenGL::StartFrameCapture(void *dev, void *wnd)
   GLWindowingData switchctx = prevctx;
   MakeValidContextCurrent(switchctx, wnd);
 
-  m_FrameCounter = RDCMAX(1 + (uint32_t)m_CapturedFrames.size(), m_FrameCounter);
+  m_FrameCounter = RDCMAX((uint32_t)m_CapturedFrames.size(), m_FrameCounter);
 
   FrameDescription frame;
-  frame.frameNumber = m_FrameCounter + 1;
+  frame.frameNumber = m_FrameCounter;
   frame.captureTime = Timing::GetUnixTimestamp();
   RDCEraseEl(frame.stats);
   m_CapturedFrames.push_back(frame);
@@ -1641,8 +1639,9 @@ bool WrappedOpenGL::EndFrameCapture(void *dev, void *wnd)
     if(bbim == NULL)
       bbim = SaveBackbufferImage();
 
-    RDCFile *rdc = RenderDoc::Inst().CreateRDC(GetDriverType(), m_FrameCounter, bbim->jpgbuf,
-                                               bbim->len, bbim->thwidth, bbim->thheight);
+    RDCFile *rdc =
+        RenderDoc::Inst().CreateRDC(GetDriverType(), m_CapturedFrames.back().frameNumber,
+                                    bbim->jpgbuf, bbim->len, bbim->thwidth, bbim->thheight);
 
     SAFE_DELETE(bbim);
 
@@ -1686,6 +1685,7 @@ bool WrappedOpenGL::EndFrameCapture(void *dev, void *wnd)
         SCOPED_SERIALISE_CHUNK(GLChunk::DeviceInitialisation, 32);
 
         SERIALISE_ELEMENT(m_FakeVAOID);
+        SERIALISE_ELEMENT(m_FBO0_ID);
       }
 
       RDCDEBUG("Inserting Resource Serialisers");
@@ -1730,7 +1730,7 @@ bool WrappedOpenGL::EndFrameCapture(void *dev, void *wnd)
       }
     }
 
-    RenderDoc::Inst().FinishCaptureWriting(rdc, m_FrameCounter);
+    RenderDoc::Inst().FinishCaptureWriting(rdc, m_CapturedFrames.back().frameNumber);
 
     m_State = CaptureState::BackgroundCapturing;
 
@@ -1773,7 +1773,7 @@ bool WrappedOpenGL::EndFrameCapture(void *dev, void *wnd)
         ClearGLErrors(m_Real);
     }
 
-    m_CapturedFrames.back().frameNumber = m_FrameCounter + 1;
+    m_CapturedFrames.back().frameNumber = m_FrameCounter;
 
     CleanupCapture();
 
@@ -2460,15 +2460,7 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
 
       SERIALISE_CHECK_READ_ERRORS();
 
-      ResourceId fboId = GetResourceManager()->GetID(FramebufferRes(GetCtx(), m_FakeBB_FBO));
-      ResourceId colorId = GetResourceManager()->GetID(TextureRes(GetCtx(), m_FakeBB_Color));
-      ResourceId depthId;
-      if(m_FakeBB_DepthStencil)
-        depthId = GetResourceManager()->GetID(TextureRes(GetCtx(), m_FakeBB_DepthStencil));
-
-      AddResourceCurChunk(fboId);
-      AddResourceCurChunk(colorId);
-      AddResourceCurChunk(depthId);
+      m_InitChunkIndex = (uint32_t)m_StructuredFile->chunks.size() - 1;
 
       return true;
     }
@@ -2522,6 +2514,7 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::DeviceInitialisation:
     {
       SERIALISE_ELEMENT(m_FakeVAOID).Named("VAO 0 ID");
+      SERIALISE_ELEMENT(m_FBO0_ID).Named("FBO 0 ID");
 
       SERIALISE_CHECK_READ_ERRORS();
 
@@ -2529,6 +2522,28 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
 
       AddResource(m_FakeVAOID, ResourceType::StateObject, "");
       GetReplay()->GetResourceDesc(m_FakeVAOID).SetCustomName("Special VAO 0");
+
+      GetResourceManager()->AddLiveResource(m_FBO0_ID, FramebufferRes(GetCtx(), m_FakeBB_FBO));
+
+      AddResource(m_FBO0_ID, ResourceType::SwapchainImage, "");
+      GetReplay()->GetResourceDesc(m_FBO0_ID).SetCustomName("Default FBO");
+
+      GetReplay()->GetResourceDesc(m_FBO0_ID).initialisationChunks.push_back(m_InitChunkIndex);
+
+      ResourceId colorId = GetResourceManager()->GetID(TextureRes(GetCtx(), m_FakeBB_Color));
+      GetReplay()->GetResourceDesc(colorId).initialisationChunks.push_back(m_InitChunkIndex);
+      GetReplay()->GetResourceDesc(m_FBO0_ID).derivedResources.push_back(colorId);
+      GetReplay()->GetResourceDesc(colorId).parentResources.push_back(m_FBO0_ID);
+
+      if(m_FakeBB_DepthStencil)
+      {
+        ResourceId depthId = GetResourceManager()->GetID(TextureRes(GetCtx(), m_FakeBB_DepthStencil));
+        GetReplay()->GetResourceDesc(depthId).initialisationChunks.push_back(m_InitChunkIndex);
+
+        GetReplay()->GetResourceDesc(m_FBO0_ID).derivedResources.push_back(depthId);
+        GetReplay()->GetResourceDesc(depthId).parentResources.push_back(m_FBO0_ID);
+      }
+
       return true;
     }
 
@@ -3028,14 +3043,14 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glSamplerParameterIuiv:
       return Serialise_glSamplerParameterIuiv(ser, 0, eGL_NONE, 0);
 
-    case GLChunk::glCreateShader: return Serialise_glCreateShader(ser, 0, eGL_NONE);
+    case GLChunk::glCreateShader: return Serialise_glCreateShader(ser, eGL_NONE, 0);
     case GLChunk::glShaderSource: return Serialise_glShaderSource(ser, 0, 0, 0, 0);
     case GLChunk::glCompileShader: return Serialise_glCompileShader(ser, 0);
     case GLChunk::glAttachShader: return Serialise_glAttachShader(ser, 0, 0);
     case GLChunk::glDetachShader: return Serialise_glDetachShader(ser, 0, 0);
     case GLChunk::glCreateShaderProgramvEXT:
     case GLChunk::glCreateShaderProgramv:
-      return Serialise_glCreateShaderProgramv(ser, 0, eGL_NONE, 0, 0);
+      return Serialise_glCreateShaderProgramv(ser, eGL_NONE, 0, 0, 0);
     case GLChunk::glCreateProgram: return Serialise_glCreateProgram(ser, 0);
     case GLChunk::glLinkProgram: return Serialise_glLinkProgram(ser, 0);
     case GLChunk::glUniformBlockBinding: return Serialise_glUniformBlockBinding(ser, 0, 0, 0);
@@ -4090,12 +4105,11 @@ bool WrappedOpenGL::ContextProcessChunk(ReadSerialiser &ser, GLChunk chunk)
           m_DrawcallStack.pop_back();
         break;
       }
-      default:
-      {
-        if(!m_AddedDrawcall)
-          AddEvent();
-      }
+      default: break;
     }
+
+    if(!m_AddedDrawcall)
+      AddEvent();
   }
 
   m_AddedDrawcall = false;

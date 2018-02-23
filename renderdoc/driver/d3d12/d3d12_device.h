@@ -46,7 +46,7 @@ struct D3D12InitParams
   D3D_FEATURE_LEVEL MinimumFeatureLevel;
 
   // check if a frame capture section version is supported
-  static const uint64_t CurrentVersion = 0x3;
+  static const uint64_t CurrentVersion = 0x4;
   static bool IsSupportedVersion(uint64_t ver);
 };
 
@@ -416,6 +416,7 @@ public:
     m_InitParams = params;
     m_SectionVersion = sectionVersion;
   }
+  CaptureState GetState() { return m_State; }
   D3D12Replay *GetReplay() { return &m_Replay; }
   WrappedID3D12CommandQueue *GetQueue() { return m_Queue; }
   ID3D12CommandAllocator *GetAlloc() { return m_Alloc; }

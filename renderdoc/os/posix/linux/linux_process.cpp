@@ -27,7 +27,7 @@
 
 extern char **environ;
 
-#define INITIAL_WAIT_TIME 1000
+#define INITIAL_WAIT_TIME 1
 #define MAX_WAIT_TIME 128000
 
 char **GetCurrentEnvironment()
@@ -44,7 +44,7 @@ int GetIdentPort(pid_t childPid)
   int waitTime = INITIAL_WAIT_TIME;
 
   // try for a little while for the /proc entry to appear
-  while(waitTime <= MAX_WAIT_TIME)
+  while(ret == 0 && waitTime <= MAX_WAIT_TIME)
   {
     // back-off for each retry
     usleep(waitTime);
@@ -75,7 +75,6 @@ int GetIdentPort(pid_t childPid)
          hexport <= RenderDoc_LastTargetControlPort)
       {
         ret = hexport;
-        break;
       }
     }
 
@@ -133,4 +132,9 @@ void CacheDebuggerPresent()
 bool OSUtility::DebuggerPresent()
 {
   return debuggerPresent;
+}
+
+const char *Process::GetEnvVariable(const char *name)
+{
+  return getenv(name);
 }

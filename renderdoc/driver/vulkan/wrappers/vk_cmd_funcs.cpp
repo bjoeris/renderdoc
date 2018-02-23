@@ -24,6 +24,27 @@
 
 #include "../vk_core.h"
 
+static std::string ToHumanStr(const VkAttachmentLoadOp &el)
+{
+  BEGIN_ENUM_STRINGISE(VkAttachmentLoadOp);
+  {
+    case VK_ATTACHMENT_LOAD_OP_LOAD: return "Load";
+    case VK_ATTACHMENT_LOAD_OP_CLEAR: return "Clear";
+    case VK_ATTACHMENT_LOAD_OP_DONT_CARE: return "Don't Care";
+  }
+  END_ENUM_STRINGISE();
+}
+
+static std::string ToHumanStr(const VkAttachmentStoreOp &el)
+{
+  BEGIN_ENUM_STRINGISE(VkAttachmentStoreOp);
+  {
+    case VK_ATTACHMENT_STORE_OP_STORE: return "Store";
+    case VK_ATTACHMENT_STORE_OP_DONT_CARE: return "Don't Care";
+  }
+  END_ENUM_STRINGISE();
+}
+
 std::vector<VkImageMemoryBarrier> WrappedVulkan::GetImplicitRenderPassBarriers(uint32_t subpass)
 {
   ResourceId rp, fb;
@@ -272,7 +293,7 @@ string WrappedVulkan::MakeRenderPassOpString(bool store)
     else
     {
       // all colour ops are the same, print it
-      opDesc = store ? ToStr(atts[col0].storeOp) : ToStr(atts[col0].loadOp);
+      opDesc = store ? ToHumanStr(atts[col0].storeOp) : ToHumanStr(atts[col0].loadOp);
     }
 
     // do we have depth?
@@ -285,7 +306,8 @@ string WrappedVulkan::MakeRenderPassOpString(bool store)
       // if there's no stencil, just print depth op
       if(!hasStencil)
       {
-        opDesc += "D=" + (store ? ToStr(atts[dsAttach].storeOp) : ToStr(atts[dsAttach].loadOp));
+        opDesc +=
+            "D=" + (store ? ToHumanStr(atts[dsAttach].storeOp) : ToHumanStr(atts[dsAttach].loadOp));
       }
       else
       {
@@ -293,19 +315,19 @@ string WrappedVulkan::MakeRenderPassOpString(bool store)
         {
           // if depth and stencil have same op, print together, otherwise separately
           if(atts[dsAttach].storeOp == atts[dsAttach].stencilStoreOp)
-            opDesc += "DS=" + ToStr(atts[dsAttach].storeOp);
+            opDesc += "DS=" + ToHumanStr(atts[dsAttach].storeOp);
           else
-            opDesc +=
-                "D=" + ToStr(atts[dsAttach].storeOp) + ", S=" + ToStr(atts[dsAttach].stencilStoreOp);
+            opDesc += "D=" + ToHumanStr(atts[dsAttach].storeOp) + ", S=" +
+                      ToHumanStr(atts[dsAttach].stencilStoreOp);
         }
         else
         {
           // if depth and stencil have same op, print together, otherwise separately
           if(atts[dsAttach].loadOp == atts[dsAttach].stencilLoadOp)
-            opDesc += "DS=" + ToStr(atts[dsAttach].loadOp);
+            opDesc += "DS=" + ToHumanStr(atts[dsAttach].loadOp);
           else
-            opDesc +=
-                "D=" + ToStr(atts[dsAttach].loadOp) + ", S=" + ToStr(atts[dsAttach].stencilLoadOp);
+            opDesc += "D=" + ToHumanStr(atts[dsAttach].loadOp) + ", S=" +
+                      ToHumanStr(atts[dsAttach].stencilLoadOp);
         }
       }
     }
@@ -324,7 +346,8 @@ bool WrappedVulkan::Serialise_vkCreateCommandPool(SerialiserType &ser, VkDevice 
 {
   SERIALISE_ELEMENT(device);
   SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
-  SERIALISE_ELEMENT_LOCAL(CmdPool, GetResID(*pCmdPool));
+  SERIALISE_ELEMENT_OPT(pAllocator);
+  SERIALISE_ELEMENT_LOCAL(CmdPool, GetResID(*pCmdPool)).TypedAs("VkCommandPool");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -411,7 +434,7 @@ bool WrappedVulkan::Serialise_vkAllocateCommandBuffers(SerialiserType &ser, VkDe
 {
   SERIALISE_ELEMENT(device);
   SERIALISE_ELEMENT_LOCAL(AllocateInfo, *pAllocateInfo);
-  SERIALISE_ELEMENT_LOCAL(CommandBuffer, GetResID(*pCommandBuffers));
+  SERIALISE_ELEMENT_LOCAL(CommandBuffer, GetResID(*pCommandBuffers)).TypedAs("VkCommandBuffer");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -552,7 +575,7 @@ bool WrappedVulkan::Serialise_vkBeginCommandBuffer(SerialiserType &ser, VkComman
     AllocateInfo = record->cmdInfo->allocInfo;
   }
 
-  SERIALISE_ELEMENT_LOCAL(CommandBuffer, GetResID(commandBuffer));
+  SERIALISE_ELEMENT_LOCAL(CommandBuffer, GetResID(commandBuffer)).TypedAs("VkCommandBuffer");
   SERIALISE_ELEMENT_LOCAL(BeginInfo, *pBeginInfo);
   SERIALISE_ELEMENT(BakedCommandBuffer);
   SERIALISE_ELEMENT(device);
@@ -828,7 +851,7 @@ bool WrappedVulkan::Serialise_vkEndCommandBuffer(SerialiserType &ser, VkCommandB
       BakedCommandBuffer = record->bakedCommands->GetResourceID();
   }
 
-  SERIALISE_ELEMENT_LOCAL(CommandBuffer, GetResID(commandBuffer));
+  SERIALISE_ELEMENT_LOCAL(CommandBuffer, GetResID(commandBuffer)).TypedAs("VkCommandBuffer");
   SERIALISE_ELEMENT(BakedCommandBuffer);
 
   SERIALISE_CHECK_READ_ERRORS();
@@ -884,7 +907,7 @@ bool WrappedVulkan::Serialise_vkEndCommandBuffer(SerialiserType &ser, VkCommandB
       {
         DrawcallDescription draw;
         draw.name = "API Calls";
-        draw.flags |= DrawFlags::SetMarker | DrawFlags::APICalls;
+        draw.flags |= DrawFlags::APICalls;
 
         AddDrawcall(draw, true);
 
@@ -1419,7 +1442,9 @@ bool WrappedVulkan::Serialise_vkCmdBindDescriptorSets(
   SERIALISE_ELEMENT(pipelineBindPoint);
   SERIALISE_ELEMENT(layout);
   SERIALISE_ELEMENT(firstSet);
+  SERIALISE_ELEMENT(setCount);
   SERIALISE_ELEMENT_ARRAY(pDescriptorSets, setCount);
+  SERIALISE_ELEMENT(dynamicOffsetCount);
   SERIALISE_ELEMENT_ARRAY(pDynamicOffsets, dynamicOffsetCount);
 
   Serialise_DebugMessages(ser);
@@ -1593,9 +1618,9 @@ bool WrappedVulkan::Serialise_vkCmdBindVertexBuffers(SerialiserType &ser,
 {
   SERIALISE_ELEMENT(commandBuffer);
   SERIALISE_ELEMENT(firstBinding);
+  SERIALISE_ELEMENT(bindingCount);
   SERIALISE_ELEMENT_ARRAY(pBuffers, bindingCount);
   SERIALISE_ELEMENT_ARRAY(pOffsets, bindingCount);
-  SERIALISE_ELEMENT(bindingCount);
 
   Serialise_DebugMessages(ser);
 
@@ -1761,6 +1786,7 @@ bool WrappedVulkan::Serialise_vkCmdUpdateBuffer(SerialiserType &ser, VkCommandBu
   SERIALISE_ELEMENT(commandBuffer);
   SERIALISE_ELEMENT(destBuffer);
   SERIALISE_ELEMENT(destOffset);
+  SERIALISE_ELEMENT(dataSize);
 
   // serialise as void* so it goes through as a buffer, not an actual array of integers.
   const void *Data = (const void *)pData;
@@ -1904,8 +1930,8 @@ bool WrappedVulkan::Serialise_vkCmdPushConstants(SerialiserType &ser, VkCommandB
   SERIALISE_ELEMENT(layout);
   SERIALISE_ELEMENT_TYPED(VkShaderStageFlagBits, stageFlags);
   SERIALISE_ELEMENT(start);
-  SERIALISE_ELEMENT_ARRAY(values, length);
   SERIALISE_ELEMENT(length);
+  SERIALISE_ELEMENT_ARRAY(values, length);
 
   Serialise_DebugMessages(ser);
 
@@ -1979,8 +2005,11 @@ bool WrappedVulkan::Serialise_vkCmdPipelineBarrier(
   SERIALISE_ELEMENT_TYPED(VkPipelineStageFlagBits, srcStageMask);
   SERIALISE_ELEMENT_TYPED(VkPipelineStageFlagBits, destStageMask);
   SERIALISE_ELEMENT_TYPED(VkDependencyFlagBits, dependencyFlags);
+  SERIALISE_ELEMENT(memoryBarrierCount);
   SERIALISE_ELEMENT_ARRAY(pMemoryBarriers, memoryBarrierCount);
+  SERIALISE_ELEMENT(bufferMemoryBarrierCount);
   SERIALISE_ELEMENT_ARRAY(pBufferMemoryBarriers, bufferMemoryBarrierCount);
+  SERIALISE_ELEMENT(imageMemoryBarrierCount);
   SERIALISE_ELEMENT_ARRAY(pImageMemoryBarriers, imageMemoryBarrierCount);
 
   Serialise_DebugMessages(ser);
@@ -2426,6 +2455,7 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
                                                    const VkCommandBuffer *pCommandBuffers)
 {
   SERIALISE_ELEMENT(commandBuffer);
+  SERIALISE_ELEMENT(commandBufferCount);
   SERIALISE_ELEMENT_ARRAY(pCommandBuffers, commandBufferCount);
 
   Serialise_DebugMessages(ser);
@@ -2547,6 +2577,11 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
         for(uint32_t c = 0; c < commandBufferCount; c++)
         {
           ResourceId cmd = GetResourceManager()->GetOriginalID(GetResID(pCommandBuffers[c]));
+
+          // propagate renderpass state
+          m_BakedCmdBufferInfo[cmd].state.renderPass = parentCmdBufInfo.state.renderPass;
+          m_BakedCmdBufferInfo[cmd].state.subpass = parentCmdBufInfo.state.subpass;
+          m_BakedCmdBufferInfo[cmd].state.framebuffer = parentCmdBufInfo.state.framebuffer;
 
           // 2 extra for the virtual labels around the command buffer
           parentCmdBufInfo.curEventID += 2 + m_BakedCmdBufferInfo[cmd].eventCount;
@@ -2772,7 +2807,7 @@ bool WrappedVulkan::Serialise_vkCmdDebugMarkerEndEXT(SerialiserType &ser,
       {
         DrawcallDescription draw;
         draw.name = "API Calls";
-        draw.flags = DrawFlags::SetMarker | DrawFlags::APICalls;
+        draw.flags = DrawFlags::APICalls;
 
         AddDrawcall(draw, true);
       }

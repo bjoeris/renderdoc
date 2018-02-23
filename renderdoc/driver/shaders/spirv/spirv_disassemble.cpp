@@ -536,7 +536,7 @@ struct SPVTypeData
       }
       else if(type == eMatrix)
       {
-        name = StringFormat::Fmt("%s%ux%u", baseType->GetName().c_str(), vectorSize, matrixSize);
+        name = StringFormat::Fmt("%s%ux%u", baseType->GetName().c_str(), matrixSize, vectorSize);
       }
       else if(type == ePointer)
       {
@@ -2188,6 +2188,11 @@ string SPVModule::Disassemble(const string &entryPoint)
 
   retDisasm = StringFormat::Fmt("SPIR-V %u.%u:\n\n", moduleVersion.major, moduleVersion.minor);
 
+  if(moduleVersion.major != 1 || moduleVersion.minor != 0)
+  {
+    return retDisasm + "Unsupported version";
+  }
+
   GeneratorID *gen = NULL;
 
   uint32_t toolid = (generator & 0xffff0000) >> 16;
@@ -3532,7 +3537,7 @@ void MakeConstantBlockVariable(ShaderConstant &outConst, SPVTypeData *type, cons
     else
       RDCERR("Unexpected base type of constant variable %u", type->baseType->type);
 
-    outConst.type.descriptor.rowMajorStorage = false;
+    outConst.type.descriptor.rowMajorStorage = (type->type == SPVTypeData::eVector);
 
     for(size_t d = 0; d < decorations.size(); d++)
     {
@@ -3730,7 +3735,7 @@ void AddSignatureParameter(bool isInput, ShaderStage stage, uint32_t id, uint32_
 
   sig.needSemanticIndex = false;
 
-  SPIRVPatchData::OutputAccess patch;
+  SPIRVPatchData::InterfaceAccess patch;
   patch.accessChain = accessChain;
   patch.ID = id;
 
@@ -3763,6 +3768,10 @@ void AddSignatureParameter(bool isInput, ShaderStage stage, uint32_t id, uint32_
     arraySize = type->arraySize;
     isArray = true;
     type = type->baseType;
+
+    // step through multi-dimensional arrays
+    while(type->type == SPVTypeData::eArray)
+      type = type->baseType;
   }
 
   if(type->type == SPVTypeData::eStruct)
@@ -3863,7 +3872,9 @@ void AddSignatureParameter(bool isInput, ShaderStage stage, uint32_t id, uint32_
 
       regIndex++;
 
-      if(!isInput)
+      if(isInput)
+        patchData.inputs.push_back(patch);
+      else
         patchData.outputs.push_back(patch);
     }
     else
@@ -3882,7 +3893,9 @@ void AddSignatureParameter(bool isInput, ShaderStage stage, uint32_t id, uint32_
 
         sigarray.push_back(s);
 
-        if(!isInput)
+        if(isInput)
+          patchData.inputs.push_back(patch);
+        else
           patchData.outputs.push_back(patch);
 
         regIndex++;
@@ -3936,7 +3949,7 @@ ShaderStage SPVModule::StageForEntry(const string &entryPoint) const
 
 void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
                                ShaderReflection &reflection, ShaderBindpointMapping &mapping,
-                               SPIRVPatchData &patchData)
+                               SPIRVPatchData &patchData) const
 {
   vector<SigParameter> inputs;
   vector<SigParameter> outputs;
@@ -4032,8 +4045,16 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
           {
             sigarray->pop_back();
 
-            if(patchData.outputs.size() > sigarray->size())
-              patchData.outputs.pop_back();
+            if(isInput)
+            {
+              if(patchData.inputs.size() > sigarray->size())
+                patchData.inputs.pop_back();
+            }
+            else
+            {
+              if(patchData.outputs.size() > sigarray->size())
+                patchData.outputs.pop_back();
+            }
           }
         }
 
@@ -4106,7 +4127,9 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
                   if((*sigarray)[s].systemValue == attr)
                   {
                     sigarray->erase(sigarray->begin() + s);
-                    if(!isInput)
+                    if(isInput)
+                      patchData.inputs.erase(patchData.inputs.begin() + s);
+                    else
                       patchData.outputs.erase(patchData.outputs.begin() + s);
                     break;
                   }
@@ -4455,6 +4478,10 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
     reflection.inputSignature.reserve(inputs.size());
     for(size_t i = 0; i < inputs.size(); i++)
       reflection.inputSignature.push_back(inputs[indices[i]]);
+
+    std::vector<SPIRVPatchData::InterfaceAccess> inPatch = patchData.inputs;
+    for(size_t i = 0; i < inputs.size(); i++)
+      patchData.inputs[i] = inPatch[indices[i]];
   }
 
   {
@@ -4468,7 +4495,7 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
     for(size_t i = 0; i < outputs.size(); i++)
       reflection.outputSignature.push_back(outputs[indices[i]]);
 
-    std::vector<SPIRVPatchData::OutputAccess> outPatch = patchData.outputs;
+    std::vector<SPIRVPatchData::InterfaceAccess> outPatch = patchData.outputs;
     for(size_t i = 0; i < outputs.size(); i++)
       patchData.outputs[i] = outPatch[indices[i]];
   }
@@ -4563,15 +4590,15 @@ void ParseSPIRV(uint32_t *spirv, size_t spirvLength, SPVModule &module)
 
   uint32_t packedVersion = spirv[1];
 
+  // Bytes: 0 | major | minor | 0
+  module.moduleVersion.major = uint8_t((packedVersion & 0x00ff0000) >> 16);
+  module.moduleVersion.minor = uint8_t((packedVersion & 0x0000ff00) >> 8);
+
   if(packedVersion != spv::Version)
   {
     RDCERR("Unsupported SPIR-V version: %08x", spirv[1]);
     return;
   }
-
-  // Bytes: 0 | major | minor | 0
-  module.moduleVersion.major = uint8_t((packedVersion & 0x00ff0000) >> 16);
-  module.moduleVersion.minor = uint8_t((packedVersion & 0x0000ff00) >> 8);
 
   module.spirv.assign(spirv, spirv + spirvLength);
 

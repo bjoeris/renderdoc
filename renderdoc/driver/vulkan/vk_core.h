@@ -55,7 +55,7 @@ struct VkInitParams
   uint32_t GetSerialiseSize();
 
   // check if a frame capture section version is supported
-  static const uint64_t CurrentVersion = 0x9;
+  static const uint64_t CurrentVersion = 0xA;
   static bool IsSupportedVersion(uint64_t ver);
 };
 
@@ -213,13 +213,6 @@ private:
   std::vector<DebugMessage> GetDebugMessages();
   void AddDebugMessage(DebugMessage msg);
   void AddDebugMessage(MessageCategory c, MessageSeverity sv, MessageSource src, std::string d);
-
-  enum
-  {
-    eInitialContents_ClearColorImage = 1,
-    eInitialContents_ClearDepthStencilImage,
-    eInitialContents_Sparse,
-  };
 
   CaptureState m_State;
   bool m_AppControlledCapture;
@@ -399,7 +392,26 @@ private:
     // -> FlushQ() ----back to freesems-------^
   } m_InternalCmds;
 
-  vector<VkDeviceMemory> m_CleanupMems;
+  // Internal lumped/pooled memory allocations
+
+  // Each memory scope gets a separate vector of allocation objects. The vector contains the list of
+  // all 'base' allocations. The offset is used to indicate the current offset, and the size is the
+  // total size, thus the free space can be determined with size - offset.
+  std::vector<MemoryAllocation> m_MemoryBlocks[arraydim<MemoryScope>()];
+
+  // Per memory scope, the size of the next allocation. This allows us to balance number of memory
+  // allocation objects with size by incrementally allocating larger blocks.
+  VkDeviceSize m_MemoryBlockSize[arraydim<MemoryScope>()];
+
+  MemoryAllocation AllocateMemoryForResource(VkImage im, MemoryScope scope, MemoryType type);
+  MemoryAllocation AllocateMemoryForResource(VkBuffer buf, MemoryScope scope, MemoryType type);
+  void FreeAllMemory(MemoryScope scope);
+  void FreeMemoryAllocation(MemoryAllocation alloc);
+
+  // internal implementation - call one of the functions above
+  MemoryAllocation AllocateMemoryForResource(bool buffer, VkMemoryRequirements mrq,
+                                             MemoryScope scope, MemoryType type);
+
   vector<VkEvent> m_CleanupEvents;
   vector<VkEvent> m_PersistentEvents;
 
@@ -663,14 +675,12 @@ private:
   bool Prepare_SparseInitialState(WrappedVkImage *im);
   template <typename SerialiserType>
   bool Serialise_SparseBufferInitialState(SerialiserType &ser, ResourceId id,
-                                          VulkanResourceManager::InitialContentData contents);
+                                          VkInitialContents contents);
   template <typename SerialiserType>
   bool Serialise_SparseImageInitialState(SerialiserType &ser, ResourceId id,
-                                         VulkanResourceManager::InitialContentData contents);
-  bool Apply_SparseInitialState(WrappedVkBuffer *buf,
-                                VulkanResourceManager::InitialContentData contents);
-  bool Apply_SparseInitialState(WrappedVkImage *im,
-                                VulkanResourceManager::InitialContentData contents);
+                                         VkInitialContents contents);
+  bool Apply_SparseInitialState(WrappedVkBuffer *buf, VkInitialContents contents);
+  bool Apply_SparseInitialState(WrappedVkImage *im, VkInitialContents contents);
 
   void ApplyInitialContents();
 
@@ -751,7 +761,7 @@ public:
   template <typename SerialiserType>
   bool Serialise_InitialState(SerialiserType &ser, ResourceId resid, WrappedVkRes *res);
   void Create_InitialState(ResourceId id, WrappedVkRes *live, bool hasData);
-  void Apply_InitialState(WrappedVkRes *live, VulkanResourceManager::InitialContentData initial);
+  void Apply_InitialState(WrappedVkRes *live, VkInitialContents initial);
 
   bool ReleaseResource(WrappedVkRes *res);
 

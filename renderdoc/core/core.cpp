@@ -45,10 +45,10 @@ std::string DoStringise(const ResourceId &el)
 {
   RDCCOMPILE_ASSERT(sizeof(el) == sizeof(uint64_t), "ResourceId is no longer 1:1 with uint64_t");
 
-  return StringFormat::Fmt("ResourceId(%llu)", el);
+  return StringFormat::Fmt("ResourceId::%llu", el);
 }
 
-BASIC_TYPE_SERIALISE_STRINGIFY(ResourceId, (uint64_t &)el, SDBasic::UnsignedInteger, 8);
+BASIC_TYPE_SERIALISE_STRINGIFY(ResourceId, (uint64_t &)el, SDBasic::ResourceId, 8);
 
 INSTANTIATE_SERIALISE_TYPE(ResourceId);
 
@@ -199,7 +199,7 @@ void RenderDoc::UnloadCrashHandler()
 
 RenderDoc::RenderDoc()
 {
-  m_LogFile = "";
+  m_CaptureFileTemplate = "";
   m_MarkerIndentLevel = 0;
 
   m_CapturesActive = 0;
@@ -286,8 +286,8 @@ void RenderDoc::Initialise()
 
     FileIO::GetDefaultFiles(base, capture_filename, m_LoggingFilename, m_Target);
 
-    if(m_LogFile.empty())
-      SetLogFile(capture_filename.c_str());
+    if(m_CaptureFileTemplate.empty())
+      SetCaptureFileTemplate(capture_filename.c_str());
 
     RDCLOGFILE(m_LoggingFilename.c_str());
   }
@@ -682,7 +682,7 @@ bool RenderDoc::ShouldTriggerCapture(uint32_t frameNumber)
     {
       // discard, this frame is past.
     }
-    else if((*it) - 1 == frameNumber)
+    else if((*it) == frameNumber)
     {
       // we want to capture the next frame
       ret = true;
@@ -702,7 +702,7 @@ RDCFile *RenderDoc::CreateRDC(RDCDriver driver, uint32_t frameNum, void *thpixel
 {
   RDCFile *ret = new RDCFile;
 
-  m_CurrentLogFile = StringFormat::Fmt("%s_frame%u.rdc", m_LogFile.c_str(), frameNum);
+  m_CurrentLogFile = StringFormat::Fmt("%s_frame%u.rdc", m_CaptureFileTemplate.c_str(), frameNum);
 
   // make sure we don't stomp another capture if we make multiple captures in the same frame.
   {
@@ -712,7 +712,8 @@ RDCFile *RenderDoc::CreateRDC(RDCDriver driver, uint32_t frameNum, void *thpixel
             return o.path == m_CurrentLogFile;
           }) != m_Captures.end())
     {
-      m_CurrentLogFile = StringFormat::Fmt("%s_frame%u_%d.rdc", m_LogFile.c_str(), frameNum, altnum);
+      m_CurrentLogFile =
+          StringFormat::Fmt("%s_frame%u_%d.rdc", m_CaptureFileTemplate.c_str(), frameNum, altnum);
       altnum++;
     }
   }
@@ -730,6 +731,8 @@ RDCFile *RenderDoc::CreateRDC(RDCDriver driver, uint32_t frameNum, void *thpixel
   }
 
   ret->SetData(driver, ToStr(driver).c_str(), OSUtility::GetMachineIdent(), thumb);
+
+  FileIO::CreateParentDirectory(m_CurrentLogFile);
 
   ret->Create(m_CurrentLogFile.c_str());
 
@@ -786,22 +789,45 @@ void RenderDoc::RegisterStructuredProcessor(RDCDriver driver, StructuredProcesso
   m_StructProcesssors[driver] = provider;
 }
 
-void RenderDoc::RegisterCaptureExporter(const char *filetype, const char *description,
-                                        CaptureExporter exporter)
+void RenderDoc::RegisterCaptureExporter(CaptureExporter exporter, CaptureFileFormat description)
 {
-  RDCASSERT(m_ImportExportFormats.find(filetype) == m_ImportExportFormats.end());
+  std::string filetype = description.extension;
 
-  m_ImportExportFormats[filetype] = description;
+  for(const CaptureFileFormat &fmt : m_ImportExportFormats)
+  {
+    if(fmt.extension == filetype)
+    {
+      RDCERR("Duplicate exporter for '%s' found", filetype.c_str());
+      return;
+    }
+  }
+
+  description.openSupported = false;
+  description.convertSupported = true;
+
+  m_ImportExportFormats.push_back(description);
 
   m_Exporters[filetype] = exporter;
 }
 
-void RenderDoc::RegisterCaptureImportExporter(const char *filetype, const char *description,
-                                              CaptureImporter importer, CaptureExporter exporter)
+void RenderDoc::RegisterCaptureImportExporter(CaptureImporter importer, CaptureExporter exporter,
+                                              CaptureFileFormat description)
 {
-  RDCASSERT(m_ImportExportFormats.find(filetype) == m_ImportExportFormats.end());
+  std::string filetype = description.extension;
 
-  m_ImportExportFormats[filetype] = description;
+  for(const CaptureFileFormat &fmt : m_ImportExportFormats)
+  {
+    if(fmt.extension == filetype)
+    {
+      RDCERR("Duplicate import/exporter for '%s' found", filetype.c_str());
+      return;
+    }
+  }
+
+  description.openSupported = true;
+  description.convertSupported = true;
+
+  m_ImportExportFormats.push_back(description);
 
   m_Importers[filetype] = importer;
   m_Exporters[filetype] = exporter;
@@ -845,28 +871,19 @@ CaptureImporter RenderDoc::GetCaptureImporter(const char *filetype)
 
 std::vector<CaptureFileFormat> RenderDoc::GetCaptureFileFormats()
 {
-  std::vector<CaptureFileFormat> ret;
+  std::vector<CaptureFileFormat> ret = m_ImportExportFormats;
 
-  CaptureFileFormat rdc;
-  rdc.name = "rdc";
-  rdc.description = "Native RDC capture file format.";
-  rdc.openSupported = true;
-  rdc.convertSupported = true;
+  std::sort(ret.begin(), ret.end());
 
-  ret.push_back(rdc);
-
-  for(auto it = m_ImportExportFormats.begin(); it != m_ImportExportFormats.end(); ++it)
   {
-    CaptureFileFormat fmt;
-    fmt.name = it->first;
-    fmt.description = it->second;
+    CaptureFileFormat rdc;
+    rdc.extension = "rdc";
+    rdc.name = "Native RDC capture file format.";
+    rdc.description = "The format produced by frame-captures from applications directly.";
+    rdc.openSupported = true;
+    rdc.convertSupported = true;
 
-    rdc.openSupported = m_Importers.find(it->first) != m_Importers.end();
-    rdc.convertSupported = m_Exporters.find(it->first) != m_Exporters.end();
-
-    RDCASSERT(rdc.openSupported || rdc.convertSupported);
-
-    ret.push_back(fmt);
+    ret.insert(ret.begin(), rdc);
   }
 
   return ret;
@@ -1027,17 +1044,18 @@ void RenderDoc::SetCaptureOptions(const CaptureOptions &opts)
   LibraryHooks::GetInstance().OptionsUpdated();
 }
 
-void RenderDoc::SetLogFile(const char *logFile)
+void RenderDoc::SetCaptureFileTemplate(const char *pathtemplate)
 {
-  if(logFile == NULL || logFile[0] == '\0')
+  if(pathtemplate == NULL || pathtemplate[0] == '\0')
     return;
 
-  m_LogFile = logFile;
+  m_CaptureFileTemplate = pathtemplate;
 
-  if(m_LogFile.length() > 4 && m_LogFile.substr(m_LogFile.length() - 4) == ".rdc")
-    m_LogFile = m_LogFile.substr(0, m_LogFile.length() - 4);
+  if(m_CaptureFileTemplate.length() > 4 &&
+     m_CaptureFileTemplate.substr(m_CaptureFileTemplate.length() - 4) == ".rdc")
+    m_CaptureFileTemplate = m_CaptureFileTemplate.substr(0, m_CaptureFileTemplate.length() - 4);
 
-  FileIO::CreateParentDirectory(m_LogFile);
+  FileIO::CreateParentDirectory(m_CaptureFileTemplate);
 }
 
 void RenderDoc::FinishCaptureWriting(RDCFile *rdc, uint32_t frameNumber)

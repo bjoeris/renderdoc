@@ -60,20 +60,21 @@ bool StartGlobalHook(const char *pathmatch, const char *logfile, const CaptureOp
 bool IsGlobalHookActive();
 void StopGlobalHook();
 
-uint32_t InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
-                           const char *logfile, const CaptureOptions &opts, bool waitForExit);
+ExecuteResult InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
+                                const char *logfile, const CaptureOptions &opts, bool waitForExit);
 struct ProcessResult
 {
   string strStdout, strStderror;
   int retCode;
 };
-uint32_t LaunchProcess(const char *app, const char *workingDir, const char *cmdLine,
+uint32_t LaunchProcess(const char *app, const char *workingDir, const char *cmdLine, bool internal,
                        ProcessResult *result = NULL);
-uint32_t LaunchScript(const char *script, const char *workingDir, const char *args,
+uint32_t LaunchScript(const char *script, const char *workingDir, const char *args, bool internal,
                       ProcessResult *result = NULL);
-uint32_t LaunchAndInjectIntoProcess(const char *app, const char *workingDir, const char *cmdLine,
-                                    const rdcarray<EnvironmentModification> &env, const char *logfile,
-                                    const CaptureOptions &opts, bool waitForExit);
+ExecuteResult LaunchAndInjectIntoProcess(const char *app, const char *workingDir, const char *cmdLine,
+                                         const rdcarray<EnvironmentModification> &env,
+                                         const char *logfile, const CaptureOptions &opts,
+                                         bool waitForExit);
 void *LoadModule(const char *module);
 void *GetFunctionAddress(void *module, const char *function);
 uint32_t GetCurrentPID();
@@ -422,6 +423,7 @@ inline uint64_t CountLeadingZeroes(uint64_t value);
 // std::string
 // OS_DEBUG_BREAK() - instruction that debugbreaks the debugger - define instead of function to
 // preserve callstacks
+// EndianSwapXX() for XX = 16, 32, 64
 
 #if ENABLED(RDOC_WIN32)
 #include "win32/win32_specific.h"
@@ -430,3 +432,66 @@ inline uint64_t CountLeadingZeroes(uint64_t value);
 #else
 #error Undefined Platform!
 #endif
+
+inline uint64_t EndianSwap(uint64_t t)
+{
+  return EndianSwap64(t);
+}
+
+inline uint32_t EndianSwap(uint32_t t)
+{
+  return EndianSwap32(t);
+}
+
+inline uint16_t EndianSwap(uint16_t t)
+{
+  return EndianSwap16(t);
+}
+
+inline int64_t EndianSwap(int64_t t)
+{
+  return (int64_t)EndianSwap(uint64_t(t));
+}
+
+inline int32_t EndianSwap(int32_t t)
+{
+  return (int32_t)EndianSwap(uint32_t(t));
+}
+
+inline int16_t EndianSwap(int16_t t)
+{
+  return (int16_t)EndianSwap(uint16_t(t));
+}
+
+inline double EndianSwap(double t)
+{
+  uint64_t u;
+  memcpy(&u, &t, sizeof(t));
+  u = EndianSwap(u);
+  memcpy(&t, &u, sizeof(t));
+  return t;
+}
+
+inline float EndianSwap(float t)
+{
+  uint32_t u;
+  memcpy(&u, &t, sizeof(t));
+  u = EndianSwap(u);
+  memcpy(&t, &u, sizeof(t));
+  return t;
+}
+
+inline char EndianSwap(char t)
+{
+  return t;
+}
+
+inline byte EndianSwap(byte t)
+{
+  return t;
+}
+
+inline bool EndianSwap(bool t)
+{
+  return t;
+}

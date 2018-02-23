@@ -219,9 +219,6 @@ void PersistantConfig::AddAndroidHosts()
 
   SetConfigSetting("MaxConnectTimeout", QString::number(Android_MaxConnectTimeout));
 
-  SetConfigSetting(lit("Android_AutoPushLayerToApp"),
-                   Android_AutoPushLayerToApp ? lit("1") : lit("0"));
-
   rdcstr androidHosts;
   RENDERDOC_EnumerateAndroidDevices(&androidHosts);
   for(const QString &hostName :
@@ -239,7 +236,7 @@ void PersistantConfig::AddAndroidHosts()
     RENDERDOC_GetAndroidFriendlyName(hostName.toUtf8().data(), friendly);
     host->friendlyName = friendly;
     // Just a command to display in the GUI and allow Launch() to be called.
-    host->runCommand = lit("org.renderdoc.renderdoccmd");
+    host->runCommand = lit("Automatically handled");
     RemoteHosts.push_back(host);
   }
 
@@ -258,7 +255,9 @@ bool PersistantConfig::SetStyle()
   {
     if(UIStyle == rdcstr(StyleData::availStyles[i].styleID))
     {
-      QApplication::setStyle(StyleData::availStyles[i].creator());
+      QStyle *style = StyleData::availStyles[i].creator();
+      Formatter::setPalette(style->standardPalette());
+      QApplication::setStyle(style);
       return true;
     }
   }

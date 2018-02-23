@@ -26,11 +26,20 @@
 #pragma once
 
 #include "core/resource_manager.h"
-#include "driver/gl/gl_resources.h"
+#include "gl_initstate.h"
+#include "gl_resources.h"
 
 class WrappedOpenGL;
 
-class GLResourceManager : public ResourceManager<GLResource, GLResource, GLResourceRecord>
+struct GLResourceManagerConfiguration
+{
+  typedef GLResource WrappedResourceType;
+  typedef GLResource RealResourceType;
+  typedef GLResourceRecord RecordType;
+  typedef GLInitialContents InitialContentData;
+};
+
+class GLResourceManager : public ResourceManager<GLResourceManagerConfiguration>
 {
 public:
   GLResourceManager(WrappedOpenGL *gl);
@@ -249,7 +258,7 @@ private:
   void PrepareTextureInitialContents(ResourceId liveid, ResourceId origid, GLResource res);
 
   void Create_InitialState(ResourceId id, GLResource live, bool hasData);
-  void Apply_InitialState(GLResource live, InitialContentData initial);
+  void Apply_InitialState(GLResource live, GLInitialContents initial);
 
   map<GLResource, GLResourceRecord *> m_GLResourceRecords;
 

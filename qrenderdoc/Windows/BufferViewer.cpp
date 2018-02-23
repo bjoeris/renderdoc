@@ -2129,6 +2129,9 @@ void BufferViewer::updatePreviewColumns()
       {
         const FormatElement &el = m_ModelVSIn->columns[elIdx];
 
+        m_VSInPosition.instanced = el.perinstance;
+        m_VSInPosition.instStepRate = el.instancerate;
+
         if(el.buffer < vbs.count())
         {
           m_VSInPosition.vertexResourceId = vbs[el.buffer].resourceId;
@@ -2151,6 +2154,9 @@ void BufferViewer::updatePreviewColumns()
       if(elIdx >= 0 && elIdx < m_ModelVSIn->columns.count())
       {
         const FormatElement &el = m_ModelVSIn->columns[elIdx];
+
+        m_VSInSecondary.instanced = el.perinstance;
+        m_VSInSecondary.instStepRate = el.instancerate;
 
         if(el.buffer < vbs.count())
         {
@@ -2277,8 +2283,11 @@ void BufferViewer::configureMeshColumns()
 
   Viewport vp = m_Ctx.CurPipelineState().GetViewport(0);
 
+  float vpWidth = qAbs(vp.width);
+  float vpHeight = qAbs(vp.height);
+
   m_Config.fov = ui->fovGuess->value();
-  m_Config.aspect = (vp.width > 0.0f && vp.height > 0.0f) ? (vp.width / vp.height) : 1.0f;
+  m_Config.aspect = (vpWidth > 0.0f && vpHeight > 0.0f) ? (vpWidth / vpHeight) : 1.0f;
   m_Config.highlightVert = 0;
 
   if(ui->aspectGuess->value() > 0.0)
@@ -2543,7 +2552,11 @@ void BufferViewer::render_mouseMove(QMouseEvent *e)
   if(e->buttons() & Qt::RightButton)
     render_clicked(e);
 
-  INVOKE_MEMFN(RT_UpdateAndDisplay);
+  // display if any mouse buttons are held while moving.
+  if(e->buttons() != Qt::NoButton)
+  {
+    INVOKE_MEMFN(RT_UpdateAndDisplay);
+  }
 }
 
 void BufferViewer::render_clicked(QMouseEvent *e)
@@ -2780,7 +2793,11 @@ void BufferViewer::Reset()
                    &BufferViewer::render_keyRelease);
   QObject::connect(ui->render, &CustomPaintWidget::mouseWheel, this,
                    &BufferViewer::render_mouseWheel);
+  updateCheckerboardColours();
+}
 
+void BufferViewer::updateCheckerboardColours()
+{
   ui->render->setColours(Formatter::DarkCheckerColor(), Formatter::LightCheckerColor());
 }
 
@@ -2929,8 +2946,11 @@ void BufferViewer::data_scrolled(int scrollvalue)
 {
   QObject *sender = QObject::sender();
   RDTableView *view = qobject_cast<RDTableView *>(sender);
-  if(view == NULL)
-    view = qobject_cast<RDTableView *>(sender->parent());
+  while(sender != NULL && view == NULL)
+  {
+    sender = sender->parent();
+    view = qobject_cast<RDTableView *>(sender);
+  }
 
   if(view == NULL)
     return;
@@ -3073,11 +3093,11 @@ void BufferViewer::exportData(const BufferExport &params)
 
   if(m_MeshView)
   {
-    ANALYTIC_SET(UIFeatures.Export.MeshOutput, true);
+    ANALYTIC_SET(Export.MeshOutput, true);
   }
   else
   {
-    ANALYTIC_SET(UIFeatures.Export.RawBuffer, true);
+    ANALYTIC_SET(Export.RawBuffer, true);
   }
 
   BufferItemModel *model = (BufferItemModel *)m_CurView->model();
@@ -3118,7 +3138,10 @@ void BufferViewer::exportData(const BufferExport &params)
                 bytes += d.stride * idx;
 
               if(bytes + d.byteSize <= (const char *)d.end)
+              {
                 f->write(bytes, d.byteSize);
+                continue;
+              }
             }
 
             // if we didn't continue above, something was wrong, so write nulls
@@ -3232,6 +3255,15 @@ void BufferViewer::debugVertex()
       m_Ctx.AddDockWindow(s->Widget(), DockReference::AddTo, this);
     });
   });
+}
+
+void BufferViewer::changeEvent(QEvent *event)
+{
+  if(event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange)
+  {
+    updateCheckerboardColours();
+    ui->render->update();
+  }
 }
 
 void BufferViewer::SyncViews(RDTableView *primary, bool selection, bool scroll)

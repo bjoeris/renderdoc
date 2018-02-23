@@ -236,7 +236,7 @@ VkResult WrappedVulkan::vkCreateYetiSurfaceGOOGLE(VkInstance instance,
                                                   const VkAllocationCallbacks *pAllocator,
                                                   VkSurfaceKHR *pSurface) {
   // should not come in here at all on replay
-  RDCASSERT(m_State >= WRITING);
+  RDCASSERT(IsCaptureMode(m_State));
 
   VkResult ret =
     ObjDisp(instance)->CreateYetiSurfaceGOOGLE(Unwrap(instance), pCreateInfo, pAllocator, pSurface);

@@ -135,10 +135,15 @@ rdcstr CaptureContext::TempCaptureFilename(const rdcstr &appname)
 void CaptureContext::LoadCapture(const rdcstr &captureFile, const rdcstr &origFilename,
                                  bool temporary, bool local)
 {
+  CloseCapture();
+
   m_LoadInProgress = true;
 
   if(local)
+  {
     m_Config.CrashReport_LastOpenedCapture = origFilename;
+    m_Config.Save();
+  }
 
   bool newCapture = (!temporary && !Config().RecentCaptureFiles.contains(origFilename));
 
@@ -155,7 +160,7 @@ void CaptureContext::LoadCapture(const rdcstr &captureFile, const rdcstr &origFi
                      [this]() { return !m_LoadInProgress; },
                      [this]() { return UpdateLoadProgress(); });
 
-  ANALYTIC_ADDAVG(LoadTime, double(loadTimer.nsecsElapsed() * 1.0e-9));
+  ANALYTIC_ADDAVG(Performance.LoadTime, double(loadTimer.nsecsElapsed() * 1.0e-9));
 
   ANALYTIC_SET(CaptureFeatures.ShaderLinkage, m_APIProps.ShaderLinkage);
   ANALYTIC_SET(CaptureFeatures.YUVTextures, m_APIProps.YUVTextures);
@@ -296,8 +301,8 @@ void CaptureContext::LoadCaptureThreaded(const QString &captureFile, const QStri
     m_StructuredFile = &r->GetStructuredFile();
 
     m_ResourceList = r->GetResources();
-    for(ResourceDescription &res : m_ResourceList)
-      m_Resources[res.resourceId] = &res;
+
+    CacheResources();
 
     m_BufferList = r->GetBuffers();
     for(BufferDescription &b : m_BufferList)
@@ -370,6 +375,19 @@ void CaptureContext::LoadCaptureThreaded(const QString &captureFile, const QStri
 
   m_LoadInProgress = false;
   m_CaptureLoaded = true;
+}
+
+void CaptureContext::CacheResources()
+{
+  m_Resources.clear();
+
+  std::sort(m_ResourceList.begin(), m_ResourceList.end(),
+            [this](const ResourceDescription &a, const ResourceDescription &b) {
+              return GetResourceName(&a) < GetResourceName(&b);
+            });
+
+  for(ResourceDescription &res : m_ResourceList)
+    m_Resources[res.resourceId] = &res;
 }
 
 bool CaptureContext::PassEquivalent(const DrawcallDescription &a, const DrawcallDescription &b)
@@ -483,8 +501,8 @@ void CaptureContext::AddFakeProfileMarkers()
   int start = 0;
   int refdraw = 0;
 
-  DrawFlags drawFlags =
-      DrawFlags::Copy | DrawFlags::Resolve | DrawFlags::SetMarker | DrawFlags::CmdList;
+  DrawFlags drawFlags = DrawFlags::Copy | DrawFlags::Resolve | DrawFlags::SetMarker |
+                        DrawFlags::APICalls | DrawFlags::CmdList;
 
   for(int32_t i = 1; i < draws.count(); i++)
   {
@@ -646,7 +664,7 @@ void CaptureContext::RecompressCapture()
   {
     // for remote files we open a new short-lived handle on the temporary file
     tempCap = cap = RENDERDOC_OpenCaptureFile();
-    cap->OpenFile(tempFilename.toUtf8().data(), "rdc");
+    cap->OpenFile(tempFilename.toUtf8().data(), "rdc", NULL);
   }
 
   if(!cap)
@@ -675,7 +693,7 @@ void CaptureContext::RecompressCapture()
   float progress = 0.0f;
 
   LambdaThread *th = new LambdaThread([this, cap, destFilename, &progress]() {
-    cap->Convert(destFilename.toUtf8().data(), "rdc", [&progress](float p) { progress = p; });
+    cap->Convert(destFilename.toUtf8().data(), "rdc", NULL, [&progress](float p) { progress = p; });
   });
   th->start();
   // wait a few ms before popping up a progress bar
@@ -693,7 +711,7 @@ void CaptureContext::RecompressCapture()
     // the original, then re-open.
 
     // this releases the hold over the real desired location.
-    cap->OpenFile("", "");
+    cap->OpenFile("", "", NULL);
 
     // now remove the old capture
     QFile::remove(GetCaptureFilename());
@@ -702,7 +720,7 @@ void CaptureContext::RecompressCapture()
     QFile::rename(destFilename, GetCaptureFilename());
 
     // and re-open
-    cap->OpenFile(GetCaptureFilename().c_str(), "rdc");
+    cap->OpenFile(GetCaptureFilename().c_str(), "rdc", NULL);
   }
   else
   {
@@ -853,6 +871,141 @@ void CaptureContext::CloseCapture()
   }
 }
 
+bool CaptureContext::ImportCapture(const CaptureFileFormat &fmt, const rdcstr &importfile,
+                                   const rdcstr &rdcfile)
+{
+  CloseCapture();
+
+  QString ext = fmt.extension;
+
+  ReplayStatus status = ReplayStatus::UnknownError;
+  QString message;
+
+  // shorten the filename after here for error messages
+  QString filename = QFileInfo(importfile).fileName();
+
+  float progress = 0.0f;
+
+  LambdaThread *th = new LambdaThread([rdcfile, importfile, ext, &message, &progress, &status]() {
+
+    ICaptureFile *file = RENDERDOC_OpenCaptureFile();
+
+    status = file->OpenFile(importfile.c_str(), ext.toUtf8().data(),
+                            [&progress](float p) { progress = p * 0.5f; });
+
+    if(status != ReplayStatus::Succeeded)
+    {
+      message = file->ErrorString();
+      file->Shutdown();
+      return;
+    }
+
+    status = file->Convert(rdcfile.c_str(), "rdc", NULL,
+                           [&progress](float p) { progress = 0.5f + p * 0.5f; });
+    file->Shutdown();
+  });
+  th->start();
+  // wait a few ms before popping up a progress bar
+  th->wait(500);
+  if(th->isRunning())
+  {
+    ShowProgressDialog(m_MainWindow, tr("Importing from %1, please wait...").arg(filename),
+                       [th]() { return !th->isRunning(); }, [&progress]() { return progress; });
+  }
+  th->deleteLater();
+
+  if(status != ReplayStatus::Succeeded)
+  {
+    QString text = tr("Couldn't convert file '%1'\n").arg(filename);
+    if(message.isEmpty())
+      text += tr("%1").arg(ToQStr(status));
+    else
+      text += tr("%1: %2").arg(ToQStr(status)).arg(message);
+
+    RDDialog::critical(m_MainWindow, tr("Error converting capture"), text);
+    return false;
+  }
+
+  return true;
+}
+
+void CaptureContext::ExportCapture(const CaptureFileFormat &fmt, const rdcstr &exportfile)
+{
+  if(!m_CaptureLocal)
+    return;
+
+  QString ext = fmt.extension;
+
+  ICaptureFile *local = NULL;
+  ICaptureFile *file = NULL;
+  ReplayStatus status = ReplayStatus::Succeeded;
+
+  const SDFile *sdfile = NULL;
+
+  // if we don't need buffers, we can export directly from our existing capture file
+  if(!fmt.requiresBuffers)
+  {
+    file = Replay().GetCaptureFile();
+    sdfile = m_StructuredFile;
+  }
+
+  if(!file)
+  {
+    local = file = RENDERDOC_OpenCaptureFile();
+    status = file->OpenFile(m_CaptureFile.toUtf8().data(), "rdc", NULL);
+  }
+
+  QString filename = QFileInfo(m_CaptureFile).fileName();
+
+  if(status != ReplayStatus::Succeeded)
+  {
+    QString text = tr("Couldn't open file '%1' for export\n").arg(filename);
+    QString message = local->ErrorString();
+    if(message.isEmpty())
+      text += tr("%1").arg(ToQStr(status));
+    else
+      text += tr("%1: %2").arg(ToQStr(status)).arg(message);
+
+    RDDialog::critical(m_MainWindow, tr("Error opening file"), text);
+
+    if(local)
+      local->Shutdown();
+    return;
+  }
+
+  float progress = 0.0f;
+
+  LambdaThread *th = new LambdaThread([this, file, sdfile, ext, exportfile, &progress, &status]() {
+    status = file->Convert(exportfile.c_str(), ext.toUtf8().data(), sdfile,
+                           [&progress](float p) { progress = p; });
+  });
+  th->start();
+  // wait a few ms before popping up a progress bar
+  th->wait(500);
+  if(th->isRunning())
+  {
+    ShowProgressDialog(m_MainWindow,
+                       tr("Exporting %1 to %2, please wait...").arg(filename).arg(QString(fmt.name)),
+                       [th]() { return !th->isRunning(); }, [&progress]() { return progress; });
+  }
+  th->deleteLater();
+
+  QString message = file->ErrorString();
+  if(local)
+    local->Shutdown();
+
+  if(status != ReplayStatus::Succeeded)
+  {
+    QString text = tr("Couldn't convert file '%1'\n").arg(filename);
+    if(message.isEmpty())
+      text += tr("%1").arg(ToQStr(status));
+    else
+      text += tr("%1: %2").arg(ToQStr(status)).arg(message);
+
+    RDDialog::critical(m_MainWindow, tr("Error converting capture"), text);
+  }
+}
+
 void CaptureContext::SetEventID(const rdcarray<ICaptureViewer *> &exclude, uint32_t selectedEventID,
                                 uint32_t eventId, bool force)
 {
@@ -954,19 +1107,28 @@ void CaptureContext::RemoveBookmark(uint32_t EID)
 
 void CaptureContext::SaveChanges()
 {
+  bool success = true;
+
   if(m_CaptureMods & CaptureModifications::Renames)
-    SaveRenames();
+    success &= SaveRenames();
 
   if(m_CaptureMods & CaptureModifications::Bookmarks)
-    SaveBookmarks();
+    success &= SaveBookmarks();
 
   if(m_CaptureMods & CaptureModifications::Notes)
-    SaveNotes();
+    success &= SaveNotes();
+
+  if(!success)
+  {
+    RDDialog::critical(m_MainWindow, tr("Can't save file"),
+                       tr("Error saving file.\n"
+                          "Check for permissions and that it's not open elsewhere"));
+  }
 
   m_CaptureMods = CaptureModifications::NoModifications;
 }
 
-void CaptureContext::SaveRenames()
+bool CaptureContext::SaveRenames()
 {
   QVariantMap resources;
   for(ResourceId id : m_CustomNames.keys())
@@ -983,7 +1145,7 @@ void CaptureContext::SaveRenames()
   props.type = SectionType::ResourceRenames;
   props.version = 1;
 
-  Replay().GetCaptureAccess()->WriteSection(props, json.toUtf8());
+  return Replay().GetCaptureAccess()->WriteSection(props, json.toUtf8());
 }
 
 void CaptureContext::LoadRenames(const QString &data)
@@ -998,9 +1160,9 @@ void CaptureContext::LoadRenames(const QString &data)
     {
       ResourceId id;
 
-      if(str.startsWith(lit("resourceid::")))
+      if(str.startsWith(lit("ResourceId::")))
       {
-        qulonglong num = str.mid(sizeof("resourceid::") - 1).toULongLong();
+        qulonglong num = str.mid(sizeof("ResourceId::") - 1).toULongLong();
         memcpy(&id, &num, sizeof(num));
       }
       else
@@ -1014,7 +1176,7 @@ void CaptureContext::LoadRenames(const QString &data)
   }
 }
 
-void CaptureContext::SaveBookmarks()
+bool CaptureContext::SaveBookmarks()
 {
   QVariantList bookmarks;
   for(const EventBookmark &mark : m_Bookmarks)
@@ -1035,7 +1197,7 @@ void CaptureContext::SaveBookmarks()
   props.type = SectionType::Bookmarks;
   props.version = 1;
 
-  Replay().GetCaptureAccess()->WriteSection(props, json.toUtf8());
+  return Replay().GetCaptureAccess()->WriteSection(props, json.toUtf8());
 }
 
 void CaptureContext::LoadBookmarks(const QString &data)
@@ -1060,7 +1222,7 @@ void CaptureContext::LoadBookmarks(const QString &data)
   }
 }
 
-void CaptureContext::SaveNotes()
+bool CaptureContext::SaveNotes()
 {
   QVariantMap root;
   for(const QString &key : m_Notes.keys())
@@ -1074,7 +1236,7 @@ void CaptureContext::SaveNotes()
 
   ANALYTIC_SET(UIFeatures.CaptureComments, true);
 
-  Replay().GetCaptureAccess()->WriteSection(props, json.toUtf8());
+  return Replay().GetCaptureAccess()->WriteSection(props, json.toUtf8());
 }
 
 void CaptureContext::LoadNotes(const QString &data)
@@ -1191,17 +1353,22 @@ rdcstr CaptureContext::GetResourceName(ResourceId id)
   if(id == ResourceId())
     return tr("No Resource");
 
-  if(m_CustomNames.contains(id))
-    return m_CustomNames[id];
-
   ResourceDescription *desc = GetResource(id);
 
   if(desc)
-    return desc->name;
+    return GetResourceName(desc);
 
   uint64_t num;
   memcpy(&num, &id, sizeof(num));
   return tr("Unknown Resource %1").arg(num);
+}
+
+rdcstr CaptureContext::GetResourceName(const ResourceDescription *desc)
+{
+  if(m_CustomNames.contains(desc->resourceId))
+    return m_CustomNames[desc->resourceId];
+
+  return desc->name;
 }
 
 bool CaptureContext::IsAutogeneratedName(ResourceId id)
@@ -1241,6 +1408,8 @@ void CaptureContext::SetResourceCustomName(ResourceId id, const rdcstr &name)
 
   m_CaptureMods |= CaptureModifications::Renames;
   m_MainWindow->captureModified();
+
+  CacheResources();
 
   RefreshUIStatus({}, true, true);
 }
@@ -1697,16 +1866,32 @@ void CaptureContext::AddDockWindow(QWidget *newWindow, DockReference ref, QWidge
     return;
   }
 
-  if(ref == DockReference::ConstantBufferArea)
+  if(ref == DockReference::TransientPopupArea)
   {
-    if(ConstantBufferPreviewer::getOne())
+    if(qobject_cast<ConstantBufferPreviewer *>(newWindow))
     {
       ToolWindowManager *manager = ToolWindowManager::managerOf(refWindow);
 
-      manager->addToolWindow(newWindow, ToolWindowManager::AreaReference(
-                                            ToolWindowManager::AddTo,
-                                            manager->areaOf(ConstantBufferPreviewer::getOne())));
-      return;
+      ConstantBufferPreviewer *cb = manager->findChild<ConstantBufferPreviewer *>();
+      if(cb)
+      {
+        manager->addToolWindow(newWindow, ToolWindowManager::AreaReference(ToolWindowManager::AddTo,
+                                                                           manager->areaOf(cb)));
+        return;
+      }
+    }
+
+    if(qobject_cast<PixelHistoryView *>(newWindow))
+    {
+      ToolWindowManager *manager = ToolWindowManager::managerOf(refWindow);
+
+      PixelHistoryView *hist = manager->findChild<PixelHistoryView *>();
+      if(hist)
+      {
+        manager->addToolWindow(newWindow, ToolWindowManager::AreaReference(ToolWindowManager::AddTo,
+                                                                           manager->areaOf(hist)));
+        return;
+      }
     }
 
     ref = DockReference::RightOf;

@@ -129,6 +129,13 @@ enum
   RenderDoc_AndroidPortOffset = 50,
 };
 
+#define RENDERDOC_VULKAN_LAYER_NAME "VK_LAYER_RENDERDOC_Capture"
+
+#define RENDERDOC_ANDROID_LIBRARY "libVkLayer_GLES_RenderDoc.so"
+
+// This MUST match the package name in the build process that generates per-architecture packages
+#define RENDERDOC_ANDROID_PACKAGE_BASE "org.renderdoc.renderdoccmd"
+
 /////////////////////////////////////////////////
 // Debugging features configuration
 

@@ -206,25 +206,22 @@ public:
   }
 
   // special function for serialising buffers
-  Serialiser &Serialise(const char *name, byte *&el, uint64_t &byteSize,
+  Serialiser &Serialise(const char *name, byte *&el, uint64_t byteSize,
                         SerialiserFlags flags = SerialiserFlags::NoFlags)
   {
-    uint64_t count = byteSize;
-
     // silently handle NULL buffers
     if(IsWriting() && el == NULL)
-      count = 0;
+      byteSize = 0;
 
     {
       m_InternalElement = true;
-      DoSerialise(*this, count);
+      DoSerialise(*this, byteSize);
       m_InternalElement = false;
     }
 
     if(IsReading())
     {
-      VerifyArraySize(count);
-      byteSize = count;
+      VerifyArraySize(byteSize);
     }
 
     if(ExportStructure())
@@ -243,7 +240,7 @@ public:
 
       SDObject &obj = *m_StructureStack.back();
       obj.type.basetype = SDBasic::Buffer;
-      obj.type.byteSize = count;
+      obj.type.byteSize = byteSize;
     }
 
     byte *tempAlloc = NULL;
@@ -255,9 +252,9 @@ public:
         m_Write->AlignTo<ChunkAlignment>();
 
         if(el)
-          m_Write->Write(el, count);
+          m_Write->Write(el, byteSize);
         else
-          RDCASSERT(count == 0);
+          RDCASSERT(byteSize == 0);
       }
       else if(IsReading())
       {
@@ -270,8 +267,8 @@ public:
 #if !defined(__COVERITY__)
         if(flags & SerialiserFlags::AllocateMemory)
         {
-          if(count > 0)
-            el = AllocAlignedBuffer(count);
+          if(byteSize > 0)
+            el = AllocAlignedBuffer(byteSize);
           else
             el = NULL;
         }
@@ -281,14 +278,14 @@ public:
         // allocation.
         if(el == NULL && ExportStructure() && m_ExportBuffers)
         {
-          if(count > 0)
-            el = tempAlloc = AllocAlignedBuffer(count);
+          if(byteSize > 0)
+            el = tempAlloc = AllocAlignedBuffer(byteSize);
           else
             el = NULL;
         }
 #endif
 
-        m_Read->Read(el, count);
+        m_Read->Read(el, byteSize);
       }
     }
 
@@ -301,9 +298,9 @@ public:
         obj.data.basic.u = m_StructuredFile->buffers.size();
 
         bytebuf *alloc = new bytebuf;
-        alloc->resize((size_t)count);
+        alloc->resize((size_t)byteSize);
         if(el)
-          memcpy(alloc->data(), el, (size_t)count);
+          memcpy(alloc->data(), el, (size_t)byteSize);
 
         m_StructuredFile->buffers.push_back(alloc);
       }
@@ -321,28 +318,6 @@ public:
 
     return *this;
   }
-
-  Serialiser &Serialise(const char *name, byte *&el, uint32_t &byteSize,
-                        SerialiserFlags flags = SerialiserFlags::NoFlags)
-  {
-    uint64_t upcastSize = byteSize;
-    Serialise(name, el, upcastSize, flags);
-    if(IsReading())
-      byteSize = (uint32_t)upcastSize;
-    return *this;
-  }
-
-#if ENABLED(RDOC_SIZET_SEP_TYPE)
-  Serialiser &Serialise(const char *name, byte *&el, size_t &byteSize,
-                        SerialiserFlags flags = SerialiserFlags::NoFlags)
-  {
-    uint64_t upcastSize = (uint64_t)byteSize;
-    Serialise(name, el, upcastSize, flags);
-    if(IsReading())
-      byteSize = (size_t)upcastSize;
-    return *this;
-  }
-#endif
 
   Serialiser &Serialise(const char *name, bytebuf &el,
                         SerialiserFlags flags = SerialiserFlags::NoFlags)
@@ -491,25 +466,13 @@ public:
     return *this;
   }
 
-  Serialiser &Serialise(const char *name, void *&el, uint64_t &byteSize,
+  Serialiser &Serialise(const char *name, void *&el, uint64_t byteSize,
                         SerialiserFlags flags = SerialiserFlags::NoFlags)
   {
     return Serialise(name, (byte *&)el, byteSize, flags);
   }
 
-  Serialiser &Serialise(const char *name, const void *&el, uint64_t &byteSize,
-                        SerialiserFlags flags = SerialiserFlags::NoFlags)
-  {
-    return Serialise(name, (byte *&)el, byteSize, flags);
-  }
-
-  Serialiser &Serialise(const char *name, void *&el, uint32_t &byteSize,
-                        SerialiserFlags flags = SerialiserFlags::NoFlags)
-  {
-    return Serialise(name, (byte *&)el, byteSize, flags);
-  }
-
-  Serialiser &Serialise(const char *name, const void *&el, uint32_t &byteSize,
+  Serialiser &Serialise(const char *name, const void *&el, uint64_t byteSize,
                         SerialiserFlags flags = SerialiserFlags::NoFlags)
   {
     return Serialise(name, (byte *&)el, byteSize, flags);
@@ -575,6 +538,7 @@ public:
       SDObject &arr = *m_StructureStack.back();
       arr.type.basetype = SDBasic::Array;
       arr.type.byteSize = N;
+      arr.type.flags |= SDTypeFlags::FixedArray;
 
       arr.data.basic.numChildren = (uint64_t)N;
       arr.data.children.resize(N);
@@ -638,7 +602,9 @@ public:
   Serialiser &Serialise(const char *name, char (&el)[N],
                         SerialiserFlags flags = SerialiserFlags::NoFlags)
   {
-    std::string str = el;
+    std::string str;
+    if(IsWriting())
+      str = el;
     Serialise(name, str, flags);
     if(str.length() >= N)
     {
@@ -657,25 +623,22 @@ public:
 
   // special function for serialising dynamically sized arrays
   template <class T>
-  Serialiser &Serialise(const char *name, T *&el, uint64_t &arrayCount,
+  Serialiser &Serialise(const char *name, T *&el, uint64_t arrayCount,
                         SerialiserFlags flags = SerialiserFlags::NoFlags)
   {
-    uint64_t count = arrayCount;
-
     // silently handle NULL arrays
     if(IsWriting() && el == NULL)
-      count = 0;
+      arrayCount = 0;
 
     {
       m_InternalElement = true;
-      DoSerialise(*this, count);
+      DoSerialise(*this, arrayCount);
       m_InternalElement = false;
     }
 
     if(IsReading())
     {
-      VerifyArraySize(count);
-      arrayCount = count;
+      VerifyArraySize(arrayCount);
     }
 
     if(ExportStructure())
@@ -748,17 +711,6 @@ public:
         SerialiseDispatch<Serialiser, T>::Do(*this, el[i]);
     }
 
-    return *this;
-  }
-
-  template <class T>
-  Serialiser &Serialise(const char *name, T *&el, uint32_t &arrayCount,
-                        SerialiserFlags flags = SerialiserFlags::NoFlags)
-  {
-    uint64_t upcastCount = arrayCount;
-    Serialise(name, el, upcastCount, flags);
-    if(IsReading())
-      arrayCount = (uint32_t)upcastCount;
     return *this;
   }
 
@@ -1118,7 +1070,7 @@ public:
 
   // dynamic array variant
   template <class T>
-  Serialiser &Serialise(const char *name, const T *&el, uint64_t &arrayCount,
+  Serialiser &Serialise(const char *name, const T *&el, uint64_t arrayCount,
                         SerialiserFlags flags = SerialiserFlags::NoFlags)
   {
     return Serialise(name, (T *&)el, arrayCount, flags);
@@ -1342,6 +1294,19 @@ public:
     return *this;
   }
 
+  Serialiser &TypedAs(const char *name)
+  {
+    if(ExportStructure() && !m_StructureStack.empty())
+    {
+      SDObject &current = *m_StructureStack.back();
+
+      if(!current.data.children.empty())
+        current.data.children.back()->type.name = name;
+    }
+
+    return *this;
+  }
+
   Serialiser &Named(const char *name)
   {
     if(ExportStructure() && !m_StructureStack.empty())
@@ -1387,6 +1352,7 @@ public:
       case SDBasic::Null: RDCFATAL("Cannot call SerialiseValue for type %d!", type); break;
       case SDBasic::String: RDCFATAL("eString should be specialised!"); break;
       case SDBasic::Enum:
+      case SDBasic::ResourceId:
       case SDBasic::UnsignedInteger:
         if(byteSize == 1)
           current.data.basic.u = (uint64_t)(uint8_t)el;
@@ -1683,12 +1649,27 @@ BASIC_TYPE_SERIALISE(bool, el, SDBasic::Boolean, 1);
 
 BASIC_TYPE_SERIALISE(char, el, SDBasic::Character, 1);
 
-BASIC_TYPE_SERIALISE(char *, el, SDBasic::String, 0);
-BASIC_TYPE_SERIALISE(const char *, el, SDBasic::String, 0);
+template <>
+inline const char *TypeName<char *>()
+{
+  return "string";
+}
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, char *&el)
+{
+  ser.SerialiseValue(SDBasic::String, 0, el);
+}
 
-// these are special because we give them a typename of 'string' for both:
-// BASIC_TYPE_SERIALISE(rdcstr, el, SDBasic::String, 0);
-// BASIC_TYPE_SERIALISE(std::string, el, SDBasic::String, 0);
+template <>
+inline const char *TypeName<const char *>()
+{
+  return "string";
+}
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, const char *&el)
+{
+  ser.SerialiseValue(SDBasic::String, 0, el);
+}
 
 template <>
 inline const char *TypeName<std::string>()
@@ -1950,10 +1931,6 @@ struct ScopedDeserialiseArray<SerialiserType, byte *>
   CONCAT(union, __LINE__).o = &obj;        \
   GET_SERIALISER.template Serialise<type>(#obj, *CONCAT(union, __LINE__).t)
 
-// helper macro for when an array has a constant size. Uses a dummy variable to serialise
-#define FIXED_COUNT(count) \
-  (CONCAT(dummy_array_count, __LINE__) = (count), CONCAT(dummy_array_count, __LINE__))
-
 #define SERIALISE_ELEMENT_ARRAY(obj, count)                                                       \
   uint64_t CONCAT(dummy_array_count, __LINE__) = 0;                                               \
   (void)CONCAT(dummy_array_count, __LINE__);                                                      \
@@ -1994,6 +1971,35 @@ struct ScopedDeserialiseArray<SerialiserType, byte *>
 // a member that is a pointer and could be NULL, so needs a hidden 'present'
 // flag serialised out
 #define SERIALISE_MEMBER_OPT(obj) ser.SerialiseNullable(#obj, el.obj)
+
+// this is used when we want to serialise a member that should not be read from, if we know from
+// context that it should always be serialised as NULL. It avoids the need to declare local dummy
+// variables. It serialises elements as empty/NULL/etc from a local while writing, and sets to
+// default on reading
+#define SERIALISE_MEMBER_EMPTY(obj) \
+  {                                 \
+    decltype(el.obj) dummy = {};    \
+    ser.Serialise(#obj, dummy);     \
+    if(ser.IsReading())             \
+      el.obj = decltype(el.obj)();  \
+  }
+#define SERIALISE_MEMBER_OPT_EMPTY(obj) \
+  {                                     \
+    decltype(el.obj) dummy = NULL;      \
+    ser.SerialiseNullable(#obj, dummy); \
+    if(ser.IsReading())                 \
+      el.obj = NULL;                    \
+  }
+#define SERIALISE_MEMBER_ARRAY_EMPTY(arrayObj)                                    \
+  {                                                                               \
+    decltype(el.arrayObj) dummy = NULL;                                           \
+    uint64_t dummycount = 0;                                                      \
+    ser.Serialise(#arrayObj, dummy, dummycount, SerialiserFlags::AllocateMemory); \
+    if(ser.IsReading())                                                           \
+    {                                                                             \
+      el.arrayObj = NULL;                                                         \
+    }                                                                             \
+  }
 
 // simple utility function for inside serialise functions, to check if the serialiser has hit an
 // error and then bail, without trying to replay anything.

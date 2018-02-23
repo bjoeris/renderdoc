@@ -473,7 +473,7 @@ public:
 
   IMPLEMENT_FUNCTION_PROXIED(rdcarray<ShaderEntryPoint>, GetShaderEntryPoints, ResourceId shader);
   IMPLEMENT_FUNCTION_PROXIED(ShaderReflection *, GetShader, ResourceId shader,
-                             std::string entryPoint);
+                             ShaderEntryPoint entry);
 
   IMPLEMENT_FUNCTION_PROXIED(std::vector<std::string>, GetDisassemblyTargets);
   IMPLEMENT_FUNCTION_PROXIED(std::string, DisassembleShader, ResourceId pipeline,
@@ -597,15 +597,15 @@ private:
   struct ShaderReflKey
   {
     ShaderReflKey() {}
-    ShaderReflKey(ResourceId i, string e) : id(i), entryPoint(e) {}
+    ShaderReflKey(ResourceId i, ShaderEntryPoint e) : id(i), entry(e) {}
     ResourceId id;
-    string entryPoint;
+    ShaderEntryPoint entry;
     bool operator<(const ShaderReflKey &o) const
     {
       if(id != o.id)
         return id < o.id;
 
-      return entryPoint < o.entryPoint;
+      return entry < o.entry;
     }
   };
 
@@ -634,6 +634,8 @@ private:
   // the ID of the output window to use for previewing on the remote host. Only valid/useful if
   // m_Replay is set
   uint64_t m_PreviewOutput = 0;
+  // The previous windowing data, so we can detect changes and recreate the window
+  WindowingData m_PreviewWindowingData;
 
   uint32_t m_PreviewEvent = 0;
 

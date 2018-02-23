@@ -1,4 +1,4 @@
-QT.xmlpatterns.VERSION = 5.9.0
+QT.xmlpatterns.VERSION = 5.9.4
 QT.xmlpatterns.name = QtXmlPatterns
 QT.xmlpatterns.module = Qt5XmlPatterns
 QT.xmlpatterns.libs = $$QT_MODULE_LIB_BASE

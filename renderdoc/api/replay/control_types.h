@@ -40,10 +40,12 @@ struct MeshFormat
     baseVertex = 0;
     vertexByteOffset = 0;
     vertexByteStride = 0;
+    instStepRate = 1;
     showAlpha = false;
     topology = Topology::Unknown;
     numIndices = 0;
     unproject = false;
+    instanced = false;
     nearPlane = farPlane = 0.0f;
   }
 
@@ -75,6 +77,8 @@ struct MeshFormat
   Topology topology;
   DOCUMENT("The number of vertices in the mesh.");
   uint32_t numIndices;
+  DOCUMENT("The number of instances to render with the same value. See :data:`instanced`.");
+  uint32_t instStepRate;
 
   DOCUMENT("The near plane for the projection matrix.");
   float nearPlane;
@@ -82,6 +86,9 @@ struct MeshFormat
   float farPlane;
   DOCUMENT("``True`` if this mesh element contains post-projection positional data.");
   bool unproject;
+
+  DOCUMENT("``True`` if this mesh element comes from instanced data. See :data:`instStepRate`.");
+  bool instanced;
 
   DOCUMENT("``True`` if the alpha component of this element should be used.");
   bool showAlpha;
@@ -270,9 +277,9 @@ DOCUMENT("How to map components to normalised ``[0, 255]`` for saving to 8-bit f
 struct TextureComponentMapping
 {
   DOCUMENT("The value that should be mapped to ``0``");
-  float blackPoint;
+  float blackPoint = 0.0f;
   DOCUMENT("The value that should be mapped to ``255``");
-  float whitePoint;
+  float whitePoint = 1.0f;
 };
 
 DECLARE_REFLECTION_STRUCT(TextureComponentMapping);
@@ -318,7 +325,7 @@ Selects the (depth/array) slice to save.
 If this is -1, then all slices are written out as detailed below. This is only supported in formats
 that don't support slices natively, and will be done in RGBA8.
 )");
-  int32_t sliceIndex;
+  int32_t sliceIndex = -1;
 
   // write out the slices as a 2D grid, with the below
   // width. Any empty slices are writted as (0,0,0,0)
@@ -326,10 +333,10 @@ that don't support slices natively, and will be done in RGBA8.
 If ``True``, write out the slices as a 2D grid with the width given in :data:`sliceGridWidth`. Any
 empty slices in the grid are written as transparent black.
 )");
-  bool slicesAsGrid;
+  bool slicesAsGrid = false;
 
   DOCUMENT("The width of a grid if :data:`slicesAsGrid` is ``True``.");
-  int32_t sliceGridWidth;
+  int32_t sliceGridWidth = 1;
 
   DOCUMENT(R"(Write out 6 slices in a cruciform pattern::
 
@@ -346,7 +353,7 @@ empty slices in the grid are written as transparent black.
 
 With the gaps filled in with transparent black.
 )");
-  bool cubeCruciform;
+  bool cubeCruciform = false;
 };
 
 DECLARE_REFLECTION_STRUCT(TextureSliceMapping);
@@ -358,10 +365,10 @@ struct TextureSave
   ResourceId id;
 
   DOCUMENT("An optional :class:`CompType` hint to use when saving a typeless texture.");
-  CompType typeHint;
+  CompType typeHint = CompType::Typeless;
 
   DOCUMENT("The :class:`FileType` to use when saving to the destination file.");
-  FileType destType;
+  FileType destType = FileType::DDS;
 
   // mip == -1 writes out all mips where allowed by file format
   // or writes mip 0 otherwise
@@ -370,7 +377,7 @@ struct TextureSave
 If set to ``-1`` then all mips are written, where allowed by file format. If not allowed, mip 0 is
 written
 )");
-  int32_t mip;
+  int32_t mip = -1;
 
   DOCUMENT(R"(Controls black/white point mapping for output formats that are normal
 :attr:`8-bit SRGB <CompType.UNorm>`, values are
@@ -384,7 +391,7 @@ written
   TextureSliceMapping slice;
 
   DOCUMENT("Selects a single component out of a texture to save as grayscale, or -1 to save all.");
-  int channelExtract;
+  int channelExtract = -1;
 
   // for formats without an alpha channel, define how it should be
   // mapped. Only available for uncompressed simple formats, done
@@ -394,7 +401,7 @@ alpha.
 
 It is an :class:`AlphaMapping` that controls what behaviour to use.
 )");
-  AlphaMapping alpha;
+  AlphaMapping alpha = AlphaMapping::Preserve;
 
   DOCUMENT("The background color if :data:`alpha` is set to :attr:`AlphaMapping.BlendToColor`");
   FloatVector alphaCol;
@@ -529,34 +536,48 @@ struct CaptureFileFormat
   DOCUMENT("");
   bool operator==(const CaptureFileFormat &o) const
   {
-    return name == o.name && description == o.description && openSupported == o.openSupported &&
+    return extension == o.extension && name == o.name && description == o.description &&
+           requiresBuffers == o.requiresBuffers && openSupported == o.openSupported &&
            convertSupported == o.convertSupported;
   }
   bool operator<(const CaptureFileFormat &o) const
   {
+    if(!(extension == o.extension))
+      return extension < o.extension;
     if(!(name == o.name))
       return name < o.name;
     if(!(description == o.description))
       return description < o.description;
+    if(!(requiresBuffers == o.requiresBuffers))
+      return requiresBuffers < o.requiresBuffers;
     if(!(openSupported == o.openSupported))
       return openSupported < o.openSupported;
     if(!(convertSupported == o.convertSupported))
       return convertSupported < o.convertSupported;
     return false;
   }
-  DOCUMENT("The name of the format as a single minimal string, e.g. ``rdc``.");
+  DOCUMENT("The file of the format as a single minimal string, e.g. ``rdc``.");
+  rdcstr extension;
+
+  DOCUMENT("A human readable short phrase naming the file format.");
   rdcstr name;
 
-  DOCUMENT("A human readable description of the file format, e.g. ``RenderDoc native capture``.");
+  DOCUMENT("A human readable long-form description of the file format.");
   rdcstr description;
+
+  DOCUMENT(R"(Indicates whether exporting to this format requires buffers or just structured data.
+If it doesn't require buffers then it can be exported directly from an opened capture, which by
+default has structured data but no buffers available.
+)");
+  bool requiresBuffers;
 
   DOCUMENT(R"(Indicates whether or not files in this format can be opened and processed as
 structured data.
 )");
-  bool openSupported = false;
+  bool openSupported;
 
   DOCUMENT("Indicates whether captures or structured data can be saved out in this format.");
-  bool convertSupported = true;
+  bool convertSupported;
 };
 
 DECLARE_REFLECTION_STRUCT(CaptureFileFormat);

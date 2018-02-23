@@ -73,7 +73,7 @@ bool WrappedID3D11Device::Serialise_CreateBlendState1(SerialiserType &ser,
                                                       ID3D11BlendState1 **ppBlendState)
 {
   SERIALISE_ELEMENT_LOCAL(Descriptor, *pBlendStateDesc);
-  SERIALISE_ELEMENT_LOCAL(pState, GetIDForResource(*ppBlendState));
+  SERIALISE_ELEMENT_LOCAL(pState, GetIDForResource(*ppBlendState)).TypedAs("ID3D11BlendState1 *");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -157,7 +157,15 @@ HRESULT WrappedID3D11Device::CreateBlendState1(const D3D11_BLEND_DESC1 *pBlendSt
       SCOPED_SERIALISE_CHUNK(D3D11Chunk::CreateBlendState1);
       Serialise_CreateBlendState1(GET_SERIALISER, pBlendStateDesc, &wrapped);
 
-      m_DeviceRecord->AddChunk(scope.Get());
+      WrappedID3D11BlendState1 *st = (WrappedID3D11BlendState1 *)wrapped;
+      ResourceId id = st->GetResourceID();
+
+      RDCASSERT(GetResourceManager()->GetResourceRecord(id) == NULL);
+
+      D3D11ResourceRecord *record = GetResourceManager()->AddResourceRecord(id);
+      record->Length = 0;
+
+      record->AddChunk(scope.Get());
     }
 
     *ppBlendState = wrapped;
@@ -172,7 +180,8 @@ bool WrappedID3D11Device::Serialise_CreateRasterizerState1(
     ID3D11RasterizerState1 **ppRasterizerState)
 {
   SERIALISE_ELEMENT_LOCAL(Descriptor, *pRasterizerDesc);
-  SERIALISE_ELEMENT_LOCAL(pState, GetIDForResource(*ppRasterizerState));
+  SERIALISE_ELEMENT_LOCAL(pState, GetIDForResource(*ppRasterizerState))
+      .TypedAs("ID3D11RasterizerState1 *");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -256,7 +265,15 @@ HRESULT WrappedID3D11Device::CreateRasterizerState1(const D3D11_RASTERIZER_DESC1
       SCOPED_SERIALISE_CHUNK(D3D11Chunk::CreateRasterizerState1);
       Serialise_CreateRasterizerState1(GET_SERIALISER, pRasterizerDesc, &wrapped);
 
-      m_DeviceRecord->AddChunk(scope.Get());
+      WrappedID3D11RasterizerState2 *st = (WrappedID3D11RasterizerState2 *)wrapped;
+      ResourceId id = st->GetResourceID();
+
+      RDCASSERT(GetResourceManager()->GetResourceRecord(id) == NULL);
+
+      D3D11ResourceRecord *record = GetResourceManager()->AddResourceRecord(id);
+      record->Length = 0;
+
+      record->AddChunk(scope.Get());
     }
 
     *ppRasterizerState = wrapped;

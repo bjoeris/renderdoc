@@ -60,23 +60,9 @@ public:
     m_EnabledHooks = true;
   }
   ~VRAPIHook() {}
-  bool CreateHooks(const char *libName)
-  {
-    if(!m_EnabledHooks)
-      return false;
+  static void libHooked(void *realLib);
 
-    if(libName)
-      PosixHookLibrary(libName, &libHooked);
-
-    bool success = SetupHooks();
-
-    if(!success)
-      return false;
-
-    m_HasHooks = true;
-
-    return true;
-  }
+  bool CreateHooks(const char *libName);
 
   void EnableHooks(const char *libName, bool enable) { m_EnabledHooks = enable; }
   void OptionsUpdated(const char *libName) {}
@@ -86,7 +72,6 @@ public:
       SetupHooks();
   }
 
-  static void libHooked(void *realLib) { libvrapi_symHandle = realLib; }
   //---------------------------------------------------------------------------------------------------------
   PFN_vrapi_CreateTextureSwapChain2 vrapi_CreateTextureSwapChain2_real;
   PFN_vrapi_CreateTextureSwapChain vrapi_CreateTextureSwapChain_real;
@@ -103,24 +88,24 @@ public:
   bool SetupHooks()
   {
     if(vrapi_CreateTextureSwapChain2_real == NULL)
-      vrapi_CreateTextureSwapChain2_real = (PFN_vrapi_CreateTextureSwapChain2)dlsym(
+      vrapi_CreateTextureSwapChain2_real = (PFN_vrapi_CreateTextureSwapChain2)PosixGetFunction(
           libvrapi_symHandle, "vrapi_CreateTextureSwapChain2");
     if(vrapi_CreateTextureSwapChain_real == NULL)
-      vrapi_CreateTextureSwapChain_real = (PFN_vrapi_CreateTextureSwapChain)dlsym(
+      vrapi_CreateTextureSwapChain_real = (PFN_vrapi_CreateTextureSwapChain)PosixGetFunction(
           libvrapi_symHandle, "vrapi_CreateTextureSwapChain");
     if(vrapi_SubmitFrame_real == NULL)
       vrapi_SubmitFrame_real =
-          (PFN_vrapi_SubmitFrame)dlsym(libvrapi_symHandle, "vrapi_SubmitFrame");
+          (PFN_vrapi_SubmitFrame)PosixGetFunction(libvrapi_symHandle, "vrapi_SubmitFrame");
 
     if(vrapi_GetTextureSwapChainLength_real == NULL)
-      vrapi_GetTextureSwapChainLength_real = (PFN_vrapi_GetTextureSwapChainLength)dlsym(
+      vrapi_GetTextureSwapChainLength_real = (PFN_vrapi_GetTextureSwapChainLength)PosixGetFunction(
           libvrapi_symHandle, "vrapi_GetTextureSwapChainLength");
     if(vrapi_GetTextureSwapChainHandle_real == NULL)
-      vrapi_GetTextureSwapChainHandle_real = (PFN_vrapi_GetTextureSwapChainHandle)dlsym(
+      vrapi_GetTextureSwapChainHandle_real = (PFN_vrapi_GetTextureSwapChainHandle)PosixGetFunction(
           libvrapi_symHandle, "vrapi_GetTextureSwapChainHandle");
     if(vrapi_GetSystemPropertyInt_real == NULL)
-      vrapi_GetSystemPropertyInt_real =
-          (PFN_vrapi_GetSystemPropertyInt)dlsym(libvrapi_symHandle, "vrapi_GetSystemPropertyInt");
+      vrapi_GetSystemPropertyInt_real = (PFN_vrapi_GetSystemPropertyInt)PosixGetFunction(
+          libvrapi_symHandle, "vrapi_GetSystemPropertyInt");
 
     return vrapi_SubmitFrame_real != NULL;
   }
@@ -189,8 +174,6 @@ __attribute__((visibility("default"))) ovrTextureSwapChain *vrapi_CreateTextureS
     vrapi_hooks.SetupHooks();
   }
 
-  gl_CurChunk = GLChunk::vrapi_CreateTextureSwapChain2;
-
   ovrTextureSwapChain *texture_swapchain = vrapi_hooks.vrapi_CreateTextureSwapChain2_real(
       type, format, width, height, levels, bufferCount);
 
@@ -206,6 +189,7 @@ __attribute__((visibility("default"))) ovrTextureSwapChain *vrapi_CreateTextureS
       GLenum internalformat = GetInternalFormat(format);
       GLenum textureType = GetTextureType(type);
 
+      gl_CurChunk = GLChunk::vrapi_CreateTextureSwapChain2;
       m_GLDriver->CreateVRAPITextureSwapChain(tex, textureType, internalformat, width, height,
                                               levels);
     }
@@ -224,8 +208,6 @@ __attribute__((visibility("default"))) ovrTextureSwapChain *vrapi_CreateTextureS
     vrapi_hooks.SetupHooks();
   }
 
-  gl_CurChunk = GLChunk::vrapi_CreateTextureSwapChain;
-
   ovrTextureSwapChain *texture_swapchain =
       vrapi_hooks.vrapi_CreateTextureSwapChain_real(type, format, width, height, levels, buffered);
 
@@ -241,6 +223,7 @@ __attribute__((visibility("default"))) ovrTextureSwapChain *vrapi_CreateTextureS
       GLenum internalformat = GetInternalFormat(format);
       GLenum textureType = GetTextureType(type);
 
+      gl_CurChunk = GLChunk::vrapi_CreateTextureSwapChain;
       m_GLDriver->CreateVRAPITextureSwapChain(tex, textureType, internalformat, width, height,
                                               levels);
     }
@@ -266,4 +249,35 @@ __attribute__((visibility("default"))) void vrapi_SubmitFrame(ovrMobile *ovr,
 
   vrapi_hooks.vrapi_SubmitFrame_real(ovr, parms);
 }
+}    // extern "C"
+
+void VRAPIHook::libHooked(void *realLib)
+{
+  libvrapi_symHandle = realLib;
+  vrapi_hooks.CreateHooks(NULL);
+}
+
+bool VRAPIHook::CreateHooks(const char *libName)
+{
+  if(!m_EnabledHooks)
+    return false;
+
+  if(libName)
+  {
+    PosixHookFunction("vrapi_CreateTextureSwapChain2", (void *)&vrapi_CreateTextureSwapChain2);
+    PosixHookFunction("vrapi_CreateTextureSwapChain", (void *)&vrapi_CreateTextureSwapChain);
+    PosixHookFunction("vrapi_SubmitFrame", (void *)&vrapi_SubmitFrame);
+
+    PosixHookLibrary(libName, &libHooked);
+    return true;
+  }
+
+  bool success = SetupHooks();
+
+  if(!success)
+    return false;
+
+  m_HasHooks = true;
+
+  return true;
 }

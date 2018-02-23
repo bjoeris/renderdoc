@@ -77,11 +77,9 @@ public:
 
     return *this;
   }
-  bool operator==(const SPIRVIterator &it) const
-  {
-    return words == it.words && offset == it.offset;
-  }
-  bool operator!=(const SPIRVIterator &it) const { return !(*this == it); }
+  bool operator==(const SPIRVIterator &it) const = delete;
+  bool operator!=(const SPIRVIterator &it) const = delete;
+  bool operator<(const SPIRVIterator &it) const { return words == it.words && offset < it.offset; }
   // utility functions
   explicit operator bool() const { return words != NULL && offset < words->size(); }
   uint32_t &operator*() { return cur(); }
@@ -120,6 +118,16 @@ public:
     words = op.words;
 
     iter = SPIRVIterator(words, 0);
+  }
+
+  static SPIRVOperation copy(SPIRVIterator it)
+  {
+    SPIRVOperation ret(it);
+
+    ret.words.insert(ret.words.begin(), it.it(), it.it() + it.size());
+    ret.iter = SPIRVIterator(ret.words, 0);
+
+    return ret;
   }
 
   // constructor that takes existing words from elsewhere and just references it.

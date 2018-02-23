@@ -1,4 +1,4 @@
-QT.axbase.VERSION = 5.9.0
+QT.axbase.VERSION = 5.9.4
 QT.axbase.name = QtAxBase
 QT.axbase.module = Qt5AxBase
 QT.axbase.libs = $$QT_MODULE_LIB_BASE

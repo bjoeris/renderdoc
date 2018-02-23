@@ -230,6 +230,12 @@ bool ReplayManager::IsRunning()
   return m_Thread && m_Thread->isRunning() && m_Running;
 }
 
+float ReplayManager::GetCurrentProcessingTime()
+{
+  QMutexLocker lock(&m_TimerLock);
+  return m_CommandTimer.isValid() ? double(m_CommandTimer.elapsed()) / 1000.0 : 0.0;
+}
+
 void ReplayManager::AsyncInvoke(const rdcstr &tag, ReplayManager::InvokeCallback m)
 {
   QString qtag(tag);
@@ -305,11 +311,11 @@ ReplayStatus ReplayManager::ConnectToRemoteServer(RemoteHost *host)
 
   if(host->IsADB())
   {
-    ANALYTIC_SET(UIFeatures.RemoteReplay.Android, true);
+    ANALYTIC_SET(UIFeatures.AndroidRemoteReplay, true);
   }
   else
   {
-    ANALYTIC_SET(UIFeatures.RemoteReplay.NonAndroid, true);
+    ANALYTIC_SET(UIFeatures.NonAndroidRemoteReplay, true);
   }
 
   m_RemoteHost = host;
@@ -369,15 +375,15 @@ void ReplayManager::ReopenCaptureFile(const QString &path)
 {
   if(!m_CaptureFile)
     m_CaptureFile = RENDERDOC_OpenCaptureFile();
-  m_CaptureFile->OpenFile(path.toUtf8().data(), "rdc");
+  m_CaptureFile->OpenFile(path.toUtf8().data(), "rdc", NULL);
 }
 
-uint32_t ReplayManager::ExecuteAndInject(const rdcstr &exe, const rdcstr &workingDir,
-                                         const rdcstr &cmdLine,
-                                         const rdcarray<EnvironmentModification> &env,
-                                         const rdcstr &capturefile, CaptureOptions opts)
+ExecuteResult ReplayManager::ExecuteAndInject(const rdcstr &exe, const rdcstr &workingDir,
+                                              const rdcstr &cmdLine,
+                                              const rdcarray<EnvironmentModification> &env,
+                                              const rdcstr &capturefile, CaptureOptions opts)
 {
-  uint32_t ret = 0;
+  ExecuteResult ret;
 
   if(m_Remote)
   {
@@ -423,7 +429,7 @@ void ReplayManager::run(int proxyRenderer, const QString &capturefile,
   {
     m_CaptureFile = RENDERDOC_OpenCaptureFile();
 
-    m_CreateStatus = m_CaptureFile->OpenFile(capturefile.toUtf8().data(), "rdc");
+    m_CreateStatus = m_CaptureFile->OpenFile(capturefile.toUtf8().data(), "rdc", NULL);
 
     if(m_CreateStatus == ReplayStatus::Succeeded)
       std::tie(m_CreateStatus, m_Renderer) = m_CaptureFile->OpenCapture(progress);
@@ -462,7 +468,19 @@ void ReplayManager::run(int proxyRenderer, const QString &capturefile,
       continue;
 
     if(cmd->method != NULL)
+    {
+      {
+        QMutexLocker lock(&m_TimerLock);
+        m_CommandTimer.start();
+      }
+
       cmd->method(m_Renderer);
+
+      {
+        QMutexLocker lock(&m_TimerLock);
+        m_CommandTimer.invalidate();
+      }
+    }
 
     // if it's a throwaway command, delete it
     if(cmd->selfdelete)

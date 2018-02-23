@@ -251,6 +251,54 @@ inline enum_name operator++(enum_name &a)                                      \
 
 #define ENUM_ARRAY_SIZE(enum_name) size_t(enum_name::Count)
 
+// declare ResourceId extremely early so that it can be referenced in structured_data.h
+
+#ifdef RENDERDOC_EXPORTS
+struct ResourceId;
+
+namespace ResourceIDGen
+{
+// the only function allowed access to ResourceId internals, for allocating a new ID
+ResourceId GetNewUniqueID();
+};
+#endif
+
+// We give every resource a globally unique ID so that we can differentiate
+// between two textures allocated in the same memory (after the first is freed)
+//
+// it's a struct around a uint64_t to aid in template selection
+DOCUMENT(R"(This is an opaque identifier that uniquely locates a resource.
+
+.. note::
+  These IDs do not overlap ever - textures, buffers, shaders and samplers will all have unique IDs
+  and do not reuse the namespace. Likewise the IDs assigned for resources during capture  are not
+  re-used on replay - the corresponding resources created on replay to stand-in for capture-time
+  resources are given unique IDs and a mapping is stored to between the capture-time resource and
+  the replay-time one.
+)");
+struct ResourceId
+{
+  ResourceId() : id() {}
+  DOCUMENT("A helper function that explicitly creates an empty/invalid/null :class:`ResourceId`.");
+  inline static ResourceId Null() { return ResourceId(); }
+  DOCUMENT("Compares two ``ResourceId`` objects for equality.");
+  bool operator==(const ResourceId u) const { return id == u.id; }
+  DOCUMENT("Compares two ``ResourceId`` objects for inequality.");
+  bool operator!=(const ResourceId u) const { return id != u.id; }
+  DOCUMENT("Compares two ``ResourceId`` objects for less-than.");
+  bool operator<(const ResourceId u) const { return id < u.id; }
+#if defined(RENDERDOC_QT_COMPAT)
+  operator QVariant() const { return QVariant::fromValue(*this); }
+#endif
+
+private:
+  uint64_t id;
+
+#ifdef RENDERDOC_EXPORTS
+  friend ResourceId ResourceIDGen::GetNewUniqueID();
+#endif
+};
+
 #include "basic_types.h"
 #include "stringise.h"
 #include "structured_data.h"
@@ -415,59 +463,8 @@ inline const WindowingData CreateAndroidWindowingData(ANativeWindow *window)
   return ret;
 }
 
-DOCUMENT(R"(Internal structure used for initialising environment in a replay application.)");
-struct GlobalEnvironment
-{
-  DOCUMENT("The handle to the X display to use internally. If left ``NULL``, one will be opened.");
-  Display *xlibDisplay = NULL;
-};
-
-#ifdef RENDERDOC_EXPORTS
-struct ResourceId;
-
-namespace ResourceIDGen
-{
-// the only function allowed access to ResourceId internals, for allocating a new ID
-ResourceId GetNewUniqueID();
-};
-#endif
-
-// We give every resource a globally unique ID so that we can differentiate
-// between two textures allocated in the same memory (after the first is freed)
-//
-// it's a struct around a uint64_t to aid in template selection
-DOCUMENT(R"(This is an opaque identifier that uniquely locates a resource.
-
-.. note::
-  These IDs do not overlap ever - textures, buffers, shaders and samplers will all have unique IDs
-  and do not reuse the namespace. Likewise the IDs assigned for resources during capture  are not
-  re-used on replay - the corresponding resources created on replay to stand-in for capture-time
-  resources are given unique IDs and a mapping is stored to between the capture-time resource and
-  the replay-time one.
-)");
-struct ResourceId
-{
-  ResourceId() : id() {}
-  DOCUMENT("A helper function that explicitly creates an empty/invalid/null :class:`ResourceId`.");
-  inline static ResourceId Null() { return ResourceId(); }
-  DOCUMENT("Compares two ``ResourceId`` objects for equality.");
-  bool operator==(const ResourceId u) const { return id == u.id; }
-  DOCUMENT("Compares two ``ResourceId`` objects for inequality.");
-  bool operator!=(const ResourceId u) const { return id != u.id; }
-  DOCUMENT("Compares two ``ResourceId`` objects for less-than.");
-  bool operator<(const ResourceId u) const { return id < u.id; }
-#if defined(RENDERDOC_QT_COMPAT)
-  operator QVariant() const { return QVariant::fromValue(*this); }
-#endif
-
-private:
-  uint64_t id;
-
-#ifdef RENDERDOC_EXPORTS
-  friend ResourceId ResourceIDGen::GetNewUniqueID();
-#endif
-};
-
+// declare metatype/reflection for ResourceId here as the struct itself is declared before including
+// all relevant headers above
 #if defined(RENDERDOC_QT_COMPAT)
 Q_DECLARE_METATYPE(ResourceId);
 #endif
@@ -483,6 +480,27 @@ DECLARE_REFLECTION_STRUCT(ResourceId);
 #include "replay_enums.h"
 #include "shader_types.h"
 #include "vk_pipestate.h"
+
+DOCUMENT(R"(Internal structure used for initialising environment in a replay application.)");
+struct GlobalEnvironment
+{
+  DOCUMENT("The handle to the X display to use internally. If left ``NULL``, one will be opened.");
+  Display *xlibDisplay = NULL;
+};
+
+DOCUMENT("The result of executing or injecting into a program.")
+struct ExecuteResult
+{
+  DOCUMENT(
+      "The :class:`ReplayStatus` resulting from the operation, indicating success or failure.");
+  ReplayStatus status;
+  DOCUMENT(R"(The ident where the new application is listening for target control, or 0 if something
+went wrong.
+)");
+  uint32_t ident;
+};
+
+DECLARE_REFLECTION_STRUCT(ExecuteResult);
 
 // there's not a good way to document a callback, so for lack of a better place we declare these
 // here and document them immediately below. They can be linked to from anywhere by name.
@@ -1170,9 +1188,14 @@ next after that.
   DOCUMENT(R"(Queue up a capture to happen on a particular frame number. When this frame is about to
 begin a capture is begun, and it ends when this frame number ends.
 
+.. note:: Frame 0 is defined as starting when the device is created, up to the first swapchain
+  present defined frame boundary.
+
 :param int frameNumber: The number of the frame to capture on.
+:param int numFrames: How many frames to capture. These will be captured sequentially and
+  independently to separate files.
 )");
-  virtual void QueueCapture(uint32_t frameNumber) = 0;
+  virtual void QueueCapture(uint32_t frameNumber, uint32_t numFrames) = 0;
 
   DOCUMENT(R"(Begin copying a given capture stored on a remote machine to the local machine over the
 target control connection.
@@ -1264,8 +1287,10 @@ or name).
 
 :param SectionProperties props: The properties of the section to be written.
 :param bytes contents: The raw contents of the section.
+:return: ``True`` if the section was written successfully, ``False`` otherwise.
+:rtype: ``bool``
 )");
-  virtual void WriteSection(const SectionProperties &props, const bytebuf &contents) = 0;
+  virtual bool WriteSection(const SectionProperties &props, const bytebuf &contents) = 0;
 
   DOCUMENT(R"(Query if callstacks are available.
 
@@ -1373,13 +1398,14 @@ This happens on the remote system, so all paths are relative to the remote files
   platform specific way to generate arguments.
 :param list env: Any :class:`EnvironmentModification` that should be made when running the program.
 :param CaptureOptions opts: The capture options to use when injecting into the program.
-:return: The ident where the new application is listening for target control, or 0 if something went
-  wrong.
-:rtype: ``int``
+:return: The :class:`ExecuteResult` indicating both the status of the operation (success or failure)
+  and any reason for failure, or else the ident where the new application is listening for target
+  control if everything succeeded.
+:rtype: ExecuteResult
 )");
-  virtual uint32_t ExecuteAndInject(const char *app, const char *workingDir, const char *cmdLine,
-                                    const rdcarray<EnvironmentModification> &env,
-                                    const CaptureOptions &opts) = 0;
+  virtual ExecuteResult ExecuteAndInject(const char *app, const char *workingDir, const char *cmdLine,
+                                         const rdcarray<EnvironmentModification> &env,
+                                         const CaptureOptions &opts) = 0;
 
   DOCUMENT(R"(Take ownership over a capture file.
 
@@ -1477,10 +1503,13 @@ empty or unrecognised.
 
 :param str filename: The filename of the file to open.
 :param str filetype: The format of the given file.
+:param ProgressCallback progress: A callback that will be repeatedly called with an updated progress
+  value if an import step occurs. Can be ``None`` if no progress is desired.
 :return: The status of the open operation, whether it succeeded or failed (and how it failed).
 :rtype: ReplayStatus
 )");
-  virtual ReplayStatus OpenFile(const char *filename, const char *filetype) = 0;
+  virtual ReplayStatus OpenFile(const char *filename, const char *filetype,
+                                RENDERDOC_ProgressCallback progress) = 0;
 
   DOCUMENT(R"(Initialises the file handle from a raw memory buffer.
 
@@ -1490,10 +1519,13 @@ For the :paramref:`OpenBuffer.filetype` parameter, see :meth:`OpenFile`.
 
 :param bytes buffer: The buffer containing the data to process.
 :param str filetype: The format of the given file.
+:param ProgressCallback progress: A callback that will be repeatedly called with an updated progress
+  value if an import step occurs. Can be ``None`` if no progress is desired.
 :return: The status of the open operation, whether it succeeded or failed (and how it failed).
 :rtype: ReplayStatus
 )");
-  virtual ReplayStatus OpenBuffer(const bytebuf &buffer, const char *filetype) = 0;
+  virtual ReplayStatus OpenBuffer(const bytebuf &buffer, const char *filetype,
+                                  RENDERDOC_ProgressCallback progress) = 0;
 
   DOCUMENT(R"(When a capture file is opened, an exclusive lock is held on the file on disk. This
 makes it impossible to copy the file to another location at the user's request. Calling this
@@ -1516,12 +1548,16 @@ representation back to native RDC.
 
 :param str filename: The filename to save to.
 :param str filetype: The format to convert to.
+:param SDFile file: An optional :class:`SDFile` with the structured data to source from. This is
+  useful in case the format specifies that it doesn't need buffers, and you already have a
+  :class:`ReplayController` open with the structured data. This saves the need to load the file
+  again. If ``None`` then structured data will be fetched if not already present and used.
 :param ProgressCallback progress: A callback that will be repeatedly called with an updated progress
   value for the conversion. Can be ``None`` if no progress is desired.
 :return: The status of the conversion operation, whether it succeeded or failed (and how it failed).
 :rtype: ReplayStatus
 )");
-  virtual ReplayStatus Convert(const char *filename, const char *filetype,
+  virtual ReplayStatus Convert(const char *filename, const char *filetype, const SDFile *file,
                                RENDERDOC_ProgressCallback progress) = 0;
 
   DOCUMENT(R"(Returns the human-readable error string for the last error received.
@@ -1944,11 +1980,12 @@ DOCUMENT(R"(Launch an application and inject into it to allow capturing.
 :param list env: Any :class:`EnvironmentModification` that should be made when running the program.
 :param CaptureOptions opts: The capture options to use when injecting into the program.
 :param bool waitForExit: If ``True`` this function will block until the process exits.
-:return: The ident where the new application is listening for target control, or 0 if something went
-  wrong.
-:rtype: ``int``
+:return: The :class:`ExecuteResult` indicating both the status of the operation (success or failure)
+  and any reason for failure, or else the ident where the new application is listening for target
+  control if everything succeeded.
+:rtype: ExecuteResult
 )");
-extern "C" RENDERDOC_API uint32_t RENDERDOC_CC
+extern "C" RENDERDOC_API ExecuteResult RENDERDOC_CC
 RENDERDOC_ExecuteAndInject(const char *app, const char *workingDir, const char *cmdLine,
                            const rdcarray<EnvironmentModification> &env, const char *logfile,
                            const CaptureOptions &opts, bool waitForExit);
@@ -1959,11 +1996,12 @@ DOCUMENT(R"(Where supported by operating system and permissions, inject into a r
 :param list env: Any :class:`EnvironmentModification` that should be made when running the program.
 :param CaptureOptions opts: The capture options to use when injecting into the program.
 :param bool waitForExit: If ``True`` this function will block until the process exits.
-:return: The ident where the new application is listening for target control, or 0 if something went
-  wrong.
-:rtype: ``int``
+:return: The :class:`ExecuteResult` indicating both the status of the operation (success or failure)
+  and any reason for failure, or else the ident where the new application is listening for target
+  control if everything succeeded.
+:rtype: ExecuteResult
 )");
-extern "C" RENDERDOC_API uint32_t RENDERDOC_CC
+extern "C" RENDERDOC_API ExecuteResult RENDERDOC_CC
 RENDERDOC_InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
                             const char *logfile, const CaptureOptions &opts, bool waitForExit);
 
@@ -2069,17 +2107,13 @@ DOCUMENT("Internal function for starting an android remote server.");
 extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_StartAndroidRemoteServer(const char *device);
 
 DOCUMENT("Internal function for checking remote Android package for requirements");
-extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_CheckAndroidPackage(const char *host,
-                                                                         const char *exe,
+extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_CheckAndroidPackage(const char *hostname,
+                                                                         const char *packageName,
                                                                          AndroidFlags *flags);
 
-DOCUMENT("Internal function that attempts to push Vulkan layer to Android application.");
-extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_PushLayerToInstalledAndroidApp(const char *host,
-                                                                                    const char *exe);
-
-DOCUMENT("Internal function that attempts to modify APK contents, adding Vulkan layer.");
-extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_AddLayerToAndroidPackage(
-    const char *host, const char *exe, RENDERDOC_ProgressCallback progress);
+DOCUMENT("Internal function that attempts to modify APK contents, adding debuggable flag.");
+extern "C" RENDERDOC_API AndroidFlags RENDERDOC_CC RENDERDOC_MakeDebuggablePackage(
+    const char *hostname, const char *packageName, RENDERDOC_ProgressCallback progress);
 
 DOCUMENT("Internal function that runs unit tests.");
 extern "C" RENDERDOC_API int RENDERDOC_CC RENDERDOC_RunUnitTests(const rdcstr &command,

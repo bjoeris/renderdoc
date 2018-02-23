@@ -47,6 +47,65 @@ QMargins uniformMargins(int m)
   return QMargins(m, m, m, m);
 }
 
+class PipRanges
+{
+public:
+  void push(qreal pos, const int triRadius)
+  {
+    if(ranges.isEmpty())
+    {
+      ranges.push_back({pos, pos});
+      return;
+    }
+
+    QPair<qreal, qreal> &range = ranges.back();
+
+    if(range.second + triRadius >= pos)
+      range.second = pos;
+    else
+      ranges.push_back({pos, pos});
+  }
+
+  QPainterPath makePath(const int triRadius, const int triHeight, qreal y)
+  {
+    QPainterPath path;
+
+    for(const QPair<qreal, qreal> &range : ranges)
+    {
+      if(range.first == range.second)
+      {
+        QPointF pos = aliasAlign(QPointF(range.first, y));
+
+        QPainterPath triangle;
+        triangle.addPolygon(
+            QPolygonF({pos + QPoint(0, triHeight), pos + QPoint(triRadius * 2, triHeight),
+                       pos + QPoint(triRadius, 0)}));
+        triangle.closeSubpath();
+
+        path = path.united(triangle);
+      }
+      else
+      {
+        QPointF left = aliasAlign(QPointF(range.first, y));
+        QPointF right = aliasAlign(QPointF(range.second, y));
+
+        QPainterPath trapezoid;
+        trapezoid.addPolygon(
+            QPolygonF({left + QPoint(0, triHeight), right + QPoint(triRadius * 2, triHeight),
+                       right + QPoint(triRadius, 0), left + QPoint(triRadius, 0)}));
+        trapezoid.closeSubpath();
+
+        path = path.united(trapezoid);
+      }
+    }
+
+    return path;
+  }
+
+private:
+  QVector<QPair<qreal, qreal>> ranges;
+};
+
 TimelineBar::TimelineBar(ICaptureContext &ctx, QWidget *parent)
     : QAbstractScrollArea(parent), m_Ctx(ctx)
 {
@@ -84,6 +143,7 @@ void TimelineBar::HighlightResourceUsage(ResourceId id)
     GUIInvoke::call([this, usage]() {
       for(const EventUsage &u : usage)
         m_UsageEvents << u;
+      qSort(m_UsageEvents);
       viewport()->update();
     });
   });
@@ -103,6 +163,7 @@ void TimelineBar::HighlightHistory(ResourceId id, const rdcarray<PixelModificati
 
     for(const PixelModification &mod : history)
       m_HistoryEvents << mod;
+    qSort(m_HistoryEvents);
   }
 
   viewport()->update();
@@ -256,32 +317,36 @@ void TimelineBar::mousePressEvent(QMouseEvent *e)
       // history events get first crack at any selection, if they exist
       if(!m_HistoryEvents.isEmpty())
       {
-        auto it = std::find_if(m_HistoryEvents.begin(), m_HistoryEvents.end(),
-                               [this, eid](const PixelModification &mod) {
-                                 if(mod.eventId == eid)
-                                   return true;
-
-                                 return false;
-                               });
+        PixelModification search = {eid};
+        auto it = std::lower_bound(m_HistoryEvents.begin(), m_HistoryEvents.end(), search);
 
         if(it != m_HistoryEvents.end())
-          m_Ctx.SetEventID({}, eid, eid);
+        {
+          // lower_bound will have returned the next highest hit. Check if there is one below, and
+          // if it's closer.
+          if(it != m_HistoryEvents.begin() && (eid - (it - 1)->eventId) < (it->eventId - eid))
+            it--;
+
+          m_Ctx.SetEventID({}, it->eventId, it->eventId);
+        }
 
         return;
       }
 
       if(!m_UsageEvents.isEmpty())
       {
-        auto it = std::find_if(m_UsageEvents.begin(), m_UsageEvents.end(),
-                               [this, eid](const EventUsage &use) {
-                                 if(use.eventId == eid)
-                                   return true;
-
-                                 return false;
-                               });
+        EventUsage search(eid, ResourceUsage::Unused);
+        auto it = std::lower_bound(m_UsageEvents.begin(), m_UsageEvents.end(), search);
 
         if(it != m_UsageEvents.end())
-          m_Ctx.SetEventID({}, eid, eid);
+        {
+          // lower_bound will have returned the next highest hit. Check if there is one below, and
+          // if it's closer.
+          if(it != m_UsageEvents.begin() && (eid - (it - 1)->eventId) < (it->eventId - eid))
+            it--;
+
+          m_Ctx.SetEventID({}, it->eventId, it->eventId);
+        }
       }
 
       return;
@@ -324,7 +389,8 @@ void TimelineBar::mouseMoveEvent(QMouseEvent *e)
 
       layout();
     }
-    else if(!m_Draws.isEmpty() && m_dataArea.contains(e->localPos()))
+    else if(!m_Draws.isEmpty() && m_dataArea.contains(e->localPos()) &&
+            !m_highlightingRect.contains(e->localPos()))
     {
       uint32_t eid = eventAt(x);
       if(m_Draws.contains(eid) && eid != m_Ctx.CurEvent())
@@ -632,7 +698,7 @@ void TimelineBar::paintEvent(QPaintEvent *e)
       // advance past the first text to draw the key
       highlightLabel.setLeft(highlightLabel.left() + fm.width(text));
 
-      text = lit(" Reads, ");
+      text = lit(" Reads ( ");
       p.drawText(highlightLabel, text, to);
       highlightLabel.setLeft(highlightLabel.left() + fm.width(text));
 
@@ -641,7 +707,7 @@ void TimelineBar::paintEvent(QPaintEvent *e)
       p.drawPath(path);
       highlightLabel.setLeft(highlightLabel.left() + triRadius * 2);
 
-      text = lit(" Writes, ");
+      text = lit(" ), Writes ( ");
       p.drawText(highlightLabel, text, to);
       highlightLabel.setLeft(highlightLabel.left() + fm.width(text));
 
@@ -650,7 +716,7 @@ void TimelineBar::paintEvent(QPaintEvent *e)
       p.drawPath(path);
       highlightLabel.setLeft(highlightLabel.left() + triRadius * 2);
 
-      text = lit(" Read/Write, ");
+      text = lit(" ), Read/Write ( ");
       p.drawText(highlightLabel, text, to);
       highlightLabel.setLeft(highlightLabel.left() + fm.width(text));
 
@@ -661,7 +727,7 @@ void TimelineBar::paintEvent(QPaintEvent *e)
 
       if(m_Ctx.CurPipelineState().SupportsBarriers())
       {
-        text = lit(" Barriers, ");
+        text = lit(" ) Barriers ( ");
         p.drawText(highlightLabel, text, to);
         highlightLabel.setLeft(highlightLabel.left() + fm.width(text));
 
@@ -671,7 +737,7 @@ void TimelineBar::paintEvent(QPaintEvent *e)
         highlightLabel.setLeft(highlightLabel.left() + triRadius * 2);
       }
 
-      text = lit(" and Clears ");
+      text = lit(" ), and Clears ( ");
       p.drawText(highlightLabel, text, to);
       highlightLabel.setLeft(highlightLabel.left() + fm.width(text));
 
@@ -679,9 +745,12 @@ void TimelineBar::paintEvent(QPaintEvent *e)
       p.fillPath(path, colors[ClearUsage]);
       p.drawPath(path);
       highlightLabel.setLeft(highlightLabel.left() + triRadius * 2);
+
+      text = lit(" )");
+      p.drawText(highlightLabel, text, to);
     }
 
-    QPainterPath paths[UsageCount];
+    PipRanges pipranges[UsageCount];
 
     QRectF pipsRect = m_highlightingRect.marginsRemoved(uniformMargins(margin));
 
@@ -691,67 +760,69 @@ void TimelineBar::paintEvent(QPaintEvent *e)
 
     p.setClipRect(pipsRect);
 
+    qreal leftClip = -triRadius * 2.0;
+    qreal rightClip = pipsRect.width() + triRadius * 10.0;
+
     if(!m_HistoryEvents.isEmpty())
     {
       for(const PixelModification &mod : m_HistoryEvents)
       {
-        QPointF pos;
+        qreal pos = offsetOf(mod.eventId) + m_eidWidth / 2 - triRadius;
 
-        pos.setX(offsetOf(mod.eventId) + m_eidWidth / 2 - triRadius);
-        pos.setY(pipsRect.y());
-
-        QPainterPath path = triangle.translated(aliasAlign(pos));
+        if(pos < leftClip || pos > rightClip)
+          continue;
 
         if(mod.Passed())
-          paths[HistoryPassed] = paths[HistoryPassed].united(path);
+          pipranges[HistoryPassed].push(pos, triRadius);
         else
-          paths[HistoryFailed] = paths[HistoryFailed].united(path);
+          pipranges[HistoryFailed].push(pos, triRadius);
       }
     }
     else
     {
       for(const EventUsage &use : m_UsageEvents)
       {
-        QPointF pos;
+        qreal pos = offsetOf(use.eventId) + m_eidWidth / 2 - triRadius;
 
-        pos.setX(offsetOf(use.eventId) + m_eidWidth / 2 - triRadius);
-        pos.setY(pipsRect.y());
-
-        QPainterPath path = triangle.translated(aliasAlign(pos));
+        if(pos < leftClip || pos > rightClip)
+          continue;
 
         if(((int)use.usage >= (int)ResourceUsage::VS_RWResource &&
             (int)use.usage <= (int)ResourceUsage::All_RWResource) ||
            use.usage == ResourceUsage::GenMips || use.usage == ResourceUsage::Copy ||
            use.usage == ResourceUsage::Resolve)
         {
-          paths[ReadWriteUsage] = paths[ReadWriteUsage].united(path);
+          pipranges[ReadWriteUsage].push(pos, triRadius);
         }
         else if(use.usage == ResourceUsage::StreamOut || use.usage == ResourceUsage::ResolveDst ||
-                use.usage == ResourceUsage::ColorTarget || use.usage == ResourceUsage::CopyDst)
+                use.usage == ResourceUsage::ColorTarget ||
+                use.usage == ResourceUsage::DepthStencilTarget || use.usage == ResourceUsage::CopyDst)
         {
-          paths[WriteUsage] = paths[WriteUsage].united(path);
+          pipranges[WriteUsage].push(pos, triRadius);
         }
         else if(use.usage == ResourceUsage::Clear)
         {
-          paths[ClearUsage] = paths[ClearUsage].united(path);
+          pipranges[ClearUsage].push(pos, triRadius);
         }
         else if(use.usage == ResourceUsage::Barrier)
         {
-          paths[BarrierUsage] = paths[BarrierUsage].united(path);
+          pipranges[BarrierUsage].push(pos, triRadius);
         }
         else
         {
-          paths[ReadUsage] = paths[ReadUsage].united(path);
+          pipranges[ReadUsage].push(pos, triRadius);
         }
       }
     }
 
     for(int i = 0; i < UsageCount; i++)
     {
-      if(!paths[i].isEmpty())
+      QPainterPath path = pipranges[i].makePath(triRadius, triHeight, pipsRect.y());
+
+      if(!path.isEmpty())
       {
-        p.drawPath(paths[i]);
-        p.fillPath(paths[i], colors[i]);
+        p.drawPath(path);
+        p.fillPath(path, colors[i]);
       }
     }
   }
@@ -952,7 +1023,7 @@ uint32_t TimelineBar::processDraws(QVector<Marker> &markers, QVector<uint32_t> &
     }
     else
     {
-      if((d.flags & (DrawFlags::SetMarker | DrawFlags::APICalls)) != DrawFlags::SetMarker)
+      if(!(d.flags & DrawFlags::SetMarker))
       {
         m_Draws.push_back(d.eventId);
         draws.push_back(d.eventId);

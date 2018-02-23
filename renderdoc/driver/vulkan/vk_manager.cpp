@@ -261,7 +261,7 @@ void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
 
   for(uint32_t i = 0; i < NumImages; i++)
   {
-    SERIALISE_ELEMENT_LOCAL(Image, (ResourceId)(srcit->first));
+    SERIALISE_ELEMENT_LOCAL(Image, (ResourceId)(srcit->first)).TypedAs("VkImage");
     SERIALISE_ELEMENT_LOCAL(ImageState, (ImageLayouts)(srcit->second));
 
     ResourceId liveid;
@@ -591,7 +591,7 @@ void VulkanResourceManager::Create_InitialState(ResourceId id, WrappedVkRes *liv
   return m_Core->Create_InitialState(id, live, hasData);
 }
 
-void VulkanResourceManager::Apply_InitialState(WrappedVkRes *live, InitialContentData initial)
+void VulkanResourceManager::Apply_InitialState(WrappedVkRes *live, VkInitialContents initial)
 {
   return m_Core->Apply_InitialState(live, initial);
 }

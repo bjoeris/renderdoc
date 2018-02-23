@@ -155,6 +155,7 @@ private slots:
 
   void on_zoomRange_clicked();
   void on_autoFit_clicked();
+  void on_autoFit_mouseClicked(QMouseEvent *e);
   void on_reset01_clicked();
   void on_visualiseRange_clicked();
   void on_backcolorPick_clicked();
@@ -205,6 +206,11 @@ private slots:
   void channelsWidget_mouseClicked(QMouseEvent *event);
   void channelsWidget_toggled(bool checked) { UI_UpdateChannels(); }
   void channelsWidget_selected(int index) { UI_UpdateChannels(); }
+protected:
+  void enterEvent(QEvent *event) override;
+  void showEvent(QShowEvent *event) override;
+  void changeEvent(QEvent *event) override;
+
 private:
   void RT_FetchCurrentPixel(uint32_t x, uint32_t y, PixelValue &pickValue, PixelValue &realValue);
   void RT_PickPixelsAndUpdate(IReplayController *);
@@ -221,6 +227,8 @@ private:
   void UI_SetHistogramRange(const TextureDescription *tex, CompType typeHint);
 
   void UI_UpdateChannels();
+
+  void HighlightUsage();
 
   void SetupTextureTabs();
 
@@ -308,6 +316,8 @@ private:
   Ui::TextureViewer *ui;
   ICaptureContext &m_Ctx;
   IReplayOutput *m_Output = NULL;
+
+  TextureSave m_SaveConfig;
 
   TextureDescription *m_CachedTexture;
   Following m_Following = Following::Default;

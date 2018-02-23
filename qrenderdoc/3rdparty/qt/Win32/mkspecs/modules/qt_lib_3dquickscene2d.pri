@@ -1,4 +1,4 @@
-QT.3dquickscene2d.VERSION = 5.9.0
+QT.3dquickscene2d.VERSION = 5.9.4
 QT.3dquickscene2d.name = Qt3DQuickScene2D
 QT.3dquickscene2d.module = Qt53DQuickScene2D
 QT.3dquickscene2d.libs = $$QT_MODULE_LIB_BASE

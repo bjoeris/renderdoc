@@ -431,7 +431,7 @@ void Serialiser<SerialiserMode::Writing>::WriteStructuredFile(const SDFile &file
     if(m_ChunkMetadata.threadID != 0)
       m_ChunkFlags |= ChunkThreadID;
 
-    if(m_ChunkMetadata.durationMicro != 0)
+    if(m_ChunkMetadata.durationMicro >= 0)
       m_ChunkFlags |= ChunkDuration;
 
     if(m_ChunkMetadata.timestampMicro != 0)
@@ -668,6 +668,7 @@ void DoSerialise(SerialiserType &ser, SDObject *el)
     }
     case SDBasic::Boolean: ser.Serialise("", el->data.basic.b); break;
     case SDBasic::Character: ser.Serialise("", el->data.basic.c); break;
+    case SDBasic::ResourceId: ser.Serialise("", el->data.basic.id); break;
     case SDBasic::UnsignedInteger:
       if(el->type.byteSize == 1)
       {

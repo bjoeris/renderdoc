@@ -158,7 +158,6 @@ SettingsDialog::SettingsDialog(ICaptureContext &ctx, QWidget *parent)
   ui->Android_SDKPath->setText(m_Ctx.Config().Android_SDKPath);
   ui->Android_JDKPath->setText(m_Ctx.Config().Android_JDKPath);
   ui->Android_MaxConnectTimeout->setValue(m_Ctx.Config().Android_MaxConnectTimeout);
-  ui->Android_AutoPushLayerToApp->setChecked(m_Ctx.Config().Android_AutoPushLayerToApp);
 
   ui->TextureViewer_ResetRange->setChecked(m_Ctx.Config().TextureViewer_ResetRange);
   ui->TextureViewer_PerTexSettings->setChecked(m_Ctx.Config().TextureViewer_PerTexSettings);
@@ -167,6 +166,37 @@ SettingsDialog::SettingsDialog(ICaptureContext &ctx, QWidget *parent)
   ui->Font_PreferMonospaced->setChecked(m_Ctx.Config().Font_PreferMonospaced);
 
   ui->AlwaysReplayLocally->setChecked(m_Ctx.Config().AlwaysReplayLocally);
+
+#if RENDERDOC_ANALYTICS_ENABLE
+  if(m_Ctx.Config().Analytics_TotalOptOut)
+  {
+    ui->analyticsAutoSubmit->setChecked(false);
+    ui->analyticsManualCheck->setChecked(false);
+    ui->analyticsOptOut->setChecked(true);
+
+    // once we've started with analytics disabled, only a restart can re-enable them.
+    ui->analyticsAutoSubmit->setText(ui->analyticsAutoSubmit->text() + tr(" (Requires Restart)"));
+    ui->analyticsManualCheck->setText(ui->analyticsManualCheck->text() + tr(" (Requires Restart)"));
+  }
+  else if(m_Ctx.Config().Analytics_ManualCheck)
+  {
+    ui->analyticsAutoSubmit->setChecked(false);
+    ui->analyticsManualCheck->setChecked(true);
+    ui->analyticsOptOut->setChecked(false);
+  }
+  else
+  {
+    ui->analyticsAutoSubmit->setChecked(true);
+    ui->analyticsManualCheck->setChecked(false);
+    ui->analyticsOptOut->setChecked(false);
+  }
+#else
+  ui->analyticsDescribeLabel->setText(tr("Analytics was disabled at compile time."));
+
+  ui->analyticsAutoSubmit->setEnabled(false);
+  ui->analyticsManualCheck->setEnabled(false);
+  ui->analyticsOptOut->setEnabled(false);
+#endif
 
   ui->AllowGlobalHook->setChecked(m_Ctx.Config().AllowGlobalHook);
 
@@ -318,6 +348,47 @@ void SettingsDialog::on_AlwaysReplayLocally_toggled(bool checked)
   m_Ctx.Config().AlwaysReplayLocally = ui->AlwaysReplayLocally->isChecked();
 
   m_Ctx.Config().Save();
+}
+
+void SettingsDialog::on_analyticsAutoSubmit_toggled(bool checked)
+{
+  if(checked)
+  {
+    m_Ctx.Config().Analytics_ManualCheck = false;
+    m_Ctx.Config().Analytics_TotalOptOut = false;
+
+    m_Ctx.Config().Save();
+  }
+}
+
+void SettingsDialog::on_analyticsManualCheck_toggled(bool checked)
+{
+  if(checked)
+  {
+    m_Ctx.Config().Analytics_ManualCheck = true;
+    m_Ctx.Config().Analytics_TotalOptOut = false;
+
+    m_Ctx.Config().Save();
+  }
+}
+
+void SettingsDialog::on_analyticsOptOut_toggled(bool checked)
+{
+  if(checked)
+  {
+    m_Ctx.Config().Analytics_ManualCheck = false;
+    m_Ctx.Config().Analytics_TotalOptOut = true;
+
+    // immediately disable the analytics collection and ensure it can't send any reports.
+    Analytics::Disable();
+
+    m_Ctx.Config().Save();
+  }
+}
+
+void SettingsDialog::on_analyticsDescribeLabel_linkActivated(const QString &link)
+{
+  Analytics::DocumentReport();
 }
 
 // core
@@ -611,7 +682,7 @@ void SettingsDialog::on_Android_SDKPath_textEdited(const QString &adb)
   m_Ctx.Config().Save();
 }
 
-void SettingsDialog::on_browseAndroidJDKPath_clicked()
+void SettingsDialog::on_browseJDKPath_clicked()
 {
   QString adb =
       RDDialog::getExistingDirectory(this, tr("Locate JDK root folder (containing bin, jre, lib)"),
@@ -637,13 +708,6 @@ void SettingsDialog::on_Android_JDKPath_textEdited(const QString &adb)
 void SettingsDialog::on_Android_MaxConnectTimeout_valueChanged(double timeout)
 {
   m_Ctx.Config().Android_MaxConnectTimeout = ui->Android_MaxConnectTimeout->value();
-
-  m_Ctx.Config().Save();
-}
-
-void SettingsDialog::on_Android_AutoPushLayerToApp_toggled(bool checked)
-{
-  m_Ctx.Config().Android_AutoPushLayerToApp = ui->Android_AutoPushLayerToApp->isChecked();
 
   m_Ctx.Config().Save();
 }
@@ -692,8 +756,6 @@ void SettingsDialog::on_UIStyle_currentIndexChanged(int index)
   if(ret == QMessageBox::Yes)
   {
     m_Ctx.Config().SetStyle();
-
-    m_Ctx.Config().SetupFormatting();
   }
 
   m_Ctx.Config().Save();

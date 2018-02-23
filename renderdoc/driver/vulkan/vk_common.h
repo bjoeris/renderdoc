@@ -234,6 +234,8 @@ struct VkGenericStruct
   const VkGenericStruct *pNext;
 };
 
+DECLARE_REFLECTION_STRUCT(VkGenericStruct);
+
 // we cast to this type when serialising as a placeholder indicating that
 // the given flags field doesn't have any bits defined
 enum VkFlagWithNoBits
@@ -280,7 +282,35 @@ void AppendModifiedChainedStruct(byte *&tempMem, VkStruct *outputStruct,
   nextChainTail = (VkGenericStruct *)outputStruct;
 }
 
-#define RENDERDOC_LAYER_NAME "VK_LAYER_RENDERDOC_Capture"
+enum class MemoryScope : uint8_t
+{
+  InitialContents,
+  First = InitialContents,
+  Count,
+};
+
+ITERABLE_OPERATORS(MemoryScope);
+
+enum class MemoryType : uint8_t
+{
+  Upload,
+  GPULocal,
+  Readback,
+};
+
+struct MemoryAllocation
+{
+  VkDeviceMemory mem = VK_NULL_HANDLE;
+  VkDeviceSize offs = 0;
+  VkDeviceSize size = 0;
+
+  // not strictly necessary but useful for reflection/readback - what scope/type were used, what was
+  // the actual memory type index selected, and was a buffer or image allocated.
+  MemoryScope scope = MemoryScope::InitialContents;
+  MemoryType type = MemoryType::GPULocal;
+  uint32_t memoryTypeIndex = 0;
+  bool buffer = false;
+};
 
 #define IMPLEMENT_FUNCTION_SERIALISED(ret, func, ...) \
   ret func(__VA_ARGS__);                              \
@@ -465,6 +495,7 @@ SERIALISE_VK_HANDLES();
 
 // declare reflect-able types
 
+DECLARE_REFLECTION_STRUCT(VkAllocationCallbacks);
 DECLARE_REFLECTION_STRUCT(VkOffset2D);
 DECLARE_REFLECTION_STRUCT(VkExtent2D);
 DECLARE_REFLECTION_STRUCT(VkMemoryType);

@@ -25,7 +25,7 @@
 #include "QRDUtils.h"
 #include <QAbstractTextDocumentLayout>
 #include <QApplication>
-#include <QElapsedTimer>
+#include <QDesktopServices>
 #include <QElapsedTimer>
 #include <QFileSystemModel>
 #include <QFontDatabase>
@@ -64,7 +64,7 @@ std::string DoStringise(const ResourceId &el)
 {
   uint64_t num;
   memcpy(&num, &el, sizeof(num));
-  return lit("resourceid::%1").arg(num).toStdString();
+  return lit("ResourceId::%1").arg(num).toStdString();
 }
 
 struct RichResourceText
@@ -180,7 +180,7 @@ void RegisterMetatypeConversions()
 
 void RichResourceTextInitialise(QVariant &var)
 {
-  static QRegularExpression re(lit("(resourceid::)([0-9]*)"));
+  static QRegularExpression re(lit("(ResourceId::)([0-9]*)"));
 
   if(var.userType() == qMetaTypeId<ResourceId>() || re.match(var.toString()).hasMatch())
   {
@@ -282,6 +282,8 @@ void RichResourceTextPaint(const QWidget *owner, QPainter *painter, QRect rect, 
           }
 
           blockrect.translate(0.0, -2.0);
+
+          blockrect.setRight(qMin(blockrect.right(), (qreal)rect.width()));
 
           painter->drawLine(blockrect.bottomLeft(), blockrect.bottomRight());
         }
@@ -680,8 +682,7 @@ void addStructuredObjects(RDTreeWidgetItem *parent, const StructuredObjectList &
     // that for the best raw structured data representation instead of flattening those out to just
     // "ResourceId", and we also don't want to store two types ('fake' and 'real'), so instead we
     // check the custom string.
-    if((obj->type.flags & SDTypeFlags::HasCustomString) &&
-       !strncmp(obj->data.str.c_str(), "ResourceId", 10))
+    if(obj->type.basetype == SDBasic::ResourceId)
     {
       ResourceId id;
       static_assert(sizeof(id) == sizeof(obj->data.basic.u), "ResourceId is no longer uint64_t!");
@@ -713,6 +714,7 @@ void addStructuredObjects(RDTreeWidgetItem *parent, const StructuredObjectList &
         case SDBasic::Null: param = lit("NULL"); break;
         case SDBasic::Buffer: param = lit("(%1 bytes)").arg(obj->type.byteSize); break;
         case SDBasic::String: param = obj->data.str; break;
+        case SDBasic::ResourceId:
         case SDBasic::Enum:
         case SDBasic::UnsignedInteger: param = Formatter::Format(obj->data.basic.u); break;
         case SDBasic::SignedInteger: param = Formatter::Format(obj->data.basic.i); break;
@@ -1140,7 +1142,12 @@ void Formatter::setParams(const PersistantConfig &config)
   *m_Font =
       config.Font_PreferMonospaced ? QFontDatabase::systemFont(QFontDatabase::FixedFont) : QFont();
 
-  m_DarkChecker = QApplication::palette().color(QPalette::Mid);
+  Formatter::setPalette(QApplication::palette());
+}
+
+void Formatter::setPalette(QPalette palette)
+{
+  m_DarkChecker = palette.color(QPalette::Mid);
   m_LightChecker = m_DarkChecker.lighter(150);
 
   RENDERDOC_SetColors(m_DarkChecker, m_LightChecker, IsDarkTheme());
@@ -1422,6 +1429,19 @@ bool RunProcessAsAdmin(const QString &fullExecutablePath, const QStringList &par
               << "Please run " << fullExecutablePath << "with args" << params << "manually.";
 
   return false;
+#endif
+}
+
+void RevealFilenameInExternalFileBrowser(const QString &filePath)
+{
+#if defined(Q_OS_WIN32)
+  // on windows we can ask explorer to highlight the exact file.
+  QProcess::startDetached(lit("explorer.exe"), QStringList() << lit("/select,")
+                                                             << QDir::toNativeSeparators(filePath));
+#else
+  // on all other platforms, we just use QDesktopServices to invoke the external file browser on the
+  // directory and hope that's close enough.
+  QDesktopServices::openUrl(QFileInfo(filePath).absoluteDir().absolutePath());
 #endif
 }
 

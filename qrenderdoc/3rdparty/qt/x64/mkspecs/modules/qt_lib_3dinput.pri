@@ -1,4 +1,4 @@
-QT.3dinput.VERSION = 5.9.0
+QT.3dinput.VERSION = 5.9.4
 QT.3dinput.name = Qt3DInput
 QT.3dinput.module = Qt53DInput
 QT.3dinput.libs = $$QT_MODULE_LIB_BASE

@@ -1,4 +1,4 @@
-QT.3danimation.VERSION = 5.9.0
+QT.3danimation.VERSION = 5.9.4
 QT.3danimation.name = Qt3DAnimation
 QT.3danimation.module = Qt53DAnimation
 QT.3danimation.libs = $$QT_MODULE_LIB_BASE

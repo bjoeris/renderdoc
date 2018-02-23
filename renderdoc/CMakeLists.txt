@@ -9,25 +9,22 @@ set(RDOC_LIBRARIES)
 
 if(ANDROID)
     list(APPEND RDOC_LIBRARIES
-        PRIVATE m
-        PRIVATE dl
-        PRIVATE log
-        PRIVATE android
-        PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+        PRIVATE -lm
+        PRIVATE -ldl
+        PRIVATE -llog
+        PRIVATE -landroid)
 elseif(APPLE)
     list(APPEND RDOC_LIBRARIES
-        PRIVATE m
-        PRIVATE dl
-        PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+        PRIVATE -lm
+        PRIVATE -ldl)
 elseif(UNIX)
     find_package(PkgConfig REQUIRED)
     find_package(Threads REQUIRED)
 
     list(APPEND RDOC_LIBRARIES
-        PRIVATE m
-        PRIVATE dl
-        PRIVATE rt
-        PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+        PRIVATE -lm
+        PRIVATE -ldl
+        PRIVATE -lrt)
 
     if(ENABLE_XLIB)
         find_package(X11 REQUIRED)
@@ -49,8 +46,12 @@ elseif(UNIX)
             PRIVATE ${XCB_INCLUDE_DIRS})
 
         list(APPEND RDOC_LIBRARIES
-            PRIVATE ${XCB_LIBRARIES})
+            PRIVATE -l${XCB_LIBRARIES})
     endif()
+endif()
+
+if(NOT "x${CMAKE_THREAD_LIBS_INIT}" STREQUAL "x")
+    list(APPEND RDOC_LIBRARIES PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 endif()
 
 set(sources
@@ -89,8 +90,17 @@ set(sources
     core/remote_server.cpp
     core/replay_proxy.cpp
     core/replay_proxy.h
-    core/android.cpp
-    core/android.h
+    android/android.cpp
+    android/android_patch.cpp
+    android/android_tools.cpp
+    android/android_utils.cpp
+    android/android_manifest.cpp
+    android/android.h
+    android/android_utils.h
+    android/jdwp.h
+    android/jdwp.cpp
+    android/jdwp_util.cpp
+    android/jdwp_connection.cpp
     core/plugins.cpp
     core/plugins.h
     core/resource_manager.cpp
@@ -148,6 +158,7 @@ set(sources
     3rdparty/jpeg-compressor/jpgd.h
     3rdparty/jpeg-compressor/jpge.cpp
     3rdparty/jpeg-compressor/jpge.h
+    3rdparty/android/android_manifest.h
     3rdparty/catch/catch.cpp
     3rdparty/catch/catch.hpp
     3rdparty/pugixml/pugixml.cpp
@@ -208,9 +219,6 @@ if(ANDROID)
         os/posix/posix_stringio.cpp
         os/posix/posix_threading.cpp
         os/posix/posix_specific.h)
-    # posix_libentry must be the last so that library_loaded is called after
-    # static objects are constructed.
-    list(APPEND sources os/posix/posix_libentry.cpp)
 elseif(APPLE)
     list(APPEND sources
         data/embedded_files.h
@@ -227,9 +235,6 @@ elseif(APPLE)
         os/posix/posix_stringio.cpp
         os/posix/posix_threading.cpp
         os/posix/posix_specific.h)
-    # posix_libentry must be the last so that library_loaded is called after
-    # static objects are constructed.
-    list(APPEND sources os/posix/posix_libentry.cpp)
 elseif(UNIX)
     list(APPEND sources
         data/embedded_files.h
@@ -248,9 +253,6 @@ elseif(UNIX)
         os/posix/posix_stringio.cpp
         os/posix/posix_threading.cpp
         os/posix/posix_specific.h)
-    # posix_libentry must be the last so that library_loaded is called after
-    # static objects are constructed.
-    list(APPEND sources os/posix/posix_libentry.cpp)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR APPLE)
@@ -270,10 +272,6 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR APPLE)
             APPEND_STRING PROPERTY COMPILE_FLAGS " -Wno-unknown-warning -Wno-format-truncation")
     endif()
 endif()
-
-add_library(rdoc OBJECT ${sources})
-target_compile_definitions(rdoc ${RDOC_DEFINITIONS})
-target_include_directories(rdoc ${RDOC_INCLUDES})
 
 set(data
     data/glsl/blit.vert
@@ -357,26 +355,68 @@ if(ENABLE_GL OR ENABLE_GLES OR ENABLE_VULKAN)
     list(APPEND renderdoc_objects $<TARGET_OBJECTS:rdoc_spirv>)
 endif()
 
+option(USE_INTERCEPTOR_LIB OFF)
+
+# on Android, pull in interceptor-lib only if we have LLVM available
+if(ANDROID AND USE_INTERCEPTOR_LIB )
+    find_package(LLVM CONFIG)
+
+    if(NOT LLVM_FOUND)
+        message(FATAL_ERROR "LLVM not found - interceptor-lib requires LLVM 4.0 available.")
+    elseif(${LLVM_PACKAGE_VERSION} VERSION_LESS "4.0.0" OR ${LLVM_PACKAGE_VERSION} VERSION_GREATER "4.0.1")
+        message(FATAL_ERROR "LLVM ${LLVM_PACKAGE_VERSION} found - we require precisely 4.0.")
+    else()
+        message(STATUS "LLVM ${LLVM_PACKAGE_VERSION} found - enabling android hooking using interceptor-lib.")
+        add_subdirectory(3rdparty/interceptor-lib)
+        list(APPEND renderdoc_objects $<TARGET_OBJECTS:interceptor_lib>)
+        link_directories(${LLVM_DIR}/../..)
+        set(RDOC_DEFINITIONS ${RDOC_DEFINITIONS} PRIVATE -DRENDERDOC_HAVE_INTERCEPTOR_LIB)
+
+        foreach(lib ${interceptor_libs})
+            list(APPEND RDOC_LIBRARIES PRIVATE -l${lib})
+        endforeach()
+    endif()
+endif()
+
+if(ANDROID AND NOT USE_INTERCEPTOR_LIB)
+    message(STATUS "Interceptor-lib not enabled (USE_INTERCEPTOR_LIB) - android hooking will use sometimes less reliable PLT-interception method. ")
+endif()
+
 # always pull in the amd folder
 add_subdirectory(driver/ihv/amd)
 list(APPEND renderdoc_objects $<TARGET_OBJECTS:rdoc_amd>)
 
-# rdoc must be after its drivers because of linux_libentry.cpp
+add_library(rdoc OBJECT ${sources})
+target_compile_definitions(rdoc ${RDOC_DEFINITIONS})
+target_include_directories(rdoc ${RDOC_INCLUDES})
+
 list(APPEND renderdoc_objects
     $<TARGET_OBJECTS:rdoc>
     ${data_objects})
+
+# posix_libentry must be the last so that library_loaded is called after
+# static objects are constructed. We guarantee this happens after even
+# any other static libraries that we link by making it its own static
+# library and appending it to the end of the link list.
+add_library(renderdoc_libentry STATIC os/posix/posix_libentry.cpp)
+target_compile_definitions(renderdoc_libentry ${RDOC_DEFINITIONS})
+target_include_directories(renderdoc_libentry ${RDOC_INCLUDES})
+link_directories(${CMAKE_CURRENT_BINARY_DIR})
+list(APPEND RDOC_LIBRARIES PRIVATE -lrenderdoc_libentry)
 
 add_library(renderdoc SHARED ${renderdoc_objects})
 target_compile_definitions(renderdoc ${RDOC_DEFINITIONS})
 target_include_directories(renderdoc ${RDOC_INCLUDES})
 target_link_libraries(renderdoc ${RDOC_LIBRARIES})
 
+add_dependencies(renderdoc renderdoc_libentry)
+
 if(UNIX AND NOT ANDROID AND NOT APPLE)
-    set_target_properties(renderdoc PROPERTIES LINK_FLAGS "-Wl,--version-script,${CMAKE_CURRENT_SOURCE_DIR}/renderdoc.version -Wl,--no-undefined")
+    set_target_properties(renderdoc PROPERTIES LINK_FLAGS "-Wl,--undefined,force_include_libentry -Wl,--version-script,${CMAKE_CURRENT_SOURCE_DIR}/renderdoc.version -Wl,--no-undefined")
 endif()
 
 if(ANDROID)
-    set_target_properties(renderdoc PROPERTIES LINK_FLAGS "-Wl,--build-id")
+    set_target_properties(renderdoc PROPERTIES LINK_FLAGS "-Wl,--undefined,force_include_libentry -Wl,--build-id")
     # rename output library
     set_target_properties(renderdoc PROPERTIES OUTPUT_NAME "VkLayer_GLES_RenderDoc")
 

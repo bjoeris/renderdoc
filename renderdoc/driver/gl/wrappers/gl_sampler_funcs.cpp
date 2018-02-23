@@ -35,7 +35,9 @@ static constexpr uint32_t numParams(GLenum pname)
 template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glGenSamplers(SerialiserType &ser, GLsizei n, GLuint *samplers)
 {
-  SERIALISE_ELEMENT_LOCAL(sampler, GetResourceManager()->GetID(SamplerRes(GetCtx(), *samplers)));
+  SERIALISE_ELEMENT(n);
+  SERIALISE_ELEMENT_LOCAL(sampler, GetResourceManager()->GetID(SamplerRes(GetCtx(), *samplers)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -93,7 +95,9 @@ void WrappedOpenGL::glGenSamplers(GLsizei count, GLuint *samplers)
 template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glCreateSamplers(SerialiserType &ser, GLsizei n, GLuint *samplers)
 {
-  SERIALISE_ELEMENT_LOCAL(sampler, GetResourceManager()->GetID(SamplerRes(GetCtx(), *samplers)));
+  SERIALISE_ELEMENT(n);
+  SERIALISE_ELEMENT_LOCAL(sampler, GetResourceManager()->GetID(SamplerRes(GetCtx(), *samplers)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -331,7 +335,7 @@ bool WrappedOpenGL::Serialise_glSamplerParameteriv(SerialiserType &ser, GLuint s
 {
   SERIALISE_ELEMENT_LOCAL(sampler, SamplerRes(GetCtx(), samplerHandle));
   SERIALISE_ELEMENT(pname);
-  SERIALISE_ELEMENT_ARRAY(params, FIXED_COUNT(numParams(pname)));
+  SERIALISE_ELEMENT_ARRAY(params, numParams(pname));
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -375,7 +379,7 @@ bool WrappedOpenGL::Serialise_glSamplerParameterfv(SerialiserType &ser, GLuint s
 {
   SERIALISE_ELEMENT_LOCAL(sampler, SamplerRes(GetCtx(), samplerHandle));
   SERIALISE_ELEMENT(pname);
-  SERIALISE_ELEMENT_ARRAY(params, FIXED_COUNT(numParams(pname)));
+  SERIALISE_ELEMENT_ARRAY(params, numParams(pname));
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -419,7 +423,7 @@ bool WrappedOpenGL::Serialise_glSamplerParameterIiv(SerialiserType &ser, GLuint 
 {
   SERIALISE_ELEMENT_LOCAL(sampler, SamplerRes(GetCtx(), samplerHandle));
   SERIALISE_ELEMENT(pname);
-  SERIALISE_ELEMENT_ARRAY(params, FIXED_COUNT(numParams(pname)));
+  SERIALISE_ELEMENT_ARRAY(params, numParams(pname));
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -463,7 +467,7 @@ bool WrappedOpenGL::Serialise_glSamplerParameterIuiv(SerialiserType &ser, GLuint
 {
   SERIALISE_ELEMENT_LOCAL(sampler, SamplerRes(GetCtx(), samplerHandle));
   SERIALISE_ELEMENT(pname);
-  SERIALISE_ELEMENT_ARRAY(params, FIXED_COUNT(numParams(pname)));
+  SERIALISE_ELEMENT_ARRAY(params, numParams(pname));
 
   SERIALISE_CHECK_READ_ERRORS();
 

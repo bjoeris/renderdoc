@@ -87,7 +87,8 @@ bool Following::operator==(const Following &o)
 void Following::GetDrawContext(ICaptureContext &ctx, bool &copy, bool &clear, bool &compute)
 {
   const DrawcallDescription *curDraw = ctx.CurDrawcall();
-  copy = curDraw != NULL && (curDraw->flags & (DrawFlags::Copy | DrawFlags::Resolve));
+  copy = curDraw != NULL &&
+         (curDraw->flags & (DrawFlags::Copy | DrawFlags::Resolve | DrawFlags::Present));
   clear = curDraw != NULL && (curDraw->flags & DrawFlags::Clear);
   compute = curDraw != NULL && (curDraw->flags & DrawFlags::Dispatch) &&
             ctx.CurPipelineState().GetShader(ShaderStage::Compute) != ResourceId();
@@ -661,6 +662,33 @@ TextureViewer::~TextureViewer()
   delete ui;
 }
 
+void TextureViewer::enterEvent(QEvent *event)
+{
+  HighlightUsage();
+}
+
+void TextureViewer::showEvent(QShowEvent *event)
+{
+  HighlightUsage();
+}
+
+void TextureViewer::changeEvent(QEvent *event)
+{
+  if(event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange)
+  {
+    updateBackgroundColors();
+    ui->render->update();
+  }
+}
+
+void TextureViewer::HighlightUsage()
+{
+  TextureDescription *texptr = GetCurrentTexture();
+
+  if(texptr && m_Ctx.HasTimelineBar())
+    m_Ctx.GetTimelineBar()->HighlightResourceUsage(texptr->resourceId);
+}
+
 void TextureViewer::RT_FetchCurrentPixel(uint32_t x, uint32_t y, PixelValue &pickValue,
                                          PixelValue &realValue)
 {
@@ -1008,7 +1036,7 @@ void TextureViewer::UI_UpdateTextureDetails()
     ui->renderContainer->setWindowTitle(title);
   }
 
-  status = m_Ctx.GetResourceName(followID) + lit(" - ");
+  status = m_Ctx.GetResourceName(current.resourceId) + lit(" - ");
 
   if(current.dimension >= 1)
     status += QString::number(current.width);
@@ -1069,7 +1097,8 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
     m_TextureSettings[m_TexDisplay.resourceId].minrange = ui->rangeHistogram->blackPoint();
     m_TextureSettings[m_TexDisplay.resourceId].maxrange = ui->rangeHistogram->whitePoint();
 
-    m_TextureSettings[m_TexDisplay.resourceId].typeHint = m_Following.GetTypeHint(m_Ctx);
+    if(m_TexDisplay.typeHint != CompType::Typeless)
+      m_TextureSettings[m_TexDisplay.resourceId].typeHint = m_TexDisplay.typeHint;
   }
 
   m_TexDisplay.resourceId = tex.resourceId;
@@ -1161,7 +1190,55 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
           QFormatStr("%1 - %2x%3").arg(i).arg(qMax(1U, tex.width >> i)).arg(qMax(1U, tex.height >> i)));
 
     ui->mipLabel->setText(tr("Mip"));
+  }
 
+  if(tex.mips == 1 && tex.msSamp <= 1)
+    ui->mipLevel->setEnabled(false);
+  else
+    ui->mipLevel->setEnabled(true);
+
+  ui->sliceFace->clear();
+
+  uint32_t numSlices = 1;
+
+  if(tex.arraysize == 1 && tex.depth <= 1)
+  {
+    ui->sliceFace->setEnabled(false);
+  }
+  else
+  {
+    ui->sliceFace->setEnabled(true);
+
+    QString cubeFaces[] = {lit("X+"), lit("X-"), lit("Y+"), lit("Y-"), lit("Z+"), lit("Z-")};
+
+    numSlices = tex.arraysize;
+
+    // for 3D textures, display the number of slices at this mip
+    if(tex.depth > 1)
+      numSlices = qMax(1u, tex.depth >> (int)ui->mipLevel->currentIndex());
+
+    for(uint32_t i = 0; i < numSlices; i++)
+    {
+      if(tex.cubemap)
+      {
+        QString name = cubeFaces[i % 6];
+        if(numSlices > 6)
+          name = QFormatStr("[%1] %2").arg(i / 6).arg(
+              cubeFaces[i % 6]);    // Front 1, Back 2, 3, 4 etc for cube arrays
+        ui->sliceFace->addItem(name);
+      }
+      else
+      {
+        ui->sliceFace->addItem(tr("Slice %1").arg(i));
+      }
+    }
+  }
+
+  // enable signals for mipLevel and sliceFace
+  ui->mipLevel->blockSignals(false);
+  ui->sliceFace->blockSignals(false);
+
+  {
     int highestMip = -1;
 
     // only switch to the selected mip for outputs, and when changing drawcall
@@ -1186,45 +1263,7 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
     m_PrevHighestMip = highestMip;
   }
 
-  if(tex.mips == 1 && tex.msSamp <= 1)
-    ui->mipLevel->setEnabled(false);
-  else
-    ui->mipLevel->setEnabled(true);
-
-  ui->sliceFace->clear();
-
-  if(tex.arraysize == 1 && tex.depth <= 1)
   {
-    ui->sliceFace->setEnabled(false);
-  }
-  else
-  {
-    ui->sliceFace->setEnabled(true);
-
-    QString cubeFaces[] = {lit("X+"), lit("X-"), lit("Y+"), lit("Y-"), lit("Z+"), lit("Z-")};
-
-    uint32_t numSlices = tex.arraysize;
-
-    // for 3D textures, display the number of slices at this mip
-    if(tex.depth > 1)
-      numSlices = qMax(1u, tex.depth >> (int)ui->mipLevel->currentIndex());
-
-    for(uint32_t i = 0; i < numSlices; i++)
-    {
-      if(tex.cubemap)
-      {
-        QString name = cubeFaces[i % 6];
-        if(numSlices > 6)
-          name = QFormatStr("[%1] %2").arg(i / 6).arg(
-              cubeFaces[i % 6]);    // Front 1, Back 2, 3, 4 etc for cube arrays
-        ui->sliceFace->addItem(name);
-      }
-      else
-      {
-        ui->sliceFace->addItem(tr("Slice %1").arg(i));
-      }
-    }
-
     int firstArraySlice = -1;
     // only switch to the selected mip for outputs, and when changing drawcall
     if(!currentTextureIsLocked() && m_Following.Type != FollowType::ReadOnly && newdraw)
@@ -1242,10 +1281,6 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
 
     m_PrevFirstArraySlice = firstArraySlice;
   }
-
-  // enable signals for mipLevel and sliceFace
-  ui->mipLevel->blockSignals(false);
-  ui->sliceFace->blockSignals(false);
 
   // because slice and mip are specially set above, we restore any per-tex settings to apply
   // even if we don't switch to a new texture.
@@ -1326,8 +1361,7 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
       RT_PickPixelsAndUpdate(r);
   });
 
-  if(m_Ctx.HasTimelineBar())
-    m_Ctx.GetTimelineBar()->HighlightResourceUsage(texptr->resourceId);
+  HighlightUsage();
 }
 
 void TextureViewer::UI_SetHistogramRange(const TextureDescription *tex, CompType typeHint)
@@ -1806,10 +1840,12 @@ void TextureViewer::OpenResourceContextMenu(ResourceId id, const rdcarray<EventU
   QAction showDisabled(tr("Show Disabled"), this);
   QAction showEmpty(tr("Show Empty"), this);
   QAction openLockedTab(tr("Open new Locked Tab"), this);
+  QAction openResourceInspector(tr("Open in Resource Inspector"), this);
   QAction usageTitle(tr("Used:"), this);
   QAction imageLayout(this);
 
   openLockedTab.setIcon(Icons::action_hover());
+  openResourceInspector.setIcon(Icons::link());
 
   showDisabled.setChecked(m_ShowDisabled);
   showDisabled.setChecked(m_ShowEmpty);
@@ -1831,6 +1867,7 @@ void TextureViewer::OpenResourceContextMenu(ResourceId id, const rdcarray<EventU
   {
     contextMenu.addSeparator();
     contextMenu.addAction(&openLockedTab);
+    contextMenu.addAction(&openResourceInspector);
     contextMenu.addSeparator();
     contextMenu.addAction(&usageTitle);
 
@@ -1838,6 +1875,12 @@ void TextureViewer::OpenResourceContextMenu(ResourceId id, const rdcarray<EventU
 
     QObject::connect(&openLockedTab, &QAction::triggered, this,
                      &TextureViewer::texContextItem_triggered);
+
+    QObject::connect(&openResourceInspector, &QAction::triggered, [this, id]() {
+      m_Ctx.ShowResourceInspector();
+
+      m_Ctx.GetResourceInspector()->Inspect(id);
+    });
 
     CombineUsageEvents(m_Ctx, usage,
                        [this, &contextMenu](uint32_t start, uint32_t end, ResourceUsage use) {
@@ -2532,6 +2575,10 @@ void TextureViewer::OnCaptureClosed()
   delete m_Watcher;
   m_Watcher = NULL;
 
+  ToolWindowManagerArea *textureTabs = ui->dockarea->areaOf(ui->renderContainer);
+  while(textureTabs->count() > 1)
+    textureTabs->removeTab(1);
+
   m_LockedTabs.clear();
 
   ui->customShader->clear();
@@ -2672,8 +2719,8 @@ void TextureViewer::OnEventChanged(uint32_t eventId)
 
   INVOKE_MEMFN(RT_UpdateAndDisplay);
 
-  // if(autoFit.Checked)
-  // AutoFitRange();
+  if(ui->autoFit->isChecked())
+    AutoFitRange();
 }
 
 QVariant TextureViewer::persistData()
@@ -2840,7 +2887,7 @@ void TextureViewer::on_overlay_currentIndexChanged(int index)
     m_TexDisplay.overlay = (DebugOverlay)ui->overlay->currentIndex();
 
 #define ANALYTICS_OVERLAY(name) \
-  case DebugOverlay::name: ANALYTIC_SET(UIFeatures.TextureDebugOverlays.name, true); break;
+  case DebugOverlay::name: ANALYTIC_SET(TextureOverlays.name, true); break;
 
   switch(m_TexDisplay.overlay)
   {
@@ -2981,6 +3028,13 @@ void TextureViewer::on_zoomRange_clicked()
 void TextureViewer::on_autoFit_clicked()
 {
   AutoFitRange();
+  ui->autoFit->setChecked(false);
+}
+
+void TextureViewer::on_autoFit_mouseClicked(QMouseEvent *e)
+{
+  if(e->buttons() & Qt::RightButton)
+    ui->autoFit->setChecked(!ui->autoFit->isChecked());
 }
 
 void TextureViewer::on_reset01_clicked()
@@ -3333,34 +3387,28 @@ void TextureViewer::on_saveTex_clicked()
   if(!texptr || !m_Output)
     return;
 
-  TextureSave config;
-  memset(&config, 0, sizeof(config));
-  config.jpegQuality = 90;
-
-  config.id = m_TexDisplay.resourceId;
-  config.typeHint = m_TexDisplay.typeHint;
-  config.slice.sliceIndex = (int)m_TexDisplay.sliceFace;
-  config.mip = (int)m_TexDisplay.mip;
+  // overwrite save params with current texture display settings
+  m_SaveConfig.id = m_TexDisplay.resourceId;
+  m_SaveConfig.typeHint = m_TexDisplay.typeHint;
+  m_SaveConfig.slice.sliceIndex = (int)m_TexDisplay.sliceFace;
+  m_SaveConfig.mip = (int)m_TexDisplay.mip;
 
   if(texptr->depth > 1)
-    config.slice.sliceIndex = (int)m_TexDisplay.sliceFace >> (int)m_TexDisplay.mip;
+    m_SaveConfig.slice.sliceIndex = (int)m_TexDisplay.sliceFace >> (int)m_TexDisplay.mip;
 
-  config.channelExtract = -1;
+  m_SaveConfig.channelExtract = -1;
   if(m_TexDisplay.red && !m_TexDisplay.green && !m_TexDisplay.blue && !m_TexDisplay.alpha)
-    config.channelExtract = 0;
+    m_SaveConfig.channelExtract = 0;
   if(!m_TexDisplay.red && m_TexDisplay.green && !m_TexDisplay.blue && !m_TexDisplay.alpha)
-    config.channelExtract = 1;
+    m_SaveConfig.channelExtract = 1;
   if(!m_TexDisplay.red && !m_TexDisplay.green && m_TexDisplay.blue && !m_TexDisplay.alpha)
-    config.channelExtract = 2;
+    m_SaveConfig.channelExtract = 2;
   if(!m_TexDisplay.red && !m_TexDisplay.green && !m_TexDisplay.blue && m_TexDisplay.alpha)
-    config.channelExtract = 3;
+    m_SaveConfig.channelExtract = 3;
 
-  config.comp.blackPoint = m_TexDisplay.rangeMin;
-  config.comp.whitePoint = m_TexDisplay.rangeMax;
-  config.alphaCol = m_TexDisplay.backgroundColor;
-  config.alpha = m_TexDisplay.alpha ? AlphaMapping::BlendToCheckerboard : AlphaMapping::Discard;
-  if(m_TexDisplay.alpha && !ui->checkerBack->isChecked())
-    config.alpha = AlphaMapping::BlendToColor;
+  m_SaveConfig.comp.blackPoint = m_TexDisplay.rangeMin;
+  m_SaveConfig.comp.whitePoint = m_TexDisplay.rangeMax;
+  m_SaveConfig.alphaCol = m_TexDisplay.backgroundColor;
 
   if(m_TexDisplay.customShaderId != ResourceId())
   {
@@ -3369,31 +3417,31 @@ void TextureViewer::on_saveTex_clicked()
         [this, &id](IReplayController *r) { id = m_Output->GetCustomShaderTexID(); });
 
     if(id != ResourceId())
-      config.id = id;
+      m_SaveConfig.id = id;
   }
 
   const ResourceId overlayTexID = m_Output->GetDebugOverlayTexID();
   const bool hasSelectedOverlay = (m_TexDisplay.overlay != DebugOverlay::NoOverlay);
   const bool hasOverlay = (hasSelectedOverlay && overlayTexID != ResourceId());
-  TextureSaveDialog saveDialog(*texptr, hasOverlay, config, this);
+  TextureSaveDialog saveDialog(*texptr, hasOverlay, m_SaveConfig, this);
   int res = RDDialog::show(&saveDialog);
 
-  config = saveDialog.config();
+  m_SaveConfig = saveDialog.config();
 
   if(saveDialog.saveOverlayInstead())
   {
-    config.id = overlayTexID;
+    m_SaveConfig.id = overlayTexID;
   }
 
   if(res)
   {
-    ANALYTIC_SET(UIFeatures.Export.TextureSave, true);
+    ANALYTIC_SET(Export.Texture, true);
 
     bool ret = false;
     QString fn = saveDialog.filename();
 
-    m_Ctx.Replay().BlockInvoke([this, &ret, config, fn](IReplayController *r) {
-      ret = r->SaveTexture(config, fn.toUtf8().data());
+    m_Ctx.Replay().BlockInvoke([this, &ret, fn](IReplayController *r) {
+      ret = r->SaveTexture(m_SaveConfig, fn.toUtf8().data());
     });
 
     if(!ret)
@@ -3469,7 +3517,7 @@ void TextureViewer::on_pixelHistory_clicked()
 
   IPixelHistoryView *hist = m_Ctx.ViewPixelHistory(texptr->resourceId, x, y, m_TexDisplay);
 
-  m_Ctx.AddDockWindow(hist->Widget(), DockReference::RightOf, this, 0.3f);
+  m_Ctx.AddDockWindow(hist->Widget(), DockReference::TransientPopupArea, this, 0.3f);
 
   // we use this pointer to ensure that the history viewer is still visible (and hasn't been closed)
   // by the time we want to set the results.

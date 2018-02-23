@@ -17,6 +17,7 @@ DEFINES *= QT_NO_NARROWING_CONVERSIONS_IN_CONNECT
 qtConfig(c++11): CONFIG += c++11 strict_c++
 qtConfig(c++14): CONFIG += c++14
 qtConfig(c++1z): CONFIG += c++1z
+qtConfig(stack-protector-strong): CONFIG += stack_protector_strong
 contains(TEMPLATE, .*lib) {
     # module and plugins
     if(!host_build|!cross_compile):qtConfig(reduce_exports): CONFIG += hide_symbols
@@ -64,6 +65,8 @@ clang {
     greaterThan(QT_GCC_MAJOR_VERSION, 4): QMAKE_CXXFLAGS_WARN_ON += -Wdate-time
     # GCC 6 introduced these
     greaterThan(QT_GCC_MAJOR_VERSION, 5): QMAKE_CXXFLAGS_WARN_ON += -Wshift-overflow=2 -Wduplicated-cond
+    # GCC 7 has a lot of false positives relating to this, so disable completely
+    greaterThan(QT_GCC_MAJOR_VERSION, 6): QMAKE_CXXFLAGS_WARN_ON += -Wno-stringop-overflow
 }
 
 warnings_are_errors:warning_clean {
@@ -72,10 +75,10 @@ warnings_are_errors:warning_clean {
     # compiler.
     clang {
         # Apple clang 4.0-4.2,5.0-5.1,6.0-6.4,7.0-7.3
-        # Regular clang 3.3-3.9, 4.0
+        # Regular clang 3.x-5.0
         apple_ver = $${QT_APPLE_CLANG_MAJOR_VERSION}.$${QT_APPLE_CLANG_MINOR_VERSION}
         reg_ver = $${QT_CLANG_MAJOR_VERSION}.$${QT_CLANG_MINOR_VERSION}
-        contains(apple_ver, "4\\.[012]|5\\.[01]|6\\.[01234]|7\\.[0123]")|contains(reg_ver, "3\\.[3-9]|4\\.0") {
+        contains(apple_ver, "4\\.[012]|5\\.[01]|6\\.[01234]|7\\.[0123]")|contains(reg_ver, "[34]\\.|5\\.0") {
             QMAKE_CXXFLAGS_WARN_ON += -Werror -Wno-error=\\$${LITERAL_HASH}warnings -Wno-error=deprecated-declarations $$WERROR
         }
     } else:intel_icc:linux {

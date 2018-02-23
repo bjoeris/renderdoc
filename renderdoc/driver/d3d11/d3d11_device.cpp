@@ -202,7 +202,8 @@ WrappedID3D11Device::WrappedID3D11Device(ID3D11Device *realDevice, D3D11InitPara
   if(params)
     m_InitParams = *params;
 
-  m_DebugManager = new D3D11DebugManager(this);
+  if(realDevice)
+    m_DebugManager = new D3D11DebugManager(this);
 
   // ATI workaround - these dlls can get unloaded and cause a crash.
 
@@ -278,10 +279,13 @@ WrappedID3D11Device::~WrappedID3D11Device()
   SAFE_RELEASE(m_WrappedDebug.m_pDebug);
   SAFE_RELEASE(m_pDevice);
 
-  RDCASSERT(WrappedID3D11Buffer::m_BufferList.empty());
-  RDCASSERT(WrappedID3D11Texture1D::m_TextureList.empty());
-  RDCASSERT(WrappedID3D11Texture2D1::m_TextureList.empty());
-  RDCASSERT(WrappedID3D11Texture3D1::m_TextureList.empty());
+  if(!IsStructuredExporting(m_State))
+  {
+    RDCASSERT(WrappedID3D11Buffer::m_BufferList.empty());
+    RDCASSERT(WrappedID3D11Texture1D::m_TextureList.empty());
+    RDCASSERT(WrappedID3D11Texture2D1::m_TextureList.empty());
+    RDCASSERT(WrappedID3D11Texture3D1::m_TextureList.empty());
+  }
 
   if(RenderDoc::Inst().GetCrashHandler())
     RenderDoc::Inst().GetCrashHandler()->UnregisterMemoryRegion(this);
@@ -356,7 +360,7 @@ HRESULT STDMETHODCALLTYPE WrappedID3D11Debug::QueryInterface(REFIID riid, void *
     return S_OK;
   }
 
-  RDCWARN("Querying ID3D11Debug for interface: %s", ToStr(riid).c_str());
+  WarnUnknownGUID("ID3D11Debug", riid);
 
   return m_pDebug->QueryInterface(riid, ppvObject);
 }
@@ -615,7 +619,7 @@ HRESULT WrappedID3D11Device::QueryInterface(REFIID riid, void **ppvObject)
   }
   else
   {
-    RDCWARN("Querying ID3D11Device for interface: %s", ToStr(riid).c_str());
+    WarnUnknownGUID("ID3D11Device", riid);
   }
 
   return m_RefCounter.QueryInterface(riid, ppvObject);
@@ -756,7 +760,7 @@ bool WrappedID3D11Device::ProcessChunk(ReadSerialiser &ser, D3D11Chunk context)
   {
     case D3D11Chunk::DeviceInitialisation:
     {
-      SERIALISE_ELEMENT_LOCAL(ImmediateContext, ResourceId());
+      SERIALISE_ELEMENT_LOCAL(ImmediateContext, ResourceId()).TypedAs("ID3D11DeviceContext *");
 
       SERIALISE_CHECK_READ_ERRORS();
 
@@ -1192,7 +1196,7 @@ bool WrappedID3D11Device::Serialise_WrapSwapchainBuffer(SerialiserType &ser,
   WrappedID3D11Texture2D1 *pTex = (WrappedID3D11Texture2D1 *)realSurface;
 
   SERIALISE_ELEMENT(Buffer);
-  SERIALISE_ELEMENT_LOCAL(SwapbufferID, pTex->GetResourceID());
+  SERIALISE_ELEMENT_LOCAL(SwapbufferID, pTex->GetResourceID()).TypedAs("IDXGISwapChain *");
 
   m_BBID = SwapbufferID;
 
@@ -1356,10 +1360,10 @@ void WrappedID3D11Device::StartFrameCapture(void *dev, void *wnd)
   m_FailedFrame = 0;
   m_FailedReason = CaptureSucceeded;
 
-  m_FrameCounter = RDCMAX(1 + (uint32_t)m_CapturedFrames.size(), m_FrameCounter);
+  m_FrameCounter = RDCMAX((uint32_t)m_CapturedFrames.size(), m_FrameCounter);
 
   FrameDescription frame;
-  frame.frameNumber = m_FrameCounter + 1;
+  frame.frameNumber = m_FrameCounter;
   frame.captureTime = Timing::GetUnixTimestamp();
   m_CapturedFrames.push_back(frame);
 
@@ -1650,8 +1654,8 @@ bool WrappedID3D11Device::EndFrameCapture(void *dev, void *wnd)
       }
     }
 
-    RDCFile *rdc = RenderDoc::Inst().CreateRDC(RDCDriver::D3D11, m_FrameCounter, jpgbuf, len,
-                                               thwidth, thheight);
+    RDCFile *rdc = RenderDoc::Inst().CreateRDC(
+        RDCDriver::D3D11, m_CapturedFrames.back().frameNumber, jpgbuf, len, thwidth, thheight);
 
     SAFE_DELETE_ARRAY(jpgbuf);
     SAFE_DELETE_ARRAY(thpixels);
@@ -1692,7 +1696,8 @@ bool WrappedID3D11Device::EndFrameCapture(void *dev, void *wnd)
         // remember to update this estimated chunk length if you add more parameters
         SCOPED_SERIALISE_CHUNK(D3D11Chunk::DeviceInitialisation, 16);
 
-        SERIALISE_ELEMENT_LOCAL(ImmediateContext, m_pImmediateContext->GetResourceID());
+        SERIALISE_ELEMENT_LOCAL(ImmediateContext, m_pImmediateContext->GetResourceID())
+            .TypedAs("ID3D11DeviceContext *");
       }
 
       RDCDEBUG("Inserting Resource Serialisers");
@@ -1744,7 +1749,7 @@ bool WrappedID3D11Device::EndFrameCapture(void *dev, void *wnd)
       UnlockForChunkFlushing();
     }
 
-    RenderDoc::Inst().FinishCaptureWriting(rdc, m_FrameCounter);
+    RenderDoc::Inst().FinishCaptureWriting(rdc, m_CapturedFrames.back().frameNumber);
 
     m_State = CaptureState::BackgroundCapturing;
 
@@ -1803,7 +1808,7 @@ bool WrappedID3D11Device::EndFrameCapture(void *dev, void *wnd)
       old.ApplyState(m_pImmediateContext);
     }
 
-    m_CapturedFrames.back().frameNumber = m_FrameCounter + 1;
+    m_CapturedFrames.back().frameNumber = m_FrameCounter;
 
     m_pImmediateContext->CleanupCapture();
 

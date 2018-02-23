@@ -75,6 +75,17 @@ MeshDisplayPipelines VulkanDebugManager::CacheMeshDisplayPipelines(VkPipelineLay
   }
   bit += 16;
 
+  if(primary.instanced)
+    key |= 1ULL << bit;
+  bit++;
+
+  if(secondary.instanced)
+    key |= 1ULL << bit;
+  bit++;
+
+  // only 64 bits, make sure they all fit
+  RDCASSERT(bit < 64);
+
   MeshDisplayPipelines &cache = m_CachedMeshPipelines[key];
 
   if(cache.pipes[(uint32_t)SolidShade::NoSolid] != VK_NULL_HANDLE)
@@ -88,9 +99,11 @@ MeshDisplayPipelines VulkanDebugManager::CacheMeshDisplayPipelines(VkPipelineLay
 
   VkVertexInputBindingDescription binds[] = {
       // primary
-      {0, primary.vertexByteStride, VK_VERTEX_INPUT_RATE_VERTEX},
+      {0, primary.vertexByteStride,
+       primary.instanced ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX},
       // secondary
-      {1, secondary.vertexByteStride, VK_VERTEX_INPUT_RATE_VERTEX}};
+      {1, secondary.vertexByteStride,
+       secondary.instanced ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX}};
 
   RDCASSERT(primaryFmt != VK_FORMAT_UNDEFINED);
 
@@ -124,6 +137,11 @@ MeshDisplayPipelines VulkanDebugManager::CacheMeshDisplayPipelines(VkPipelineLay
                                               : MakeVkPrimitiveTopology(primary.topology),
       false,
   };
+
+  if(IsStrip(primary.topology))
+  {
+    ia.primitiveRestartEnable = true;
+  }
 
   VkRect2D scissor = {{0, 0}, {16384, 16384}};
 
@@ -484,7 +502,7 @@ void VulkanReplay::RenderMesh(uint32_t eventId, const vector<MeshFormat> &second
           if(fmt.indexResourceId != ResourceId())
           {
             VkBuffer ib =
-                m_pDriver->GetResourceManager()->GetCurrentHandle<VkBuffer>(fmt.indexResourceId);
+                m_pDriver->GetResourceManager()->GetLiveHandle<VkBuffer>(fmt.indexResourceId);
 
             vt->CmdBindIndexBuffer(Unwrap(cmd), Unwrap(ib), fmt.indexByteOffset, idxtype);
           }
@@ -526,6 +544,12 @@ void VulkanReplay::RenderMesh(uint32_t eventId, const vector<MeshFormat> &second
         m_pDriver->GetResourceManager()->GetCurrentHandle<VkBuffer>(cfg.position.vertexResourceId);
 
     VkDeviceSize offs = cfg.position.vertexByteOffset;
+
+    // we source all data from the first instanced value in the instanced case, so make sure we
+    // offset correctly here.
+    if(cfg.position.instanced)
+      offs += cfg.position.vertexByteStride * (cfg.curInstance / cfg.position.instStepRate);
+
     vt->CmdBindVertexBuffers(Unwrap(cmd), 0, 1, UnwrapPtr(vb), &offs);
   }
 
@@ -541,6 +565,12 @@ void VulkanReplay::RenderMesh(uint32_t eventId, const vector<MeshFormat> &second
         m_pDriver->GetResourceManager()->GetCurrentHandle<VkBuffer>(cfg.second.vertexResourceId);
 
     VkDeviceSize offs = cfg.second.vertexByteOffset;
+
+    // we source all data from the first instanced value in the instanced case, so make sure we
+    // offset correctly here.
+    if(cfg.second.instanced)
+      offs += cfg.second.vertexByteStride * (cfg.curInstance / cfg.second.instStepRate);
+
     vt->CmdBindVertexBuffers(Unwrap(cmd), 1, 1, UnwrapPtr(vb), &offs);
   }
 

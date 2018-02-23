@@ -54,7 +54,7 @@ static void StripUnwantedLayers(vector<string> &Layers)
   for(auto it = Layers.begin(); it != Layers.end();)
   {
     // don't try and create our own layer on replay!
-    if(*it == RENDERDOC_LAYER_NAME)
+    if(*it == RENDERDOC_VULKAN_LAYER_NAME)
     {
       it = Layers.erase(it);
       continue;
@@ -488,16 +488,10 @@ void WrappedVulkan::Shutdown()
     GetResourceManager()->ReleaseWrappedResource(m_InternalCmds.freesems[i]);
   }
 
+  FreeAllMemory(MemoryScope::InitialContents);
+
   // we do more in Shutdown than the equivalent vkDestroyInstance since on replay there's
   // no explicit vkDestroyDevice, we destroy the device here then the instance
-
-  // destroy any replay objects that aren't specifically to do with the frame capture
-  for(size_t i = 0; i < m_CleanupMems.size(); i++)
-  {
-    ObjDisp(m_Device)->FreeMemory(Unwrap(m_Device), Unwrap(m_CleanupMems[i]), NULL);
-    GetResourceManager()->ReleaseWrappedResource(m_CleanupMems[i]);
-  }
-  m_CleanupMems.clear();
 
   // destroy the physical devices manually because due to remapping the may have leftover
   // refcounts
@@ -569,7 +563,7 @@ bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(SerialiserType &ser, Vk
 {
   SERIALISE_ELEMENT(instance);
   SERIALISE_ELEMENT_LOCAL(PhysicalDeviceIndex, *pPhysicalDeviceCount);
-  SERIALISE_ELEMENT_LOCAL(PhysicalDevice, GetResID(*pPhysicalDevices));
+  SERIALISE_ELEMENT_LOCAL(PhysicalDevice, GetResID(*pPhysicalDevices)).TypedAs("VkPhysicalDevice");
 
   uint32_t memIdxMap[VK_MAX_MEMORY_TYPES] = {0};
   // not used at the moment but useful for reference and might be used
@@ -921,8 +915,9 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
 {
   SERIALISE_ELEMENT(physicalDevice);
   SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
-  SERIALISE_ELEMENT_LOCAL(Device, GetResID(*pDevice));
-  SERIALISE_ELEMENT(m_SupportedQueueFamily);
+  SERIALISE_ELEMENT_OPT(pAllocator);
+  SERIALISE_ELEMENT_LOCAL(Device, GetResID(*pDevice)).TypedAs("VkDevice");
+  SERIALISE_ELEMENT(m_SupportedQueueFamily).Hidden();
 
   SERIALISE_CHECK_READ_ERRORS();
 

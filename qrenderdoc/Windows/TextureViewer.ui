@@ -44,13 +44,13 @@
      <x>10</x>
      <y>120</y>
      <width>558</width>
-     <height>28</height>
+     <height>32</height>
     </rect>
    </property>
    <property name="minimumSize">
     <size>
      <width>0</width>
-     <height>28</height>
+     <height>32</height>
     </size>
    </property>
    <property name="frameShape">
@@ -148,7 +148,7 @@
      </widget>
     </item>
     <item>
-     <widget class="QToolButton" name="autoFit">
+     <widget class="RDToolButton" name="autoFit">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Fixed" vsizetype="MinimumExpanding">
         <horstretch>0</horstretch>
@@ -164,6 +164,9 @@
       <property name="icon">
        <iconset resource="../Resources/resources.qrc">
         <normaloff>:/wand.png</normaloff>:/wand.png</iconset>
+      </property>
+      <property name="checkable">
+       <bool>true</bool>
       </property>
       <property name="autoRaise">
        <bool>true</bool>
@@ -227,13 +230,13 @@
      <x>490</x>
      <y>40</y>
      <width>129</width>
-     <height>28</height>
+     <height>32</height>
     </rect>
    </property>
    <property name="minimumSize">
     <size>
      <width>0</width>
-     <height>28</height>
+     <height>32</height>
     </size>
    </property>
    <property name="frameShape">
@@ -280,13 +283,13 @@
      <x>10</x>
      <y>80</y>
      <width>221</width>
-     <height>28</height>
+     <height>32</height>
     </rect>
    </property>
    <property name="minimumSize">
     <size>
      <width>0</width>
-     <height>28</height>
+     <height>32</height>
     </size>
    </property>
    <property name="frameShape">
@@ -416,13 +419,13 @@
      <x>330</x>
      <y>40</y>
      <width>149</width>
-     <height>28</height>
+     <height>32</height>
     </rect>
    </property>
    <property name="minimumSize">
     <size>
      <width>0</width>
-     <height>28</height>
+     <height>32</height>
     </size>
    </property>
    <property name="frameShape">
@@ -544,7 +547,7 @@
      <x>10</x>
      <y>40</y>
      <width>299</width>
-     <height>28</height>
+     <height>32</height>
     </rect>
    </property>
    <property name="sizePolicy">
@@ -556,7 +559,7 @@
    <property name="minimumSize">
     <size>
      <width>0</width>
-     <height>28</height>
+     <height>32</height>
     </size>
    </property>
    <property name="frameShape">
@@ -637,7 +640,7 @@
      <x>3</x>
      <y>3</y>
      <width>696</width>
-     <height>28</height>
+     <height>32</height>
     </rect>
    </property>
    <property name="sizePolicy">
@@ -649,7 +652,7 @@
    <property name="minimumSize">
     <size>
      <width>0</width>
-     <height>28</height>
+     <height>32</height>
     </size>
    </property>
    <property name="frameShape">
@@ -1275,11 +1278,6 @@ See FAQ on &quot;Gamma display of linear data&quot;</string>
  </widget>
  <customwidgets>
   <customwidget>
-   <class>RDLineEdit</class>
-   <extends>QLineEdit</extends>
-   <header>Widgets/Extended/RDLineEdit.h</header>
-  </customwidget>
-  <customwidget>
    <class>ToolWindowManager</class>
    <extends>QWidget</extends>
    <header>3rdparty/toolwindowmanager/ToolWindowManager.h</header>
@@ -1288,6 +1286,11 @@ See FAQ on &quot;Gamma display of linear data&quot;</string>
    <class>CustomPaintWidget</class>
    <extends>QWidget</extends>
    <header>Widgets/CustomPaintWidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>RDLineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>Widgets/Extended/RDLineEdit.h</header>
   </customwidget>
   <customwidget>
    <class>ThumbnailStrip</class>

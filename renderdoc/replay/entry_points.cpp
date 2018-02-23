@@ -24,10 +24,10 @@
  ******************************************************************************/
 
 #include "3rdparty/catch/catch.hpp"
+#include "android/android.h"
 #include "api/replay/renderdoc_replay.h"
 #include "api/replay/version.h"
 #include "common/common.h"
-#include "core/android.h"
 #include "core/core.h"
 #include "maths/camera.h"
 #include "maths/formatpacking.h"
@@ -296,7 +296,7 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_UnregisterMemoryRegion(void
     handler->UnregisterMemoryRegion(base);
 }
 
-extern "C" RENDERDOC_API uint32_t RENDERDOC_CC
+extern "C" RENDERDOC_API ExecuteResult RENDERDOC_CC
 RENDERDOC_ExecuteAndInject(const char *app, const char *workingDir, const char *cmdLine,
                            const rdcarray<EnvironmentModification> &env, const char *logfile,
                            const CaptureOptions &opts, bool waitForExit)
@@ -332,7 +332,7 @@ extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_CanGlobalHook()
   return Process::CanGlobalHook();
 }
 
-extern "C" RENDERDOC_API uint32_t RENDERDOC_CC
+extern "C" RENDERDOC_API ExecuteResult RENDERDOC_CC
 RENDERDOC_InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
                             const char *logfile, const CaptureOptions &opts, bool waitForExit)
 {
@@ -369,7 +369,7 @@ extern "C" RENDERDOC_API uint32_t RENDERDOC_CC RENDERDOC_EnumerateRemoteTargets(
   {
     int index = 0;
     std::string deviceID;
-    Android::extractDeviceIDAndIndex(host, index, deviceID);
+    Android::ExtractDeviceIDAndIndex(host, index, deviceID);
 
     // each subsequent device gets a new range of ports. The deviceID isn't needed since we already
     // forwarded the ports to the right devices.
@@ -606,16 +606,34 @@ static std::string ResourceFormatName(const ResourceFormat &fmt)
     {
       case ResourceFormatType::Regular: break;
       case ResourceFormatType::Undefined: return "Undefined";
-      case ResourceFormatType::BC1: return fmt.srgbCorrected ? "BC1_SRGB" : "BC1_UNORM";
-      case ResourceFormatType::BC2: return fmt.srgbCorrected ? "BC2_SRGB" : "BC2_UNORM";
-      case ResourceFormatType::BC3: return fmt.srgbCorrected ? "BC3_SRGB" : "BC3_UNORM";
+      case ResourceFormatType::BC1:
+        if(fmt.compType == CompType::Typeless)
+          return "BC1_TYPELESS";
+        return fmt.srgbCorrected ? "BC1_SRGB" : "BC1_UNORM";
+      case ResourceFormatType::BC2:
+        if(fmt.compType == CompType::Typeless)
+          return "BC2_TYPELESS";
+        return fmt.srgbCorrected ? "BC2_SRGB" : "BC2_UNORM";
+      case ResourceFormatType::BC3:
+        if(fmt.compType == CompType::Typeless)
+          return "BC3_TYPELESS";
+        return fmt.srgbCorrected ? "BC3_SRGB" : "BC3_UNORM";
       case ResourceFormatType::BC4:
+        if(fmt.compType == CompType::Typeless)
+          return "BC4_TYPELESS";
         return fmt.compType == CompType::UNorm ? "BC4_UNORM" : "BC4_SNORM";
       case ResourceFormatType::BC5:
+        if(fmt.compType == CompType::Typeless)
+          return "BC5_TYPELESS";
         return fmt.compType == CompType::UNorm ? "BC5_UNORM" : "BC5_SNORM";
       case ResourceFormatType::BC6:
+        if(fmt.compType == CompType::Typeless)
+          return "BC6_TYPELESS";
         return fmt.compType == CompType::UNorm ? "BC6_UFLOAT" : "BC6_SFLOAT";
-      case ResourceFormatType::BC7: return fmt.srgbCorrected ? "BC7_SRGB" : "BC7_UNORM";
+      case ResourceFormatType::BC7:
+        if(fmt.compType == CompType::Typeless)
+          return "BC7_TYPELESS";
+        return fmt.srgbCorrected ? "BC7_SRGB" : "BC7_UNORM";
       case ResourceFormatType::ETC2: return fmt.srgbCorrected ? "ETC2_SRGB" : "ETC_UNORM";
       case ResourceFormatType::EAC:
       {
@@ -637,9 +655,12 @@ static std::string ResourceFormatName(const ResourceFormat &fmt)
       case ResourceFormatType::R9G9B9E5: return "R9G9B9E5_FLOAT";
       case ResourceFormatType::R4G4B4A4: return fmt.bgraOrder ? "R4G4B4A4_UNORM" : "B4G4R4A4_UNORM";
       case ResourceFormatType::R4G4: return "R4G4_UNORM";
-      case ResourceFormatType::D16S8: return "D16S8";
-      case ResourceFormatType::D24S8: return "D24S8";
-      case ResourceFormatType::D32S8: return "D32S8";
+      case ResourceFormatType::D16S8:
+        return fmt.compType == CompType::Typeless ? "D16S8_TYPELESS" : "D16S8";
+      case ResourceFormatType::D24S8:
+        return fmt.compType == CompType::Typeless ? "D24S8_TYPELESS" : "D24S8";
+      case ResourceFormatType::D32S8:
+        return fmt.compType == CompType::Typeless ? "D32S8_TYPELESS" : "D32S8";
       case ResourceFormatType::S8: return "S8";
       case ResourceFormatType::YUV: return "YUV";
       case ResourceFormatType::PVRTC: return "PVRTC";

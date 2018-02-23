@@ -77,11 +77,10 @@ DrawcallDescription *SetupDrawcallPointers(vector<DrawcallDescription *> *drawca
 
       ret = SetupDrawcallPointers(drawcallTable, draw->children, draw, previous);
     }
-    else if((draw->flags & (DrawFlags::PushMarker | DrawFlags::SetMarker | DrawFlags::MultiDraw)) &&
-            !(draw->flags & DrawFlags::APICalls))
+    else if(draw->flags & (DrawFlags::PushMarker | DrawFlags::SetMarker | DrawFlags::MultiDraw))
     {
       // don't want to set up previous/next links for markers, but still add them to the table
-      // Some markers like Present or API Calls should have previous/next
+      // Some markers like Present or API Calls should have previous/next and are not markers
 
       if(drawcallTable)
       {
@@ -110,12 +109,14 @@ DrawcallDescription *SetupDrawcallPointers(vector<DrawcallDescription *> *drawca
   return ret;
 }
 
-void PatchLineStripIndexBufer(const DrawcallDescription *draw, uint16_t *idx16, uint32_t *idx32,
-                              std::vector<uint32_t> &patchedIndices)
+void PatchLineStripIndexBuffer(const DrawcallDescription *draw, uint8_t *idx8, uint16_t *idx16,
+                               uint32_t *idx32, std::vector<uint32_t> &patchedIndices)
 {
   const uint32_t restart = 0xffffffff;
 
-#define IDX_VALUE(offs) (idx16 ? idx16[index + offs] : (idx32 ? idx32[index + offs] : index + offs))
+#define IDX_VALUE(offs)        \
+  (idx16 ? idx16[index + offs] \
+         : (idx32 ? idx32[index + offs] : (idx8 ? idx8[index + offs] : index + offs)))
 
   switch(draw->topology)
   {
@@ -355,8 +356,23 @@ void HighlightCache::CacheHighlightingData(uint32_t eventId, const MeshDisplay &
       if(cfg.position.baseVertex > 0)
         maxIndex += add;
 
+      uint32_t primRestart = 0;
+      if(IsStrip(cfg.position.topology))
+      {
+        if(cfg.position.indexByteStride == 1)
+          primRestart = 0xff;
+        else if(cfg.position.indexByteStride == 2)
+          primRestart = 0xffff;
+        else
+          primRestart = 0xffffffff;
+      }
+
       for(uint32_t i = 0; cfg.position.baseVertex != 0 && i < numIndices; i++)
       {
+        // don't modify primitive restart indices
+        if(primRestart && indices[i] == primRestart)
+          continue;
+
         if(cfg.position.baseVertex < 0)
         {
           if(indices[i] < sub)

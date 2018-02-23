@@ -33,14 +33,158 @@ using std::pair;
 
 class WrappedVulkan;
 
-class VulkanResourceManager
-    : public ResourceManager<WrappedVkRes *, TypedRealHandle, VkResourceRecord>
+struct MemIDOffset
+{
+  ResourceId memory;
+  VkDeviceSize memOffs;
+};
+
+DECLARE_REFLECTION_STRUCT(MemIDOffset);
+
+struct SparseBufferInitState
+{
+  VkSparseMemoryBind *binds;
+  uint32_t numBinds;
+
+  MemIDOffset *memDataOffs;
+  uint32_t numUniqueMems;
+
+  VkDeviceSize totalSize;
+};
+
+DECLARE_REFLECTION_STRUCT(SparseBufferInitState);
+
+struct SparseImageInitState
+{
+  VkSparseMemoryBind *opaque;
+  uint32_t opaqueCount;
+
+  VkExtent3D imgdim;    // in pages
+  VkExtent3D pagedim;
+
+  // available on capture - filled out in Prepare_SparseInitialState and serialised to disk
+  MemIDOffset *pages[NUM_VK_IMAGE_ASPECTS];
+
+  uint32_t pageCount[NUM_VK_IMAGE_ASPECTS];
+
+  // available on replay - filled out in the read path of Serialise_SparseInitialState
+  VkSparseImageMemoryBind *pageBinds[NUM_VK_IMAGE_ASPECTS];
+
+  MemIDOffset *memDataOffs;
+  uint32_t numUniqueMems;
+
+  VkDeviceSize totalSize;
+};
+
+DECLARE_REFLECTION_STRUCT(SparseImageInitState);
+
+// this struct is copied around and for that reason we explicitly keep it simple and POD. The
+// lifetime of the memory allocated is controlled by the resource manager - when preparing or
+// serialising, we explicitly set the initial contents, then when the whole system is done with them
+// we free them again.
+struct VkInitialContents
+{
+  enum Tag
+  {
+    BufferCopy = 0,
+    ClearColorImage = 1,
+    ClearDepthStencilImage,
+    Sparse,
+    DescriptorSet,
+  };
+
+  VkInitialContents()
+  {
+    RDCCOMPILE_ASSERT(std::is_standard_layout<VkInitialContents>::value,
+                      "VkInitialContents must be POD");
+    memset(this, 0, sizeof(*this));
+  }
+
+  VkInitialContents(VkResourceType t, Tag tg)
+  {
+    memset(this, 0, sizeof(*this));
+    type = t;
+    tag = tg;
+  }
+
+  VkInitialContents(VkResourceType t, MemoryAllocation m)
+  {
+    memset(this, 0, sizeof(*this));
+    type = t;
+    mem = m;
+  }
+
+  template <typename Configuration>
+  void Free(ResourceManager<Configuration> *rm)
+  {
+    // any of these will be NULL if unused
+    SAFE_DELETE_ARRAY(descriptorSlots);
+    SAFE_DELETE_ARRAY(descriptorWrites);
+    SAFE_DELETE_ARRAY(descriptorInfo);
+
+    rm->ResourceTypeRelease(GetWrapped(buf));
+    rm->ResourceTypeRelease(GetWrapped(img));
+
+    // memory is not free'd here
+
+    if(tag == Sparse)
+    {
+      if(type == eResImage)
+      {
+        SAFE_DELETE_ARRAY(sparseImage.opaque);
+        for(uint32_t i = 0; i < NUM_VK_IMAGE_ASPECTS; i++)
+        {
+          SAFE_DELETE_ARRAY(sparseImage.pages[i]);
+          SAFE_DELETE_ARRAY(sparseImage.pageBinds[i]);
+        }
+        SAFE_DELETE_ARRAY(sparseImage.memDataOffs);
+      }
+      else if(type == eResBuffer)
+      {
+        SAFE_DELETE_ARRAY(sparseBuffer.binds);
+        SAFE_DELETE_ARRAY(sparseBuffer.memDataOffs);
+      }
+    }
+  }
+
+  // for descriptor heaps, when capturing we save the slots, when replaying we store direct writes
+  DescriptorSetSlot *descriptorSlots;
+  VkWriteDescriptorSet *descriptorWrites;
+  VkDescriptorBufferInfo *descriptorInfo;
+  uint32_t numDescriptors;
+
+  // for plain resources, we store the resource type and memory allocation details of the contents
+  VkResourceType type;
+  VkBuffer buf;
+  VkImage img;
+  MemoryAllocation mem;
+  Tag tag;
+
+  // sparse resources need extra information. Which one is valid, depends on the value of type above
+  union
+  {
+    SparseBufferInitState sparseBuffer;
+    SparseImageInitState sparseImage;
+  };
+};
+
+struct VulkanResourceManagerConfiguration
+{
+  typedef WrappedVkRes *WrappedResourceType;
+  typedef TypedRealHandle RealResourceType;
+  typedef VkResourceRecord RecordType;
+  typedef VkInitialContents InitialContentData;
+};
+
+class VulkanResourceManager : public ResourceManager<VulkanResourceManagerConfiguration>
 {
 public:
   VulkanResourceManager(CaptureState state, WrappedVulkan *core)
       : ResourceManager(), m_State(state), m_Core(core)
   {
   }
+  void SetState(CaptureState state) { m_State = state; }
+  CaptureState GetState() { return m_State; }
   ~VulkanResourceManager() {}
   void ClearWithoutReleasing()
   {
@@ -273,7 +417,7 @@ private:
   uint32_t GetSize_InitialState(ResourceId id, WrappedVkRes *res);
   bool Serialise_InitialState(WriteSerialiser &ser, ResourceId resid, WrappedVkRes *res);
   void Create_InitialState(ResourceId id, WrappedVkRes *live, bool hasData);
-  void Apply_InitialState(WrappedVkRes *live, InitialContentData initial);
+  void Apply_InitialState(WrappedVkRes *live, VkInitialContents initial);
 
   CaptureState m_State;
   WrappedVulkan *m_Core;

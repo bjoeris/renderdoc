@@ -1,4 +1,4 @@
-QT.sql.VERSION = 5.9.0
+QT.sql.VERSION = 5.9.4
 QT.sql.name = QtSql
 QT.sql.module = Qt5Sql
 QT.sql.libs = $$QT_MODULE_LIB_BASE
@@ -10,7 +10,7 @@ QT.sql.depends = core
 QT.sql.uses =
 QT.sql.module_config = v2
 QT.sql.DEFINES = QT_SQL_LIB
-QT.sql.enabled_features = sql-mysql sql-odbc sql-psql sql-sqlite
-QT.sql.disabled_features = sql-db2 sql-ibase sql-oci sql-sqlite2 sql-tds
+QT.sql.enabled_features =
+QT.sql.disabled_features =
 QT_CONFIG +=
 QT_MODULES += sql

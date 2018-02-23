@@ -103,6 +103,9 @@ union ShaderValue
   DoubleVecVal d;
   DOCUMENT("``double`` values.");
   double dv[16];
+
+  DOCUMENT("64-bit integer values.");
+  uint64_t u64v[16];
 };
 
 DOCUMENT(R"(Holds a single named shader variable. It contains either a primitive type (up to a 4x4
@@ -184,10 +187,12 @@ struct ShaderVariable
       return type < o.type;
     if(!(displayAsHex == o.displayAsHex))
       return displayAsHex < o.displayAsHex;
-    if(memcmp(&value, &o.value, sizeof(value)) < 0)
-      return true;
     if(!(isStruct == o.isStruct))
       return isStruct < o.isStruct;
+    if(!(rowMajor == o.rowMajor))
+      return rowMajor < o.rowMajor;
+    if(memcmp(&value, &o.value, sizeof(value)) < 0)
+      return true;
     if(!(members == o.members))
       return members < o.members;
     return false;
@@ -203,14 +208,17 @@ struct ShaderVariable
   DOCUMENT("The :class:`basic type <VarType>` of this variable.");
   VarType type;
 
-  DOCUMENT("``True`` if the contents of this variable should be displayed as hex.");
-  bool displayAsHex;
-
   DOCUMENT("The :class:`contents <ShaderValue>` of this variable if it has no members.");
   ShaderValue value;
 
+  DOCUMENT("``True`` if the contents of this variable should be displayed as hex.");
+  bool displayAsHex;
+
   DOCUMENT("``True`` if this variable is a structure and not an array or basic type.");
   bool isStruct;
+
+  DOCUMENT("``True`` if this variable is stored in rows in memory. Only relevant for matrices.");
+  bool rowMajor;
 
   DOCUMENT("The members of this variable as a list of :class:`ShaderValue`.");
   rdcarray<ShaderVariable> members;
@@ -646,6 +654,8 @@ DECLARE_REFLECTION_STRUCT(ShaderResource);
 DOCUMENT("Describes an entry point in a shader.");
 struct ShaderEntryPoint
 {
+  ShaderEntryPoint() = default;
+  ShaderEntryPoint(const rdcstr &n, ShaderStage s) : name(n), stage(s) {}
   DOCUMENT("");
   bool operator==(const ShaderEntryPoint &o) const { return name == o.name && stage == o.stage; }
   bool operator<(const ShaderEntryPoint &o) const

@@ -51,9 +51,9 @@ template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glFenceSync(SerialiserType &ser, GLsync real, GLenum condition,
                                           GLbitfield flags)
 {
+  SERIALISE_ELEMENT_LOCAL(sync, GetResourceManager()->GetSyncID(real)).TypedAs("GLsync");
   SERIALISE_ELEMENT(condition);
   SERIALISE_ELEMENT_TYPED(GLsyncbitfield, flags);
-  SERIALISE_ELEMENT_LOCAL(sync, GetResourceManager()->GetSyncID(real));
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -124,7 +124,7 @@ template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glClientWaitSync(SerialiserType &ser, GLsync sync_, GLbitfield flags,
                                                GLuint64 timeout)
 {
-  SERIALISE_ELEMENT_LOCAL(sync, GetResourceManager()->GetSyncID(sync_));
+  SERIALISE_ELEMENT_LOCAL(sync, GetResourceManager()->GetSyncID(sync_)).TypedAs("GLsync");
   SERIALISE_ELEMENT_TYPED(GLsyncbitfield, flags);
   SERIALISE_ELEMENT(timeout);
 
@@ -160,7 +160,7 @@ template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glWaitSync(SerialiserType &ser, GLsync sync_, GLbitfield flags,
                                          GLuint64 timeout)
 {
-  SERIALISE_ELEMENT_LOCAL(sync, GetResourceManager()->GetSyncID(sync_));
+  SERIALISE_ELEMENT_LOCAL(sync, GetResourceManager()->GetSyncID(sync_)).TypedAs("GLsync");
   SERIALISE_ELEMENT_TYPED(GLsyncbitfield, flags);
   SERIALISE_ELEMENT(timeout);
 
@@ -202,7 +202,9 @@ void WrappedOpenGL::glDeleteSync(GLsync sync)
 template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glGenQueries(SerialiserType &ser, GLsizei n, GLuint *ids)
 {
-  SERIALISE_ELEMENT_LOCAL(query, GetResourceManager()->GetID(QueryRes(GetCtx(), *ids)));
+  SERIALISE_ELEMENT(n);
+  SERIALISE_ELEMENT_LOCAL(query, GetResourceManager()->GetID(QueryRes(GetCtx(), *ids)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -259,8 +261,10 @@ template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glCreateQueries(SerialiserType &ser, GLenum target, GLsizei n,
                                               GLuint *ids)
 {
-  SERIALISE_ELEMENT_LOCAL(query, GetResourceManager()->GetID(SamplerRes(GetCtx(), *ids)));
   SERIALISE_ELEMENT(target);
+  SERIALISE_ELEMENT(n);
+  SERIALISE_ELEMENT_LOCAL(query, GetResourceManager()->GetID(SamplerRes(GetCtx(), *ids)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 

@@ -1,4 +1,4 @@
-QT.bluetooth.VERSION = 5.9.0
+QT.bluetooth.VERSION = 5.9.4
 QT.bluetooth.name = QtBluetooth
 QT.bluetooth.module = Qt5Bluetooth
 QT.bluetooth.libs = $$QT_MODULE_LIB_BASE

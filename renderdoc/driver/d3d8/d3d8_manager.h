@@ -48,7 +48,23 @@ struct D3D8ResourceRecord : public ResourceRecord
   D3D8ResourceRecord(ResourceId id) : ResourceRecord(id, true) {}
 };
 
-class D3D8ResourceManager : public ResourceManager<IUnknown *, IUnknown *, D3D8ResourceRecord>
+struct D3D8InitialContents
+{
+  template <typename Configuration>
+  void Free(ResourceManager<Configuration> *rm)
+  {
+  }
+};
+
+struct D3D8ResourceManagerConfiguration
+{
+  typedef IUnknown *WrappedResourceType;
+  typedef IUnknown *RealResourceType;
+  typedef D3D8ResourceRecord RecordType;
+  typedef D3D8InitialContents InitialContentData;
+};
+
+class D3D8ResourceManager : public ResourceManager<D3D8ResourceManagerConfiguration>
 {
 public:
   D3D8ResourceManager(WrappedD3DDevice8 *dev) : m_Device(dev) {}
@@ -64,7 +80,7 @@ private:
   uint32_t GetSize_InitialState(ResourceId id, IUnknown *res);
   bool Serialise_InitialState(WriteSerialiser &ser, ResourceId resid, IUnknown *res);
   void Create_InitialState(ResourceId id, IUnknown *live, bool hasData);
-  void Apply_InitialState(IUnknown *live, InitialContentData data);
+  void Apply_InitialState(IUnknown *live, D3D8InitialContents data);
 
   WrappedD3DDevice8 *m_Device;
 };

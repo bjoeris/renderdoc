@@ -154,7 +154,7 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
 
   QObject::connect(&m_MessageTick, &QTimer::timeout, this, &MainWindow::messageCheck);
   m_MessageTick.setSingleShot(false);
-  m_MessageTick.setInterval(500);
+  m_MessageTick.setInterval(175);
   m_MessageTick.start();
 
   m_RemoteProbeSemaphore.release();
@@ -330,6 +330,44 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
   ui->action_Save_Capture_Inplace->setEnabled(false);
   ui->action_Save_Capture_As->setEnabled(false);
   ui->action_Close_Capture->setEnabled(false);
+  ui->menu_Export_As->setEnabled(false);
+
+  {
+    ICaptureFile *tmp = RENDERDOC_OpenCaptureFile();
+    rdcarray<CaptureFileFormat> formats = tmp->GetCaptureFileFormats();
+
+    for(const CaptureFileFormat &fmt : formats)
+    {
+      if(fmt.extension == "rdc")
+        continue;
+
+      if(fmt.openSupported)
+      {
+        QAction *action = new QAction(fmt.name, this);
+
+        QObject::connect(action, &QAction::triggered, [this, fmt]() { importCapture(fmt); });
+
+        if(!fmt.description.isEmpty())
+          action->setToolTip(fmt.description);
+
+        ui->menu_Import_From->addAction(action);
+      }
+
+      if(fmt.convertSupported)
+      {
+        QAction *action = new QAction(fmt.name, this);
+
+        QObject::connect(action, &QAction::triggered, [this, fmt]() { exportCapture(fmt); });
+
+        if(!fmt.description.isEmpty())
+          action->setToolTip(fmt.description);
+
+        ui->menu_Export_As->addAction(action);
+      }
+    }
+
+    tmp->Shutdown();
+  }
 
   QList<QAction *> actions = ui->menuBar->actions();
 
@@ -396,6 +434,33 @@ void MainWindow::on_action_Open_Capture_triggered()
     LoadFromFilename(filename, false);
 }
 
+void MainWindow::importCapture(const CaptureFileFormat &fmt)
+{
+  if(!PromptCloseCapture())
+    return;
+
+  QString ext = fmt.extension;
+  QString title = fmt.name;
+
+  QString filename =
+      RDDialog::getOpenFileName(this, tr("Select file to open"), m_Ctx.Config().LastCaptureFilePath,
+                                tr("%1 Files (*.%2);;All Files (*)").arg(title).arg(ext));
+
+  if(!filename.isEmpty())
+  {
+    QString rdcfile = m_Ctx.TempCaptureFilename(lit("imported_") + ext);
+
+    bool success = m_Ctx.ImportCapture(fmt, filename, rdcfile);
+
+    if(success)
+    {
+      // open file as temporary, in case the user wants to save the imported rdc
+      LoadFromFilename(rdcfile, true);
+      takeCaptureOwnership();
+    }
+  }
+}
+
 void MainWindow::captureModified()
 {
   // once the capture is modified, enable the save-in-place option. It might already have been
@@ -439,22 +504,38 @@ void MainWindow::OnCaptureTrigger(const QString &exe, const QString &workingDir,
   LambdaThread *th = new LambdaThread([this, exe, workingDir, cmdLine, env, opts, callback]() {
     QString capturefile = m_Ctx.TempCaptureFilename(QFileInfo(exe).baseName());
 
-    uint32_t ret = m_Ctx.Replay().ExecuteAndInject(exe, workingDir, cmdLine, env, capturefile, opts);
+    ExecuteResult ret =
+        m_Ctx.Replay().ExecuteAndInject(exe, workingDir, cmdLine, env, capturefile, opts);
 
     GUIInvoke::call([this, exe, ret, callback]() {
-      if(ret == 0)
+
+      if(ret.status == ReplayStatus::JDWPFailure)
+      {
+        RDDialog::critical(
+            this, tr("Error connecting to debugger"),
+            tr("Error launching %1 for capture.\n\n"
+               "Something went wrong connecting to the debugger on the Android device.\n\n"
+               "This can happen if the package is not "
+               "marked as debuggable, or if another android tool such as android studio "
+               "or other tool is interfering with the debug connection.")
+                .arg(exe));
+        return;
+      }
+
+      if(ret.status != ReplayStatus::Succeeded)
       {
         RDDialog::critical(this, tr("Error kicking capture"),
-                           tr("Error launching %1 for capture.\n\nCheck diagnostic log in Help "
-                              "menu for more details.")
-                               .arg(exe));
+                           tr("Error launching %1 for capture.\n\n%2. Check the diagnostic log in "
+                              "the help menu for more details")
+                               .arg(exe)
+                               .arg(ToQStr(ret.status)));
         return;
       }
 
       LiveCapture *live = new LiveCapture(
           m_Ctx, m_Ctx.Replay().CurrentRemote() ? m_Ctx.Replay().CurrentRemote()->hostname : "",
-          m_Ctx.Replay().CurrentRemote() ? m_Ctx.Replay().CurrentRemote()->Name() : "", ret, this,
-          this);
+          m_Ctx.Replay().CurrentRemote() ? m_Ctx.Replay().CurrentRemote()->Name() : "", ret.ident,
+          this, this);
       ShowLiveCapture(live);
       callback(live);
     });
@@ -481,20 +562,36 @@ void MainWindow::OnInjectTrigger(uint32_t PID, const rdcarray<EnvironmentModific
   LambdaThread *th = new LambdaThread([this, PID, env, name, opts, callback]() {
     QString capturefile = m_Ctx.TempCaptureFilename(name);
 
-    uint32_t ret = RENDERDOC_InjectIntoProcess(PID, env, capturefile.toUtf8().data(), opts, false);
+    ExecuteResult ret =
+        RENDERDOC_InjectIntoProcess(PID, env, capturefile.toUtf8().data(), opts, false);
 
     GUIInvoke::call([this, PID, ret, callback]() {
-      if(ret == 0)
+
+      if(ret.status == ReplayStatus::JDWPFailure)
       {
         RDDialog::critical(
-            this, tr("Error kicking capture"),
-            tr("Error injecting into process %1 for capture.\n\nCheck diagnostic log in "
-               "Help menu for more details.")
+            this, tr("Error connecting to debugger"),
+            tr("Error injecting into process %1 for capture.\n\n"
+               "Something went wrong connecting to the debugger on the Android device.\n\n"
+               "This can happen if the package is not "
+               "marked as debuggable, or if another android tool such as android studio "
+               "or other tool is interfering with the debug connection.")
                 .arg(PID));
         return;
       }
 
-      LiveCapture *live = new LiveCapture(m_Ctx, QString(), QString(), ret, this, this);
+      if(ret.status != ReplayStatus::Succeeded)
+      {
+        RDDialog::critical(
+            this, tr("Error kicking capture"),
+            tr("Error injecting into process %1 for capture.\n\n%2. Check the diagnostic log in "
+               "the help menu for more details")
+                .arg(PID)
+                .arg(ToQStr(ret.status)));
+        return;
+      }
+
+      LiveCapture *live = new LiveCapture(m_Ctx, QString(), QString(), ret.ident, this, this);
       ShowLiveCapture(live);
     });
   });
@@ -527,7 +624,7 @@ void MainWindow::LoadCapture(const QString &filename, bool temporary, bool local
     {
       ICaptureFile *file = RENDERDOC_OpenCaptureFile();
 
-      ReplayStatus status = file->OpenFile(filename.toUtf8().data(), "rdc");
+      ReplayStatus status = file->OpenFile(filename.toUtf8().data(), "rdc", NULL);
 
       if(status != ReplayStatus::Succeeded)
       {
@@ -538,7 +635,7 @@ void MainWindow::LoadCapture(const QString &filename, bool temporary, bool local
         else
           text += tr("%1: %2").arg(ToQStr(status)).arg(message);
 
-        RDDialog::critical(NULL, tr("Error opening capture"), text);
+        RDDialog::critical(this, tr("Error opening capture"), text);
 
         file->Shutdown();
         return;
@@ -638,7 +735,7 @@ void MainWindow::LoadCapture(const QString &filename, bool temporary, bool local
 
         remoteMessage += tr("Try selecting a different remote context in the status bar.");
 
-        RDDialog::critical(NULL, tr("Unsupported capture driver"), remoteMessage);
+        RDDialog::critical(this, tr("Unsupported capture driver"), remoteMessage);
       }
       else
       {
@@ -647,7 +744,7 @@ void MainWindow::LoadCapture(const QString &filename, bool temporary, bool local
 
         remoteMessage += tr("Try selecting a remote context in the status bar.");
 
-        RDDialog::critical(NULL, tr("Unsupported capture driver"), remoteMessage);
+        RDDialog::critical(this, tr("Unsupported capture driver"), remoteMessage);
       }
 
       return;
@@ -665,7 +762,7 @@ void MainWindow::LoadCapture(const QString &filename, bool temporary, bool local
         // some error
         if(fileToLoad.isEmpty())
         {
-          RDDialog::critical(NULL, tr("Error copying to remote"),
+          RDDialog::critical(this, tr("Error copying to remote"),
                              tr("Couldn't copy %1 to remote host for replaying").arg(filename));
           return;
         }
@@ -679,7 +776,7 @@ void MainWindow::LoadCapture(const QString &filename, bool temporary, bool local
       }
       else
       {
-        ANALYTIC_ADDUNIQ(APIsUsed, driver);
+        ANALYTIC_ADDUNIQ(APIs, driver);
       }
 
       m_Ctx.LoadCapture(fileToLoad, origFilename, temporary, local);
@@ -707,7 +804,7 @@ void MainWindow::OpenCaptureConfigFile(const QString &filename, bool exe)
   ToolWindowManager::raiseToolWindow(capDialog->Widget());
 }
 
-QString MainWindow::GetSavePath()
+QString MainWindow::GetSavePath(QString title, QString filter)
 {
   QString dir;
 
@@ -719,8 +816,13 @@ QString MainWindow::GetSavePath()
       dir = m_LastSaveCapturePath;
   }
 
-  QString filename =
-      RDDialog::getSaveFileName(this, tr("Save Capture As"), dir, tr("Capture Files (*.rdc)"));
+  if(title.isEmpty())
+    title = tr("Save Capture As");
+
+  if(filter.isEmpty())
+    filter = tr("Capture Files (*.rdc)");
+
+  QString filename = RDDialog::getSaveFileName(this, title, dir, filter);
 
   if(!filename.isEmpty())
   {
@@ -755,6 +857,25 @@ bool MainWindow::PromptSaveCaptureAs()
   return false;
 }
 
+void MainWindow::exportCapture(const CaptureFileFormat &fmt)
+{
+  if(!m_Ctx.IsCaptureLocal())
+  {
+    RDDialog::information(
+        this, tr("Save changes to capture?"),
+        tr("The capture is on a remote host, it must be saved locally before it can be exported."));
+    PromptSaveCaptureAs();
+    return;
+  }
+
+  QString saveFilename =
+      GetSavePath(tr("Export Capture As"),
+                  tr("%1 Files (*.%2)").arg(QString(fmt.name)).arg(QString(fmt.extension)));
+
+  if(!saveFilename.isEmpty())
+    m_Ctx.ExportCapture(fmt, saveFilename);
+}
+
 bool MainWindow::PromptCloseCapture()
 {
   if(!m_Ctx.IsCaptureLoaded())
@@ -769,7 +890,7 @@ bool MainWindow::PromptCloseCapture()
     caplocal = m_Ctx.IsCaptureLocal();
 
     QMessageBox::StandardButton res =
-        RDDialog::question(NULL, tr("Unsaved capture"), tr("Save this capture?"),
+        RDDialog::question(this, tr("Unsaved capture"), tr("Save this capture?"),
                            QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
 
     if(res == QMessageBox::Cancel)
@@ -817,7 +938,7 @@ bool MainWindow::PromptCloseCapture()
           tr("\nThe capture is on a remote host, would you like to save these changes locally?");
     }
 
-    res = RDDialog::question(NULL, tr("Save changes to capture?"), text,
+    res = RDDialog::question(this, tr("Save changes to capture?"), text,
                              QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
 
     if(res == QMessageBox::Cancel)
@@ -851,6 +972,7 @@ void MainWindow::CloseCapture()
 
   ui->action_Save_Capture_Inplace->setEnabled(false);
   ui->action_Save_Capture_As->setEnabled(false);
+  ui->menu_Export_As->setEnabled(false);
 }
 
 void MainWindow::SetTitle(const QString &filename)
@@ -1109,8 +1231,6 @@ void MainWindow::CheckUpdates(bool forceCheck, UpdateResultMethod callback)
   statusText->setText(tr("Checking for updates..."));
 
   statusProgress->setVisible(true);
-  statusProgress->setMinimumSize(QSize(200, 0));
-  statusProgress->setMinimum(0);
   statusProgress->setMaximum(0);
 
   // call out to the status-check to see when the bug report was last updated
@@ -1127,7 +1247,6 @@ void MainWindow::CheckUpdates(bool forceCheck, UpdateResultMethod callback)
 
     statusText->setText(QString());
     statusProgress->setVisible(false);
-    statusProgress->setMaximum(1000);
 
     if(response.isEmpty())
     {
@@ -1304,7 +1423,7 @@ void MainWindow::recentCaptureFile(const QString &filename)
   else
   {
     QMessageBox::StandardButton res =
-        RDDialog::question(NULL, tr("File not found"),
+        RDDialog::question(this, tr("File not found"),
                            tr("File %1 couldn't be found.\nRemove from recent list?").arg(filename));
 
     if(res == QMessageBox::Yes)
@@ -1325,7 +1444,7 @@ void MainWindow::recentCaptureSetting(const QString &filename)
   else
   {
     QMessageBox::StandardButton res =
-        RDDialog::question(NULL, tr("File not found"),
+        RDDialog::question(this, tr("File not found"),
                            tr("File %1 couldn't be found.\nRemove from recent list?").arg(filename));
 
     if(res == QMessageBox::Yes)
@@ -1363,10 +1482,7 @@ void MainWindow::setCaptureHasErrors(bool errors)
     statusIcon->setPixmap(m_messageAlternate ? empty : del);
 
     QString text;
-    text = tr("%1 loaded. Capture has %2 errors, warnings or performance notes. "
-              "See the 'Errors and Warnings' window.")
-               .arg(filename)
-               .arg(m_Ctx.DebugMessages().size());
+    text = tr("%1 loaded. Capture has %2 issues.").arg(filename).arg(m_Ctx.DebugMessages().size());
     if(m_Ctx.UnreadMessageCount() > 0)
       text += tr(" %1 Unread.").arg(m_Ctx.UnreadMessageCount());
     statusText->setText(text);
@@ -1403,6 +1519,16 @@ void MainWindow::messageCheck()
 {
   if(m_Ctx.IsCaptureLoaded())
   {
+    if(m_Ctx.Replay().GetCurrentProcessingTime() >= 1.5f)
+    {
+      statusProgress->setVisible(true);
+      statusProgress->setMaximum(0);
+    }
+    else
+    {
+      statusProgress->hide();
+    }
+
     m_Ctx.Replay().AsyncInvoke([this](IReplayController *r) {
       rdcarray<DebugMessage> msgs = r->GetDebugMessages();
 
@@ -1594,12 +1720,18 @@ void MainWindow::switchContext()
 
       if(!host->serverRunning && !host->runCommand.isEmpty())
       {
-        GUIInvoke::call([this]() { statusText->setText(tr("Running remote server command...")); });
+        GUIInvoke::call([this]() {
+          statusText->setText(tr("Running remote server command..."));
+          statusProgress->setVisible(true);
+          statusProgress->setMaximum(0);
+        });
 
         host->Launch();
 
         // check if it's running now
         host->CheckStatus();
+
+        GUIInvoke::call([this]() { statusProgress->setVisible(false); });
       }
 
       ReplayStatus status = ReplayStatus::Succeeded;
@@ -1666,6 +1798,7 @@ void MainWindow::OnCaptureLoaded()
   ui->action_Save_Capture_Inplace->setEnabled(m_Ctx.IsCaptureTemporary());
   ui->action_Save_Capture_As->setEnabled(true);
   ui->action_Close_Capture->setEnabled(true);
+  ui->menu_Export_As->setEnabled(true);
 
   // don't allow changing context while capture is open
   contextChooser->setEnabled(false);
@@ -1702,6 +1835,7 @@ void MainWindow::OnCaptureClosed()
   ui->action_Save_Capture_Inplace->setEnabled(false);
   ui->action_Save_Capture_As->setEnabled(false);
   ui->action_Close_Capture->setEnabled(false);
+  ui->menu_Export_As->setEnabled(false);
 
   ui->action_Start_Replay_Loop->setEnabled(false);
 

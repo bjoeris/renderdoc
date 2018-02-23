@@ -67,7 +67,7 @@ void RDTreeViewDelegate::initStyleOption(QStyleOptionViewItem *option, const QMo
   }
 }
 
-RDTipLabel::RDTipLabel() : QLabel(NULL)
+RDTipLabel::RDTipLabel(QWidget *listener) : QLabel(NULL), mouseListener(listener)
 {
   int margin = style()->pixelMetric(QStyle::PM_ToolTipLabelFrameWidth, NULL, this);
   int opacity = style()->styleHint(QStyle::SH_ToolTipLabel_Opacity, NULL, this);
@@ -94,6 +94,32 @@ void RDTipLabel::paintEvent(QPaintEvent *ev)
   QLabel::paintEvent(ev);
 }
 
+void RDTipLabel::mousePressEvent(QMouseEvent *e)
+{
+  if(mouseListener)
+    sendListenerEvent(e);
+}
+
+void RDTipLabel::sendListenerEvent(QMouseEvent *e)
+{
+  QMouseEvent *duplicate =
+      new QMouseEvent(e->type(), mouseListener->mapFromGlobal(e->globalPos()), e->windowPos(),
+                      e->globalPos(), e->button(), e->buttons(), e->modifiers(), e->source());
+  QCoreApplication::postEvent(mouseListener, duplicate);
+}
+
+void RDTipLabel::mouseReleaseEvent(QMouseEvent *e)
+{
+  if(mouseListener)
+    sendListenerEvent(e);
+}
+
+void RDTipLabel::mouseDoubleClickEvent(QMouseEvent *e)
+{
+  if(mouseListener)
+    sendListenerEvent(e);
+}
+
 void RDTipLabel::resizeEvent(QResizeEvent *e)
 {
   QStyleHintReturnMask frameMask;
@@ -112,7 +138,7 @@ RDTreeView::RDTreeView(QWidget *parent) : QTreeView(parent)
   m_delegate = new RDTreeViewDelegate(this);
   QTreeView::setItemDelegate(m_delegate);
 
-  m_ElidedTooltip = new RDTipLabel();
+  m_ElidedTooltip = new RDTipLabel(viewport());
   m_ElidedTooltip->hide();
 }
 
@@ -232,29 +258,34 @@ void RDTreeView::drawRow(QPainter *painter, const QStyleOptionViewItem &options,
                                           back.greenF() * 0.8 + fore.greenF() * 0.2,
                                           back.blueF() * 0.8 + fore.blueF() * 0.2)));
 
+    QRect intersectrect = options.rect.adjusted(0, 0, 1, 0);
+
     for(int i = 0, count = model()->columnCount(); i < count; i++)
     {
       QRect r = visualRect(model()->index(index.row(), i, index.parent()));
-      r = r.intersected(options.rect);
+
+      if(r.width() <= 0)
+        r.moveLeft(r.left() + r.width());
+      if(r.height() <= 0)
+        r.moveTop(r.top() + r.height());
+
+      r = r.intersected(intersectrect);
+
+      if(treePosition() == i)
+      {
+        int depth = 1;
+        QModelIndex idx = index;
+        while(idx.parent().isValid())
+        {
+          depth++;
+          idx = idx.parent();
+        }
+        r.setLeft(r.left() - indentation() * depth);
+      }
 
       // draw bottom and right of the rect
-      if(r.width() > 0 && r.height() > 0)
-      {
-        if(treePosition() == i)
-        {
-          int depth = 1;
-          QModelIndex idx = index;
-          while(idx.parent().isValid())
-          {
-            depth++;
-            idx = idx.parent();
-          }
-          r.setLeft(r.left() - indentation() * depth);
-        }
-
-        painter->drawLine(r.bottomLeft(), r.bottomRight());
-        painter->drawLine(r.topRight(), r.bottomRight());
-      }
+      painter->drawLine(r.bottomLeft(), r.bottomRight());
+      painter->drawLine(r.topRight(), r.bottomRight());
     }
 
     painter->setPen(p);
@@ -303,7 +334,7 @@ void RDTreeView::drawBranches(QPainter *painter, const QRect &rect, const QModel
   else
   {
     // draw only the expand item, not the branches
-    QRect primitive(0, rect.top(), indentation(), rect.height());
+    QRect primitive(0, rect.top(), qMin(rect.width(), indentation()), rect.height());
 
     // if root isn't decorated, skip
     if(!rootIsDecorated() && !index.parent().isValid())

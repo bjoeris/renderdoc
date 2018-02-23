@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include <QElapsedTimer>
 #include <QMutex>
 #include <QQueue>
 #include <QSemaphore>
@@ -52,6 +53,7 @@ public:
 
   bool IsRunning();
   ReplayStatus GetCreateStatus() { return m_CreateStatus; }
+  float GetCurrentProcessingTime();
   // this tagged version is for cases when we might send a request - e.g. to pick a vertex or pixel
   // - and want to pre-empt it with a new request before the first has returned. Either because some
   // other work is taking a while or because we're sending requests faster than they can be
@@ -85,9 +87,9 @@ public:
   ICaptureFile *GetCaptureFile() { return m_CaptureFile; }
   void ReopenCaptureFile(const QString &path);
   const RemoteHost *CurrentRemote() { return m_RemoteHost; }
-  uint32_t ExecuteAndInject(const rdcstr &exe, const rdcstr &workingDir, const rdcstr &cmdLine,
-                            const rdcarray<EnvironmentModification> &env, const rdcstr &capturefile,
-                            CaptureOptions opts);
+  ExecuteResult ExecuteAndInject(const rdcstr &exe, const rdcstr &workingDir, const rdcstr &cmdLine,
+                                 const rdcarray<EnvironmentModification> &env,
+                                 const rdcstr &capturefile, CaptureOptions opts);
 
   rdcarray<rdcstr> GetRemoteSupport();
   void GetHomeFolder(bool synchronous, DirectoryBrowseCallback cb);
@@ -112,6 +114,9 @@ private:
   };
 
   void run(int proxyRenderer, const QString &capturefile, RENDERDOC_ProgressCallback progress);
+
+  QMutex m_TimerLock;
+  QElapsedTimer m_CommandTimer;
 
   QMutex m_RenderLock;
   QQueue<InvokeHandle *> m_RenderQueue;

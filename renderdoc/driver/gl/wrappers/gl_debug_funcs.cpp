@@ -36,10 +36,22 @@ bool WrappedOpenGL::Serialise_glObjectLabel(SerialiserType &ser, GLenum identifi
 
   if(ser.IsWriting())
   {
-    if(length == 0 || label == NULL)
+    // we share implementations between KHR_debug and EXT_debug_label, however KHR_debug follows the
+    // pattern elsewhere (e.g. in glShaderSource) of a length of -1 meaning indeterminate
+    // NULL-terminated length, but EXT_debug_label takes length of 0 to mean that.
+    GLsizei realLength = length;
+    if(gl_CurChunk == GLChunk::glLabelObjectEXT && length == 0)
+      realLength = -1;
+
+    // if length is negative (after above twiddling), it's taken from strlen and the label must be
+    // NULL-terminated
+    if(realLength < 0)
+      realLength = label ? (GLsizei)strlen(label) : 0;
+
+    if(realLength == 0 || label == NULL)
       Label = "";
     else
-      Label = std::string(label, label + (length > 0 ? length : strlen(label)));
+      Label = std::string(label, label + realLength);
 
     switch(identifier)
     {
@@ -156,6 +168,7 @@ bool WrappedOpenGL::Serialise_glDebugMessageInsert(SerialiserType &ser, GLenum s
   SERIALISE_ELEMENT(type);
   SERIALISE_ELEMENT(id);
   SERIALISE_ELEMENT(severity);
+  SERIALISE_ELEMENT(length);
   SERIALISE_ELEMENT(name);
 
   SERIALISE_CHECK_READ_ERRORS();
@@ -225,6 +238,7 @@ bool WrappedOpenGL::Serialise_glInsertEventMarkerEXT(SerialiserType &ser, GLsize
   std::string marker =
       marker_ ? std::string(marker_, marker_ + (length > 0 ? length : strlen(marker_))) : "";
 
+  SERIALISE_ELEMENT(length);
   SERIALISE_ELEMENT(marker);
 
   SERIALISE_CHECK_READ_ERRORS();
@@ -279,27 +293,28 @@ void WrappedOpenGL::glStringMarkerGREMEDY(GLsizei len, const void *string)
 
 template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glPushDebugGroup(SerialiserType &ser, GLenum source, GLuint id,
-                                               GLsizei length, const GLchar *message)
+                                               GLsizei length, const GLchar *message_)
 {
-  std::string name =
-      message ? std::string(message, message + (length > 0 ? length : strlen(message))) : "";
+  std::string message =
+      message_ ? std::string(message_, message_ + (length > 0 ? length : strlen(message_))) : "";
 
   // unused, just for the user's benefit
   SERIALISE_ELEMENT(source);
   SERIALISE_ELEMENT(id);
-  SERIALISE_ELEMENT(name);
+  SERIALISE_ELEMENT(length);
+  SERIALISE_ELEMENT(message);
 
   SERIALISE_CHECK_READ_ERRORS();
 
   if(IsReplayingAndReading())
   {
-    GLMarkerRegion::Begin(name, source, id);
+    GLMarkerRegion::Begin(message, source, id);
     m_ReplayEventCount++;
 
     if(IsLoading(m_State))
     {
       DrawcallDescription draw;
-      draw.name = name;
+      draw.name = message;
       draw.flags |= DrawFlags::PushMarker;
 
       AddEvent();
@@ -337,7 +352,7 @@ bool WrappedOpenGL::Serialise_glPopDebugGroup(SerialiserType &ser)
     {
       DrawcallDescription draw;
       draw.name = "API Calls";
-      draw.flags |= DrawFlags::SetMarker | DrawFlags::APICalls;
+      draw.flags |= DrawFlags::APICalls;
 
       AddDrawcall(draw, true);
     }

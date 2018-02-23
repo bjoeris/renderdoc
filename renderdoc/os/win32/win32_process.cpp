@@ -186,7 +186,7 @@ extern "C" __declspec(dllexport) void __cdecl INTERNAL_SetCaptureOptions(Capture
 extern "C" __declspec(dllexport) void __cdecl INTERNAL_SetLogFile(const char *log)
 {
   if(log)
-    RenderDoc::Inst().SetLogFile(log);
+    RenderDoc::Inst().SetCaptureFileTemplate(log);
 }
 
 static EnvironmentModification tempEnvMod;
@@ -395,7 +395,8 @@ void InjectFunctionCall(HANDLE hProcess, uintptr_t renderdoc_remote, const char 
 }
 
 static PROCESS_INFORMATION RunProcess(const char *app, const char *workingDir, const char *cmdLine,
-                                      HANDLE *phChildStdOutput_Rd, HANDLE *phChildStdError_Rd)
+                                      bool internal, HANDLE *phChildStdOutput_Rd,
+                                      HANDLE *phChildStdError_Rd)
 {
   PROCESS_INFORMATION pi;
   STARTUPINFO si;
@@ -472,7 +473,8 @@ static PROCESS_INFORMATION RunProcess(const char *app, const char *workingDir, c
     si.hStdError = hChildStdError_Wr;
   }
 
-  RDCLOG("Running process %s", app);
+  if(!internal)
+    RDCLOG("Running process %s", app);
 
   BOOL retValue = CreateProcessW(NULL, paramsAlloc, &pSec, &tSec,
                                  true,    // Need to inherit handles for ReadFile to read stdout
@@ -498,8 +500,9 @@ static PROCESS_INFORMATION RunProcess(const char *app, const char *workingDir, c
   return pi;
 }
 
-uint32_t Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
-                                    const char *logfile, const CaptureOptions &opts, bool waitForExit)
+ExecuteResult Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
+                                         const char *logfile, const CaptureOptions &opts,
+                                         bool waitForExit)
 {
   wstring wlogfile = logfile == NULL ? L"" : StringFormat::UTF82Wide(logfile);
 
@@ -559,7 +562,7 @@ uint32_t Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModi
     DWORD err = GetLastError();
     RDCERR("Couldn't determine bitness of process, err: %08x", err);
     CloseHandle(hProcess);
-    return 0;
+    return {ReplayStatus::IncompatibleProcess, 0};
   }
 
   bool capalt = false;
@@ -578,7 +581,7 @@ uint32_t Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModi
   {
     DWORD err = GetLastError();
     RDCERR("Couldn't determine bitness of self, err: %08x", err);
-    return 0;
+    return {ReplayStatus::InternalError, 0};
   }
 
   // we know we're 32-bit, so if the target process is not wow64
@@ -630,7 +633,7 @@ uint32_t Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModi
       RDCERR("Can't capture x64 process with x86 renderdoc");
 
       CloseHandle(hProcess);
-      return 0;
+      return {ReplayStatus::IncompatibleProcess, 0};
     }
   }
 #else
@@ -743,16 +746,7 @@ uint32_t Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModi
     tSec.nLength = sizeof(tSec);
 
     // serialise to string with two chars per byte
-    string optstr;
-    {
-      optstr.reserve(sizeof(CaptureOptions) * 2 + 1);
-      byte *b = (byte *)&opts;
-      for(size_t i = 0; i < sizeof(CaptureOptions); i++)
-      {
-        optstr.push_back(char('a' + ((b[i] >> 4) & 0xf)));
-        optstr.push_back(char('a' + ((b[i]) & 0xf)));
-      }
-    }
+    string optstr = opts.EncodeAsString();
 
     wchar_t *paramsAlloc = new wchar_t[2048];
 
@@ -839,7 +833,7 @@ uint32_t Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModi
       RDCERR(
           "Can't spawn alternate bitness renderdoccmd - have you built 32-bit and 64-bit?\n"
           "You need to build the matching bitness for the programs you want to capture.");
-      return 0;
+      return {ReplayStatus::InternalError, 0};
     }
 
     ResumeThread(pi.hThread);
@@ -855,7 +849,12 @@ uint32_t Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModi
 
     CloseHandle(hProcess);
 
-    return (uint32_t)exitCode;
+    if(exitCode == 0)
+      return {ReplayStatus::UnknownError, 0};
+    if(exitCode < RenderDoc_FirstTargetControlPort)
+      return {(ReplayStatus)exitCode, 0};
+
+    return {ReplayStatus::Succeeded, (uint32_t)exitCode};
   }
 
   InjectDLL(hProcess, renderdocPath);
@@ -917,16 +916,17 @@ uint32_t Process::InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModi
 
   CloseHandle(hProcess);
 
-  return controlident;
+  return {ReplayStatus::Succeeded, controlident};
 }
 
 uint32_t Process::LaunchProcess(const char *app, const char *workingDir, const char *cmdLine,
-                                ProcessResult *result)
+                                bool internal, ProcessResult *result)
 {
   HANDLE hChildStdOutput_Rd, hChildStdError_Rd;
 
-  PROCESS_INFORMATION pi = RunProcess(app, workingDir, cmdLine, result ? &hChildStdOutput_Rd : NULL,
-                                      result ? &hChildStdError_Rd : NULL);
+  PROCESS_INFORMATION pi =
+      RunProcess(app, workingDir, cmdLine, internal, result ? &hChildStdOutput_Rd : NULL,
+                 result ? &hChildStdError_Rd : NULL);
 
   if(pi.dwProcessId == 0)
   {
@@ -934,7 +934,8 @@ uint32_t Process::LaunchProcess(const char *app, const char *workingDir, const c
     return 0;
   }
 
-  RDCLOG("Launched process '%s' with '%s'", app, cmdLine);
+  if(!internal)
+    RDCLOG("Launched process '%s' with '%s'", app, cmdLine);
 
   ResumeThread(pi.hThread);
 
@@ -981,19 +982,19 @@ uint32_t Process::LaunchProcess(const char *app, const char *workingDir, const c
 }
 
 uint32_t Process::LaunchScript(const char *script, const char *workingDir, const char *argList,
-                               ProcessResult *result)
+                               bool internal, ProcessResult *result)
 {
   // Change parameters to invoke command interpreter
   string args = "/C " + string(script) + " " + string(argList);
 
-  return LaunchProcess("cmd.exe", workingDir, args.c_str(), result);
+  return LaunchProcess("cmd.exe", workingDir, args.c_str(), internal, result);
 }
 
-uint32_t Process::LaunchAndInjectIntoProcess(const char *app, const char *workingDir,
-                                             const char *cmdLine,
-                                             const rdcarray<EnvironmentModification> &env,
-                                             const char *logfile, const CaptureOptions &opts,
-                                             bool waitForExit)
+ExecuteResult Process::LaunchAndInjectIntoProcess(const char *app, const char *workingDir,
+                                                  const char *cmdLine,
+                                                  const rdcarray<EnvironmentModification> &env,
+                                                  const char *logfile, const CaptureOptions &opts,
+                                                  bool waitForExit)
 {
   void *func =
       GetProcAddress(GetModuleHandleA(STRINGIZE(RDOC_DLL_FILE) ".dll"), "INTERNAL_SetLogFile");
@@ -1002,24 +1003,24 @@ uint32_t Process::LaunchAndInjectIntoProcess(const char *app, const char *workin
   {
     RDCERR("Can't find required export function in " STRINGIZE(
         RDOC_DLL_FILE) ".dll - corrupted/missing file?");
-    return 0;
+    return {ReplayStatus::InternalError, 0};
   }
 
-  PROCESS_INFORMATION pi = RunProcess(app, workingDir, cmdLine, NULL, NULL);
+  PROCESS_INFORMATION pi = RunProcess(app, workingDir, cmdLine, false, NULL, NULL);
 
   if(pi.dwProcessId == 0)
-    return 0;
+    return {ReplayStatus::InjectionFailed, 0};
 
-  uint32_t ret = InjectIntoProcess(pi.dwProcessId, env, logfile, opts, false);
+  ExecuteResult ret = InjectIntoProcess(pi.dwProcessId, env, logfile, opts, false);
 
   CloseHandle(pi.hProcess);
   ResumeThread(pi.hThread);
   ResumeThread(pi.hThread);
 
-  if(ret == 0)
+  if(ret.ident == 0 || ret.status != ReplayStatus::Succeeded)
   {
     CloseHandle(pi.hThread);
-    return 0;
+    return ret;
   }
 
   if(waitForExit)
@@ -1400,16 +1401,7 @@ bool Process::StartGlobalHook(const char *pathmatch, const char *logfile, const 
   paramsAlloc.resize(2048);
 
   // serialise to string with two chars per byte
-  string optstr;
-  {
-    optstr.reserve(sizeof(CaptureOptions) * 2 + 1);
-    byte *b = (byte *)&opts;
-    for(size_t i = 0; i < sizeof(CaptureOptions); i++)
-    {
-      optstr.push_back(char('a' + ((b[i] >> 4) & 0xf)));
-      optstr.push_back(char('a' + ((b[i]) & 0xf)));
-    }
-  }
+  string optstr = opts.EncodeAsString();
 
   wstring wlogfile = logfile == NULL ? L"" : StringFormat::UTF82Wide(string(logfile));
   wstring wpathmatch = StringFormat::UTF82Wide(string(pathmatch));

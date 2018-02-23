@@ -60,32 +60,114 @@ void WrappedOpenGL::ShaderData::Compile(WrappedOpenGL &gl, ResourceId id, GLuint
   if(type == eGL_VERTEX_SHADER)
     CheckVertexOutputUses(sources, pointSizeUsed, clipDistanceUsed);
 
+  string concatenated;
+
+  for(size_t i = 0; i < sources.size(); i++)
   {
-    string concatenated;
-
-    for(size_t i = 0; i < sources.size(); i++)
+    if(sources.size() > 1)
     {
-      if(sources.size() > 1)
-      {
-        if(i > 0)
-          concatenated += "\n";
-        concatenated += "/////////////////////////////";
-        concatenated += StringFormat::Fmt("// Source file %u", (uint32_t)i);
-        concatenated += "/////////////////////////////";
+      if(i > 0)
         concatenated += "\n";
-      }
-
-      concatenated += sources[i];
+      concatenated += "/////////////////////////////";
+      concatenated += StringFormat::Fmt("// Source file %u", (uint32_t)i);
+      concatenated += "/////////////////////////////";
+      concatenated += "\n";
     }
 
-    reflection.encoding = ShaderEncoding::GLSL;
-    reflection.rawBytes.assign((byte *)concatenated.c_str(), concatenated.size());
+    concatenated += sources[i];
   }
+
+  size_t offs = concatenated.find("#version");
+
+  if(offs == std::string::npos)
+  {
+    // if there's no #version it's assumed to be 100 which we set below
+    version = 0;
+  }
+  else
+  {
+    // see if we find a second result after the first
+    size_t offs2 = concatenated.find("#version", offs + 1);
+
+    if(offs2 == std::string::npos)
+    {
+      version = ParseVersionStatement(concatenated.c_str() + offs);
+    }
+    else
+    {
+      // slow path, multiple #version matches so the first one might be in a comment. We need to
+      // search from the start, past comments and whitespace, to find the first real #version.
+      const char *search = concatenated.c_str();
+      const char *end = search + concatenated.size();
+
+      while(search < end)
+      {
+        // skip whitespace
+        if(isspace(*search))
+        {
+          search++;
+          continue;
+        }
+
+        // skip single-line C++ style comments
+        if(search + 1 < end && search[0] == '/' && search[1] == '/')
+        {
+          // continue until the next newline
+          while(search < end && search[0] != '\r' && search[0] != '\n')
+            search++;
+
+          // continue, the whitespace skip above will skip the newline
+          continue;
+        }
+
+        // skip multi-line C style comments
+        if(search + 1 < end && search[0] == '/' && search[1] == '*')
+        {
+          // continue until the ending marker
+          while(search + 1 < end && (search[0] != '*' || search[1] != '/'))
+            search++;
+
+          // skip the end marker
+          search += 2;
+
+          // continue, the whitespace skip above will skip the newline
+          continue;
+        }
+
+        // missing #version is valid, so just exit
+        if(search + sizeof("#version") > end)
+        {
+          RDCERR("Bad shader - reached end of text after skipping all comments and whitespace");
+          break;
+        }
+
+        std::string versionText(search, search + sizeof("#version") - 1);
+
+        // if we found the version, parse it
+        if(versionText == "#version")
+          version = ParseVersionStatement(search);
+
+        // otherwise break - a missing #version is valid, and a legal #version cannot occur anywhere
+        // after this point.
+        break;
+      }
+    }
+  }
+
+  // default to version 100
+  if(version == 0)
+    version = 100;
+
+  reflection.encoding = ShaderEncoding::GLSL;
+  reflection.rawBytes.assign((byte *)concatenated.c_str(), concatenated.size());
 
   GLuint sepProg = prog;
 
   GLint status = 0;
-  gl.glGetShaderiv(realShader, eGL_COMPILE_STATUS, &status);
+  if(realShader == 0)
+    status = 1;
+  else
+    gl.glGetShaderiv(realShader, eGL_COMPILE_STATUS, &status);
 
   if(sepProg == 0 && status == 1)
     sepProg = MakeSeparableShaderProgram(gl, type, sources, NULL);
@@ -120,23 +202,20 @@ void WrappedOpenGL::ShaderData::Compile(WrappedOpenGL &gl, ResourceId id, GLuint
 
     reflection.stage = MakeShaderStage(type);
 
-    // TODO sort these so that the first file contains the entry point
-    reflection.debugInfo.files.resize(sources.size());
-    for(size_t i = 0; i < sources.size(); i++)
-    {
-      reflection.debugInfo.files[i].filename = StringFormat::Fmt("source%u.glsl", (uint32_t)i);
-      reflection.debugInfo.files[i].contents = sources[i];
-    }
+    reflection.debugInfo.files.resize(1);
+    reflection.debugInfo.files[0].filename = "main.glsl";
+    reflection.debugInfo.files[0].contents = concatenated;
   }
 }
 
 #pragma region Shaders
 
 template <typename SerialiserType>
-bool WrappedOpenGL::Serialise_glCreateShader(SerialiserType &ser, GLuint shader, GLenum type)
+bool WrappedOpenGL::Serialise_glCreateShader(SerialiserType &ser, GLenum type, GLuint shader)
 {
   SERIALISE_ELEMENT(type);
-  SERIALISE_ELEMENT_LOCAL(Shader, GetResourceManager()->GetID(ShaderRes(GetCtx(), shader)));
+  SERIALISE_ELEMENT_LOCAL(Shader, GetResourceManager()->GetID(ShaderRes(GetCtx(), shader)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -173,7 +252,7 @@ GLuint WrappedOpenGL::glCreateShader(GLenum type)
     {
       USE_SCRATCH_SERIALISER();
       SCOPED_SERIALISE_CHUNK(gl_CurChunk);
-      Serialise_glCreateShader(ser, real, type);
+      Serialise_glCreateShader(ser, type, real);
 
       chunk = scope.Get();
     }
@@ -213,7 +292,9 @@ bool WrappedOpenGL::Serialise_glShaderSource(SerialiserType &ser, GLuint shaderH
     }
   }
 
+  SERIALISE_ELEMENT(count);
   SERIALISE_ELEMENT(sources);
+  SERIALISE_ELEMENT_ARRAY(length, count);
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -486,12 +567,14 @@ void WrappedOpenGL::glDetachShader(GLuint program, GLuint shader)
 #pragma region Programs
 
 template <typename SerialiserType>
-bool WrappedOpenGL::Serialise_glCreateShaderProgramv(SerialiserType &ser, GLuint program, GLenum type,
-                                                     GLsizei count, const GLchar *const *strings)
+bool WrappedOpenGL::Serialise_glCreateShaderProgramv(SerialiserType &ser, GLenum type, GLsizei count,
+                                                     const GLchar *const *strings, GLuint program)
 {
   SERIALISE_ELEMENT(type);
-  SERIALISE_ELEMENT_ARRAY(strings, (uint32_t &)count);
-  SERIALISE_ELEMENT_LOCAL(Program, GetResourceManager()->GetID(ProgramRes(GetCtx(), program)));
+  SERIALISE_ELEMENT(count);
+  SERIALISE_ELEMENT_ARRAY(strings, count);
+  SERIALISE_ELEMENT_LOCAL(Program, GetResourceManager()->GetID(ProgramRes(GetCtx(), program)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -551,7 +634,7 @@ GLuint WrappedOpenGL::glCreateShaderProgramv(GLenum type, GLsizei count, const G
     {
       USE_SCRATCH_SERIALISER();
       SCOPED_SERIALISE_CHUNK(gl_CurChunk);
-      Serialise_glCreateShaderProgramv(ser, real, type, count, strings);
+      Serialise_glCreateShaderProgramv(ser, type, count, strings, real);
 
       chunk = scope.Get();
     }
@@ -596,7 +679,8 @@ GLuint WrappedOpenGL::glCreateShaderProgramv(GLenum type, GLsizei count, const G
 template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glCreateProgram(SerialiserType &ser, GLuint program)
 {
-  SERIALISE_ELEMENT_LOCAL(Program, GetResourceManager()->GetID(ProgramRes(GetCtx(), program)));
+  SERIALISE_ELEMENT_LOCAL(Program, GetResourceManager()->GetID(ProgramRes(GetCtx(), program)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -888,7 +972,8 @@ bool WrappedOpenGL::Serialise_glUniformSubroutinesuiv(SerialiserType &ser, GLenu
                                                       GLsizei count, const GLuint *indices)
 {
   SERIALISE_ELEMENT(shadertype);
-  SERIALISE_ELEMENT_ARRAY(indices, (uint32_t &)count);
+  SERIALISE_ELEMENT(count);
+  SERIALISE_ELEMENT_ARRAY(indices, count);
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -964,7 +1049,8 @@ bool WrappedOpenGL::Serialise_glTransformFeedbackVaryings(SerialiserType &ser, G
                                                           GLenum bufferMode)
 {
   SERIALISE_ELEMENT_LOCAL(program, ProgramRes(GetCtx(), programHandle));
-  SERIALISE_ELEMENT_ARRAY(varyings, (uint32_t &)count);
+  SERIALISE_ELEMENT(count);
+  SERIALISE_ELEMENT_ARRAY(varyings, count);
   SERIALISE_ELEMENT(bufferMode);
 
   SERIALISE_CHECK_READ_ERRORS();
@@ -1274,8 +1360,9 @@ void WrappedOpenGL::glUseProgramStages(GLuint pipeline, GLbitfield stages, GLuin
 template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glGenProgramPipelines(SerialiserType &ser, GLsizei n, GLuint *pipelines)
 {
-  SERIALISE_ELEMENT_LOCAL(pipeline,
-                          GetResourceManager()->GetID(ProgramPipeRes(GetCtx(), *pipelines)));
+  SERIALISE_ELEMENT(n);
+  SERIALISE_ELEMENT_LOCAL(pipeline, GetResourceManager()->GetID(ProgramPipeRes(GetCtx(), *pipelines)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -1334,8 +1421,9 @@ template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glCreateProgramPipelines(SerialiserType &ser, GLsizei n,
                                                        GLuint *pipelines)
 {
-  SERIALISE_ELEMENT_LOCAL(pipeline,
-                          GetResourceManager()->GetID(ProgramPipeRes(GetCtx(), *pipelines)));
+  SERIALISE_ELEMENT(n);
+  SERIALISE_ELEMENT_LOCAL(pipeline, GetResourceManager()->GetID(ProgramPipeRes(GetCtx(), *pipelines)))
+      .TypedAs("GLResource");
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -1480,9 +1568,9 @@ bool WrappedOpenGL::Serialise_glCompileShaderIncludeARB(SerialiserType &ser, GLu
 {
   SERIALISE_ELEMENT_LOCAL(shader, ShaderRes(GetCtx(), shaderHandle));
 
-  SERIALISE_ELEMENT_ARRAY(path, (uint32_t &)count);
-  SERIALISE_ELEMENT_ARRAY(length, (uint32_t &)count);
   SERIALISE_ELEMENT(count);
+  SERIALISE_ELEMENT_ARRAY(path, count);
+  SERIALISE_ELEMENT_ARRAY(length, count);
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -1549,8 +1637,10 @@ bool WrappedOpenGL::Serialise_glNamedStringARB(SerialiserType &ser, GLenum type,
                                                const GLchar *valStr)
 {
   SERIALISE_ELEMENT(type);
+  SERIALISE_ELEMENT(namelen);
   SERIALISE_ELEMENT_LOCAL(
       name, nameStr ? std::string(nameStr, nameStr + (namelen > 0 ? namelen : strlen(nameStr))) : "");
+  SERIALISE_ELEMENT(stringlen);
   SERIALISE_ELEMENT_LOCAL(
       value,
       valStr ? std::string(valStr, valStr + (stringlen > 0 ? stringlen : strlen(valStr))) : "");
@@ -1588,6 +1678,7 @@ template <typename SerialiserType>
 bool WrappedOpenGL::Serialise_glDeleteNamedStringARB(SerialiserType &ser, GLint namelen,
                                                      const GLchar *nameStr)
 {
+  SERIALISE_ELEMENT(namelen);
   SERIALISE_ELEMENT_LOCAL(
       name, nameStr ? std::string(nameStr, nameStr + (namelen > 0 ? namelen : strlen(nameStr))) : "");
 
@@ -1620,14 +1711,14 @@ void WrappedOpenGL::glDeleteNamedStringARB(GLint namelen, const GLchar *name)
 
 #pragma endregion
 
-INSTANTIATE_FUNCTION_SERIALISED(void, glCreateShader, GLuint shader, GLenum type);
+INSTANTIATE_FUNCTION_SERIALISED(void, glCreateShader, GLenum type, GLuint shader);
 INSTANTIATE_FUNCTION_SERIALISED(void, glShaderSource, GLuint shaderHandle, GLsizei count,
                                 const GLchar *const *source, const GLint *length);
 INSTANTIATE_FUNCTION_SERIALISED(void, glCompileShader, GLuint shaderHandle);
 INSTANTIATE_FUNCTION_SERIALISED(void, glAttachShader, GLuint programHandle, GLuint shaderHandle);
 INSTANTIATE_FUNCTION_SERIALISED(void, glDetachShader, GLuint programHandle, GLuint shaderHandle);
-INSTANTIATE_FUNCTION_SERIALISED(void, glCreateShaderProgramv, GLuint program, GLenum type,
-                                GLsizei count, const GLchar *const *strings);
+INSTANTIATE_FUNCTION_SERIALISED(void, glCreateShaderProgramv, GLenum type, GLsizei count,
+                                const GLchar *const *strings, GLuint program);
 INSTANTIATE_FUNCTION_SERIALISED(void, glCreateProgram, GLuint program);
 INSTANTIATE_FUNCTION_SERIALISED(void, glLinkProgram, GLuint programHandle);
 INSTANTIATE_FUNCTION_SERIALISED(void, glUniformBlockBinding, GLuint programHandle,

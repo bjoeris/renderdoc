@@ -205,7 +205,7 @@ QXmlStreamWriter *PipelineStateViewer::beginHTMLExport()
 
   if(!filename.isEmpty())
   {
-    ANALYTIC_SET(UIFeatures.Export.PipelineState, true);
+    ANALYTIC_SET(Export.PipelineState, true);
 
     QDir dirinfo = QFileInfo(filename).dir();
     if(dirinfo.exists())
@@ -387,7 +387,7 @@ void PipelineStateViewer::exportHTMLTable(QXmlStreamWriter &xml, const QStringLi
         {
           xml.writeStartElement(lit("td"));
 
-          if(el.canConvert<bool>())
+          if(el.type() == QVariant::Bool)
             xml.writeCharacters(el.toBool() ? tr("True") : tr("False"));
           else
             xml.writeCharacters(el.toString());
@@ -892,7 +892,7 @@ bool PipelineStateViewer::SaveShaderFile(const ShaderReflection *shader)
 
   if(!filename.isEmpty())
   {
-    ANALYTIC_SET(UIFeatures.Export.ShaderSave, true);
+    ANALYTIC_SET(Export.Shader, true);
 
     QDir dirinfo = QFileInfo(filename).dir();
     if(dirinfo.exists())

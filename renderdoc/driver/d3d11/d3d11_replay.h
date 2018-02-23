@@ -116,7 +116,7 @@ public:
   vector<DebugMessage> GetDebugMessages();
 
   rdcarray<ShaderEntryPoint> GetShaderEntryPoints(ResourceId shader);
-  ShaderReflection *GetShader(ResourceId shader, string entryPoint);
+  ShaderReflection *GetShader(ResourceId shader, ShaderEntryPoint entry);
 
   vector<string> GetDisassemblyTargets();
   string DisassembleShader(ResourceId pipeline, const ShaderReflection *refl, const string &target);
@@ -362,9 +362,9 @@ private:
     ID3D11GeometryShader *MeshGS = NULL;
     ID3D11PixelShader *WireframePS = NULL;
     ID3D11PixelShader *MeshPS = NULL;
-    ID3D11Buffer *AxisHelper;
-    ID3D11Buffer *FrustumHelper;
-    ID3D11Buffer *TriHighlightHelper;
+    ID3D11Buffer *AxisHelper = NULL;
+    ID3D11Buffer *FrustumHelper = NULL;
+    ID3D11Buffer *TriHighlightHelper = NULL;
     ID3D11InputLayout *GenericLayout = NULL;
 
     byte *MeshVSBytecode = NULL;

@@ -60,6 +60,9 @@ private slots:
   void on_CheckUpdate_AllowChecks_toggled(bool checked);
   void on_Font_PreferMonospaced_toggled(bool checked);
   void on_AlwaysReplayLocally_toggled(bool checked);
+  void on_analyticsAutoSubmit_toggled(bool checked);
+  void on_analyticsManualCheck_toggled(bool checked);
+  void on_analyticsOptOut_toggled(bool checked);
 
   // core
   void on_chooseSearchPaths_clicked();
@@ -92,14 +95,15 @@ private slots:
   // android
   void on_browseTempCaptureDirectory_clicked();
   void on_browseAndroidSDKPath_clicked();
-  void on_browseAndroidJDKPath_clicked();
+  void on_browseJDKPath_clicked();
   void on_Android_MaxConnectTimeout_valueChanged(double timeout);
   void on_Android_SDKPath_textEdited(const QString &path);
   void on_Android_JDKPath_textEdited(const QString &path);
-  void on_Android_AutoPushLayerToApp_toggled(bool checked);
 
   // manual slots
   void formatter_valueChanged(int value);
+
+  void on_analyticsDescribeLabel_linkActivated(const QString &link);
 
 private:
   Ui::SettingsDialog *ui;

@@ -1,4 +1,4 @@
-QT.location.VERSION = 5.9.0
+QT.location.VERSION = 5.9.4
 QT.location.name = QtLocation
 QT.location.module = Qt5Location
 QT.location.libs = $$QT_MODULE_LIB_BASE

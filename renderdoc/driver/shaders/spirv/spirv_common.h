@@ -78,21 +78,22 @@ ShaderBuiltin BuiltInToSystemAttribute(ShaderStage stage, const spv::BuiltIn el)
 // patching
 struct SPIRVPatchData
 {
-  struct OutputAccess
+  struct InterfaceAccess
   {
-    // ID of the base output variable
+    // ID of the base variable
     uint32_t ID;
 
     // the access chain of indices
     std::vector<uint32_t> accessChain;
 
-    // is this output part of a matrix
+    // is this input/output part of a matrix
     bool isMatrix = false;
   };
 
-  // matches the output signature array, with details of where to fetch the output from in the
+  // matches the input/output signature array, with details of where to fetch the output from in the
   // SPIR-V.
-  std::vector<OutputAccess> outputs;
+  std::vector<InterfaceAccess> inputs;
+  std::vector<InterfaceAccess> outputs;
 };
 
 struct SPVModule
@@ -136,7 +137,7 @@ struct SPVModule
   ShaderStage StageForEntry(const string &entryPoint) const;
 
   void MakeReflection(ShaderStage stage, const string &entryPoint, ShaderReflection &reflection,
-                      ShaderBindpointMapping &mapping, SPIRVPatchData &patchData);
+                      ShaderBindpointMapping &mapping, SPIRVPatchData &patchData) const;
 };
 
 string CompileSPIRV(const SPIRVCompilationSettings &settings, const vector<string> &sources,

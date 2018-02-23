@@ -84,7 +84,7 @@ HRESULT STDMETHODCALLTYPE DummyID3D12DebugDevice::QueryInterface(REFIID riid, vo
     return S_OK;
   }
 
-  RDCWARN("Querying ID3D12DebugDevice for interface: %s", ToStr(riid).c_str());
+  WarnUnknownGUID("ID3D12DebugDevice", riid);
 
   return E_NOINTERFACE;
 }
@@ -114,8 +114,7 @@ HRESULT STDMETHODCALLTYPE WrappedID3D12DebugDevice::QueryInterface(REFIID riid, 
     return S_OK;
   }
 
-  string guid = ToStr(riid);
-  RDCWARN("Querying ID3D12DebugDevice for interface: %s", guid.c_str());
+  WarnUnknownGUID("ID3D12DebugDevice", riid);
 
   return m_pDebug->QueryInterface(riid, ppvObject);
 }
@@ -143,8 +142,6 @@ WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitPara
 
     m_pDevice->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &m_D3D12Opts, sizeof(m_D3D12Opts));
   }
-
-  WrappedID3D12Resource::m_List = NULL;
 
   // refcounters implicitly construct with one reference, but we don't start with any soft
   // references.
@@ -180,7 +177,8 @@ WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitPara
   {
     m_State = CaptureState::LoadingReplaying;
 
-    WrappedID3D12Resource::m_List = new std::map<ResourceId, WrappedID3D12Resource *>();
+    if(realDevice)
+      WrappedID3D12Resource::m_List = new std::map<ResourceId, WrappedID3D12Resource *>();
 
     m_FrameCaptureRecord = NULL;
 
@@ -189,6 +187,8 @@ WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitPara
   else
   {
     m_State = CaptureState::BackgroundCapturing;
+
+    WrappedID3D12Resource::m_List = NULL;
   }
 
   m_ResourceManager = new D3D12ResourceManager(m_State, this);
@@ -285,14 +285,16 @@ WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitPara
     RDCDEBUG("Couldn't get ID3D12InfoQueue.");
   }
 
-  m_InitParams = *params;
+  if(params)
+    m_InitParams = *params;
 }
 
 WrappedID3D12Device::~WrappedID3D12Device()
 {
   RenderDoc::Inst().RemoveDeviceFrameCapturer((ID3D12Device *)this);
 
-  SAFE_DELETE(WrappedID3D12Resource::m_List);
+  if(!IsStructuredExporting(m_State))
+    SAFE_DELETE(WrappedID3D12Resource::m_List);
 
   for(size_t i = 0; i < m_QueueFences.size(); i++)
   {
@@ -481,8 +483,7 @@ HRESULT WrappedID3D12Device::QueryInterface(REFIID riid, void **ppvObject)
   }
   else
   {
-    string guid = ToStr(riid);
-    RDCWARN("Querying ID3D12Device for interface: %s", guid.c_str());
+    WarnUnknownGUID("ID3D12Device", riid);
   }
 
   return m_RefCounter.QueryInterface(riid, ppvObject);
@@ -658,7 +659,7 @@ bool WrappedID3D12Device::Serialise_WrapSwapchainBuffer(SerialiserType &ser,
   WrappedID3D12Resource *pRes = (WrappedID3D12Resource *)realSurface;
 
   SERIALISE_ELEMENT(Buffer);
-  SERIALISE_ELEMENT_LOCAL(SwapbufferID, GetResID(pRes));
+  SERIALISE_ELEMENT_LOCAL(SwapbufferID, GetResID(pRes)).TypedAs("IDXGISwapChain *");
   SERIALISE_ELEMENT_LOCAL(BackbufferDescriptor, pRes->GetDesc());
 
   SERIALISE_CHECK_READ_ERRORS();
@@ -859,12 +860,13 @@ bool WrappedID3D12Device::Serialise_MapDataWrite(SerialiserType &ser, ID3D12Reso
 {
   SERIALISE_ELEMENT(Resource);
   SERIALISE_ELEMENT(Subresource);
-  SERIALISE_ELEMENT(range);
 
   MappedData += range.Begin;
-  uint64_t rangeSize = range.End - range.Begin;
 
-  SERIALISE_ELEMENT_ARRAY(MappedData, rangeSize);
+  SERIALISE_ELEMENT_ARRAY(MappedData, range.End - range.Begin);
+  SERIALISE_ELEMENT(range);
+
+  uint64_t rangeSize = range.End - range.Begin;
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -965,8 +967,6 @@ bool WrappedID3D12Device::Serialise_WriteToSubresource(SerialiserType &ser, ID3D
   SERIALISE_ELEMENT(Resource);
   SERIALISE_ELEMENT(Subresource);
   SERIALISE_ELEMENT_OPT(pDstBox);
-  SERIALISE_ELEMENT(SrcRowPitch);
-  SERIALISE_ELEMENT(SrcDepthPitch);
 
   uint64_t dataSize = 0;
 
@@ -990,6 +990,10 @@ bool WrappedID3D12Device::Serialise_WriteToSubresource(SerialiserType &ser, ID3D
   }
 
   SERIALISE_ELEMENT_ARRAY(pSrcData, dataSize);
+  SERIALISE_ELEMENT(dataSize).Hidden();
+
+  SERIALISE_ELEMENT(SrcRowPitch);
+  SERIALISE_ELEMENT(SrcDepthPitch);
 
   SERIALISE_CHECK_READ_ERRORS();
 
@@ -1233,7 +1237,7 @@ void WrappedID3D12Device::EndCaptureFrame(ID3D12Resource *presentImage)
   ser.SetDrawChunk();
   SCOPED_SERIALISE_CHUNK(SystemChunk::CaptureEnd);
 
-  SERIALISE_ELEMENT_LOCAL(PresentedBackbuffer, GetResID(presentImage));
+  SERIALISE_ELEMENT_LOCAL(PresentedBackbuffer, GetResID(presentImage)).TypedAs("ID3D12Resource *");
 
   m_FrameCaptureRecord->AddChunk(scope.Get());
 }
@@ -1247,10 +1251,10 @@ void WrappedID3D12Device::StartFrameCapture(void *dev, void *wnd)
 
   m_SubmitCounter = 0;
 
-  m_FrameCounter = RDCMAX(1 + (uint32_t)m_CapturedFrames.size(), m_FrameCounter);
+  m_FrameCounter = RDCMAX((uint32_t)m_CapturedFrames.size(), m_FrameCounter);
 
   FrameDescription frame;
-  frame.frameNumber = m_FrameCounter + 1;
+  frame.frameNumber = m_FrameCounter;
   frame.captureTime = Timing::GetUnixTimestamp();
   RDCEraseEl(frame.stats);
   m_CapturedFrames.push_back(frame);
@@ -1580,8 +1584,8 @@ bool WrappedID3D12Device::EndFrameCapture(void *dev, void *wnd)
       if((*it)->GetResourceRecord()->ContainsExecuteIndirect)
         WrappedID3D12Resource::RefBuffers(GetResourceManager());
 
-    rdc = RenderDoc::Inst().CreateRDC(RDCDriver::D3D12, m_FrameCounter, jpgbuf, len, thwidth,
-                                      thheight);
+    rdc = RenderDoc::Inst().CreateRDC(RDCDriver::D3D12, m_CapturedFrames.back().frameNumber, jpgbuf,
+                                      len, thwidth, thheight);
 
     SAFE_DELETE_ARRAY(jpgbuf);
     SAFE_DELETE_ARRAY(thpixels);
@@ -1684,7 +1688,7 @@ bool WrappedID3D12Device::EndFrameCapture(void *dev, void *wnd)
     RDCDEBUG("Done");
   }
 
-  RenderDoc::Inst().FinishCaptureWriting(rdc, m_FrameCounter);
+  RenderDoc::Inst().FinishCaptureWriting(rdc, m_CapturedFrames.back().frameNumber);
 
   SAFE_DELETE(m_HeaderChunk);
 
@@ -2558,6 +2562,11 @@ ReplayStatus WrappedID3D12Device::ReadLogInitialisation(RDCFile *rdc, bool store
 
       // read the remaining data into memory and pass to immediate context
       frameDataSize = reader->GetSize() - reader->GetOffset();
+
+      if(IsStructuredExporting(m_State))
+      {
+        m_Queue = new WrappedID3D12CommandQueue(NULL, this, m_State);
+      }
 
       m_Queue->SetFrameReader(new StreamReader(reader, frameDataSize));
 

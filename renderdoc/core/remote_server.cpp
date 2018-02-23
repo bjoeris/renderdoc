@@ -25,8 +25,8 @@
 
 #include <sstream>
 #include <utility>
+#include "android/android.h"
 #include "api/replay/renderdoc_replay.h"
-#include "core/android.h"
 #include "core/core.h"
 #include "os/os_specific.h"
 #include "replay/replay_controller.h"
@@ -315,6 +315,8 @@ static void ActiveRemoteClientThread(ClientThread *threadData,
 
       RDCLOG("Copying file to local path '%s'.", path.c_str());
 
+      FileIO::CreateParentDirectory(path);
+
       {
         READ_DATA_SCOPE();
 
@@ -452,16 +454,17 @@ static void ActiveRemoteClientThread(ClientThread *threadData,
               remoteDriver->Shutdown();
               remoteDriver = NULL;
             }
-            else
-            {
-              RenderDoc::Inst().SetProgressCallback<LoadProgress>(RENDERDOC_ProgressCallback());
+          }
 
-              kill = true;
-              Threading::JoinThread(ticker);
-              Threading::CloseThread(ticker);
+          RenderDoc::Inst().SetProgressCallback<LoadProgress>(RENDERDOC_ProgressCallback());
 
-              proxy = new ReplayProxy(reader, writer, remoteDriver, replayDriver, previewWindow);
-            }
+          kill = true;
+          Threading::JoinThread(ticker);
+          Threading::CloseThread(ticker);
+
+          if(status == ReplayStatus::Succeeded && remoteDriver)
+          {
+            proxy = new ReplayProxy(reader, writer, remoteDriver, replayDriver, previewWindow);
           }
         }
         else
@@ -692,6 +695,8 @@ static void ActiveRemoteClientThread(ClientThread *threadData,
 
       reader.EndChunk();
 
+      bool success = false;
+
       if(rdc)
       {
         StreamWriter *sectionWriter = rdc->WriteSection(props);
@@ -700,7 +705,15 @@ static void ActiveRemoteClientThread(ClientThread *threadData,
         {
           sectionWriter->Write(contents.data(), contents.size());
           delete sectionWriter;
+
+          success = true;
         }
+      }
+
+      {
+        WRITE_DATA_SCOPE();
+        SCOPED_SERIALISE_CHUNK(eRemoteServer_WriteSection);
+        SERIALISE_ELEMENT(success);
       }
     }
     else if(type == eRemoteServer_CloseLog)
@@ -734,12 +747,12 @@ static void ActiveRemoteClientThread(ClientThread *threadData,
 
       reader.EndChunk();
 
-      uint32_t ident = 0;
+      ExecuteResult ret = {};
 
       if(threadData->allowExecution)
       {
-        ident = Process::LaunchAndInjectIntoProcess(app.c_str(), workingDir.c_str(),
-                                                    cmdLine.c_str(), env, "", opts, false);
+        ret = Process::LaunchAndInjectIntoProcess(app.c_str(), workingDir.c_str(), cmdLine.c_str(),
+                                                  env, "", opts, false);
       }
       else
       {
@@ -749,7 +762,7 @@ static void ActiveRemoteClientThread(ClientThread *threadData,
       {
         WRITE_DATA_SCOPE();
         SCOPED_SERIALISE_CHUNK(eRemoteServer_ExecuteAndInject);
-        SERIALISE_ELEMENT(ident);
+        SERIALISE_ELEMENT(ret);
       }
     }
     else if((int)type >= eReplayProxy_First && proxy)
@@ -1022,9 +1035,14 @@ public:
   }
   const std::string &hostname() const { return m_hostname; }
   virtual ~RemoteServer() { SAFE_DELETE(m_Socket); }
-  void ShutdownConnection() { delete this; }
+  void ShutdownConnection()
+  {
+    ResetAndroidSettings();
+    delete this;
+  }
   void ShutdownServerAndConnection()
   {
+    ResetAndroidSettings();
     {
       WRITE_DATA_SCOPE();
       SCOPED_SERIALISE_CHUNK(eRemoteServer_ShutdownServer);
@@ -1156,7 +1174,7 @@ public:
     {
       int index = 0;
       std::string deviceID;
-      Android::extractDeviceIDAndIndex(m_hostname, index, deviceID);
+      Android::ExtractDeviceIDAndIndex(m_hostname, index, deviceID);
 
       string adbStdout = Android::adbExecCommand(deviceID, "shell pm list packages -3").strStdout;
       using namespace std;
@@ -1217,16 +1235,35 @@ public:
     return files;
   }
 
-  uint32_t ExecuteAndInject(const char *a, const char *w, const char *c,
-                            const rdcarray<EnvironmentModification> &env, const CaptureOptions &opts)
+  ExecuteResult ExecuteAndInject(const char *a, const char *w, const char *c,
+                                 const rdcarray<EnvironmentModification> &env,
+                                 const CaptureOptions &opts)
   {
-    const char *host = hostname().c_str();
-    if(Android::IsHostADB(host))
-      return Android::StartAndroidPackageForCapture(host, a);
-
     std::string app = a && a[0] ? a : "";
     std::string workingDir = w && w[0] ? w : "";
     std::string cmdline = c && c[0] ? c : "";
+
+    const char *host = hostname().c_str();
+    if(Android::IsHostADB(host))
+    {
+      // we spin up a thread to Ping() every second, since StartAndroidPackageForCapture can block
+      // for a long time.
+      volatile int32_t done = 0;
+      Threading::ThreadHandle pingThread = Threading::CreateThread([&done, this]() {
+        bool ok = true;
+        while(ok && Atomic::CmpExch32(&done, 0, 0) == 0)
+          ok = Ping();
+      });
+
+      ExecuteResult ret = Android::StartAndroidPackageForCapture(host, app.c_str(), opts);
+
+      Atomic::Inc32(&done);
+
+      Threading::JoinThread(pingThread);
+      Threading::CloseThread(pingThread);
+
+      return ret;
+    }
 
     {
       WRITE_DATA_SCOPE();
@@ -1238,7 +1275,7 @@ public:
       SERIALISE_ELEMENT(env);
     }
 
-    uint32_t ident = 0;
+    ExecuteResult ret = {};
 
     {
       READ_DATA_SCOPE();
@@ -1246,7 +1283,7 @@ public:
 
       if(type == eRemoteServer_ExecuteAndInject)
       {
-        SERIALISE_ELEMENT(ident);
+        SERIALISE_ELEMENT(ret);
       }
       else
       {
@@ -1256,7 +1293,7 @@ public:
       ser.EndChunk();
     }
 
-    return ident;
+    return ret;
   }
 
   void CopyCaptureFromRemote(const char *remotepath, const char *localpath,
@@ -1343,6 +1380,8 @@ public:
     rdcpair<ReplayStatus, IReplayController *> ret;
     ret.first = ReplayStatus::InternalError;
     ret.second = NULL;
+
+    ResetAndroidSettings();
 
     if(proxyid != ~0U && proxyid >= m_Proxies.size())
     {
@@ -1435,6 +1474,17 @@ public:
     ret.first = ReplayStatus::Succeeded;
     ret.second = rend;
     return ret;
+  }
+
+  void ResetAndroidSettings()
+  {
+    if(Android::IsHostADB(m_hostname.c_str()))
+    {
+      int index = 0;
+      std::string deviceID;
+      Android::ExtractDeviceIDAndIndex(m_hostname.c_str(), index, deviceID);
+      Android::ResetCaptureSettings(deviceID);
+    }
   }
 
   void CloseCapture(IReplayController *rend)
@@ -1606,10 +1656,10 @@ public:
     return contents;
   }
 
-  void WriteSection(const SectionProperties &props, const bytebuf &contents)
+  bool WriteSection(const SectionProperties &props, const bytebuf &contents)
   {
     if(!Connected())
-      return;
+      return false;
 
     {
       WRITE_DATA_SCOPE();
@@ -1617,6 +1667,26 @@ public:
       SERIALISE_ELEMENT(props);
       SERIALISE_ELEMENT(contents);
     }
+
+    bool success = false;
+
+    {
+      READ_DATA_SCOPE();
+      RemoteServerPacket type = ser.ReadChunk<RemoteServerPacket>();
+
+      if(type == eRemoteServer_WriteSection)
+      {
+        SERIALISE_ELEMENT(success);
+      }
+      else
+      {
+        RDCERR("Unexpected response to has write section request");
+      }
+
+      ser.EndChunk();
+    }
+
+    return success;
   }
 
   bool HasCallstacks()
@@ -1756,7 +1826,7 @@ RENDERDOC_CreateRemoteServerConnection(const char *host, uint32_t port, IRemoteS
 
     int index = 0;
     std::string deviceID;
-    Android::extractDeviceIDAndIndex(host, index, deviceID);
+    Android::ExtractDeviceIDAndIndex(host, index, deviceID);
 
     // each subsequent device gets a new range of ports. The deviceID isn't needed since we
     // already

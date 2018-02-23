@@ -560,6 +560,11 @@ static const VkExtensionProperties supportedExtensions[] = {
     {
         VK_EXT_VALIDATION_FLAGS_EXTENSION_NAME, VK_EXT_VALIDATION_FLAGS_SPEC_VERSION,
     },
+#ifdef VK_GOOGLE_yeti_surface
+    {
+      VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME, VK_GOOGLE_YETI_SURFACE_SPEC_VERSION,
+    },
+#endif
 #ifdef VK_IMG_format_pvrtc
     {
         VK_IMG_FORMAT_PVRTC_EXTENSION_NAME, VK_IMG_FORMAT_PVRTC_SPEC_VERSION,
@@ -650,11 +655,6 @@ static const VkExtensionProperties supportedExtensions[] = {
 #ifdef VK_KHR_xcb_surface
     {
         VK_KHR_XCB_SURFACE_EXTENSION_NAME, VK_KHR_XCB_SURFACE_SPEC_VERSION,
-    },
-#endif
-#ifdef VK_GOOGLE_yeti_surface
-    {
-      VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME, VK_GOOGLE_YETI_SURFACE_SPEC_VERSION,
     },
 #endif
 #ifdef VK_KHR_xlib_surface
@@ -842,7 +842,7 @@ void WrappedVulkan::EndCaptureFrame(VkImage presentImage)
   ser.SetDrawChunk();
   SCOPED_SERIALISE_CHUNK(SystemChunk::CaptureEnd);
 
-  SERIALISE_ELEMENT_LOCAL(PresentedImage, GetResID(presentImage));
+  SERIALISE_ELEMENT_LOCAL(PresentedImage, GetResID(presentImage)).TypedAs("VkImage");
 
   m_FrameCaptureRecord->AddChunk(scope.Get());
 }
@@ -932,10 +932,10 @@ void WrappedVulkan::StartFrameCapture(void *dev, void *wnd)
 
   m_SubmitCounter = 0;
 
-  m_FrameCounter = RDCMAX(1 + (uint32_t)m_CapturedFrames.size(), m_FrameCounter);
+  m_FrameCounter = RDCMAX((uint32_t)m_CapturedFrames.size(), m_FrameCounter);
 
   FrameDescription frame;
-  frame.frameNumber = m_FrameCounter + 1;
+  frame.frameNumber = m_FrameCounter;
   frame.captureTime = Timing::GetUnixTimestamp();
   RDCEraseEl(frame.stats);
   m_CapturedFrames.push_back(frame);
@@ -1079,10 +1079,9 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
 
     const SwapchainInfo &swapInfo = *swaprecord->swapInfo;
 
-    // since these objects are very short lived (only this scope), we
-    // don't wrap them.
+    // since this happens during capture, we don't want to start serialising extra image creates,
+    // so we manually create & then just wrap.
     VkImage readbackIm = VK_NULL_HANDLE;
-    VkDeviceMemory readbackMem = VK_NULL_HANDLE;
 
     VkResult vkr = VK_SUCCESS;
 
@@ -1107,22 +1106,17 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
     vt->CreateImage(Unwrap(device), &imInfo, NULL, &readbackIm);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
-    VkMemoryRequirements mrq = {0};
-    vt->GetImageMemoryRequirements(Unwrap(device), readbackIm, &mrq);
+    GetResourceManager()->WrapResource(Unwrap(device), readbackIm);
 
     VkImageSubresource subr = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
     VkSubresourceLayout layout = {0};
-    vt->GetImageSubresourceLayout(Unwrap(device), readbackIm, &subr, &layout);
+    vt->GetImageSubresourceLayout(Unwrap(device), Unwrap(readbackIm), &subr, &layout);
 
-    // allocate readback memory
-    VkMemoryAllocateInfo allocInfo = {
-        VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, NULL, mrq.size,
-        GetReadbackMemoryIndex(mrq.memoryTypeBits),
-    };
+    MemoryAllocation readbackMem =
+        AllocateMemoryForResource(readbackIm, MemoryScope::InitialContents, MemoryType::Readback);
 
-    vkr = vt->AllocateMemory(Unwrap(device), &allocInfo, NULL, &readbackMem);
-    RDCASSERTEQUAL(vkr, VK_SUCCESS);
-    vkr = vt->BindImageMemory(Unwrap(device), readbackIm, readbackMem, 0);
+    vkr = vt->BindImageMemory(Unwrap(device), Unwrap(readbackIm), Unwrap(readbackMem.mem),
+                              readbackMem.offs);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
     VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
@@ -1158,14 +1152,14 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                         VK_QUEUE_FAMILY_IGNORED,
                                         VK_QUEUE_FAMILY_IGNORED,
-                                        readbackIm,    // was never wrapped
+                                        Unwrap(readbackIm),
                                         {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
 
     DoPipelineBarrier(cmd, 1, &bbBarrier);
     DoPipelineBarrier(cmd, 1, &readBarrier);
 
     vt->CmdCopyImage(Unwrap(cmd), Unwrap(backbuffer), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                     readbackIm, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cpy);
+                     Unwrap(readbackIm), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cpy);
 
     // barrier to switch backbuffer back to present layout
     std::swap(bbBarrier.oldLayout, bbBarrier.newLayout);
@@ -1187,7 +1181,8 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
 
     // map memory and readback
     byte *pData = NULL;
-    vkr = vt->MapMemory(Unwrap(device), readbackMem, 0, VK_WHOLE_SIZE, 0, (void **)&pData);
+    vkr = vt->MapMemory(Unwrap(device), Unwrap(readbackMem.mem), readbackMem.offs, readbackMem.size,
+                        0, (void **)&pData);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
     RDCASSERT(pData != NULL);
@@ -1311,11 +1306,11 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
       }
     }
 
-    vt->UnmapMemory(Unwrap(device), readbackMem);
+    vt->UnmapMemory(Unwrap(device), Unwrap(readbackMem.mem));
 
     // delete all
-    vt->DestroyImage(Unwrap(device), readbackIm, NULL);
-    vt->FreeMemory(Unwrap(device), readbackMem, NULL);
+    vt->DestroyImage(Unwrap(device), Unwrap(readbackIm), NULL);
+    GetResourceManager()->ReleaseWrappedResource(readbackIm);
   }
 
   byte *jpgbuf = NULL;
@@ -1340,8 +1335,8 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
     }
   }
 
-  RDCFile *rdc =
-      RenderDoc::Inst().CreateRDC(RDCDriver::Vulkan, m_FrameCounter, jpgbuf, len, thwidth, thheight);
+  RDCFile *rdc = RenderDoc::Inst().CreateRDC(RDCDriver::Vulkan, m_CapturedFrames.back().frameNumber,
+                                             jpgbuf, len, thwidth, thheight);
 
   SAFE_DELETE_ARRAY(jpgbuf);
   SAFE_DELETE_ARRAY(thpixels);
@@ -1434,7 +1429,7 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
     }
   }
 
-  RenderDoc::Inst().FinishCaptureWriting(rdc, m_FrameCounter);
+  RenderDoc::Inst().FinishCaptureWriting(rdc, m_CapturedFrames.back().frameNumber);
 
   SAFE_DELETE(m_HeaderChunk);
 
@@ -1453,6 +1448,8 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
   GetResourceManager()->FreeInitialContents();
 
   GetResourceManager()->FlushPendingDirty();
+
+  FreeAllMemory(MemoryScope::InitialContents);
 
   return true;
 }
@@ -1490,6 +1487,8 @@ void WrappedVulkan::AddResourceCurChunk(ResourceId id)
 ReplayStatus WrappedVulkan::ReadLogInitialisation(RDCFile *rdc, bool storeStructuredBuffers)
 {
   int sectionIdx = rdc->SectionIndex(SectionType::FrameCapture);
+
+  GetResourceManager()->SetState(m_State);
 
   if(sectionIdx < 0)
     return ReplayStatus::FileCorrupted;
@@ -1558,7 +1557,7 @@ ReplayStatus WrappedVulkan::ReadLogInitialisation(RDCFile *rdc, bool storeStruct
 
     // only set progress after we've initialised the debug manager, to prevent progress jumping
     // backwards.
-    if(m_DebugManager)
+    if(m_DebugManager || IsStructuredExporting(m_State))
     {
       RenderDoc::Inst().SetProgress(LoadProgress::FileInitialRead,
                                     float(offsetEnd) / float(reader->GetSize()));
@@ -1796,12 +1795,12 @@ ReplayStatus WrappedVulkan::ContextReplayLog(CaptureState readType, uint32_t sta
     // destroy any events we created for waiting on
     for(size_t i = 0; i < m_CleanupEvents.size(); i++)
       ObjDisp(GetDev())->DestroyEvent(Unwrap(GetDev()), m_CleanupEvents[i], NULL);
+
+    vkFreeCommandBuffers(GetDev(), m_InternalCmds.cmdpool, (uint32_t)m_RerecordCmdList.size(),
+                         m_RerecordCmdList.data());
   }
 
   m_CleanupEvents.clear();
-
-  vkFreeCommandBuffers(GetDev(), m_InternalCmds.cmdpool, (uint32_t)m_RerecordCmdList.size(),
-                       m_RerecordCmdList.data());
 
   m_RerecordCmds.clear();
   m_RerecordCmdList.clear();
@@ -2260,7 +2259,7 @@ bool WrappedVulkan::ProcessChunk(ReadSerialiser &ser, VulkanChunk chunk)
       }
       else if(system == SystemChunk::CaptureEnd)
       {
-        SERIALISE_ELEMENT_LOCAL(PresentedImage, ResourceId());
+        SERIALISE_ELEMENT_LOCAL(PresentedImage, ResourceId()).TypedAs("VkImage");
 
         SERIALISE_CHECK_READ_ERRORS();
 

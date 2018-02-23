@@ -495,7 +495,7 @@
          <string>Hook into child processes - useful with launchers or similar intermediate processes</string>
         </property>
         <property name="text">
-         <string>Hook into Children</string>
+         <string>Capture Child Processes</string>
         </property>
        </widget>
       </item>
@@ -584,6 +584,44 @@
         </property>
         <property name="decimals">
          <number>0</number>
+        </property>
+        <property name="maximum">
+         <double>4294967296.0</double>
+        </property>
+        <property name="minimum">
+         <double>0.0</double>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="numFramesLabel">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="text">
+         <string># Frames:</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QDoubleSpinBox" name="numFrames">
+        <property name="minimumSize">
+         <size>
+          <width>45</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="decimals">
+         <number>0</number>
+        </property>
+        <property name="minimum">
+         <double>1.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>10.000000000000000</double>
         </property>
        </widget>
       </item>

@@ -23,8 +23,8 @@
  * THE SOFTWARE.
  ******************************************************************************/
 
+#include "android/android.h"
 #include "api/replay/renderdoc_replay.h"
-#include "core/android.h"
 #include "core/core.h"
 #include "jpeg-compressor/jpgd.h"
 #include "os/os_specific.h"
@@ -179,7 +179,7 @@ void RenderDoc::TargetControlClientThread(uint32_t version, Network::Socket *cli
       bytebuf buf;
 
       ICaptureFile *file = RENDERDOC_OpenCaptureFile();
-      if(file->OpenFile(captures.back().path.c_str(), "rdc") == ReplayStatus::Succeeded)
+      if(file->OpenFile(captures.back().path.c_str(), "rdc", NULL) == ReplayStatus::Succeeded)
       {
         buf = file->GetThumbnail(FileType::JPG, 0).data;
       }
@@ -249,7 +249,7 @@ void RenderDoc::TargetControlClientThread(uint32_t version, Network::Socket *cli
 
       if(type == ePacket_TriggerCapture)
       {
-        uint32_t numFrames;
+        uint32_t numFrames = 1;
 
         READ_DATA_SCOPE();
         SERIALISE_ELEMENT(numFrames);
@@ -258,12 +258,15 @@ void RenderDoc::TargetControlClientThread(uint32_t version, Network::Socket *cli
       }
       else if(type == ePacket_QueueCapture)
       {
-        uint32_t frameNum;
+        uint32_t frameNum = 0;
+        uint32_t numFrames = 1;
 
         READ_DATA_SCOPE();
         SERIALISE_ELEMENT(frameNum);
+        SERIALISE_ELEMENT(numFrames);
 
-        RenderDoc::Inst().QueueCapture(frameNum);
+        for(uint32_t f = 0; f < numFrames; f++)
+          RenderDoc::Inst().QueueCapture(frameNum + f);
       }
       else if(type == ePacket_DeleteCapture)
       {
@@ -537,12 +540,13 @@ public:
       SAFE_DELETE(m_Socket);
   }
 
-  void QueueCapture(uint32_t frameNumber)
+  void QueueCapture(uint32_t frameNumber, uint32_t numFrames)
   {
     WRITE_DATA_SCOPE();
     SCOPED_SERIALISE_CHUNK(ePacket_QueueCapture);
 
     SERIALISE_ELEMENT(frameNumber);
+    SERIALISE_ELEMENT(numFrames);
 
     if(ser.IsErrored())
       SAFE_DELETE(m_Socket);
@@ -707,6 +711,9 @@ public:
       msg.apiUse.name = ToStr(driver);
       msg.apiUse.presenting = presenting;
       msg.apiUse.supported = supported;
+
+      if(presenting)
+        m_API = ToStr(driver);
 
       RDCLOG("Used API: %s (%s & %s)", msg.apiUse.name.c_str(),
              presenting ? "Presenting" : "Not presenting",

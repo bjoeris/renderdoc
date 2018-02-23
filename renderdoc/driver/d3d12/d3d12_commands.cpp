@@ -220,8 +220,7 @@ HRESULT STDMETHODCALLTYPE WrappedID3D12CommandQueue::QueryInterface(REFIID riid,
   }
   else
   {
-    string guid = ToStr(riid);
-    RDCWARN("Querying ID3D12CommandQueue for interface: %s", guid.c_str());
+    WarnUnknownGUID("ID3D12CommandQueue", riid);
   }
 
   return RefCounter12::QueryInterface(riid, ppvObject);
@@ -462,7 +461,7 @@ bool WrappedID3D12CommandQueue::ProcessChunk(ReadSerialiser &ser, D3D12Chunk chu
 
       if(system == SystemChunk::CaptureEnd)
       {
-        SERIALISE_ELEMENT_LOCAL(PresentedImage, ResourceId());
+        SERIALISE_ELEMENT_LOCAL(PresentedImage, ResourceId()).TypedAs("ID3D12Resource *");
 
         SERIALISE_CHECK_READ_ERRORS();
 
@@ -835,8 +834,7 @@ HRESULT STDMETHODCALLTYPE WrappedID3D12GraphicsCommandList::QueryInterface(REFII
   }
   else
   {
-    string guid = ToStr(riid);
-    RDCWARN("Querying ID3D12GraphicsCommandList for interface: %s", guid.c_str());
+    WarnUnknownGUID("ID3D12GraphicsCommandList", riid);
   }
 
   return RefCounter12::QueryInterface(riid, ppvObject);
