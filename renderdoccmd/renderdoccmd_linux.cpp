@@ -152,7 +152,8 @@ void VerifyVulkanLayer(const GlobalEnvironment &env, int argc, char *argv[])
   if (home_path != NULL) {
     string ignorePath = string(home_path) + "/.renderdoc/ignore_vulkan_layer_issues";
     if(FileExists(ignorePath))
-      return;  }
+      return;
+  }
 
   bool needUpdate = RENDERDOC_NeedVulkanLayerRegistration(&flags, &myJSONs, &otherJSONs);
   if(!needUpdate)
