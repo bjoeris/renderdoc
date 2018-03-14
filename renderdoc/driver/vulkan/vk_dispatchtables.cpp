@@ -81,6 +81,15 @@ void InitInstanceExtensionTables(VkInstance instance, InstanceDeviceInfo *info)
   InstanceGPA(GetPhysicalDeviceSurfaceFormatsKHR);
   InstanceGPA(GetPhysicalDeviceSurfacePresentModesKHR);
   InstanceGPA(GetPhysicalDeviceSurfaceSupportKHR);
+
+  InstanceGPA(GetPhysicalDeviceFeatures2KHR);
+  InstanceGPA(GetPhysicalDeviceProperties2KHR);
+  InstanceGPA(GetPhysicalDeviceFormatProperties2KHR);
+  InstanceGPA(GetPhysicalDeviceImageFormatProperties2KHR);
+  InstanceGPA(GetPhysicalDeviceQueueFamilyProperties2KHR);
+  InstanceGPA(GetPhysicalDeviceMemoryProperties2KHR);
+  InstanceGPA(GetPhysicalDeviceSparseImageFormatProperties2KHR);
+
   InstanceGPA(CreateDebugReportCallbackEXT);
   InstanceGPA(DestroyDebugReportCallbackEXT);
   InstanceGPA(DebugReportMessageEXT);
