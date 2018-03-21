@@ -617,7 +617,7 @@ void D3D12PipelineStateViewer::setViewDetails(RDTreeWidgetItem *node, const D3D1
   if((res.firstElement * res.elementByteSize) > 0 ||
      (res.numElements * res.elementByteSize) < buf->length)
   {
-    text += tr("The view covers bytes %1-%2 (%3 elements).\nThe buffer is %3 bytes in length (%5 "
+    text += tr("The view covers bytes %1-%2 (%3 elements).\nThe buffer is %3 bytes in length (%4 "
                "elements).")
                 .arg(res.firstElement * res.elementByteSize)
                 .arg((res.firstElement + res.numElements) * res.elementByteSize)
@@ -1609,11 +1609,11 @@ void D3D12PipelineStateViewer::setState()
 
   ui->stencilEnabled->setPixmap(state.outputMerger.depthStencilState.stencilEnable ? tick : cross);
   ui->stencilReadMask->setText(
-      Formatter::Format(state.outputMerger.depthStencilState.frontFace.compareMask, true));
+      Formatter::Format((uint8_t)state.outputMerger.depthStencilState.frontFace.compareMask, true));
   ui->stencilWriteMask->setText(
-      Formatter::Format(state.outputMerger.depthStencilState.frontFace.writeMask, true));
+      Formatter::Format((uint8_t)state.outputMerger.depthStencilState.frontFace.writeMask, true));
   ui->stencilRef->setText(
-      Formatter::Format(state.outputMerger.depthStencilState.frontFace.reference, true));
+      Formatter::Format((uint8_t)state.outputMerger.depthStencilState.frontFace.reference, true));
 
   ui->stencils->beginUpdate();
   ui->stencils->clear();

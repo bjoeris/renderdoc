@@ -26,6 +26,21 @@
 #include "../vk_debug.h"
 #include "../vk_rendertext.h"
 #include "../vk_shader_cache.h"
+#include "api/replay/version.h"
+
+// intercept and overwrite the application info if present. We must use the same appinfo on
+// capture and replay, and the safer default is not to replay as if we were the original app but
+// with a slightly different workload. So instead we trample what the app reported and put in our
+// own info.
+static VkApplicationInfo renderdocAppInfo = {
+    VK_STRUCTURE_TYPE_APPLICATION_INFO,
+    NULL,
+    "RenderDoc Capturing App",
+    VK_MAKE_VERSION(RENDERDOC_VERSION_MAJOR, RENDERDOC_VERSION_MINOR, 0),
+    "RenderDoc",
+    VK_MAKE_VERSION(RENDERDOC_VERSION_MAJOR, RENDERDOC_VERSION_MINOR, 0),
+    VK_API_VERSION_1_0,
+};
 
 // vk_dispatchtables.cpp
 void InitDeviceTable(VkDevice dev, PFN_vkGetDeviceProcAddr gpa);
@@ -96,9 +111,6 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
   m_InitParams = params;
   m_SectionVersion = sectionVersion;
 
-  params.AppName = string("RenderDoc @ ") + params.AppName;
-  params.EngineName = string("RenderDoc @ ") + params.EngineName;
-
   // PORTABILITY verify that layers/extensions are available
   StripUnwantedLayers(params.Layers);
 
@@ -162,12 +174,25 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
 
   AddRequiredExtensions(true, params.Extensions, supportedExtensions);
 
+  if(supportedExtensions.find(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) ==
+     supportedExtensions.end())
+  {
+    RDCWARN("Unsupported required instance extension for AMD performance counters '%s'",
+            VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+  }
+  else
+  {
+    if(std::find(params.Extensions.begin(), params.Extensions.end(),
+                 VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) == params.Extensions.end())
+      params.Extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+  }
+
   // verify that extensions & layers are supported
   for(size_t i = 0; i < params.Layers.size(); i++)
   {
     if(supportedLayers.find(params.Layers[i]) == supportedLayers.end())
     {
-      RDCERR("Log requires layer '%s' which is not supported", params.Layers[i].c_str());
+      RDCERR("Capture requires layer '%s' which is not supported", params.Layers[i].c_str());
       return ReplayStatus::APIHardwareUnsupported;
     }
   }
@@ -176,7 +201,7 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
   {
     if(supportedExtensions.find(params.Extensions[i]) == supportedExtensions.end())
     {
-      RDCERR("Log requires extension '%s' which is not supported", params.Extensions[i].c_str());
+      RDCERR("Capture requires extension '%s' which is not supported", params.Extensions[i].c_str());
       return ReplayStatus::APIHardwareUnsupported;
     }
   }
@@ -198,21 +223,11 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
   for(size_t i = 0; i < params.Extensions.size(); i++)
     extscstr[i] = params.Extensions[i].c_str();
 
-  VkApplicationInfo appinfo = {
-      VK_STRUCTURE_TYPE_APPLICATION_INFO,
-      NULL,
-      params.AppName.c_str(),
-      params.AppVersion,
-      params.EngineName.c_str(),
-      params.EngineVersion,
-      VK_API_VERSION_1_0,
-  };
-
   VkInstanceCreateInfo instinfo = {
       VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
       NULL,
       0,
-      &appinfo,
+      &renderdocAppInfo,
       (uint32_t)params.Layers.size(),
       layerscstr,
       (uint32_t)params.Extensions.size(),
@@ -394,6 +409,9 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
 
   modifiedCreateInfo.ppEnabledExtensionNames = addedExts;
 
+  if(modifiedCreateInfo.pApplicationInfo)
+    modifiedCreateInfo.pApplicationInfo = &renderdocAppInfo;
+
   VkResult ret = createFunc(&modifiedCreateInfo, pAllocator, pInstance);
 
   m_Instance = *pInstance;
@@ -479,8 +497,11 @@ void WrappedVulkan::Shutdown()
     GetResourceManager()->ReleaseWrappedResource(m_InternalCmds.freecmds[i]);
 
   // destroy the pool
-  ObjDisp(m_Device)->DestroyCommandPool(Unwrap(m_Device), Unwrap(m_InternalCmds.cmdpool), NULL);
-  GetResourceManager()->ReleaseWrappedResource(m_InternalCmds.cmdpool);
+  if(m_Device != VK_NULL_HANDLE && m_InternalCmds.cmdpool != VK_NULL_HANDLE)
+  {
+    ObjDisp(m_Device)->DestroyCommandPool(Unwrap(m_Device), Unwrap(m_InternalCmds.cmdpool), NULL);
+    GetResourceManager()->ReleaseWrappedResource(m_InternalCmds.cmdpool);
+  }
 
   for(size_t i = 0; i < m_InternalCmds.freesems.size(); i++)
   {
@@ -504,7 +525,8 @@ void WrappedVulkan::Shutdown()
   SAFE_DELETE(m_DebugManager);
   SAFE_DELETE(m_ShaderCache);
 
-  if(ObjDisp(m_Instance)->DestroyDebugReportCallbackEXT && m_DbgMsgCallback != VK_NULL_HANDLE)
+  if(m_Instance && ObjDisp(m_Instance)->DestroyDebugReportCallbackEXT &&
+     m_DbgMsgCallback != VK_NULL_HANDLE)
     ObjDisp(m_Instance)->DestroyDebugReportCallbackEXT(Unwrap(m_Instance), m_DbgMsgCallback, NULL);
 
   // need to store the unwrapped device and instance to destroy the
@@ -512,8 +534,8 @@ void WrappedVulkan::Shutdown()
   VkInstance inst = Unwrap(m_Instance);
   VkDevice dev = Unwrap(m_Device);
 
-  const VkLayerDispatchTable *vt = ObjDisp(m_Device);
-  const VkLayerInstanceDispatchTable *vit = ObjDisp(m_Instance);
+  const VkLayerDispatchTable *vt = m_Device != VK_NULL_HANDLE ? ObjDisp(m_Device) : NULL;
+  const VkLayerInstanceDispatchTable *vit = m_Instance != VK_NULL_HANDLE ? ObjDisp(m_Instance) : NULL;
 
   // this destroys the wrapped objects for the devices and instances
   m_ResourceManager->Shutdown();
@@ -534,8 +556,10 @@ void WrappedVulkan::Shutdown()
   m_QueueFamilies.clear();
 
   // finally destroy device then instance
-  vt->DestroyDevice(dev, NULL);
-  vit->DestroyInstance(inst, NULL);
+  if(vt)
+    vt->DestroyDevice(dev, NULL);
+  if(vit)
+    vit->DestroyInstance(inst, NULL);
 }
 
 void WrappedVulkan::vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator)
@@ -611,7 +635,7 @@ bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(SerialiserType &ser, Vk
     {
       VkDriverInfo capturedVersion(physProps);
 
-      RDCLOG("Captured log describes physical device %u:", PhysicalDeviceIndex);
+      RDCLOG("Capture describes physical device %u:", PhysicalDeviceIndex);
       RDCLOG("   - %s (ver %u.%u patch 0x%x) - %04x:%04x", physProps.deviceName,
              capturedVersion.Major(), capturedVersion.Minor(), capturedVersion.Patch(),
              physProps.vendorID, physProps.deviceID);
@@ -1010,7 +1034,16 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       extArray = new const char *[createInfo.enabledExtensionCount];
 
       for(uint32_t i = 0; i < createInfo.enabledExtensionCount; i++)
+      {
+        if(supportedExtensions.find(Extensions[i]) == supportedExtensions.end())
+        {
+          m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;
+          RDCERR("Capture requires extension '%s' which is not supported", Extensions[i].c_str());
+          return false;
+        }
+
         extArray[i] = Extensions[i].c_str();
+      }
 
       createInfo.ppEnabledExtensionNames = extArray;
     }
@@ -1236,6 +1269,8 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
         break;
       }
     }
+
+    APIProps.vendor = GetDriverVersion().Vendor();
 
     m_ShaderCache = new VulkanShaderCache(this);
 

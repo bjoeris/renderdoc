@@ -39,6 +39,17 @@
 
 WRAPPED_POOL_INST(WrappedID3D12Device);
 
+void WrappedID3D12Device::RemoveQueue(WrappedID3D12CommandQueue *queue)
+{
+  auto it = std::remove_if(m_Queues.begin(), m_Queues.end(),
+                           [queue](const WrappedID3D12CommandQueue *q) { return q == queue; });
+
+  if(it != m_Queues.end())
+    m_Queues.erase(it);
+  else
+    RDCERR("Unknown wrapped queue %p being remvoed", queue);
+}
+
 std::string WrappedID3D12Device::GetChunkName(uint32_t idx)
 {
   if((SystemChunk)idx < SystemChunk::FirstDriverChunk)
@@ -1945,13 +1956,13 @@ bool WrappedID3D12Device::Serialise_SetName(SerialiserType &ser, ID3D12DeviceChi
   if(IsReplayingAndReading() && pResource)
   {
     ResourceId origId = GetResourceManager()->GetOriginalID(GetResID(pResource));
-    m_ResourceNames[origId] = Name;
+    m_ResourceNames[origId] = Name ? Name : "";
 
     ResourceDescription &descr = GetReplay()->GetResourceDesc(origId);
-    descr.SetCustomName(Name);
+    descr.SetCustomName(Name ? Name : "");
     AddResourceCurChunk(descr);
 
-    pResource->SetName(StringFormat::UTF82Wide(Name).c_str());
+    pResource->SetName(StringFormat::UTF82Wide(Name ? Name : "").c_str());
   }
 
   return true;

@@ -191,7 +191,7 @@ static void Obj2XML(pugi::xml_node &parent, SDObject &child)
 
   if(child.type.basetype == SDBasic::UnsignedInteger ||
      child.type.basetype == SDBasic::SignedInteger || child.type.basetype == SDBasic::Float ||
-     child.type.basetype == SDBasic::ResourceId)
+     child.type.basetype == SDBasic::Resource)
   {
     obj.append_attribute("width") = child.type.byteSize;
   }
@@ -204,6 +204,12 @@ static void Obj2XML(pugi::xml_node &parent, SDObject &child)
 
   if(child.type.flags & SDTypeFlags::NullString)
     obj.append_attribute("nullstring") = true;
+
+  if(child.type.flags & SDTypeFlags::FixedArray)
+    obj.append_attribute("fixedarray") = true;
+
+  if(child.type.flags & SDTypeFlags::Union)
+    obj.append_attribute("union") = true;
 
   if(child.type.basetype == SDBasic::Chunk)
   {
@@ -241,7 +247,7 @@ static void Obj2XML(pugi::xml_node &parent, SDObject &child)
 
     switch(child.type.basetype)
     {
-      case SDBasic::ResourceId:
+      case SDBasic::Resource:
       case SDBasic::Enum:
       case SDBasic::UnsignedInteger: obj.text() = child.data.basic.u; break;
       case SDBasic::SignedInteger: obj.text() = child.data.basic.i; break;
@@ -416,7 +422,7 @@ static SDObject *XML2Obj(pugi::xml_node &obj)
   }
 
   if(ret->type.basetype == SDBasic::UnsignedInteger || ret->type.basetype == SDBasic::SignedInteger ||
-     ret->type.basetype == SDBasic::Float || ret->type.basetype == SDBasic::ResourceId)
+     ret->type.basetype == SDBasic::Float || ret->type.basetype == SDBasic::Resource)
   {
     ret->type.byteSize = obj.attribute("width").as_uint();
   }
@@ -426,6 +432,12 @@ static SDObject *XML2Obj(pugi::xml_node &obj)
 
   if(obj.attribute("nullable"))
     ret->type.flags |= SDTypeFlags::Nullable;
+
+  if(obj.attribute("fixedarray"))
+    ret->type.flags |= SDTypeFlags::FixedArray;
+
+  if(obj.attribute("union"))
+    ret->type.flags |= SDTypeFlags::Union;
 
   if(obj.attribute("typename"))
     ret->type.name = obj.attribute("typename").as_string();
@@ -471,7 +483,7 @@ static SDObject *XML2Obj(pugi::xml_node &obj)
 
     switch(ret->type.basetype)
     {
-      case SDBasic::ResourceId:
+      case SDBasic::Resource:
       case SDBasic::Enum:
       case SDBasic::UnsignedInteger: ret->data.basic.u = obj.text().as_ullong(); break;
       case SDBasic::SignedInteger: ret->data.basic.i = obj.text().as_llong(); break;

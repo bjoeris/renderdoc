@@ -478,6 +478,10 @@ void TextureViewer::UI_UpdateCachedTexture()
     id = m_TexDisplay.resourceId;
 
   m_CachedTexture = m_Ctx.GetTexture(id);
+
+  ui->debugPixelContext->setEnabled(m_Ctx.CurPipelineState().IsCaptureD3D11() &&
+                                    m_CachedTexture != NULL);
+  ui->pixelHistory->setEnabled(m_Ctx.CurPipelineState().IsCaptureD3D11() && m_CachedTexture != NULL);
 }
 
 TextureViewer::TextureViewer(ICaptureContext &ctx, QWidget *parent)
@@ -943,19 +947,10 @@ void TextureViewer::UI_UpdateStatusText()
 
     if(m_TexDisplay.customShaderId != ResourceId())
       statusText += lit(")");
-
-    // PixelPicked = true;
   }
   else
   {
     statusText += tr(" - Right click to pick a pixel");
-
-    if(m_Output != NULL)
-    {
-      m_Ctx.Replay().AsyncInvoke([this](IReplayController *) { m_Output->DisablePixelContext(); });
-    }
-
-    // PixelPicked = false;
   }
 
   // try and keep status text consistent by sticking to the high water mark
@@ -1971,7 +1966,12 @@ void TextureViewer::InitStageResourcePreviews(ShaderStage stage,
 
     int arrayLen = resArray != NULL ? resArray->count() : 1;
 
-    for(int arrayIdx = 0; arrayIdx < arrayLen; arrayIdx++)
+    // it's too expensive in bindless-type cases to create a thumbnail for every array element, so
+    // for now we create one just for the first element and add an array size indicator to the slot
+    // name
+    // for(int arrayIdx = 0; arrayIdx < arrayLen; arrayIdx++)
+    int arrayIdx = 0;
+
     {
       ResourceId id = resArray != NULL ? resArray->at(arrayIdx).resourceId : ResourceId();
       CompType typeHint = resArray != NULL ? resArray->at(arrayIdx).typeHint : CompType::Typeless;
@@ -2002,7 +2002,7 @@ void TextureViewer::InitStageResourcePreviews(ShaderStage stage,
                              .arg(idx);
 
       if(arrayLen > 1)
-        slotName += QFormatStr("[%1]").arg(arrayIdx);
+        slotName += QFormatStr(" Arr[%1]").arg(arrayLen);
 
       if(copy)
         slotName = tr("SRC");
@@ -2539,9 +2539,10 @@ void TextureViewer::Reset()
 
   ui->statusText->setText(QString());
   ui->renderContainer->setWindowTitle(tr("Current"));
-  ui->zoomOption->setCurrentText(QString());
   ui->mipLevel->clear();
   ui->sliceFace->clear();
+
+  UI_SetScale(1.0f);
 
   ui->channels->setCurrentIndex(0);
   ui->overlay->setCurrentIndex(0);
@@ -3388,7 +3389,7 @@ void TextureViewer::on_saveTex_clicked()
     return;
 
   // overwrite save params with current texture display settings
-  m_SaveConfig.id = m_TexDisplay.resourceId;
+  m_SaveConfig.resourceId = m_TexDisplay.resourceId;
   m_SaveConfig.typeHint = m_TexDisplay.typeHint;
   m_SaveConfig.slice.sliceIndex = (int)m_TexDisplay.sliceFace;
   m_SaveConfig.mip = (int)m_TexDisplay.mip;
@@ -3417,7 +3418,7 @@ void TextureViewer::on_saveTex_clicked()
         [this, &id](IReplayController *r) { id = m_Output->GetCustomShaderTexID(); });
 
     if(id != ResourceId())
-      m_SaveConfig.id = id;
+      m_SaveConfig.resourceId = id;
   }
 
   const ResourceId overlayTexID = m_Output->GetDebugOverlayTexID();
@@ -3430,7 +3431,7 @@ void TextureViewer::on_saveTex_clicked()
 
   if(saveDialog.saveOverlayInstead())
   {
-    m_SaveConfig.id = overlayTexID;
+    m_SaveConfig.resourceId = overlayTexID;
   }
 
   if(res)

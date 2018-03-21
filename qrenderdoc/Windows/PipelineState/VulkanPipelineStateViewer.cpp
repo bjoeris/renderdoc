@@ -666,7 +666,7 @@ QVariantList VulkanPipelineStateViewer::makeSampler(const QString &bindset, cons
           bindset,
           slotname,
           descriptor.immutableSampler ? tr("Immutable Sampler") : tr("Sampler"),
-          descriptor.resourceResourceId,
+          descriptor.samplerResourceId,
           addressing,
           filter + lit(", ") + lod,
           QString()};
@@ -1271,19 +1271,21 @@ void VulkanPipelineStateViewer::setShaderState(const VKPipe::Shader &stage,
 {
   ShaderReflection *shaderDetails = stage.reflection;
 
-  shader->setText(
-      QFormatStr("%1: %2").arg(ToQStr(pipe.pipelineResourceId)).arg(ToQStr(stage.resourceId)));
+  QString shText =
+      QFormatStr("%1: %2").arg(ToQStr(pipe.pipelineResourceId)).arg(ToQStr(stage.resourceId));
 
   if(shaderDetails != NULL)
   {
     QString entryFunc = shaderDetails->entryPoint;
-    if(!shaderDetails->debugInfo.files.isEmpty() || entryFunc != lit("main"))
-      shader->setText(entryFunc + lit("()"));
+
+    if(entryFunc != lit("main"))
+      shText += lit(": ") + entryFunc + lit("()");
 
     if(!shaderDetails->debugInfo.files.isEmpty())
-      shader->setText(entryFunc + lit("() - ") +
-                      QFileInfo(shaderDetails->debugInfo.files[0].filename).fileName());
+      shText += lit(" - ") + QFileInfo(shaderDetails->debugInfo.files[0].filename).fileName();
   }
+
+  shader->setText(shText);
 
   int vs = 0;
 
@@ -1965,22 +1967,22 @@ void VulkanPipelineStateViewer::setState()
   ui->stencils->clear();
   if(state.depthStencil.stencilTestEnable)
   {
-    ui->stencils->addTopLevelItem(
-        new RDTreeWidgetItem({tr("Front"), ToQStr(state.depthStencil.frontFace.function),
-                              ToQStr(state.depthStencil.frontFace.failOperation),
-                              ToQStr(state.depthStencil.frontFace.depthFailOperation),
-                              ToQStr(state.depthStencil.frontFace.passOperation),
-                              Formatter::Format(state.depthStencil.frontFace.writeMask, true),
-                              Formatter::Format(state.depthStencil.frontFace.compareMask, true),
-                              Formatter::Format(state.depthStencil.frontFace.reference, true)}));
-    ui->stencils->addTopLevelItem(
-        new RDTreeWidgetItem({tr("Back"), ToQStr(state.depthStencil.backFace.function),
-                              ToQStr(state.depthStencil.backFace.failOperation),
-                              ToQStr(state.depthStencil.backFace.depthFailOperation),
-                              ToQStr(state.depthStencil.backFace.passOperation),
-                              Formatter::Format(state.depthStencil.backFace.writeMask, true),
-                              Formatter::Format(state.depthStencil.backFace.compareMask, true),
-                              Formatter::Format(state.depthStencil.backFace.reference, true)}));
+    ui->stencils->addTopLevelItem(new RDTreeWidgetItem(
+        {tr("Front"), ToQStr(state.depthStencil.frontFace.function),
+         ToQStr(state.depthStencil.frontFace.failOperation),
+         ToQStr(state.depthStencil.frontFace.depthFailOperation),
+         ToQStr(state.depthStencil.frontFace.passOperation),
+         Formatter::Format((uint8_t)state.depthStencil.frontFace.writeMask, true),
+         Formatter::Format((uint8_t)state.depthStencil.frontFace.compareMask, true),
+         Formatter::Format((uint8_t)state.depthStencil.frontFace.reference, true)}));
+    ui->stencils->addTopLevelItem(new RDTreeWidgetItem(
+        {tr("Back"), ToQStr(state.depthStencil.backFace.function),
+         ToQStr(state.depthStencil.backFace.failOperation),
+         ToQStr(state.depthStencil.backFace.depthFailOperation),
+         ToQStr(state.depthStencil.backFace.passOperation),
+         Formatter::Format((uint8_t)state.depthStencil.backFace.writeMask, true),
+         Formatter::Format((uint8_t)state.depthStencil.backFace.compareMask, true),
+         Formatter::Format((uint8_t)state.depthStencil.backFace.reference, true)}));
   }
   else
   {

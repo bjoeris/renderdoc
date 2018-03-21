@@ -231,6 +231,8 @@ private:
   bool m_WARP;
   bool m_Proxy;
 
+  GPUVendor m_Vendor = GPUVendor::Unknown;
+
   D3D11DebugManager *GetDebugManager();
   // shared by BuildCustomShader and BuildTargetShader
   void BuildShader(std::string source, std::string entry, const ShaderCompileFlags &compileFlags,
@@ -246,6 +248,7 @@ private:
   void FillTimers(D3D11CounterContext &ctx, const DrawcallDescription &drawnode);
   void FillTimersAMD(uint32_t &eventStartID, uint32_t &sampleIndex, vector<uint32_t> &eventIDs,
                      const DrawcallDescription &drawnode);
+  void SerializeImmediateContext();
 
   bool RenderTextureInternal(TextureDisplay cfg, bool blendAlpha);
 
@@ -300,7 +303,7 @@ private:
 
   HighlightCache m_HighlightCache;
 
-  uint32_t m_SOBufferSize = 32 * 1024 * 1024;
+  uint64_t m_SOBufferSize = 32 * 1024 * 1024;
   ID3D11Buffer *m_SOBuffer = NULL;
   ID3D11Buffer *m_SOStagingBuffer = NULL;
   std::vector<ID3D11Query *> m_SOStatsQueries;

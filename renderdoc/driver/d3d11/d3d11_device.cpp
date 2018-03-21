@@ -242,6 +242,8 @@ WrappedID3D11Device::~WrappedID3D11Device()
 
   m_CachedStateObjects.clear();
 
+  GetResourceManager()->ClearReferencedResources();
+
   SAFE_RELEASE(m_pDevice1);
   SAFE_RELEASE(m_pDevice2);
   SAFE_RELEASE(m_pDevice3);
@@ -2222,7 +2224,7 @@ bool WrappedID3D11Device::Serialise_SetResourceName(SerialiserType &ser,
   {
     ResourceDescription &descr = GetReplay()->GetResourceDesc(
         GetResourceManager()->GetOriginalID(GetIDForResource(pResource)));
-    descr.SetCustomName(Name);
+    descr.SetCustomName(Name ? Name : "");
     AddResourceCurChunk(descr);
 
     SetDebugName(pResource, Name);

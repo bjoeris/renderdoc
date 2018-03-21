@@ -578,6 +578,14 @@ public:
 
       if(role == Qt::DisplayRole)
       {
+        if(unclampedNumRows > 0 && row >= numRows - 2)
+        {
+          if(col < 2 && row == numRows - 1)
+            return QString::number(unclampedNumRows - numRows);
+
+          return lit("...");
+        }
+
         if(col >= 0 && col < m_ColumnCount && row < numRows)
         {
           if(col == 0)
@@ -670,7 +678,7 @@ public:
   int32_t displayBaseVertex = 0;
   int32_t baseVertex = 0;
   uint32_t curInstance = 0;
-  uint32_t numRows = 0;
+  uint32_t numRows = 0, unclampedNumRows = 0;
   bool meshView = true;
   bool meshInput = false;
 
@@ -1421,6 +1429,15 @@ void BufferViewer::OnEventChanged(uint32_t eventId)
       m_ModelVSOut->primRestart = m_ModelVSIn->primRestart;
     }
   }
+  else
+  {
+    QString errors;
+    QList<FormatElement> cols = FormatElement::ParseFormatString(m_Format, 0, true, errors);
+
+    ClearModels();
+
+    m_ModelVSIn->columns = cols;
+  }
 
   EnableCameraGuessControls();
 
@@ -1506,6 +1523,7 @@ void BufferViewer::OnEventChanged(uint32_t eventId)
         uint32_t bufCount = uint32_t(buf->end - buf->data);
 
         m_ModelVSIn->numRows = uint32_t((bufCount + buf->stride - 1) / buf->stride);
+        m_ModelVSIn->unclampedNumRows = 0;
 
         // ownership passes to model
         m_ModelVSIn->buffers.push_back(buf);
@@ -1695,6 +1713,7 @@ void BufferViewer::RT_FetchMeshData(IReplayController *r)
   m_PostVS = r->GetPostVSData(m_Config.curInstance, MeshDataStage::VSOut);
 
   m_ModelVSOut->numRows = m_PostVS.numIndices;
+  m_ModelVSOut->unclampedNumRows = 0;
   m_ModelVSOut->baseVertex = m_PostVS.baseVertex;
   m_ModelVSOut->displayBaseVertex = m_ModelVSIn->baseVertex;
 
@@ -1756,8 +1775,9 @@ void BufferViewer::RT_FetchMeshData(IReplayController *r)
   m_PostGS = r->GetPostVSData(m_Config.curInstance, MeshDataStage::GSOut);
 
   m_ModelGSOut->numRows = m_PostGS.numIndices;
+  m_ModelGSOut->unclampedNumRows = 0;
   m_ModelGSOut->baseVertex = m_PostGS.baseVertex;
-  m_ModelVSOut->displayBaseVertex = m_ModelVSIn->baseVertex;
+  m_ModelGSOut->displayBaseVertex = m_ModelVSIn->baseVertex;
 
   indices = NULL;
   m_ModelGSOut->indices = NULL;
@@ -2115,7 +2135,10 @@ void BufferViewer::updatePreviewColumns()
       if(elIdx < 0 || elIdx >= m_ModelVSIn->columns.count())
         elIdx = 0;
 
-      m_VSInPosition.numIndices = draw->numIndices;
+      if(m_ModelVSIn->unclampedNumRows > 0)
+        m_VSInPosition.numIndices = m_ModelVSIn->numRows;
+      else
+        m_VSInPosition.numIndices = draw->numIndices;
       m_VSInPosition.topology = draw->topology;
       m_VSInPosition.indexByteStride = draw->indexByteWidth;
       m_VSInPosition.baseVertex = draw->baseVertex;
@@ -2277,9 +2300,66 @@ void BufferViewer::configureMeshColumns()
   }
 
   if(draw == NULL)
+  {
     m_ModelVSIn->numRows = 0;
+    m_ModelVSIn->unclampedNumRows = 0;
+  }
   else
+  {
     m_ModelVSIn->numRows = draw->numIndices;
+    m_ModelVSIn->unclampedNumRows = 0;
+
+    // calculate an upper bound on the valid number of rows just in case it's an invalid value (e.g.
+    // 0xdeadbeef) and we want to clamp.
+    uint32_t numRowsUpperBound = 0;
+
+    if(draw->flags & DrawFlags::UseIBuffer)
+    {
+      // In an indexed draw we clamp to however many indices are available in the index buffer
+
+      BoundVBuffer ib = m_Ctx.CurPipelineState().GetIBuffer();
+
+      uint32_t bytesAvailable = 0;
+
+      BufferDescription *buf = m_Ctx.GetBuffer(ib.resourceId);
+      if(buf)
+        bytesAvailable = buf->length - ib.byteOffset - draw->indexOffset * draw->indexByteWidth;
+
+      // drawing more than this many indices will read off the end of the index buffer - which while
+      // technically not invalid is certainly not intended, so serves as a good 'upper bound'
+      numRowsUpperBound = bytesAvailable / draw->indexByteWidth;
+    }
+    else
+    {
+      // for a non-indexed draw, we take the largest vertex buffer
+      rdcarray<BoundVBuffer> VBs = m_Ctx.CurPipelineState().GetVBuffers();
+
+      for(const BoundVBuffer &vb : VBs)
+      {
+        if(vb.byteStride == 0)
+          continue;
+
+        BufferDescription *buf = m_Ctx.GetBuffer(vb.resourceId);
+        if(buf)
+        {
+          numRowsUpperBound =
+              qMax(numRowsUpperBound, uint32_t(buf->length - vb.byteOffset) / vb.byteStride);
+        }
+      }
+
+      // if there are no vertex buffers we can't clamp.
+      if(numRowsUpperBound == 0)
+        numRowsUpperBound = ~0U;
+    }
+
+    // if we have significantly clamped, then set the unclamped number of rows and clamp.
+    if(numRowsUpperBound + 100 < m_ModelVSIn->numRows)
+    {
+      m_ModelVSIn->unclampedNumRows = m_ModelVSIn->numRows;
+      m_ModelVSIn->numRows = numRowsUpperBound + 100;
+      m_VSInPosition.numIndices = m_ModelVSIn->numRows;
+    }
+  }
 
   Viewport vp = m_Ctx.CurPipelineState().GetViewport(0);
 
@@ -2606,9 +2686,13 @@ void BufferViewer::render_clicked(QMouseEvent *e)
 
 void BufferViewer::ScrollToRow(BufferItemModel *model, int row)
 {
+  int hs = model->view->horizontalScrollBar()->value();
+
   model->view->scrollTo(model->index(row, 0), QAbstractItemView::PositionAtTop);
   model->view->clearSelection();
   model->view->selectRow(row);
+
+  model->view->horizontalScrollBar()->setValue(hs);
 }
 
 void BufferViewer::ViewBuffer(uint64_t byteOffset, uint64_t byteSize, ResourceId id,
@@ -2696,8 +2780,9 @@ void BufferViewer::RT_UpdateAndDisplay(IReplayController *)
   {
     m_Config.cam = m_CurrentCamera->camera();
     m_Output->SetMeshDisplay(m_Config);
-    m_Output->Display();
   }
+
+  GUIInvoke::call([this]() { ui->render->update(); });
 }
 
 RDTableView *BufferViewer::tableForStage(MeshDataStage stage)
@@ -2824,6 +2909,7 @@ void BufferViewer::ClearModels()
     m->generics.clear();
     m->genericsEnabled.clear();
     m->numRows = 0;
+    m->unclampedNumRows = 0;
 
     m->endReset();
   }
@@ -2858,6 +2944,7 @@ void BufferViewer::CalcColumnWidth(int maxNumRows)
       FormatElement(headerText, 0, 16, false, 1, false, 1, intFmt, false, false));
 
   m_ModelVSIn->numRows = 2;
+  m_ModelVSIn->unclampedNumRows = 0;
   m_ModelVSIn->baseVertex = 0;
 
   if(m_ModelVSIn->indices)
@@ -3273,6 +3360,11 @@ void BufferViewer::SyncViews(RDTableView *primary, bool selection, bool scroll)
 
   RDTableView *views[] = {ui->vsinData, ui->vsoutData, ui->gsoutData};
 
+  int horizScrolls[ARRAY_COUNT(views)] = {0};
+
+  for(size_t i = 0; i < ARRAY_COUNT(views); i++)
+    horizScrolls[i] = views[i]->horizontalScrollBar()->value();
+
   if(primary == NULL)
   {
     for(RDTableView *table : views)
@@ -3303,6 +3395,9 @@ void BufferViewer::SyncViews(RDTableView *primary, bool selection, bool scroll)
     if(scroll)
       table->verticalScrollBar()->setValue(primary->verticalScrollBar()->value());
   }
+
+  for(size_t i = 0; i < ARRAY_COUNT(views); i++)
+    views[i]->horizontalScrollBar()->setValue(horizScrolls[i]);
 }
 
 void BufferViewer::UpdateHighlightVerts()

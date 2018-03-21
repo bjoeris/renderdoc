@@ -270,6 +270,7 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
                   break;
                 }
               }
+              m_Ctx.Config().Save();
               PopulateReportedBugs();
             }
           });
@@ -379,7 +380,7 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
     QKeySequence ks = a->shortcut();
     if(!ks.isEmpty())
     {
-      m_GlobalShortcutCallbacks[ks] = [a]() {
+      m_GlobalShortcutCallbacks[ks] = [a](QWidget *) {
         if(a->isEnabled())
           a->trigger();
       };
@@ -1105,6 +1106,15 @@ void MainWindow::PopulateRecentCaptureSettings()
   ui->menu_Recent_Capture_Settings->addAction(ui->action_Clear_Capture_Settings_History);
 }
 
+void MainWindow::on_action_Clear_Reported_Bugs_triggered()
+{
+  ui->menu_Reported_Bugs->clear();
+  ui->menu_Reported_Bugs->setEnabled(false);
+
+  m_Ctx.Config().CrashReport_ReportedBugs.clear();
+  m_Ctx.Config().Save();
+}
+
 void MainWindow::PopulateReportedBugs()
 {
   ui->menu_Reported_Bugs->clear();
@@ -1149,14 +1159,12 @@ void MainWindow::PopulateReportedBugs()
 
   if(unread)
   {
-    if(!m_Ctx.Config().CheckUpdate_UpdateAvailable)
-      ui->menu_Help->setIcon(Icons::bug());
+    ui->menu_Help->setIcon(Icons::bug());
     ui->menu_Reported_Bugs->setIcon(Icons::bug());
   }
   else
   {
-    if(!m_Ctx.Config().CheckUpdate_UpdateAvailable)
-      ui->menu_Help->setIcon(QIcon());
+    ui->menu_Help->setIcon(QIcon());
     ui->menu_Reported_Bugs->setIcon(QIcon());
   }
 }
@@ -1211,7 +1219,7 @@ void MainWindow::CheckUpdates(bool forceCheck, UpdateResultMethod callback)
       return;
   }
 
-  if(!forceCheck && checkDue)
+  if(!forceCheck && !checkDue)
   {
     if(callback)
       callback(UpdateResult::Toosoon);
@@ -1478,6 +1486,7 @@ void MainWindow::setCaptureHasErrors(bool errors)
   {
     const QPixmap &del = Pixmaps::del(this);
     QPixmap empty(del.width(), del.height());
+    empty.setDevicePixelRatio(del.devicePixelRatio());
     empty.fill(Qt::transparent);
     statusIcon->setPixmap(m_messageAlternate ? empty : del);
 
@@ -1934,7 +1943,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         // then use that callback
         if(widgets.contains(focus))
         {
-          callbacks[focus]();
+          callbacks[focus](focus);
           event->accept();
           return true;
         }
@@ -1944,10 +1953,12 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
       }
     }
 
+    focus = QApplication::focusWidget();
+
     // if we didn't find matches or no such shortcut is registered, try global shortcuts
     if(m_GlobalShortcutCallbacks.contains(pressed))
     {
-      m_GlobalShortcutCallbacks[pressed]();
+      m_GlobalShortcutCallbacks[pressed](focus);
       event->accept();
       return true;
     }

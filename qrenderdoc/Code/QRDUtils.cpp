@@ -117,7 +117,7 @@ struct RichResourceText
     {
       if(v.userType() == qMetaTypeId<ResourceId>())
       {
-        QString resname = ctx.GetResourceName(v.value<ResourceId>());
+        QString resname = QString(ctx.GetResourceName(v.value<ResourceId>())).toHtmlEscaped();
         html += lit("<td><b>%1</b></td><td><img src=':/link.png'></td>").arg(resname);
         text += resname;
 
@@ -127,7 +127,7 @@ struct RichResourceText
       }
       else
       {
-        html += lit("<td>%1</td>").arg(v.toString());
+        html += lit("<td>%1</td>").arg(v.toString().toHtmlEscaped());
         text += v.toString();
 
         // this only generates one block
@@ -682,7 +682,7 @@ void addStructuredObjects(RDTreeWidgetItem *parent, const StructuredObjectList &
     // that for the best raw structured data representation instead of flattening those out to just
     // "ResourceId", and we also don't want to store two types ('fake' and 'real'), so instead we
     // check the custom string.
-    if(obj->type.basetype == SDBasic::ResourceId)
+    if(obj->type.basetype == SDBasic::Resource)
     {
       ResourceId id;
       static_assert(sizeof(id) == sizeof(obj->data.basic.u), "ResourceId is no longer uint64_t!");
@@ -714,7 +714,7 @@ void addStructuredObjects(RDTreeWidgetItem *parent, const StructuredObjectList &
         case SDBasic::Null: param = lit("NULL"); break;
         case SDBasic::Buffer: param = lit("(%1 bytes)").arg(obj->type.byteSize); break;
         case SDBasic::String: param = obj->data.str; break;
-        case SDBasic::ResourceId:
+        case SDBasic::Resource:
         case SDBasic::Enum:
         case SDBasic::UnsignedInteger: param = Formatter::Format(obj->data.basic.u); break;
         case SDBasic::SignedInteger: param = Formatter::Format(obj->data.basic.i); break;
@@ -1310,7 +1310,14 @@ bool RunProcessAsAdmin(const QString &fullExecutablePath, const QStringList &par
 #if defined(Q_OS_WIN32)
 
   std::wstring wideExe = QDir::toNativeSeparators(fullExecutablePath).toStdWString();
-  std::wstring wideParams = params.join(QLatin1Char(' ')).toStdWString();
+  std::wstring wideParams;
+
+  for(QString p : params)
+  {
+    wideParams += L"\"";
+    wideParams += p.toStdWString();
+    wideParams += L"\" ";
+  }
 
   SHELLEXECUTEINFOW info = {};
   info.cbSize = sizeof(info);

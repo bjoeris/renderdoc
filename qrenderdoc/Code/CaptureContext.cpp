@@ -160,13 +160,20 @@ void CaptureContext::LoadCapture(const rdcstr &captureFile, const rdcstr &origFi
                      [this]() { return !m_LoadInProgress; },
                      [this]() { return UpdateLoadProgress(); });
 
+#if defined(RELEASE)
   ANALYTIC_ADDAVG(Performance.LoadTime, double(loadTimer.nsecsElapsed() * 1.0e-9));
+#endif
 
   ANALYTIC_SET(CaptureFeatures.ShaderLinkage, m_APIProps.ShaderLinkage);
   ANALYTIC_SET(CaptureFeatures.YUVTextures, m_APIProps.YUVTextures);
   ANALYTIC_SET(CaptureFeatures.SparseResources, m_APIProps.SparseResources);
   ANALYTIC_SET(CaptureFeatures.MultiGPU, m_APIProps.MultiGPU);
   ANALYTIC_SET(CaptureFeatures.D3D12Bundle, m_APIProps.D3D12Bundle);
+
+  if(m_APIProps.vendor != GPUVendor::Unknown)
+  {
+    ANALYTIC_ADDUNIQ(GPUVendors, ToQStr(m_APIProps.vendor));
+  }
 
   m_MainWindow->setProgress(-1.0f);
 
@@ -193,7 +200,7 @@ void CaptureContext::LoadCapture(const rdcstr &captureFile, const rdcstr &origFi
       }
     });
 
-    if(newCapture && m_Notes.contains(lit("comments")))
+    if(newCapture && m_Notes.contains(lit("comments")) && m_Config.Comments_ShowOnLoad)
     {
       if(!HasCommentView())
         ShowCommentView();

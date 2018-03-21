@@ -25,6 +25,7 @@
 #include "d3d12_replay.h"
 #include "driver/dx/official/d3dcompiler.h"
 #include "driver/dxgi/dxgi_common.h"
+#include "driver/ihv/amd/amd_counters.h"
 #include "maths/camera.h"
 #include "maths/matrix.h"
 #include "serialise/rdcfile.h"
@@ -83,6 +84,26 @@ void D3D12Replay::CreateResources()
       RDCERR("Couldn't create DXGI factory! HRESULT: %s", ToStr(hr).c_str());
     }
 
+    if(m_pFactory)
+    {
+      LUID luid = m_pDevice->GetAdapterLuid();
+
+      IDXGIAdapter *pDXGIAdapter;
+      hr = m_pFactory->EnumAdapterByLuid(luid, __uuidof(IDXGIAdapter), (void **)&pDXGIAdapter);
+
+      if(FAILED(hr))
+      {
+        RDCERR("Couldn't get DXGI adapter by LUID from D3D device");
+      }
+      else
+      {
+        DXGI_ADAPTER_DESC desc = {};
+        pDXGIAdapter->GetDesc(&desc);
+
+        m_Vendor = GPUVendorFromPCIVendor(desc.VendorId);
+      }
+    }
+
     m_DebugManager = new D3D12DebugManager(m_pDevice);
 
     CreateSOBuffers();
@@ -93,6 +114,27 @@ void D3D12Replay::CreateResources()
     m_VertexPick.Init(m_pDevice, m_DebugManager);
     m_PixelPick.Init(m_pDevice, m_DebugManager);
     m_Histogram.Init(m_pDevice, m_DebugManager);
+  }
+
+  if(RenderDoc::Inst().IsReplayApp())
+  {
+    AMDCounters *counters = new AMDCounters();
+
+    ID3D12Device *d3dDevice = m_pDevice->GetReal();
+
+    if(counters->Init(AMDCounters::ApiType::Dx12, (void *)d3dDevice))
+    {
+      m_pAMDCounters = counters;
+    }
+    else
+    {
+      delete counters;
+      m_pAMDCounters = NULL;
+    }
+  }
+  else
+  {
+    m_pAMDCounters = NULL;
   }
 }
 
@@ -115,6 +157,8 @@ void D3D12Replay::DestroyResources()
   SAFE_RELEASE(m_CustomShaderTex);
 
   SAFE_DELETE(m_DebugManager);
+
+  SAFE_DELETE(m_pAMDCounters);
 }
 
 ReplayStatus D3D12Replay::ReadLogInitialisation(RDCFile *rdc, bool storeStructuredBuffers)
@@ -128,6 +172,7 @@ APIProperties D3D12Replay::GetAPIProperties()
 
   ret.pipelineType = GraphicsAPI::D3D12;
   ret.localRenderer = GraphicsAPI::D3D12;
+  ret.vendor = m_Vendor;
   ret.degraded = false;
   ret.shadersMutable = false;
 

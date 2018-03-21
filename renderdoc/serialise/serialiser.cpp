@@ -308,7 +308,11 @@ uint32_t Serialiser<SerialiserMode::Writing>::BeginChunk(uint32_t chunkID, uint3
       }
 
       if(c & ChunkDuration)
+      {
+        if(m_ChunkMetadata.durationMicro < 0)
+          m_ChunkMetadata.durationMicro = 0;
         m_Write->Write(m_ChunkMetadata.durationMicro);
+      }
 
       if(c & ChunkTimestamp)
       {
@@ -668,7 +672,7 @@ void DoSerialise(SerialiserType &ser, SDObject *el)
     }
     case SDBasic::Boolean: ser.Serialise("", el->data.basic.b); break;
     case SDBasic::Character: ser.Serialise("", el->data.basic.c); break;
-    case SDBasic::ResourceId: ser.Serialise("", el->data.basic.id); break;
+    case SDBasic::Resource: ser.Serialise("", el->data.basic.id); break;
     case SDBasic::UnsignedInteger:
       if(el->type.byteSize == 1)
       {

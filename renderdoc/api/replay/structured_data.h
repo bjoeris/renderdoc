@@ -82,7 +82,7 @@ DOCUMENT(R"(The basic irreducible type of an object. Every other more complex ty
   A single byte character. Wide/multi-byte characters are not supported (these would be stored as a
   string with 1 character and multiple bytes in UTF-8).
 
-.. data:: ResourceId
+.. data:: Resource
 
   A ResourceId. Equivalent to (and stored as) an 8-byte unsigned integer, but specifically contains
   the unique Id of a resource in a capture.
@@ -101,7 +101,7 @@ enum class SDBasic : uint32_t
   Float,
   Boolean,
   Character,
-  ResourceId,
+  Resource,
 };
 
 DECLARE_REFLECTION_ENUM(SDBasic);
@@ -135,6 +135,11 @@ DOCUMENT(R"(Bitfield flags that could be applied to a type.
 
   Special flag to indicate that this is array was a fixed-size real array, rather than a complex
   container type or a pointer & length.
+
+.. data:: Union
+
+  Special flag to indicate that this is structure is stored as a union, meaning all children share
+  the same memory and some external flag indicates which element is valid.
 )");
 enum class SDTypeFlags : uint32_t
 {
@@ -144,6 +149,7 @@ enum class SDTypeFlags : uint32_t
   Nullable = 0x4,
   NullString = 0x8,
   FixedArray = 0x10,
+  Union = 0x20,
 };
 
 BITMASK_OPERATORS(SDTypeFlags);
@@ -395,7 +401,7 @@ struct SDObject
       case SDBasic::Enum:
       case SDBasic::UnsignedInteger: return QVariant(qulonglong(data.basic.u));
       case SDBasic::SignedInteger: return QVariant(qlonglong(data.basic.i));
-      case SDBasic::ResourceId: return (QVariant)data.basic.id;
+      case SDBasic::Resource: return (QVariant)data.basic.id;
       case SDBasic::Float: return data.basic.d;
       case SDBasic::Boolean: return data.basic.b;
       case SDBasic::Character: return data.basic.c;
@@ -545,7 +551,7 @@ DOCUMENT("Make a structured object out of a ResourceId");
 inline SDObject *makeSDObject(const char *name, ResourceId val)
 {
   SDObject *ret = new SDObject(name, "ResourceId");
-  ret->type.basetype = SDBasic::ResourceId;
+  ret->type.basetype = SDBasic::Resource;
   ret->type.byteSize = 8;
   ret->data.basic.id = val;
   return ret;
