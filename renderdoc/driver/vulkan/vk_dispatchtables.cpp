@@ -69,62 +69,10 @@ void InitReplayTables(void *vulkanModule)
 
 void InitInstanceExtensionTables(VkInstance instance, InstanceDeviceInfo *info)
 {
-  VkLayerInstanceDispatchTable *table = GetInstanceDispatchTable(instance);
-  RDCASSERT(table);
-
-  // we know we'll only have one instance, so this is safe
-
-  InstanceGPA(EnumerateDeviceExtensionProperties);
-  InstanceGPA(EnumerateDeviceLayerProperties);
-
-  InstanceGPA(GetPhysicalDeviceSurfaceCapabilitiesKHR);
-  InstanceGPA(GetPhysicalDeviceSurfaceFormatsKHR);
-  InstanceGPA(GetPhysicalDeviceSurfacePresentModesKHR);
-  InstanceGPA(GetPhysicalDeviceSurfaceSupportKHR);
-
-  InstanceGPA(GetPhysicalDeviceFeatures2KHR);
-  InstanceGPA(GetPhysicalDeviceProperties2KHR);
-  InstanceGPA(GetPhysicalDeviceFormatProperties2KHR);
-  InstanceGPA(GetPhysicalDeviceImageFormatProperties2KHR);
-  InstanceGPA(GetPhysicalDeviceQueueFamilyProperties2KHR);
-  InstanceGPA(GetPhysicalDeviceMemoryProperties2KHR);
-  InstanceGPA(GetPhysicalDeviceSparseImageFormatProperties2KHR);
-
-  InstanceGPA(CreateDebugReportCallbackEXT);
-  InstanceGPA(DestroyDebugReportCallbackEXT);
-  InstanceGPA(DebugReportMessageEXT);
-
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-  InstanceGPA(CreateWin32SurfaceKHR);
-#endif
-
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
-  InstanceGPA(CreateAndroidSurfaceKHR);
-#endif
-
-#ifdef VK_USE_PLATFORM_XCB_KHR
-  InstanceGPA(CreateXcbSurfaceKHR);
-#endif
-
-#ifdef VK_USE_PLATFORM_YETI_GOOGLE
-  InstanceGPA(CreateYetiSurfaceGOOGLE);
-  InstanceGPA(GetPhysicalDeviceYetiPresentationSupportGOOGLE);
-#endif
-
-#ifdef VK_USE_PLATFORM_XLIB_KHR
-  InstanceGPA(CreateXlibSurfaceKHR);
-#endif
-
-  InstanceGPA(DestroySurfaceKHR);
-}
-
-void InitInstanceExtensionTables(VkInstance instance)
-{
   VkLayerInstanceDispatchTableExtended *table = GetInstanceDispatchTable(instance);
   RDCASSERT(table);
 
   instance = Unwrap(instance);
-  InstanceDeviceInfo *info = GetRecord(instance)->instDevInfo;
 
 #undef HookInitExtension
 #define HookInitExtension(ext, func) \
