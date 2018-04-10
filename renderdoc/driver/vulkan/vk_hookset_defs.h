@@ -69,7 +69,7 @@
               const VkAndroidSurfaceCreateInfoKHR *, pCreateInfo, const VkAllocationCallbacks *, \
               pAllocator, VkSurfaceKHR *, pSurface);
 
-#else
+#else // linux subsytems
 
 #if defined(VK_USE_PLATFORM_XCB_KHR)
 
@@ -85,12 +85,12 @@
               physicalDevice, uint32_t, queueFamilyIndex, xcb_connection_t *, connection,    \
               xcb_visualid_t, visual_id);
 
-#else
+#else // defined(VK_USE_PLATFORM_XCB_KHR)
 
 #define HookInitInstance_PlatformSpecific_Xcb()
 #define HookDefine_PlatformSpecific_Xcb()
 
-#endif
+#endif // defined(VK_USE_PLATFORM_XCB_KHR)
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
 
@@ -111,12 +111,12 @@
   HookDefine4(VkResult, vkGetRandROutputDisplayEXT, VkPhysicalDevice, physicalDevice, Display *,   \
               dpy, RROutput, rrOutput, VkDisplayKHR *, pDisplay);
 
-#else
+#else // defined(VK_USE_PLATFORM_XLIB_KHR)
 
 #define HookInitInstance_PlatformSpecific_Xlib()
 #define HookDefine_PlatformSpecific_Xlib()
 
-#endif
+#endif // defined(VK_USE_PLATFORM_XLIB_KHR)
 
 #if defined(VK_USE_PLATFORM_YETI_GOOGLE)
 
@@ -130,12 +130,12 @@
               pAllocator, VkSurfaceKHR *, pSurface);                                             \
   HookDefine3(VkBool32, vkGetPhysicalDeviceYetiPresentationSupportGOOGLE, VkPhysicalDevice,      \
               physicalDevice, uint32_t, queueFamilyIndex, uint32_t, streamIndex);
-#else
+#else // defined(VK_USE_PLATFORM_YETI_GOOGLE)
 
 #define HookInitInstance_PlatformSpecific_Yeti()
 #define HookDefine_PlatformSpecific_Yeti()
 
-#endif
+#endif // defined(VK_USE_PLATFORM_YETI_GOOGLE)
 
 #define HookInitInstance_PlatformSpecific() \
   HookInitInstance_PlatformSpecific_Xcb() HookInitInstance_PlatformSpecific_Xlib() HookInitInstance_PlatformSpecific_Yeti()
