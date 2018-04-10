@@ -176,6 +176,11 @@ ExecuteResult StartAndroidPackageForCapture(const char *host, const char *packag
   if(RDCLib.size() < installedPath.size() || RDCLib.substr(0, installedPath.size()) != installedPath)
     RDCLib.clear();
 
+  // some versions of adb/android also don't print any error message at all! Look to see if the
+  // wildcard glob is still present.
+  if(RDCLib.find("/lib/*/" RENDERDOC_ANDROID_LIBRARY) != std::string::npos)
+    RDCLib.clear();
+
   bool injectLibraries = true;
 
   if(RDCLib.empty())
@@ -435,7 +440,7 @@ bool CheckAndroidServerVersion(const string &deviceID)
   // Compare the server's versionCode and versionName with the host's for compatibility
   std::string hostVersionCode =
       string(STRINGIZE(RENDERDOC_VERSION_MAJOR)) + string(STRINGIZE(RENDERDOC_VERSION_MINOR));
-  std::string hostVersionName = RENDERDOC_STABLE_BUILD ? MAJOR_MINOR_VERSION_STRING : GitVersionHash;
+  std::string hostVersionName = GitVersionHash;
 
   // False positives will hurt us, so check for explicit matches
   if((hostVersionCode == versionCode) && (hostVersionName == versionName))

@@ -2002,7 +2002,7 @@ void GLPipelineStateViewer::resource_itemActivated(RDTreeWidgetItem *item, int c
     {
       format += tr("// members skipped as they are fixed size:\n");
       for(int i = 0; i < shaderRes.variableType.members.count() - 1; i++)
-        format += QFormatStr("%1 %2;\n")
+        format += QFormatStr("// %1 %2;\n")
                       .arg(shaderRes.variableType.members[i].type.descriptor.name)
                       .arg(shaderRes.variableType.members[i].name);
     }
@@ -2637,21 +2637,20 @@ void GLPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const GLPipe::Shad
         uint64_t byteSize = shaderCBuf.byteSize;
 
         QString slotname = tr("Uniforms");
-        QString name = m_Ctx.GetResourceName(b->resourceId);
+        QString name = tr("Empty");
         QString sizestr = tr("%1 Variables").arg(numvars);
         QString byterange;
 
         if(!filledSlot)
-        {
-          name = tr("Empty");
           length = 0;
-        }
 
         if(b)
         {
           slotname = QFormatStr("%1: %2").arg(bindPoint).arg(shaderCBuf.name);
           offset = b->byteOffset;
           length = b->byteSize;
+
+          name = m_Ctx.GetResourceName(b->resourceId);
 
           BufferDescription *buf = m_Ctx.GetBuffer(b->resourceId);
           if(buf && length == 0)

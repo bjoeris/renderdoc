@@ -26,6 +26,7 @@
 #include "d3d11_replay.h"
 #include "driver/dx/official/d3dcompiler.h"
 #include "driver/ihv/amd/amd_counters.h"
+#include "driver/ihv/nv/nv_counters.h"
 #include "driver/shaders/dxbc/dxbc_debug.h"
 #include "maths/camera.h"
 #include "maths/matrix.h"
@@ -156,20 +157,30 @@ void D3D11Replay::CreateResources()
 
   RenderDoc::Inst().SetProgress(LoadProgress::DebugManagerInit, 0.9f);
 
-  AMDCounters *counters = new AMDCounters();
+  AMDCounters *countersAMD = new AMDCounters();
+  NVCounters *countersNV = new NVCounters();
 
   ID3D11Device *d3dDevice = m_pDevice->GetReal();
 
-  if(counters->Init(AMDCounters::ApiType::Dx11, (void *)d3dDevice))
+  if(countersAMD->Init(AMDCounters::ApiType::Dx11, (void *)d3dDevice))
   {
-    m_pAMDCounters = counters;
+    m_pAMDCounters = countersAMD;
   }
   else
   {
-    delete counters;
+    delete countersAMD;
     m_pAMDCounters = NULL;
   }
 
+  if(countersNV->Init(d3dDevice))
+  {
+    m_pNVCounters = countersNV;
+  }
+  else
+  {
+    delete countersNV;
+    m_pNVCounters = NULL;
+  }
   RenderDoc::Inst().SetProgress(LoadProgress::DebugManagerInit, 1.0f);
 }
 
@@ -187,6 +198,7 @@ void D3D11Replay::DestroyResources()
   m_PixelHistory.Release();
 
   SAFE_DELETE(m_pAMDCounters);
+  SAFE_DELETE(m_pNVCounters);
 
   ShutdownStreamOut();
   ClearPostVSCache();
@@ -2809,7 +2821,8 @@ uint32_t D3D11Replay::PickVertex(uint32_t eventId, int32_t width, int32_t height
     // Instead we grab min and max above, and convert every vertex in that range. This might
     // slightly over-estimate but not as bad as 0-max or the whole buffer.
     for(uint32_t idx = minIndex; idx <= maxIndex; idx++)
-      vbData[idx] = HighlightCache::InterpretVertex(data, idx, cfg, dataEnd, valid);
+      vbData[idx] = HighlightCache::InterpretVertex(data, idx, cfg.position.vertexByteStride,
+                                                    cfg.position.format, dataEnd, valid);
 
     D3D11_BOX box;
     box.top = 0;
