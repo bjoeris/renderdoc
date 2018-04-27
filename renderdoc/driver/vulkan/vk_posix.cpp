@@ -44,7 +44,7 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
 #define EXPECT_WSI 0
 
 #if(defined(VK_USE_PLATFORM_ANDROID_KHR) || defined(VK_USE_PLATFORM_XCB_KHR) || \
-    defined(VK_USE_PLATFORM_XLIB_KHR))
+    defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_YETI_GOOGLE))
 
 #undef EXPECT_WSI
 #define EXPECT_WSI 1
@@ -104,17 +104,18 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
 #endif
 
 #if defined(VK_USE_PLATFORM_YETI_GOOGLE)
-    // check if supported
-    if(supportedExtensions.find(VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME) !=
-              supportedExtensions.end())
-    {
-      // don't add duplicates
-      if(std::find(extensionList.begin(), extensionList.end(),
-                 VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME) == extensionList.end())
-       {
-         extensionList.push_back(VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME);
-       }
-    }
+    // must be supported
+    RDCASSERT(supportedExtensions.find(VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME) !=
+      supportedExtensions.end());
+
+    m_SupportedWindowSystems.push_back(WindowingSystem::Yeti);
+
+    // don't add duplicates
+    if(std::find(extensionList.begin(), extensionList.end(),
+               VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME) == extensionList.end())
+     {
+       extensionList.push_back(VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME);
+     }
 #endif
 
 #if EXPECT_WSI
@@ -129,12 +130,7 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
 
 #if EXPECT_WSI
 
-    // TODO(akharlamov) Figure out the purpose of this message. The check for
-    // Google Yeti Surface doesn't fail.
-#elif defined(VK_USE_PLATFORM_YETI_GOOGLE)
-      RDCERR("Require the yeti surface '%s' to be present", VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME);
-
-#elif defined(VK_USE_PLATFORM_XCB_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR)
+#elif defined(VK_USE_PLATFORM_XCB_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR || defined(VK_USE_PLATFORM_YETI_GOOGLE))
     // if we expected WSI support, warn about it but continue. The UI will have no supported
     // window systems to work with so will be forced to be headless.
     if(m_SupportedWindowSystems.empty())
@@ -155,24 +151,23 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
       RDCWARN("XLib Output requires the '%s' extension to be present",
               VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
 #endif
+
+#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
+      RDCWARN("Yeti Output requires the '%s' extension to be present",
+        VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME);
+#endif
     }
 
 #endif
+    } else if (device) {
+      if (!m_SupportedWindowSystems.empty()) {
+        if (supportedExtensions.find(VK_KHR_SWAPCHAIN_EXTENSION_NAME) == supportedExtensions.end()) {
+          RDCWARN("Unsupported required device extension '%s'", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        } else {
+          extensionList.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        }
+      }
     }
-  else if(device)
-  {
-    if(!m_SupportedWindowSystems.empty())
-    {
-    if(supportedExtensions.find(VK_KHR_SWAPCHAIN_EXTENSION_NAME) == supportedExtensions.end())
-    {
-        RDCWARN("Unsupported required device extension '%s'", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    }
-      else
-      {
-    extensionList.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-  }
-    }
-  }
 }
 
 #if defined(VK_USE_PLATFORM_XCB_KHR)

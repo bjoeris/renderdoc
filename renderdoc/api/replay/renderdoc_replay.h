@@ -332,6 +332,7 @@ enum class WindowingSystem : uint32_t
   Xlib,
   XCB,
   Android,
+  Yeti,
 };
 
 DECLARE_REFLECTION_ENUM(WindowingSystem);
@@ -407,6 +408,19 @@ inline const WindowingData CreateWin32WindowingData(HWND window)
 
   ret.system = WindowingSystem::Win32;
   ret.win32.window = window;
+
+  return ret;
+}
+
+DOCUMENT(R"(Create a :class:`WindowingData` for a Yeti application.
+
+:return: A :class:`WindowingData` corresponding to the given system.
+:rtype: WindowingData
+)");
+inline const WindowingData CreateYetiWindowingData() {
+  WindowingData ret = {};
+
+  ret.system = WindowingSystem::Yeti;
 
   return ret;
 }
