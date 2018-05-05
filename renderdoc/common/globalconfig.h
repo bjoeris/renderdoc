@@ -116,12 +116,6 @@
 #define RDOC_XCB OPTION_OFF
 #endif
 
-#if defined(RENDERDOC_WINDOWING_YETI)
-#define RDOC_YETI OPTION_ON
-#else
-#define RDOC_YETI OPTION_OFF
-#endif
-
 /////////////////////////////////////////////////
 // Global constants
 enum

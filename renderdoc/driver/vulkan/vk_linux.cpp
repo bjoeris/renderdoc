@@ -53,11 +53,6 @@ void VulkanReplay::OutputWindow::SetWindowHandle(WindowingData window)
   }
 #endif
 
-#if ENABLED(RDOC_YETI)
-  RDCWARN("Window system is Yeti, no OS handles for app window are needed");
-  return; // there are no OS specific handles to save.
-#endif
-
   RDCERR("Unrecognised/unsupported window system %d", window.system);
 }
 
@@ -99,19 +94,6 @@ void VulkanReplay::OutputWindow::CreateSurface(VkInstance inst)
   }
 #endif
 
-#if ENABLED(RDOC_YETI)
-  VkYetiSurfaceCreateInfoGOOGLE createInfo;
-
-  createInfo.sType = VK_STRUCTURE_TYPE_YETI_SURFACE_CREATE_INFO_GOOGLE;
-  createInfo.pNext = NULL;
-  createInfo.streamIndex = 0;
-
-  VkResult vkr = ObjDisp(inst)->CreateYetiSurfaceGOOGLE(Unwrap(inst), &createInfo, NULL, &surface);
-  RDCASSERTEQUAL(vkr, VK_SUCCESS);
-
-  return;
-#endif
-
   RDCERR("Unrecognised/unsupported window system %d", m_WindowSystem);
 }
 
@@ -147,18 +129,6 @@ void VulkanReplay::GetOutputWindowDimensions(uint64_t id, int32_t &w, int32_t &h
 
     free(geom);
 
-    return;
-  }
-#endif
-
-#if ENABLED(RDOC_YETI)
-  if (outw.m_WindowSystem == WindowingSystem::Yeti) {
-    RDCWARN("Window system is Yeti (%d), size is %d, %d", outw.m_WindowSystem, outw.width, outw.height);
-    // TODO(akharlamov) Can there be a better default resolution selection?
-    // Because we don't have a window, outw dimensions can actually be (0,0) until the surface is created.
-    // This will fail surface creation, so default to 1080p.
-    w = outw.width != 0 ? outw.width : 1920;
-    h = outw.height != 0 ? outw.height : 1080;
     return;
   }
 #endif

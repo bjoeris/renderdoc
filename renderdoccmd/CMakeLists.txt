@@ -30,10 +30,6 @@ elseif(UNIX)
         list(APPEND libraries PRIVATE -lxcb)
     endif()
 
-    if(ENABLE_YETI)
-        list(APPEND libraries PRIVATE -lyeti)
-    endif()
-
     if(ENABLE_XLIB AND ENABLE_XCB)
         list(APPEND libraries PRIVATE -lX11-xcb)
     endif()
