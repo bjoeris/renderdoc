@@ -71,6 +71,7 @@ WrappedID3D11Device::WrappedID3D11Device(ID3D11Device *realDevice, D3D11InitPara
     flags |= WriteSerialiser::ChunkCallstack;
 
   m_ScratchSerialiser.SetChunkMetadataRecording(flags);
+  m_ScratchSerialiser.SetVersion(D3D11InitParams::CurrentVersion);
 
   m_StructuredFile = &m_StoredStructuredData;
 
@@ -983,6 +984,8 @@ ReplayStatus WrappedID3D11Device::ReadLogInitialisation(RDCFile *rdc, bool store
 
   m_StoredStructuredData.version = m_StructuredFile->version = m_SectionVersion;
 
+  ser.SetVersion(m_SectionVersion);
+
   int chunkIdx = 0;
 
   struct chunkinfo
@@ -1777,6 +1780,8 @@ bool WrappedID3D11Device::EndFrameCapture(void *dev, void *wnd)
     GetResourceManager()->MarkUnwrittenResources();
 
     GetResourceManager()->ClearReferencedResources();
+
+    GetResourceManager()->FreeInitialContents();
 
     return true;
   }

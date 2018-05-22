@@ -32,7 +32,6 @@
 namespace JDWP
 {
 uint32_t Command::idalloc = 42;
-int32_t objectID::size = 8;
 
 uint32_t Command::Send(StreamWriter &writer)
 {
@@ -130,23 +129,6 @@ CommandData &CommandData::Write(const std::string &str)
 }
 
 template <>
-CommandData &CommandData::Read(objectID &id)
-{
-  ReadBytes(&id, objectID::getSize());
-  id.EndianSwap();
-  return *this;
-}
-
-template <>
-CommandData &CommandData::Write(const objectID &id)
-{
-  objectID tmp = id;
-  tmp.EndianSwap();
-  WriteBytes(&tmp, objectID::getSize());
-  return *this;
-}
-
-template <>
 CommandData &CommandData::Read(taggedObjectID &id)
 {
   Read((byte &)id.tag);
@@ -220,8 +202,8 @@ template <>
 CommandData &CommandData::Read(Location &loc)
 {
   Read((byte &)loc.tag);
-  Read(loc.classID);
-  Read(loc.methodID);
+  Read(loc.clss);
+  Read(loc.meth);
   Read(loc.index);
   return *this;
 }
@@ -230,9 +212,95 @@ template <>
 CommandData &CommandData::Write(const Location &loc)
 {
   Write((const byte &)loc.tag);
-  Write(loc.classID);
-  Write(loc.methodID);
+  Write(loc.clss);
+  Write(loc.meth);
   Write(loc.index);
+  return *this;
+}
+
+// objectID variants
+template <>
+CommandData &CommandData::Read(objectID &id)
+{
+  ReadBytes(&id, objectID::getSize());
+  id.EndianSwap();
+  return *this;
+}
+
+template <>
+CommandData &CommandData::Write(const objectID &id)
+{
+  objectID tmp = id;
+  tmp.EndianSwap();
+  WriteBytes(&tmp, objectID::getSize());
+  return *this;
+}
+
+template <>
+CommandData &CommandData::Read(referenceTypeID &id)
+{
+  ReadBytes(&id, referenceTypeID::getSize());
+  id.EndianSwap();
+  return *this;
+}
+
+template <>
+CommandData &CommandData::Write(const referenceTypeID &id)
+{
+  referenceTypeID tmp = id;
+  tmp.EndianSwap();
+  WriteBytes(&tmp, referenceTypeID::getSize());
+  return *this;
+}
+
+template <>
+CommandData &CommandData::Read(methodID &id)
+{
+  ReadBytes(&id, methodID::getSize());
+  id.EndianSwap();
+  return *this;
+}
+
+template <>
+CommandData &CommandData::Write(const methodID &id)
+{
+  methodID tmp = id;
+  tmp.EndianSwap();
+  WriteBytes(&tmp, methodID::getSize());
+  return *this;
+}
+
+template <>
+CommandData &CommandData::Read(fieldID &id)
+{
+  ReadBytes(&id, fieldID::getSize());
+  id.EndianSwap();
+  return *this;
+}
+
+template <>
+CommandData &CommandData::Write(const fieldID &id)
+{
+  fieldID tmp = id;
+  tmp.EndianSwap();
+  WriteBytes(&tmp, fieldID::getSize());
+  return *this;
+}
+
+template <>
+CommandData &CommandData::Read(frameID &id)
+{
+  ReadBytes(&id, frameID::getSize());
+  id.EndianSwap();
+  return *this;
+}
+
+template <>
+CommandData &CommandData::Write(const frameID &id)
+{
+  frameID tmp = id;
+  tmp.EndianSwap();
+  WriteBytes(&tmp, frameID::getSize());
   return *this;
 }
 };

@@ -6,6 +6,7 @@ set(glslang_sources
     ${glslang_dir}/SPIRV/GlslangToSpv.h
     ${glslang_dir}/SPIRV/GLSL.std.450.h
     ${glslang_dir}/SPIRV/GLSL.ext.AMD.h
+    ${glslang_dir}/SPIRV/GLSL.ext.EXT.h
     ${glslang_dir}/SPIRV/GLSL.ext.KHR.h
     ${glslang_dir}/SPIRV/GLSL.ext.NV.h
     ${glslang_dir}/SPIRV/hex_float.h
@@ -15,14 +16,6 @@ set(glslang_sources
     ${glslang_dir}/SPIRV/SpvBuilder.cpp
     ${glslang_dir}/SPIRV/SpvBuilder.h
     ${glslang_dir}/SPIRV/spvIR.h
-    ${glslang_dir}/hlsl/hlslAttributes.cpp
-    ${glslang_dir}/hlsl/hlslAttributes.h
-    ${glslang_dir}/hlsl/hlslParseHelper.cpp
-    ${glslang_dir}/hlsl/hlslOpMap.cpp
-    ${glslang_dir}/hlsl/hlslParseables.cpp
-    ${glslang_dir}/hlsl/hlslScanContext.cpp
-    ${glslang_dir}/hlsl/hlslGrammar.cpp
-    ${glslang_dir}/hlsl/hlslTokenStream.cpp
     ${glslang_dir}/glslang/GenericCodeGen/CodeGen.cpp
     ${glslang_dir}/glslang/GenericCodeGen/Link.cpp
     ${glslang_dir}/glslang/Include/arrays.h
@@ -80,6 +73,8 @@ set(glslang_sources
     ${glslang_dir}/glslang/MachineIndependent/SymbolTable.h
     ${glslang_dir}/glslang/MachineIndependent/Versions.cpp
     ${glslang_dir}/glslang/MachineIndependent/Versions.h
+    ${glslang_dir}/glslang/MachineIndependent/attribute.cpp
+    ${glslang_dir}/glslang/MachineIndependent/attribute.h
     ${glslang_dir}/glslang/OSDependent/osinclude.h
     ${glslang_dir}/glslang/Public/ShaderLang.h)
 
@@ -100,12 +95,19 @@ set(sources
 
 add_definitions(-DAMD_EXTENSIONS)
 add_definitions(-DNV_EXTENSIONS)
-add_definitions(-DENABLE_HLSL)
 
 set_source_files_properties(${glslang_sources}
-    PROPERTIES COMPILE_FLAGS "-Wno-ignored-qualifiers -Wno-unknown-warning-option -Wno-inconsistent-missing-override")
+    PROPERTIES COMPILE_FLAGS "-Wno-ignored-qualifiers")
+
+if(CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
+    set_source_files_properties(${glslang_dir}/glslang/MachineIndependent/reflection.cpp
+        PROPERTIES COMPILE_FLAGS "-Wno-implicit-fallthrough -Wno-ignored-qualifiers")
+endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set_property(SOURCE "${glslang_sources}"
+        APPEND PROPERTY COMPILE_FLAGS "-Wno-unknown-warning-option -Wno-inconsistent-missing-override")
+
     set_source_files_properties(${glslang_dir}/SPIRV/GlslangToSpv.cpp
         PROPERTIES COMPILE_FLAGS "-Wno-tautological-constant-out-of-range-compare")
 endif()

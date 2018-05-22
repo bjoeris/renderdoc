@@ -30,6 +30,8 @@ void DescSetLayout::Init(VulkanResourceManager *resourceMan, VulkanCreationInfo 
 {
   dynamicCount = 0;
 
+  flags = pCreateInfo->flags;
+
   // descriptor set layouts can be sparse, such that only three bindings exist
   // but they are at 0, 5 and 10.
   // We assume here that while the layouts may be sparse that's mostly to allow
@@ -63,13 +65,40 @@ void DescSetLayout::Init(VulkanResourceManager *resourceMan, VulkanCreationInfo 
   }
 }
 
-void DescSetLayout::CreateBindingsArray(vector<DescriptorSetSlot *> &descBindings)
+void DescSetLayout::CreateBindingsArray(std::vector<DescriptorSetSlot *> &descBindings) const
 {
   descBindings.resize(bindings.size());
   for(size_t i = 0; i < bindings.size(); i++)
   {
     descBindings[i] = new DescriptorSetSlot[bindings[i].descriptorCount];
     memset(descBindings[i], 0, sizeof(DescriptorSetSlot) * bindings[i].descriptorCount);
+  }
+}
+
+void DescSetLayout::UpdateBindingsArray(const DescSetLayout &prevLayout,
+                                        std::vector<DescriptorSetSlot *> &descBindings) const
+{
+  // if we have fewer bindings now, delete the orphaned bindings arrays
+  for(size_t i = bindings.size(); i < prevLayout.bindings.size(); i++)
+    SAFE_DELETE_ARRAY(descBindings[i]);
+
+  // resize to the new number of bindings
+  descBindings.resize(bindings.size());
+
+  // re-allocate slots and move any previous bindings that overlapped over.
+  for(size_t i = 0; i < bindings.size(); i++)
+  {
+    // allocate new slot array
+    DescriptorSetSlot *newSlots = new DescriptorSetSlot[bindings[i].descriptorCount];
+
+    // copy over any previous bindings that overlapped
+    memcpy(newSlots, descBindings[i],
+           sizeof(DescriptorSetSlot) *
+               RDCMIN(prevLayout.bindings[i].descriptorCount, bindings[i].descriptorCount));
+
+    // delete old array, and assign the new one
+    SAFE_DELETE_ARRAY(descBindings[i]);
+    descBindings[i] = newSlots;
   }
 }
 
@@ -176,6 +205,23 @@ void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan, Vulk
       vertexBindings[i].perInstance =
           pCreateInfo->pVertexInputState->pVertexBindingDescriptions[i].inputRate ==
           VK_VERTEX_INPUT_RATE_INSTANCE;
+      vertexBindings[i].instanceDivisor = 1;
+    }
+
+    // if there's a divisors struct, apply them now
+    const VkPipelineVertexInputDivisorStateCreateInfoEXT *divisors =
+        (const VkPipelineVertexInputDivisorStateCreateInfoEXT *)FindNextStruct(
+            pCreateInfo->pVertexInputState,
+            VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT);
+    if(divisors)
+    {
+      for(uint32_t b = 0; b < divisors->vertexBindingDivisorCount; b++)
+      {
+        const VkVertexInputBindingDivisorDescriptionEXT &div = divisors->pVertexBindingDivisors[b];
+
+        if(div.binding < vertexBindings.size())
+          vertexBindings[div.binding].instanceDivisor = div.divisor;
+      }
     }
 
     vertexAttrs.resize(pCreateInfo->pVertexInputState->vertexAttributeDescriptionCount);
@@ -198,6 +244,15 @@ void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan, Vulk
     patchControlPoints = pCreateInfo->pTessellationState->patchControlPoints;
   else
     patchControlPoints = 0;
+
+  tessellationDomainOrigin = VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT;
+
+  const VkPipelineTessellationDomainOriginStateCreateInfo *tessDomain =
+      (const VkPipelineTessellationDomainOriginStateCreateInfo *)FindNextStruct(
+          pCreateInfo->pTessellationState,
+          VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO);
+  if(tessDomain)
+    tessellationDomainOrigin = tessDomain->domainOrigin;
 
   if(pCreateInfo->pViewportState)
     viewportCount = pCreateInfo->pViewportState->viewportCount;
@@ -227,6 +282,20 @@ void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan, Vulk
   depthBiasClamp = pCreateInfo->pRasterizationState->depthBiasClamp;
   depthBiasSlopeFactor = pCreateInfo->pRasterizationState->depthBiasSlopeFactor;
   lineWidth = pCreateInfo->pRasterizationState->lineWidth;
+
+  // VkPipelineRasterizationConservativeStateCreateInfoEXT
+  conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT;
+  extraPrimitiveOverestimationSize = 0.0f;
+
+  const VkPipelineRasterizationConservativeStateCreateInfoEXT *conservRast =
+      (const VkPipelineRasterizationConservativeStateCreateInfoEXT *)FindNextStruct(
+          pCreateInfo->pRasterizationState,
+          VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT);
+  if(conservRast)
+  {
+    conservativeRasterizationMode = conservRast->conservativeRasterizationMode;
+    extraPrimitiveOverestimationSize = conservRast->extraPrimitiveOverestimationSize;
+  }
 
   // VkPipelineMultisampleStateCreateInfo
   if(pCreateInfo->pMultisampleState)
@@ -378,6 +447,8 @@ void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan, Vulk
 
   patchControlPoints = 0;
 
+  tessellationDomainOrigin = VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT;
+
   viewportCount = 0;
 
   // VkPipelineRasterStateCreateInfo
@@ -386,6 +457,10 @@ void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan, Vulk
   polygonMode = VK_POLYGON_MODE_FILL;
   cullMode = VK_CULL_MODE_NONE;
   frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
+  // VkPipelineRasterizationConservativeStateCreateInfoEXT
+  conservativeRasterizationMode = VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT;
+  extraPrimitiveOverestimationSize = 0.0f;
 
   // VkPipelineMultisampleStateCreateInfo
   rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -507,6 +582,7 @@ void VulkanCreationInfo::BufferView::Init(VulkanResourceManager *resourceMan,
                                           const VkBufferViewCreateInfo *pCreateInfo)
 {
   buffer = GetResID(pCreateInfo->buffer);
+  format = pCreateInfo->format;
   offset = pCreateInfo->offset;
   size = pCreateInfo->range;
 }
@@ -556,6 +632,22 @@ void VulkanCreationInfo::Sampler::Init(VulkanResourceManager *resourceMan, Vulka
   maxLod = pCreateInfo->maxLod;
   borderColor = pCreateInfo->borderColor;
   unnormalizedCoordinates = pCreateInfo->unnormalizedCoordinates != 0;
+
+  reductionMode = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE_EXT;
+
+  const VkSamplerReductionModeCreateInfoEXT *reduction =
+      (const VkSamplerReductionModeCreateInfoEXT *)FindNextStruct(
+          pCreateInfo, VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT);
+  if(reduction)
+  {
+    reductionMode = reduction->reductionMode;
+  }
+}
+
+void VulkanCreationInfo::YCbCrSampler::Init(VulkanResourceManager *resourceMan,
+                                            VulkanCreationInfo &info,
+                                            const VkSamplerYcbcrConversionCreateInfo *pCreateInfo)
+{
 }
 
 static TextureSwizzle Convert(VkComponentSwizzle s, int i)
@@ -664,4 +756,146 @@ void VulkanCreationInfo::DescSetPool::CreateOverflow(VkDevice device,
   resourceMan->AddLiveResource(poolid, pool);
 
   overflow.push_back(pool);
+}
+
+void DescUpdateTemplate::Init(VulkanResourceManager *resourceMan, VulkanCreationInfo &info,
+                              const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo)
+{
+  updates.insert(updates.begin(), pCreateInfo->pDescriptorUpdateEntries,
+                 pCreateInfo->pDescriptorUpdateEntries + pCreateInfo->descriptorUpdateEntryCount);
+
+  dataByteSize = 0;
+
+  texelBufferViewCount = 0;
+  bufferInfoCount = 0;
+  imageInfoCount = 0;
+
+  for(const VkDescriptorUpdateTemplateEntry &entry : updates)
+  {
+    uint32_t entrySize = 4;
+
+    if(entry.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER ||
+       entry.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)
+    {
+      entrySize = sizeof(VkBufferView);
+
+      texelBufferViewCount += entry.descriptorCount;
+    }
+    else if(entry.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER ||
+            entry.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+            entry.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+            entry.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ||
+            entry.descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)
+    {
+      entrySize = sizeof(VkDescriptorImageInfo);
+
+      imageInfoCount += entry.descriptorCount;
+    }
+    else
+    {
+      entrySize = sizeof(VkDescriptorBufferInfo);
+
+      bufferInfoCount += entry.descriptorCount;
+    }
+
+    dataByteSize =
+        RDCMAX(dataByteSize, entry.offset + entry.stride * entry.descriptorCount + entrySize);
+  }
+
+  if(pCreateInfo->templateType == VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET)
+  {
+    if(IsCaptureMode(resourceMan->GetState()))
+    {
+      layout = *GetRecord(pCreateInfo->descriptorSetLayout)->descInfo->layout;
+    }
+    else
+    {
+      layout = info.m_DescSetLayout[GetResID(pCreateInfo->descriptorSetLayout)];
+    }
+  }
+  else
+  {
+    if(IsCaptureMode(resourceMan->GetState()))
+    {
+      layout = GetRecord(pCreateInfo->pipelineLayout)->pipeLayoutInfo->layouts[pCreateInfo->set];
+    }
+    else
+    {
+      const std::vector<ResourceId> &descSetLayouts =
+          info.m_PipelineLayout[GetResID(pCreateInfo->pipelineLayout)].descSetLayouts;
+
+      layout = info.m_DescSetLayout[descSetLayouts[pCreateInfo->set]];
+    }
+  }
+}
+
+void DescUpdateTemplate::Apply(const void *pData, DescUpdateTemplateApplication &application)
+{
+  application.bufView.reserve(texelBufferViewCount);
+  application.bufInfo.reserve(bufferInfoCount);
+  application.imgInfo.reserve(imageInfoCount);
+
+  for(const VkDescriptorUpdateTemplateEntry &entry : updates)
+  {
+    VkWriteDescriptorSet write = {};
+
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = VK_NULL_HANDLE;    // set externally for non-push descriptor template updates.
+    write.dstBinding = entry.dstBinding;
+    write.dstArrayElement = entry.dstArrayElement;
+    write.descriptorType = entry.descriptorType;
+    write.descriptorCount = entry.descriptorCount;
+
+    const byte *src = (const byte *)pData + entry.offset;
+
+    if(entry.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER ||
+       entry.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)
+    {
+      size_t idx = application.bufView.size();
+
+      application.bufView.resize(idx + entry.descriptorCount);
+
+      for(uint32_t d = 0; d < entry.descriptorCount; d++)
+      {
+        memcpy(&application.bufView[idx + d], src, sizeof(VkBufferView));
+        src += entry.stride;
+      }
+
+      write.pTexelBufferView = &application.bufView[idx];
+    }
+    else if(entry.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER ||
+            entry.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+            entry.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+            entry.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ||
+            entry.descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)
+    {
+      size_t idx = application.imgInfo.size();
+
+      application.imgInfo.resize(idx + entry.descriptorCount);
+
+      for(uint32_t d = 0; d < entry.descriptorCount; d++)
+      {
+        memcpy(&application.imgInfo[idx + d], src, sizeof(VkDescriptorImageInfo));
+        src += entry.stride;
+      }
+
+      write.pImageInfo = &application.imgInfo[idx];
+    }
+    else
+    {
+      size_t idx = application.bufInfo.size();
+
+      application.bufInfo.resize(idx + entry.descriptorCount);
+
+      for(uint32_t d = 0; d < entry.descriptorCount; d++)
+      {
+        memcpy(&application.bufInfo[idx + d], src, sizeof(VkDescriptorBufferInfo));
+        src += entry.stride;
+      }
+
+      write.pBufferInfo = &application.bufInfo[idx];
+    }
+
+    application.writes.push_back(write);
+  }
 }

@@ -67,9 +67,10 @@ enum VkResourceType
   eResEvent,
   eResQueryPool,
   eResSemaphore,
-
   eResSwapchain,
-  eResSurface
+  eResSurface,
+  eResDescUpdateTemplate,
+  eResSamplerConversion,
 };
 
 DECLARE_REFLECTION_ENUM(VkResourceType);
@@ -548,6 +549,32 @@ struct WrappedVkSurfaceKHR : WrappedVkNonDispRes
     TypeEnum = eResSurface,
   };
 };
+struct WrappedVkDescriptorUpdateTemplate : WrappedVkNonDispRes
+{
+  WrappedVkDescriptorUpdateTemplate(VkDescriptorUpdateTemplate obj, ResourceId objId)
+      : WrappedVkNonDispRes(obj, objId)
+  {
+  }
+  typedef VkDescriptorUpdateTemplate InnerType;
+  ALLOCATE_WITH_WRAPPED_POOL(WrappedVkDescriptorUpdateTemplate);
+  enum
+  {
+    TypeEnum = eResDescUpdateTemplate,
+  };
+};
+struct WrappedVkSamplerYcbcrConversion : WrappedVkNonDispRes
+{
+  WrappedVkSamplerYcbcrConversion(VkSamplerYcbcrConversion obj, ResourceId objId)
+      : WrappedVkNonDispRes(obj, objId)
+  {
+  }
+  typedef VkSamplerYcbcrConversion InnerType;
+  ALLOCATE_WITH_WRAPPED_POOL(WrappedVkSamplerYcbcrConversion);
+  enum
+  {
+    TypeEnum = eResSamplerConversion,
+  };
+};
 
 // VkDisplayKHR and VkDisplayModeKHR are both UNWRAPPED because there's no need to wrap them.
 // The only thing we need to wrap VkSurfaceKHR for is to get back the window from it later.
@@ -645,6 +672,8 @@ UNWRAP_NONDISP_HELPER(VkFramebuffer)
 UNWRAP_NONDISP_HELPER(VkCommandPool)
 UNWRAP_NONDISP_HELPER(VkSwapchainKHR)
 UNWRAP_NONDISP_HELPER(VkSurfaceKHR)
+UNWRAP_NONDISP_HELPER(VkDescriptorUpdateTemplate)
+UNWRAP_NONDISP_HELPER(VkSamplerYcbcrConversion)
 
 // VkDisplayKHR and VkDisplayModeKHR are both UNWRAPPED because there's no need to wrap them.
 // The only thing we need to wrap VkSurfaceKHR for is to get back the window from it later.
@@ -919,6 +948,11 @@ struct DescriptorSetData
   map<ResourceId, pair<uint32_t, FrameRefType> > bindFrameRefs;
 };
 
+struct PipelineLayoutData
+{
+  std::vector<DescSetLayout> layouts;
+};
+
 struct MemMapState
 {
   MemMapState()
@@ -949,6 +983,8 @@ struct AttachmentInfo
   // used to apply the barrier in EndRenderPass
   VkImageMemoryBarrier barrier;
 };
+
+struct DescUpdateTemplate;
 
 struct VkResourceRecord : public ResourceRecord
 {
@@ -1062,7 +1098,9 @@ public:
     MemMapState *memMapState;                      // only for device memory
     CmdBufferRecordingInfo *cmdInfo;               // only for command buffers
     AttachmentInfo *imageAttachments;              // only for framebuffers and render passes
-    DescriptorSetData *descInfo;    // only for descriptor sets and descriptor set layouts
+    PipelineLayoutData *pipeLayoutInfo;            // only for pipeline layouts
+    DescriptorSetData *descInfo;             // only for descriptor sets and descriptor set layouts
+    DescUpdateTemplate *descTemplateInfo;    // only for descriptor update templates
   };
 
   VkResourceRecord *bakedCommands;
@@ -1171,6 +1209,7 @@ bool IsStencilFormat(VkFormat f);
 bool IsStencilOnlyFormat(VkFormat f);
 bool IsSRGBFormat(VkFormat f);
 bool IsUIntFormat(VkFormat f);
+bool IsDoubleFormat(VkFormat f);
 bool IsSIntFormat(VkFormat f);
 bool IsYUVFormat(VkFormat f);
 

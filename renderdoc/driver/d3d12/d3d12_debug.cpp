@@ -426,6 +426,86 @@ D3D12_GPU_DESCRIPTOR_HANDLE D3D12DebugManager::GetGPUHandle(SamplerSlot slot)
   return ret;
 }
 
+D3D12_CPU_DESCRIPTOR_HANDLE D3D12DebugManager::GetTempDescriptor(const D3D12Descriptor &desc,
+                                                                 size_t idx)
+{
+  D3D12_CPU_DESCRIPTOR_HANDLE ret = {};
+
+  if(desc.GetType() == D3D12DescriptorType::RTV)
+  {
+    ret = GetCPUHandle(FIRST_TMP_RTV);
+    ret.ptr += idx * sizeof(D3D12Descriptor);
+
+    const D3D12_RENDER_TARGET_VIEW_DESC *rtvdesc = &desc.nonsamp.rtv;
+    if(rtvdesc->ViewDimension == D3D12_RTV_DIMENSION_UNKNOWN)
+    {
+      rtvdesc = NULL;
+
+      const std::map<ResourceId, DXGI_FORMAT> &bbs = m_pDevice->GetBackbufferFormats();
+
+      auto it = bbs.find(GetResID(desc.nonsamp.resource));
+
+      // fixup for backbuffers
+      if(it != bbs.end())
+      {
+        D3D12_RENDER_TARGET_VIEW_DESC bbDesc = {};
+        bbDesc.Format = it->second;
+        bbDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+        m_pDevice->CreateRenderTargetView(desc.nonsamp.resource, &bbDesc, ret);
+        return ret;
+      }
+    }
+
+    m_pDevice->CreateRenderTargetView(desc.nonsamp.resource, rtvdesc, ret);
+  }
+  else if(desc.GetType() == D3D12DescriptorType::DSV)
+  {
+    ret = GetCPUHandle(TMP_DSV);
+
+    const D3D12_DEPTH_STENCIL_VIEW_DESC *dsvdesc = &desc.nonsamp.dsv;
+    if(dsvdesc->ViewDimension == D3D12_RTV_DIMENSION_UNKNOWN)
+      dsvdesc = NULL;
+
+    m_pDevice->CreateDepthStencilView(desc.nonsamp.resource, dsvdesc, ret);
+  }
+  else if(desc.GetType() == D3D12DescriptorType::UAV)
+  {
+    // need a non-shader visible heap for this one
+    ret = GetCPUHandle(TMP_UAV);
+
+    D3D12_UNORDERED_ACCESS_VIEW_DESC unpacked = desc.nonsamp.uav.desc.AsDesc();
+
+    const D3D12_UNORDERED_ACCESS_VIEW_DESC *uavdesc = &unpacked;
+    if(uavdesc->ViewDimension == D3D12_UAV_DIMENSION_UNKNOWN)
+    {
+      uavdesc = NULL;
+
+      const std::map<ResourceId, DXGI_FORMAT> &bbs = m_pDevice->GetBackbufferFormats();
+
+      auto it = bbs.find(GetResID(desc.nonsamp.resource));
+
+      // fixup for backbuffers
+      if(it != bbs.end())
+      {
+        D3D12_UNORDERED_ACCESS_VIEW_DESC bbDesc = {};
+        bbDesc.Format = it->second;
+        bbDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+        m_pDevice->CreateUnorderedAccessView(desc.nonsamp.resource, NULL, &bbDesc, ret);
+        return ret;
+      }
+    }
+
+    m_pDevice->CreateUnorderedAccessView(desc.nonsamp.resource, desc.nonsamp.uav.counterResource,
+                                         uavdesc, ret);
+  }
+  else
+  {
+    RDCERR("Unexpected descriptor type %s for temp descriptor!", ToStr(desc.GetType()).c_str());
+  }
+
+  return ret;
+}
+
 void D3D12DebugManager::SetDescriptorHeaps(ID3D12GraphicsCommandList *list, bool cbvsrvuav,
                                            bool samplers)
 {

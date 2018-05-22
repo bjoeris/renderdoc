@@ -41,7 +41,7 @@ void GLReplay::CreateOverlayProgram(GLuint Program, GLuint Pipeline, GLuint frag
 {
   WrappedOpenGL &gl = *m_pDriver;
 
-  void *ctx = m_ReplayCtx.ctx;
+  ContextPair &ctx = gl.GetCtx();
 
   // delete the old program if it exists
   if(DebugData.overlayProg != 0)
@@ -151,7 +151,7 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
 
   GLMarkerRegion renderoverlay(StringFormat::Fmt("RenderOverlay %d", overlay));
 
-  void *ctx = m_ReplayCtx.ctx;
+  ContextPair &ctx = gl.GetCtx();
 
   GLRenderState rs(&gl.GetHookset());
   rs.FetchState(&gl);
@@ -375,10 +375,10 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
       gl.glGetNamedBufferParameterivEXT(idxbuf, eGL_BUFFER_SIZE, (GLint *)&length);
 
       idxs.resize(length);
-      gl.glGetBufferSubData(
-          eGL_ELEMENT_ARRAY_BUFFER, offset,
-          RDCMIN(GLsizeiptr(length - offset), GLsizeiptr(draw->numIndices * draw->indexByteWidth)),
-          &idxs[0]);
+      gl.glGetBufferSubData(eGL_ELEMENT_ARRAY_BUFFER, offset,
+                            RDCMIN(GLsizeiptr(length - offset),
+                                   GLsizeiptr(draw->numIndices) * GLsizeiptr(draw->indexByteWidth)),
+                            &idxs[0]);
 
       // unbind the real index buffer
       gl.glBindBuffer(eGL_ELEMENT_ARRAY_BUFFER, 0);

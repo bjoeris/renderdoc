@@ -499,6 +499,7 @@ WrappedOpenGL::WrappedOpenGL(const GLHookSet &funcs, GLPlatform &platform)
     flags |= WriteSerialiser::ChunkCallstack;
 
   m_ScratchSerialiser.SetChunkMetadataRecording(flags);
+  m_ScratchSerialiser.SetVersion(GLInitParams::CurrentVersion);
 
   m_SectionVersion = GLInitParams::CurrentVersion;
 
@@ -517,6 +518,8 @@ WrappedOpenGL::WrappedOpenGL(const GLHookSet &funcs, GLPlatform &platform)
   m_SuppressDebugMessages = false;
 
   m_DrawcallStack.push_back(&m_ParentDrawcall);
+
+  m_ShareGroupID = UINTPTR_MAX - 2000;
 
   m_CurEventID = 0;
   m_CurDrawcallID = 0;
@@ -565,15 +568,9 @@ WrappedOpenGL::WrappedOpenGL(const GLHookSet &funcs, GLPlatform &platform)
     m_ContextRecord->Length = 0;
     m_ContextRecord->SpecialResource = true;
 
-    // register VAO 0 as a special VAO, so that it can be tracked if the app uses it
-    // we immediately mark it dirty since the vertex array tracking functions expect a proper VAO
-    m_FakeVAOID = GetResourceManager()->RegisterResource(VertexArrayRes(NULL, 0));
-    GetResourceManager()->AddResourceRecord(m_FakeVAOID);
-    GetResourceManager()->MarkDirtyResource(m_FakeVAOID);
-
-    // also register an ID for the backbuffer, so we can identify it properly.
-    m_FBO0_ID = GetResourceManager()->RegisterResource(FramebufferRes(NULL, 0));
-    GetResourceManager()->AddResourceRecord(m_FBO0_ID);
+    // we register an ID for the backbuffer, this will be tied to the fake-created backbuffer on
+    // replay, and every context's FBO 0 will be pointed to it with ReplaceResource
+    m_FBO0_ID = ResourceIDGen::GetNewUniqueID();
   }
   else
   {
@@ -588,11 +585,11 @@ WrappedOpenGL::WrappedOpenGL(const GLHookSet &funcs, GLPlatform &platform)
   m_FakeBB_FBO = 0;
   m_FakeBB_Color = 0;
   m_FakeBB_DepthStencil = 0;
-  m_FakeVAO = 0;
-  m_FakeIdxSize = 0;
 
   m_CurChunkOffset = 0;
   m_AddedDrawcall = false;
+
+  m_CurCtxPairTLS = Threading::AllocateTLSSlot();
 }
 
 void WrappedOpenGL::Initialise(GLInitParams &params, uint64_t sectionVersion)
@@ -602,12 +599,6 @@ void WrappedOpenGL::Initialise(GLInitParams &params, uint64_t sectionVersion)
 
   m_InitParams = params;
   m_SectionVersion = sectionVersion;
-
-  // as a concession to compatibility, generate a 'fake' VBO to act as VBO 0.
-  // consider making it an error/warning for programs to use this?
-  gl.glGenVertexArrays(1, &m_FakeVAO);
-  gl.glBindVertexArray(m_FakeVAO);
-  gl.glBindVertexArray(0);
 
   gl.glGenFramebuffers(1, &m_FakeBB_FBO);
   gl.glBindFramebuffer(eGL_FRAMEBUFFER, m_FakeBB_FBO);
@@ -748,8 +739,6 @@ std::string WrappedOpenGL::GetChunkName(uint32_t idx)
 
 WrappedOpenGL::~WrappedOpenGL()
 {
-  if(m_FakeVAO)
-    m_Real.glDeleteVertexArrays(1, &m_FakeVAO);
   if(m_FakeBB_FBO)
     m_Real.glDeleteFramebuffers(1, &m_FakeBB_FBO);
   if(m_FakeBB_Color)
@@ -784,14 +773,17 @@ WrappedOpenGL::~WrappedOpenGL()
     RenderDoc::Inst().GetCrashHandler()->UnregisterMemoryRegion(this);
 }
 
-void *WrappedOpenGL::GetCtx()
+ContextPair &WrappedOpenGL::GetCtx()
 {
-  return (void *)m_ActiveContexts[Threading::GetCurrentID()].ctx;
+  ContextPair *ret = (ContextPair *)Threading::GetTLSValue(m_CurCtxPairTLS);
+  if(ret)
+    return *ret;
+  return m_EmptyPair;
 }
 
 WrappedOpenGL::ContextData &WrappedOpenGL::GetCtxData()
 {
-  return m_ContextData[GetCtx()];
+  return m_ContextData[GetCtx().ctx];
 }
 
 // defined in gl_<platform>_hooks.cpp
@@ -807,7 +799,25 @@ void WrappedOpenGL::DeleteContext(void *contextHandle)
 
   RenderDoc::Inst().RemoveDeviceFrameCapturer(ctxdata.ctx);
 
+  // delete the context
   GetResourceManager()->DeleteContext(contextHandle);
+
+  bool lastInGroup = true;
+  for(auto it = m_ContextData.begin(); it != m_ContextData.end(); ++it)
+  {
+    // if we find another context that's not this one, but is in the same share group, we're note
+    // the last
+    if(it->second.shareGroup == ctxdata.shareGroup && it->second.ctx &&
+       it->second.ctx != contextHandle)
+    {
+      lastInGroup = false;
+      break;
+    }
+  }
+
+  // if this is the last context in the share group, delete the group.
+  if(lastInGroup)
+    GetResourceManager()->DeleteContext(ctxdata.shareGroup);
 
   if(ctxdata.built && ctxdata.ready)
   {
@@ -878,16 +888,46 @@ void WrappedOpenGL::CreateContext(GLWindowingData winData, void *shareContext,
   ctxdata.isCore = core;
   ctxdata.attribsCreate = attribsCreate;
 
+  if(shareContext == NULL)
+  {
+    // no sharing, allocate a new group ID
+    ctxdata.shareGroup = (void *)m_ShareGroupID;
+
+    // we're counting down from UINTPTR_MAX when allocating IDs
+    m_ShareGroupID--;
+  }
+  else
+  {
+    // use the same shareGroup ID as the share context.
+    ctxdata.shareGroup = ShareCtx(shareContext);
+  }
+
   RenderDoc::Inst().AddDeviceFrameCapturer(ctxdata.ctx, this);
 }
 
-void WrappedOpenGL::RegisterContext(GLWindowingData winData, void *shareContext, bool core,
-                                    bool attribsCreate)
+void WrappedOpenGL::RegisterReplayContext(GLWindowingData winData, void *shareContext, bool core,
+                                          bool attribsCreate)
 {
   ContextData &ctxdata = m_ContextData[winData.ctx];
   ctxdata.ctx = winData.ctx;
   ctxdata.isCore = core;
   ctxdata.attribsCreate = attribsCreate;
+
+  if(shareContext == NULL)
+  {
+    // no sharing, allocate a new group ID
+    ctxdata.shareGroup = (void *)m_ShareGroupID;
+
+    // we're counting down from UINTPTR_MAX when allocating IDs
+    m_ShareGroupID--;
+  }
+  else
+  {
+    // use the same shareGroup ID as the share context.
+    ctxdata.shareGroup = ShareCtx(shareContext);
+  }
+
+  ActivateContext(winData);
 }
 
 void WrappedOpenGL::ActivateContext(GLWindowingData winData)
@@ -910,6 +950,23 @@ void WrappedOpenGL::ActivateContext(GLWindowingData winData)
       m_LastContexts.erase(m_LastContexts.begin());
   }
 
+  // update thread-local context pair
+  {
+    ContextPair *ctx = (ContextPair *)Threading::GetTLSValue(m_CurCtxPairTLS);
+
+    if(ctx)
+    {
+      *ctx = {winData.ctx, ShareCtx(winData.ctx)};
+    }
+    else
+    {
+      ctx = new ContextPair({winData.ctx, ShareCtx(winData.ctx)});
+      m_CtxPairs.push_back(ctx);
+
+      Threading::SetTLSValue(m_CurCtxPairTLS, ctx);
+    }
+  }
+
   // TODO: support multiple GL contexts more explicitly
   Keyboard::AddInputWindow((void *)winData.wnd);
 
@@ -919,29 +976,58 @@ void WrappedOpenGL::ActivateContext(GLWindowingData winData)
     if(IsActiveCapturing(m_State))
     {
       // fetch any initial states needed. Note this is insufficient, and doesn't handle the case
-      // where
-      // we might just suddenly start getting commands on a thread that already has a context
-      // active.
-      // For now we assume we'll only get GL commands from a single thread
-      QueuedInitialStateFetch fetch;
-      fetch.res.Context = winData.ctx;
-      size_t before = m_QueuedInitialFetches.size();
-      auto it = std::lower_bound(m_QueuedInitialFetches.begin(), m_QueuedInitialFetches.end(), fetch);
-      for(; it != m_QueuedInitialFetches.end() && it->res.Context == winData.ctx;)
+      // where we might just suddenly start getting commands on a thread that already has a context
+      // active. For now we assume we'll only get GL commands from a single thread
+      //
+      // First we process any queued fetches from the context itself (i.e. non-shared resources),
+      // then from the context's share group.
+      for(void *ctx : {(void *)winData.ctx, ShareCtx(winData.ctx)})
       {
-        GetResourceManager()->ContextPrepare_InitialState(it->res);
-        it = m_QueuedInitialFetches.erase(it);
-      }
-      size_t after = m_QueuedInitialFetches.size();
+        QueuedResource fetch;
+        fetch.res.ContextShareGroup = ctx;
+        size_t before = m_QueuedInitialFetches.size();
+        auto it =
+            std::lower_bound(m_QueuedInitialFetches.begin(), m_QueuedInitialFetches.end(), fetch);
+        for(; it != m_QueuedInitialFetches.end() && it->res.ContextShareGroup == ctx;)
+        {
+          GetResourceManager()->ContextPrepare_InitialState(it->res);
+          it = m_QueuedInitialFetches.erase(it);
+        }
+        size_t after = m_QueuedInitialFetches.size();
 
-      (void)before;
-      (void)after;
-      RDCDEBUG("Prepared %zu resources on context %p, %zu left", before - after, winData.ctx, after);
+        (void)before;
+        (void)after;
+        RDCDEBUG("Prepared %zu resources on context/sharegroup %p, %zu left", before - after, ctx,
+                 after);
+      }
 
       USE_SCRATCH_SERIALISER();
       SCOPED_SERIALISE_CHUNK(GLChunk::MakeContextCurrent);
       Serialise_BeginCaptureFrame(ser);
       m_ContextRecord->AddChunk(scope.Get());
+    }
+
+    // also if there are any queued releases, process them now
+    if(!m_QueuedReleases.empty())
+    {
+      for(void *ctx : {(void *)winData.ctx, ShareCtx(winData.ctx)})
+      {
+        QueuedResource fetch;
+        fetch.res.ContextShareGroup = ctx;
+        size_t before = m_QueuedReleases.size();
+        auto it = std::lower_bound(m_QueuedReleases.begin(), m_QueuedReleases.end(), fetch);
+        for(; it != m_QueuedReleases.end() && it->res.ContextShareGroup == ctx;)
+        {
+          ReleaseResource(it->res);
+          it = m_QueuedReleases.erase(it);
+        }
+        size_t after = m_QueuedReleases.size();
+
+        (void)before;
+        (void)after;
+        RDCDEBUG("Released %zu resources on context/sharegroup %p, %zu left", before - after, ctx,
+                 after);
+      }
     }
 
     ContextData &ctxdata = m_ContextData[winData.ctx];
@@ -1055,6 +1141,59 @@ void WrappedOpenGL::ActivateContext(GLWindowingData winData)
 
         gl_CurChunk = GLChunk::glGenBuffers;
         glGenBuffers(1, &ctxdata.m_ClientMemoryIBO);
+      }
+
+      if(IsCaptureMode(m_State))
+      {
+        // check if we already have VAO 0 registered for this context. This could be possible if
+        // VAOs are shared and a previous context in the share group created it.
+        GLResource vao0 = VertexArrayRes(GetCtx(), 0);
+
+        if(!GetResourceManager()->HasCurrentResource(vao0))
+        {
+          ResourceId id = GetResourceManager()->RegisterResource(vao0);
+
+          GLResourceRecord *record = GetResourceManager()->AddResourceRecord(id);
+          RDCASSERT(record);
+
+          {
+            USE_SCRATCH_SERIALISER();
+            SCOPED_SERIALISE_CHUNK(GLChunk::glGenVertexArrays);
+            GLuint zero = 0;
+            Serialise_glGenVertexArrays(ser, 1, &zero);
+
+            record->AddChunk(scope.Get());
+          }
+
+          // give it a name
+          {
+            USE_SCRATCH_SERIALISER();
+            SCOPED_SERIALISE_CHUNK(GLChunk::glObjectLabel);
+            Serialise_glObjectLabel(ser, eGL_VERTEX_ARRAY, 0, -1, "Default VAO");
+
+            record->AddChunk(scope.Get());
+          }
+
+          // we immediately mark it dirty since the vertex array tracking functions expect a proper
+          // VAO
+          GetResourceManager()->MarkDirtyResource(id);
+        }
+
+        // we also do the same for FBO 0, but this is treated 'specially' as we actually only create
+        // one backbuffer and re-point all FBOs at it, however there may be several IDs
+        // corresponding to the default backbuffer. We rename them all.
+        GLResource fbo0 = FramebufferRes(GetCtx(), 0);
+
+        if(!GetResourceManager()->HasCurrentResource(fbo0))
+        {
+          ResourceId id = GetResourceManager()->RegisterResource(fbo0);
+
+          USE_SCRATCH_SERIALISER();
+          SCOPED_SERIALISE_CHUNK(GLChunk::glContextInit);
+          Serialise_ContextInit(ser);
+
+          m_DeviceRecord->AddChunk(scope.Get());
+        }
       }
     }
 
@@ -1311,7 +1450,7 @@ void WrappedOpenGL::SwapBuffers(void *windowHandle)
     RenderDoc::Inst().Tick();
 
   // don't do anything if no context is active.
-  if(GetCtx() == NULL)
+  if(m_ActiveContexts[Threading::GetCurrentID()].ctx == NULL)
   {
     m_NoCtxFrames++;
     if(m_NoCtxFrames == 100)
@@ -1580,15 +1719,6 @@ void WrappedOpenGL::StartFrameCapture(void *dev, void *wnd)
 
   GetResourceManager()->MarkResourceFrameReferenced(m_DeviceResourceID, eFrameRef_Write);
 
-  GLuint prevVAO = 0;
-  m_Real.glGetIntegerv(eGL_VERTEX_ARRAY_BINDING, (GLint *)&prevVAO);
-
-  m_Real.glBindVertexArray(m_FakeVAO);
-
-  GetResourceManager()->MarkVAOReferenced(VertexArrayRes(NULL, m_FakeVAO), eFrameRef_Write, true);
-
-  m_Real.glBindVertexArray(prevVAO);
-
   GetResourceManager()->PrepareInitialContents();
 
   FreeCaptureData();
@@ -1694,7 +1824,10 @@ bool WrappedOpenGL::EndFrameCapture(void *dev, void *wnd)
         // remember to update this estimated chunk length if you add more parameters
         SCOPED_SERIALISE_CHUNK(GLChunk::DeviceInitialisation, 32);
 
-        SERIALISE_ELEMENT(m_FakeVAOID);
+        // legacy behaviour where we had a single global VAO 0. Ignore, but preserve for easier
+        // compatibility with old captures
+        ResourceId vao;
+        SERIALISE_ELEMENT(vao);
         SERIALISE_ELEMENT(m_FBO0_ID);
       }
 
@@ -1747,6 +1880,8 @@ bool WrappedOpenGL::EndFrameCapture(void *dev, void *wnd)
     GetResourceManager()->MarkUnwrittenResources();
 
     GetResourceManager()->ClearReferencedResources();
+
+    GetResourceManager()->FreeInitialContents();
 
     if(switchctx.ctx != prevctx.ctx)
     {
@@ -2013,6 +2148,21 @@ bool WrappedOpenGL::Serialise_CaptureScope(SerialiserType &ser)
   return true;
 }
 
+template <typename SerialiserType>
+bool WrappedOpenGL::Serialise_ContextInit(SerialiserType &ser)
+{
+  SERIALISE_ELEMENT_LOCAL(FBO0_ID, GetResourceManager()->GetID(FramebufferRes(GetCtx(), 0)));
+
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+  {
+    GetResourceManager()->ReplaceResource(FBO0_ID, m_FBO0_ID);
+  }
+
+  return true;
+}
+
 void WrappedOpenGL::ContextEndFrame()
 {
   USE_SCRATCH_SERIALISER();
@@ -2054,12 +2204,50 @@ void WrappedOpenGL::FreeCaptureData()
 
 void WrappedOpenGL::QueuePrepareInitialState(GLResource res)
 {
-  QueuedInitialStateFetch fetch;
-  fetch.res = res;
+  QueuedResource q;
+  q.res = res;
 
-  auto insertPos =
-      std::lower_bound(m_QueuedInitialFetches.begin(), m_QueuedInitialFetches.end(), fetch);
-  m_QueuedInitialFetches.insert(insertPos, fetch);
+  auto insertPos = std::lower_bound(m_QueuedInitialFetches.begin(), m_QueuedInitialFetches.end(), q);
+  m_QueuedInitialFetches.insert(insertPos, q);
+}
+
+void WrappedOpenGL::QueueResourceRelease(GLResource res)
+{
+  ContextPair &ctx = GetCtx();
+  if(res.ContextShareGroup == ctx.ctx || res.ContextShareGroup == ctx.shareGroup)
+  {
+    // if we're already on a context, delete immediately
+    ReleaseResource(res);
+  }
+  else
+  {
+    // otherwise, queue for next time this becomes active
+    QueuedResource q;
+    q.res = res;
+
+    auto insertPos = std::lower_bound(m_QueuedReleases.begin(), m_QueuedReleases.end(), q);
+    m_QueuedReleases.insert(insertPos, q);
+  }
+}
+
+void WrappedOpenGL::ReleaseResource(GLResource res)
+{
+  switch(res.Namespace)
+  {
+    default: RDCERR("Unknown namespace to release: %s", ToStr(res.Namespace).c_str()); return;
+    case eResTexture: m_Real.glDeleteTextures(1, &res.name); break;
+    case eResSampler: m_Real.glDeleteSamplers(1, &res.name); break;
+    case eResFramebuffer: m_Real.glDeleteFramebuffers(1, &res.name); break;
+    case eResRenderbuffer: m_Real.glDeleteRenderbuffers(1, &res.name); break;
+    case eResBuffer: m_Real.glDeleteBuffers(1, &res.name); break;
+    case eResVertexArray: m_Real.glDeleteVertexArrays(1, &res.name); break;
+    case eResShader: m_Real.glDeleteShader(res.name); break;
+    case eResProgram: m_Real.glDeleteProgram(res.name); break;
+    case eResProgramPipe: m_Real.glDeleteProgramPipelines(1, &res.name); break;
+    case eResFeedback: m_Real.glDeleteTransformFeedbacks(1, &res.name); break;
+    case eResQuery: m_Real.glDeleteQueries(1, &res.name); break;
+    case eResSync: m_Real.glDeleteSync(GetResourceManager()->GetSync(res.name)); break;
+  }
 }
 
 void WrappedOpenGL::AttemptCapture()
@@ -2117,6 +2305,18 @@ void WrappedOpenGL::BeginCaptureFrame()
   Serialise_BeginCaptureFrame(ser);
 
   m_ContextRecord->AddChunk(scope.Get(), 1);
+
+  // mark VAO 0 on this context as referenced
+  {
+    GLuint prevVAO = 0;
+    m_Real.glGetIntegerv(eGL_VERTEX_ARRAY_BINDING, (GLint *)&prevVAO);
+
+    m_Real.glBindVertexArray(0);
+
+    GetResourceManager()->MarkVAOReferenced(VertexArrayRes(GetCtx(), 0), eFrameRef_Write, true);
+
+    m_Real.glBindVertexArray(prevVAO);
+  }
 }
 
 void WrappedOpenGL::FinishCapture()
@@ -2210,9 +2410,7 @@ void WrappedOpenGL::RegisterDebugCallback()
   if(HasExt[KHR_debug] && m_Real.glDebugMessageCallback)
   {
     m_Real.glDebugMessageCallback(&DebugSnoopStatic, this);
-#if ENABLED(RDOC_DEVEL)
     m_Real.glEnable(eGL_DEBUG_OUTPUT_SYNCHRONOUS);
-#endif
   }
 }
 
@@ -2345,6 +2543,8 @@ ReplayStatus WrappedOpenGL::ReadLogInitialisation(RDCFile *rdc, bool storeStruct
   m_StructuredFile = &ser.GetStructuredFile();
 
   m_StoredStructuredData.version = m_StructuredFile->version = m_SectionVersion;
+
+  ser.SetVersion(m_SectionVersion);
 
   int chunkIdx = 0;
 
@@ -2523,39 +2723,41 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
   {
     case GLChunk::DeviceInitialisation:
     {
-      SERIALISE_ELEMENT(m_FakeVAOID).Named("VAO 0 ID");
+      // legacy behaviour where we had a single global VAO 0. Ignore
+      ResourceId vao;
+      SERIALISE_ELEMENT(vao).Hidden();
       SERIALISE_ELEMENT(m_FBO0_ID).Named("FBO 0 ID");
 
       SERIALISE_CHECK_READ_ERRORS();
 
-      GetResourceManager()->AddLiveResource(m_FakeVAOID, VertexArrayRes(NULL, 0));
-
-      AddResource(m_FakeVAOID, ResourceType::StateObject, "");
-      GetReplay()->GetResourceDesc(m_FakeVAOID).SetCustomName("Special VAO 0");
-
-      GetResourceManager()->AddLiveResource(m_FBO0_ID, FramebufferRes(GetCtx(), m_FakeBB_FBO));
-
-      AddResource(m_FBO0_ID, ResourceType::SwapchainImage, "");
-      GetReplay()->GetResourceDesc(m_FBO0_ID).SetCustomName("Default FBO");
-
-      GetReplay()->GetResourceDesc(m_FBO0_ID).initialisationChunks.push_back(m_InitChunkIndex);
-
-      ResourceId colorId = GetResourceManager()->GetID(TextureRes(GetCtx(), m_FakeBB_Color));
-      GetReplay()->GetResourceDesc(colorId).initialisationChunks.push_back(m_InitChunkIndex);
-      GetReplay()->GetResourceDesc(m_FBO0_ID).derivedResources.push_back(colorId);
-      GetReplay()->GetResourceDesc(colorId).parentResources.push_back(m_FBO0_ID);
-
-      if(m_FakeBB_DepthStencil)
+      if(IsReplayingAndReading())
       {
-        ResourceId depthId = GetResourceManager()->GetID(TextureRes(GetCtx(), m_FakeBB_DepthStencil));
-        GetReplay()->GetResourceDesc(depthId).initialisationChunks.push_back(m_InitChunkIndex);
+        GetResourceManager()->AddLiveResource(m_FBO0_ID, FramebufferRes(GetCtx(), m_FakeBB_FBO));
 
-        GetReplay()->GetResourceDesc(m_FBO0_ID).derivedResources.push_back(depthId);
-        GetReplay()->GetResourceDesc(depthId).parentResources.push_back(m_FBO0_ID);
+        AddResource(m_FBO0_ID, ResourceType::SwapchainImage, "");
+        GetReplay()->GetResourceDesc(m_FBO0_ID).SetCustomName("Default FBO");
+
+        GetReplay()->GetResourceDesc(m_FBO0_ID).initialisationChunks.push_back(m_InitChunkIndex);
+
+        ResourceId colorId = GetResourceManager()->GetID(TextureRes(GetCtx(), m_FakeBB_Color));
+        GetReplay()->GetResourceDesc(colorId).initialisationChunks.push_back(m_InitChunkIndex);
+        GetReplay()->GetResourceDesc(m_FBO0_ID).derivedResources.push_back(colorId);
+        GetReplay()->GetResourceDesc(colorId).parentResources.push_back(m_FBO0_ID);
+
+        if(m_FakeBB_DepthStencil)
+        {
+          ResourceId depthId =
+              GetResourceManager()->GetID(TextureRes(GetCtx(), m_FakeBB_DepthStencil));
+          GetReplay()->GetResourceDesc(depthId).initialisationChunks.push_back(m_InitChunkIndex);
+
+          GetReplay()->GetResourceDesc(m_FBO0_ID).derivedResources.push_back(depthId);
+          GetReplay()->GetResourceDesc(depthId).parentResources.push_back(m_FBO0_ID);
+        }
       }
 
       return true;
     }
+    case GLChunk::glContextInit: return Serialise_ContextInit(ser);
 
     case GLChunk::glGenBuffersARB:
     case GLChunk::glGenBuffers: return Serialise_glGenBuffers(ser, 0, 0);
@@ -3933,6 +4135,7 @@ ReplayStatus WrappedOpenGL::ContextReplayLog(CaptureState readType, uint32_t sta
 
   ser.SetStringDatabase(&m_StringDB);
   ser.SetUserData(GetResourceManager());
+  ser.SetVersion(m_SectionVersion);
 
   SDFile *prevFile = m_StructuredFile;
 
@@ -4137,7 +4340,7 @@ void WrappedOpenGL::AddUsage(const DrawcallDescription &d)
 
   GLResourceManager *rm = GetResourceManager();
 
-  void *ctx = GetCtx();
+  ContextPair &ctx = GetCtx();
 
   uint32_t e = d.eventId;
 

@@ -716,7 +716,7 @@ void addStructuredObjects(RDTreeWidgetItem *parent, const StructuredObjectList &
         case SDBasic::String: param = obj->data.str; break;
         case SDBasic::Resource:
         case SDBasic::Enum:
-        case SDBasic::UnsignedInteger: param = Formatter::Format(obj->data.basic.u); break;
+        case SDBasic::UnsignedInteger: param = Formatter::HumanFormat(obj->data.basic.u); break;
         case SDBasic::SignedInteger: param = Formatter::Format(obj->data.basic.i); break;
         case SDBasic::Float: param = Formatter::Format(obj->data.basic.d); break;
         case SDBasic::Boolean: param = (obj->data.basic.b ? lit("True") : lit("False")); break;
@@ -808,37 +808,39 @@ int GUIInvoke::methodIndex = -1;
 
 void GUIInvoke::init()
 {
-  GUIInvoke *invoke = new GUIInvoke();
+  GUIInvoke *invoke = new GUIInvoke(NULL, {});
   methodIndex = invoke->metaObject()->indexOfMethod(QMetaObject::normalizedSignature("doInvoke()"));
 }
 
-void GUIInvoke::call(const std::function<void()> &f)
+void GUIInvoke::call(QObject *obj, const std::function<void()> &f)
 {
   if(onUIThread())
   {
-    f();
+    if(obj)
+      f();
     return;
   }
 
-  defer(f);
+  defer(obj, f);
 }
 
-void GUIInvoke::defer(const std::function<void()> &f)
+void GUIInvoke::defer(QObject *obj, const std::function<void()> &f)
 {
-  GUIInvoke *invoke = new GUIInvoke(f);
+  GUIInvoke *invoke = new GUIInvoke(obj, f);
   invoke->moveToThread(qApp->thread());
   invoke->metaObject()->method(methodIndex).invoke(invoke, Qt::QueuedConnection);
 }
 
-void GUIInvoke::blockcall(const std::function<void()> &f)
+void GUIInvoke::blockcall(QObject *obj, const std::function<void()> &f)
 {
   if(onUIThread())
   {
-    f();
+    if(obj)
+      f();
     return;
   }
 
-  GUIInvoke *invoke = new GUIInvoke(f);
+  GUIInvoke *invoke = new GUIInvoke(obj, f);
   invoke->moveToThread(qApp->thread());
   invoke->metaObject()->method(methodIndex).invoke(invoke, Qt::BlockingQueuedConnection);
 }
@@ -906,7 +908,7 @@ QMessageBox::StandardButton RDDialog::messageBox(QMessageBox::Icon icon, QWidget
   QMessageBox::StandardButton ret = defaultButton;
 
   // if we're already on the right thread, this boils down to a function call
-  GUIInvoke::blockcall([&]() {
+  GUIInvoke::blockcall(parent, [&]() {
     QMessageBox mb(icon, title, text, buttons, parent);
     mb.setDefaultButton(defaultButton);
     show(&mb);
@@ -924,7 +926,7 @@ QMessageBox::StandardButton RDDialog::messageBoxChecked(QMessageBox::Icon icon, 
   QMessageBox::StandardButton ret = defaultButton;
 
   // if we're already on the right thread, this boils down to a function call
-  GUIInvoke::blockcall([&]() {
+  GUIInvoke::blockcall(parent, [&]() {
     QMessageBox mb(icon, title, text, buttons, parent);
     mb.setDefaultButton(defaultButton);
     mb.setCheckBox(checkBox);
@@ -1184,6 +1186,22 @@ QString Formatter::Format(double f, bool)
   return ret;
 }
 
+QString Formatter::HumanFormat(uint64_t u)
+{
+  if(u == UINT16_MAX)
+    return lit("UINT16_MAX");
+  if(u == UINT32_MAX)
+    return lit("UINT32_MAX");
+  if(u == UINT64_MAX)
+    return lit("UINT64_MAX");
+
+  // format as hex when over a certain threshold
+  if(u > 0xffffff)
+    return lit("0x") + Format(u, true);
+
+  return Format(u);
+}
+
 class RDProgressDialog : public QProgressDialog
 {
 public:
@@ -1305,7 +1323,7 @@ bool IsRunningAsAdmin()
 }
 
 bool RunProcessAsAdmin(const QString &fullExecutablePath, const QStringList &params,
-                       std::function<void()> finishedCallback)
+                       QWidget *parent, std::function<void()> finishedCallback)
 {
 #if defined(Q_OS_WIN32)
 
@@ -1336,10 +1354,10 @@ bool RunProcessAsAdmin(const QString &fullExecutablePath, const QStringList &par
       HANDLE h = info.hProcess;
 
       // do the wait on another thread
-      LambdaThread *thread = new LambdaThread([h, finishedCallback]() {
+      LambdaThread *thread = new LambdaThread([h, parent, finishedCallback]() {
         WaitForSingleObject(h, 30000);
         CloseHandle(h);
-        GUIInvoke::call(finishedCallback);
+        GUIInvoke::call(parent, finishedCallback);
       });
       thread->selfDelete(true);
       thread->start();
@@ -1387,9 +1405,9 @@ bool RunProcessAsAdmin(const QString &fullExecutablePath, const QStringList &par
 
     // when the process exits, call the callback and delete
     QObject::connect(process, OverloadedSlot<int>::of(&QProcess::finished),
-                     [process, finishedCallback](int exitCode) {
+                     [parent, process, finishedCallback](int exitCode) {
                        process->deleteLater();
-                       GUIInvoke::call(finishedCallback);
+                       GUIInvoke::call(parent, finishedCallback);
                      });
 
     return true;
@@ -1424,9 +1442,9 @@ bool RunProcessAsAdmin(const QString &fullExecutablePath, const QStringList &par
 
     // when the process exits, call the callback and delete
     QObject::connect(process, OverloadedSlot<int>::of(&QProcess::finished),
-                     [process, finishedCallback](int exitCode) {
+                     [parent, process, finishedCallback](int exitCode) {
                        process->deleteLater();
-                       GUIInvoke::call(finishedCallback);
+                       GUIInvoke::call(parent, finishedCallback);
                      });
 
     return true;
@@ -1566,15 +1584,15 @@ void ShowProgressDialog(QWidget *window, const QString &labelText, ProgressFinis
       QThread::msleep(30);
 
       if(update)
-        GUIInvoke::call([update, &dialog]() { dialog.setPercentage(update()); });
+        GUIInvoke::call(&dialog, [update, &dialog]() { dialog.setPercentage(update()); });
 
-      GUIInvoke::call([finished, &tickerSemaphore]() {
+      GUIInvoke::call(&dialog, [finished, &tickerSemaphore]() {
         if(finished())
           tickerSemaphore.tryAcquire();
       });
     }
 
-    GUIInvoke::call([&dialog]() { dialog.closeAndReset(); });
+    GUIInvoke::call(&dialog, [&dialog]() { dialog.closeAndReset(); });
   });
   progressTickerThread.start();
 
@@ -1673,6 +1691,22 @@ QString GetSystemUsername()
     username = lit("Unknown_User");
 
   return username;
+}
+
+void BringToForeground(QWidget *window)
+{
+#ifdef Q_OS_WIN
+  SetWindowPos((HWND)window->winId(), HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+  window->setWindowState(Qt::WindowActive);
+  window->raise();
+  window->showNormal();
+  window->show();
+  SetWindowPos((HWND)window->winId(), HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+#else
+  window->activateWindow();
+  window->raise();
+  window->showNormal();
+#endif
 }
 
 bool IsDarkTheme()

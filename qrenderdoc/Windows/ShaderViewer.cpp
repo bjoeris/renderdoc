@@ -202,6 +202,8 @@ void ShaderViewer::editShader(bool customShader, const QString &entryPoint, cons
   m_Scintillas.removeOne(m_DisassemblyView);
   ui->docking->removeToolWindow(m_DisassemblyFrame);
 
+  m_DisassemblyView = NULL;
+
   // hide watch, constants, variables
   ui->watch->hide();
   ui->variables->hide();
@@ -312,7 +314,7 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
 
       rdcstr disasm = r->DisassembleShader(m_Pipeline, m_ShaderDetails, "");
 
-      GUIInvoke::call([this, targets, disasm]() {
+      GUIInvoke::call(this, [this, targets, disasm]() {
         QStringList targetNames;
         for(const rdcstr &t : targets)
         {
@@ -909,7 +911,7 @@ void ShaderViewer::disassemble_typeChanged(int index)
   m_Ctx.Replay().AsyncInvoke([this, target](IReplayController *r) {
     rdcstr disasm = r->DisassembleShader(m_Pipeline, m_ShaderDetails, target.data());
 
-    GUIInvoke::call([this, disasm]() {
+    GUIInvoke::call(this, [this, disasm]() {
       m_DisassemblyView->setReadOnly(false);
       m_DisassemblyView->setText(disasm.c_str());
       m_DisassemblyView->setReadOnly(true);
@@ -2088,25 +2090,25 @@ void ShaderViewer::updateVariableTooltip()
 
   QString text = QFormatStr("<pre>%1\n").arg(var.name);
   text +=
-      lit("                 X          Y          Z          W \n"
-          "----------------------------------------------------\n");
+      lit("                  X           Y           Z           W \n"
+          "--------------------------------------------------------\n");
 
   text += QFormatStr("float | %1 %2 %3 %4\n")
-              .arg(Formatter::Format(var.value.fv[0]), 10)
-              .arg(Formatter::Format(var.value.fv[1]), 10)
-              .arg(Formatter::Format(var.value.fv[2]), 10)
-              .arg(Formatter::Format(var.value.fv[3]), 10);
+              .arg(Formatter::Format(var.value.fv[0]), 11)
+              .arg(Formatter::Format(var.value.fv[1]), 11)
+              .arg(Formatter::Format(var.value.fv[2]), 11)
+              .arg(Formatter::Format(var.value.fv[3]), 11);
   text += QFormatStr("uint  | %1 %2 %3 %4\n")
-              .arg(var.value.uv[0], 10, 10, QLatin1Char(' '))
-              .arg(var.value.uv[1], 10, 10, QLatin1Char(' '))
-              .arg(var.value.uv[2], 10, 10, QLatin1Char(' '))
-              .arg(var.value.uv[3], 10, 10, QLatin1Char(' '));
+              .arg(var.value.uv[0], 11, 10, QLatin1Char(' '))
+              .arg(var.value.uv[1], 11, 10, QLatin1Char(' '))
+              .arg(var.value.uv[2], 11, 10, QLatin1Char(' '))
+              .arg(var.value.uv[3], 11, 10, QLatin1Char(' '));
   text += QFormatStr("int   | %1 %2 %3 %4\n")
-              .arg(var.value.iv[0], 10, 10, QLatin1Char(' '))
-              .arg(var.value.iv[1], 10, 10, QLatin1Char(' '))
-              .arg(var.value.iv[2], 10, 10, QLatin1Char(' '))
-              .arg(var.value.iv[3], 10, 10, QLatin1Char(' '));
-  text += QFormatStr("hex   |   %1   %2   %3   %4")
+              .arg(var.value.iv[0], 11, 10, QLatin1Char(' '))
+              .arg(var.value.iv[1], 11, 10, QLatin1Char(' '))
+              .arg(var.value.iv[2], 11, 10, QLatin1Char(' '))
+              .arg(var.value.iv[3], 11, 10, QLatin1Char(' '));
+  text += QFormatStr("hex   |    %1    %2    %3    %4")
               .arg(Formatter::HexFormat(var.value.uv[0], 4))
               .arg(Formatter::HexFormat(var.value.uv[1], 4))
               .arg(Formatter::HexFormat(var.value.uv[2], 4))

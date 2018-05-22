@@ -25,6 +25,7 @@
 #include "gl_shader_refl.h"
 #include <algorithm>
 #include <functional>
+#include "3rdparty/glslang/glslang/Public/ShaderLang.h"
 #include "gl_driver.h"
 
 void sort(rdcarray<ShaderConstant> &vars)
@@ -238,236 +239,264 @@ GLuint MakeSeparableShaderProgram(WrappedOpenGL &gl, GLenum type, vector<string>
     // this will fail if e.g. a member of gl_PerVertex is declared at global scope
     // (this is probably most likely for clipdistance if it's redeclared with a size)
 
-    // these strings contain whichever source string we replaced, here to scope until
-    // the program has been created
-    string subStrings[2];
+    // we start by concatenating the source strings to make parsing easier.
+    std::string combined;
 
-    for(int blocktype = 0; blocktype < 2; blocktype++)
+    for(size_t i = 0; i < sources.size(); i++)
+      combined += sources[i];
+
+    for(int attempt = 0; attempt < 2; attempt++)
     {
-      // vertex shaders don't have an in block
-      if(type == eGL_VERTEX_SHADER && blocktype == 0)
-        continue;
+      std::string src = combined;
 
-      string &substituted = subStrings[blocktype];
-
-      string block = blocks[blocktype];
-      const char *identifier = blockIdentifiers[blocktype];
-
-      bool already = false;
-
-      for(size_t i = 0; i < sources.size(); i++)
+      if(attempt == 1)
       {
-        // if we find the 'identifier' (ie. the block name),
-        // assume this block is already present and stop
-        if(sources[i].find(identifier) != string::npos)
+        RDCLOG("Attempting to pre-process shader with glslang to allow patching");
+
+        glslang::TShader sh(EShLanguage(ShaderIdx(type)));
+
+        const char *c_src = combined.c_str();
+        sh.setStrings(&c_src, 1);
+        sh.setEnvInput(glslang::EShSourceGlsl, EShLanguage(ShaderIdx(type)),
+                       glslang::EShClientOpenGL, 100);
+        sh.setEnvClient(glslang::EShClientOpenGL, glslang::EShTargetOpenGL_450);
+        sh.setEnvTarget(glslang::EShTargetNone, glslang::EShTargetSpv_1_0);
+
+        TBuiltInResource res = {};
+        glslang::TShader::ForbidIncluder incl;
+
+        bool success =
+            sh.preprocess(&res, 100, ENoProfile, false, false, EShMsgOnlyPreprocessor, &src, incl);
+
+        if(!success)
         {
-          already = true;
-          break;
+          RDCLOG("glslang failed:\n\n%s\n\n%s", sh.getInfoLog(), sh.getInfoDebugLog());
+          continue;
         }
       }
 
-      // only try and insert this block if the shader doesn't already have it
-      if(already)
-        continue;
-
-      for(size_t i = 0; i < sources.size(); i++)
+      for(int blocktype = 0; blocktype < 2; blocktype++)
       {
-        string src = strings[i];
-
-        size_t len = src.length();
-
-        // find if this source contains a #version, accounting for whitespace
-        size_t it = 0;
-
-        while(it != string::npos)
-        {
-          it = src.find("#", it);
-
-          if(it == string::npos)
-            break;
-
-          // advance past the #
-          ++it;
-
-          // skip whitespace
-          while(it < len && isspacetab(src[it]))
-            ++it;
-
-          if(it + 7 < len && !strncmp(&src[it], "version", 7))
-          {
-            it += sizeof("version") - 1;
-            break;
-          }
-        }
-
-        // no #version found
-        if(it == string::npos)
+        // vertex shaders don't have an in block
+        if(type == eGL_VERTEX_SHADER && blocktype == 0)
           continue;
 
-        // it now points after the #version
+        string block = blocks[blocktype];
+        const char *identifier = blockIdentifiers[blocktype];
 
-        // skip whitespace
-        while(it < len && isspacetab(src[it]))
-          ++it;
-
-        // skip number
-        while(it < len && src[it] >= '0' && src[it] <= '9')
-          ++it;
-
-        // skip whitespace
-        while(it < len && isspacetab(src[it]))
-          ++it;
-
-        if(!strncmp(&src[it], "core", 4))
-          it += sizeof("core") - 1;
-        if(!strncmp(&src[it], "compatibility", 13))
-          it += sizeof("compatibility") - 1;
-        if(!strncmp(&src[it], "es", 2))
-          it += sizeof("es") - 1;
-
-        // how deep are we in an #if. We want to place our definition
-        // outside of any #ifs.
-        int if_depth = 0;
-
-        // now skip past comments, and any #directives
-        while(it < len)
+        // if we find the 'identifier' (ie. the block name),
+        // assume this block is already present and stop.
+        // only try and insert this block if the shader doesn't already have it
+        if(src.find(identifier) != string::npos)
         {
-          // skip whitespace
-          while(it < len && iswhitespace(src[it]))
-            ++it;
-
-          // skip C++ style comments
-          if(it + 1 < len && src[it] == '/' && src[it + 1] == '/')
-          {
-            // keep going until the next newline
-            while(it < len && !isnewline(src[it]))
-              ++it;
-
-            // skip more things
-            continue;
-          }
-
-          // skip preprocessor directives
-          if(src[it] == '#')
-          {
-            // skip the '#'
-            it++;
-
-            // skip whitespace
-            while(it < len && iswhitespace(src[it]))
-              ++it;
-
-            // if it's an if, then increase our depth
-            // This covers:
-            // #if
-            // #ifdef
-            // #ifndef
-            if(!strncmp(&src[it], "if", 2))
-            {
-              if_depth++;
-            }
-            else if(!strncmp(&src[it], "endif", 5))
-            {
-              if_depth--;
-            }
-            // everything else is #extension or #else or #undef or anything
-
-            // keep going until the next newline
-            while(it < len && !isnewline(src[it]))
-            {
-              // if we encounter a C-style comment in the middle of a #define
-              // we can't consume it because then we'd miss the start of it.
-              // Instead we break out (although we're not technically at the
-              // end of the pre-processor line) and let it be consumed next.
-              // Note that we can discount C++-style comments because they
-              // want to consume to the end of the line too.
-              if(it + 1 < len && src[it] == '/' && src[it + 1] == '*')
-                break;
-
-              ++it;
-            }
-
-            // skip more things
-            continue;
-          }
-
-          // skip C style comments
-          if(it + 1 < len && src[it] == '/' && src[it + 1] == '*')
-          {
-            // keep going until the we reach a */
-            while(it + 1 < len && (src[it] != '*' || src[it + 1] != '/'))
-              ++it;
-
-            // skip the closing */ too
-            it += 2;
-
-            // skip more things
-            continue;
-          }
-
-          // see if we have a precision statement, if so skip that
-          const char precision[] = "precision";
-          if(it + sizeof(precision) < len && !strncmp(&src[it], precision, sizeof(precision) - 1))
-          {
-            // since we're speculating here (although what else could it be?) we don't modify
-            // it until we're sure.
-            size_t pit = it + sizeof(precision);
-
-            // skip whitespace
-            while(pit < len && isspacetab(src[pit]))
-              ++pit;
-
-            // if we now match any of the precisions, then continue consuming until the next ;
-            const char lowp[] = "lowp";
-            const char mediump[] = "mediump";
-            const char highp[] = "highp";
-
-            bool precisionMatch =
-                (pit + sizeof(lowp) < len && !strncmp(&src[pit], lowp, sizeof(lowp) - 1) &&
-                 isspacetab(src[pit + sizeof(lowp) - 1]));
-            precisionMatch |=
-                (pit + sizeof(mediump) < len && !strncmp(&src[pit], mediump, sizeof(mediump) - 1) &&
-                 isspacetab(src[pit + sizeof(mediump) - 1]));
-            precisionMatch |=
-                (pit + sizeof(highp) < len && !strncmp(&src[pit], highp, sizeof(highp) - 1) &&
-                 isspacetab(src[pit + sizeof(highp) - 1]));
-
-            if(precisionMatch)
-            {
-              it = pit;
-              while(it < len && src[it] != ';')
-                ++it;
-
-              ++it;    // skip the ; itself
-
-              // skip more things
-              continue;
-            }
-
-            // otherwise just stop here, it's not a precision statement
-          }
-
-          // nothing more to skip, check if we're outside an if
-          if(if_depth == 0)
-            break;
-
-          // if not, this might not be a comment, etc etc. Just skip to the next line
-          // so we can keep going to find the #endif
-          while(it < len && !isnewline(src[it]))
-            ++it;
+          continue;
         }
 
-        substituted = src;
+        {
+          size_t len = src.length();
 
-        substituted.insert(it, block);
+          // find if this source contains a #version, accounting for whitespace
+          size_t it = 0;
 
-        strings[i] = substituted.c_str();
+          while(it != string::npos)
+          {
+            it = src.find("#", it);
 
-        break;
+            if(it == string::npos)
+              break;
+
+            // advance past the #
+            ++it;
+
+            // skip whitespace
+            while(it < len && isspacetab(src[it]))
+              ++it;
+
+            if(it + 7 < len && !strncmp(&src[it], "version", 7))
+            {
+              it += sizeof("version") - 1;
+              break;
+            }
+          }
+
+          // no #version found
+          if(it == string::npos)
+          {
+            // insert at the start
+            it = 0;
+          }
+          else
+          {
+            // it now points after the #version
+
+            // skip whitespace
+            while(it < len && isspacetab(src[it]))
+              ++it;
+
+            // skip number
+            while(it < len && src[it] >= '0' && src[it] <= '9')
+              ++it;
+
+            // skip whitespace
+            while(it < len && isspacetab(src[it]))
+              ++it;
+
+            if(!strncmp(&src[it], "core", 4))
+              it += sizeof("core") - 1;
+            if(!strncmp(&src[it], "compatibility", 13))
+              it += sizeof("compatibility") - 1;
+            if(!strncmp(&src[it], "es", 2))
+              it += sizeof("es") - 1;
+
+            // how deep are we in an #if. We want to place our definition
+            // outside of any #ifs.
+            int if_depth = 0;
+
+            // now skip past comments, and any #directives
+            while(it < len)
+            {
+              // skip whitespace
+              while(it < len && iswhitespace(src[it]))
+                ++it;
+
+              // skip C++ style comments
+              if(it + 1 < len && src[it] == '/' && src[it + 1] == '/')
+              {
+                // keep going until the next newline
+                while(it < len && !isnewline(src[it]))
+                  ++it;
+
+                // skip more things
+                continue;
+              }
+
+              // skip preprocessor directives
+              if(src[it] == '#')
+              {
+                // skip the '#'
+                it++;
+
+                // skip whitespace
+                while(it < len && iswhitespace(src[it]))
+                  ++it;
+
+                // if it's an if, then increase our depth
+                // This covers:
+                // #if
+                // #ifdef
+                // #ifndef
+                if(!strncmp(&src[it], "if", 2))
+                {
+                  if_depth++;
+                }
+                else if(!strncmp(&src[it], "endif", 5))
+                {
+                  if_depth--;
+                }
+                // everything else is #extension or #else or #undef or anything
+
+                // keep going until the next newline
+                while(it < len && !isnewline(src[it]))
+                {
+                  // if we encounter a C-style comment in the middle of a #define
+                  // we can't consume it because then we'd miss the start of it.
+                  // Instead we break out (although we're not technically at the
+                  // end of the pre-processor line) and let it be consumed next.
+                  // Note that we can discount C++-style comments because they
+                  // want to consume to the end of the line too.
+                  if(it + 1 < len && src[it] == '/' && src[it + 1] == '*')
+                    break;
+
+                  ++it;
+                }
+
+                // skip more things
+                continue;
+              }
+
+              // skip C style comments
+              if(it + 1 < len && src[it] == '/' && src[it + 1] == '*')
+              {
+                // keep going until the we reach a */
+                while(it + 1 < len && (src[it] != '*' || src[it + 1] != '/'))
+                  ++it;
+
+                // skip the closing */ too
+                it += 2;
+
+                // skip more things
+                continue;
+              }
+
+              // see if we have a precision statement, if so skip that
+              const char precision[] = "precision";
+              if(it + sizeof(precision) < len && !strncmp(&src[it], precision, sizeof(precision) - 1))
+              {
+                // since we're speculating here (although what else could it be?) we don't modify
+                // it until we're sure.
+                size_t pit = it + sizeof(precision);
+
+                // skip whitespace
+                while(pit < len && isspacetab(src[pit]))
+                  ++pit;
+
+                // if we now match any of the precisions, then continue consuming until the next ;
+                const char lowp[] = "lowp";
+                const char mediump[] = "mediump";
+                const char highp[] = "highp";
+
+                bool precisionMatch =
+                    (pit + sizeof(lowp) < len && !strncmp(&src[pit], lowp, sizeof(lowp) - 1) &&
+                     isspacetab(src[pit + sizeof(lowp) - 1]));
+                precisionMatch |= (pit + sizeof(mediump) < len &&
+                                   !strncmp(&src[pit], mediump, sizeof(mediump) - 1) &&
+                                   isspacetab(src[pit + sizeof(mediump) - 1]));
+                precisionMatch |=
+                    (pit + sizeof(highp) < len && !strncmp(&src[pit], highp, sizeof(highp) - 1) &&
+                     isspacetab(src[pit + sizeof(highp) - 1]));
+
+                if(precisionMatch)
+                {
+                  it = pit;
+                  while(it < len && src[it] != ';')
+                    ++it;
+
+                  ++it;    // skip the ; itself
+
+                  // skip more things
+                  continue;
+                }
+
+                // otherwise just stop here, it's not a precision statement
+              }
+
+              // nothing more to skip, check if we're outside an if
+              if(if_depth == 0)
+                break;
+
+              // if not, this might not be a comment, etc etc. Just skip to the next line
+              // so we can keep going to find the #endif
+              while(it < len && !isnewline(src[it]))
+                ++it;
+            }
+          }
+
+          if(it < src.length())
+            src.insert(it, block);
+        }
       }
-    }
 
-    sepProg = CreateSepProgram(gl, type, (GLsizei)sources.size(), strings, numPaths, paths);
+      const char *c_src = src.c_str();
+
+      sepProg = CreateSepProgram(gl, type, 1, &c_src, numPaths, paths);
+
+      // when we get it to link, bail!
+      gl.glGetProgramiv(sepProg, eGL_LINK_STATUS, &status);
+      if(status == 1)
+        break;
+
+      RDCWARN("Couldn't patch separability into shader, attempt #%d", attempt + 1);
+    }
   }
 
   gl.glGetProgramiv(sepProg, eGL_LINK_STATUS, &status);
@@ -1627,32 +1656,32 @@ void MakeShaderReflection(const GLHookSet &gl, GLenum shadType, GLuint sepProg,
 
         switch(values[1])
         {
-          case eGL_FLOAT:
           case eGL_DOUBLE:
-          case eGL_FLOAT_VEC2:
           case eGL_DOUBLE_VEC2:
-          case eGL_FLOAT_VEC3:
           case eGL_DOUBLE_VEC3:
-          case eGL_FLOAT_VEC4:
           case eGL_DOUBLE_VEC4:
-          case eGL_FLOAT_MAT4:
           case eGL_DOUBLE_MAT4:
-          case eGL_FLOAT_MAT4x3:
           case eGL_DOUBLE_MAT4x3:
-          case eGL_FLOAT_MAT4x2:
           case eGL_DOUBLE_MAT4x2:
-          case eGL_FLOAT_MAT3:
           case eGL_DOUBLE_MAT3:
-          case eGL_FLOAT_MAT3x4:
           case eGL_DOUBLE_MAT3x4:
-          case eGL_FLOAT_MAT3x2:
           case eGL_DOUBLE_MAT3x2:
-          case eGL_FLOAT_MAT2:
           case eGL_DOUBLE_MAT2:
-          case eGL_FLOAT_MAT2x3:
           case eGL_DOUBLE_MAT2x3:
-          case eGL_FLOAT_MAT2x4:
-          case eGL_DOUBLE_MAT2x4: sig.compType = CompType::Float; break;
+          case eGL_DOUBLE_MAT2x4: sig.compType = CompType::Double; break;
+          case eGL_FLOAT:
+          case eGL_FLOAT_VEC2:
+          case eGL_FLOAT_VEC3:
+          case eGL_FLOAT_VEC4:
+          case eGL_FLOAT_MAT4:
+          case eGL_FLOAT_MAT4x3:
+          case eGL_FLOAT_MAT4x2:
+          case eGL_FLOAT_MAT3:
+          case eGL_FLOAT_MAT3x4:
+          case eGL_FLOAT_MAT3x2:
+          case eGL_FLOAT_MAT2:
+          case eGL_FLOAT_MAT2x3:
+          case eGL_FLOAT_MAT2x4: sig.compType = CompType::Float; break;
           case eGL_INT:
           case eGL_INT_VEC2:
           case eGL_INT_VEC3:
@@ -2314,12 +2343,12 @@ void ResortBindings(ShaderReflection *refl, ShaderBindpointMapping *mapping)
 
   // apply the permutation to the mapping array, and update the bindPoint values in the shader
   // reflection to match, so that the re-order is applied
-  ApplyPermutation(permutation, [mapping, refl](size_t a, size_t b) {
+  ApplyPermutation(permutation, [mapping](size_t a, size_t b) {
     std::swap(mapping->readOnlyResources[a], mapping->readOnlyResources[b]);
   });
 
   for(size_t i = 0; i < permutation.size(); i++)
-    refl->readOnlyResources[i].bindPoint = (int)permutation[i].first;
+    refl->readOnlyResources[permutation[i].first].bindPoint = (int)i;
 
   permutation.resize(mapping->readWriteResources.size());
   for(size_t i = 0; i < mapping->readWriteResources.size(); i++)
@@ -2327,12 +2356,12 @@ void ResortBindings(ShaderReflection *refl, ShaderBindpointMapping *mapping)
 
   std::sort(permutation.begin(), permutation.end(), permutation_sort());
 
-  ApplyPermutation(permutation, [mapping, refl](size_t a, size_t b) {
+  ApplyPermutation(permutation, [mapping](size_t a, size_t b) {
     std::swap(mapping->readWriteResources[a], mapping->readWriteResources[b]);
   });
 
   for(size_t i = 0; i < permutation.size(); i++)
-    refl->readWriteResources[i].bindPoint = (int)permutation[i].first;
+    refl->readWriteResources[permutation[i].first].bindPoint = (int)i;
 
   permutation.resize(mapping->constantBlocks.size());
   for(size_t i = 0; i < mapping->constantBlocks.size(); i++)
@@ -2340,10 +2369,10 @@ void ResortBindings(ShaderReflection *refl, ShaderBindpointMapping *mapping)
 
   std::sort(permutation.begin(), permutation.end(), permutation_sort());
 
-  ApplyPermutation(permutation, [mapping, refl](size_t a, size_t b) {
+  ApplyPermutation(permutation, [mapping](size_t a, size_t b) {
     std::swap(mapping->constantBlocks[a], mapping->constantBlocks[b]);
   });
 
   for(size_t i = 0; i < permutation.size(); i++)
-    refl->constantBlocks[i].bindPoint = (int)permutation[i].first;
+    refl->constantBlocks[permutation[i].first].bindPoint = (int)i;
 }

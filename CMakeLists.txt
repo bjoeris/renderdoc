@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 2.8.12)
 # Configure some stuff that needs to be set really early
 if(BUILD_ANDROID)
     set(CMAKE_TOOLCHAIN_FILE
-        "${CMAKE_SOURCE_DIR}/scripts/android.toolchain.cmake"
+        "${CMAKE_SOURCE_DIR}/util/android.toolchain.cmake"
         CACHE STRING
         "The Android toolchain file")
 
@@ -216,7 +216,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         -Wno-unknown-pragmas
         -Wno-reorder)
     if(CMAKE_COMPILER_IS_GNUCXX)
-        list(APPEND warning_flags -Wno-unused-but-set-variable -Wno-maybe-uninitialized)
+        list(APPEND warning_flags -Wno-unused-but-set-variable -Wno-maybe-uninitialized -Wno-class-memaccess)
 
         # We keep the implicit fallthrough warning for now, but allow more
         # comments to silence it.
@@ -272,5 +272,5 @@ if(ENABLE_QRENDERDOC OR ENABLE_PYRENDERDOC)
 endif()
 
 # install documentation files
-install (FILES scripts/LINUX_DIST_README DESTINATION share/doc/renderdoc RENAME README)
+install (FILES util/LINUX_DIST_README DESTINATION share/doc/renderdoc RENAME README)
 install (FILES LICENSE.md DESTINATION share/doc/renderdoc)

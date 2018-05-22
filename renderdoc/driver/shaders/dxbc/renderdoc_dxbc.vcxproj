@@ -103,6 +103,8 @@
     <ClCompile Include="dxbc_disassemble.cpp" />
     <ClCompile Include="dxbc_inspect.cpp" />
     <ClCompile Include="dxbc_reflect.cpp" />
+    <ClCompile Include="dxbc_sdbg.cpp" />
+    <ClCompile Include="dxbc_spdb.cpp" />
     <ClCompile Include="precompiled.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
@@ -115,6 +117,8 @@
     <ClInclude Include="dxbc_reflect.h" />
     <ClInclude Include="dxbc_sdbg.h" />
     <ClInclude Include="dxbc_spdb.h" />
+    <ClInclude Include="official\cvconst.h" />
+    <ClInclude Include="official\cvinfo.h" />
     <ClInclude Include="precompiled.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

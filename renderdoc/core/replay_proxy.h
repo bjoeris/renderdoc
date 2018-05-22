@@ -149,6 +149,7 @@ public:
   {
     return ReplayStatus::Succeeded;
   }
+  AMDRGPControl *GetRGPControl() { return NULL; }
   vector<WindowingSystem> GetSupportedWindowSystems()
   {
     if(m_Proxy)
@@ -639,7 +640,7 @@ private:
   // m_Replay is set
   uint64_t m_PreviewOutput = 0;
   // The previous windowing data, so we can detect changes and recreate the window
-  WindowingData m_PreviewWindowingData;
+  WindowingData m_PreviewWindowingData = {WindowingSystem::Unknown};
 
   uint32_t m_EventID = 0;
 

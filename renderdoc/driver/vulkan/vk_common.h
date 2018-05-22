@@ -59,6 +59,7 @@
 
 #include "api/replay/renderdoc_replay.h"
 #include "core/core.h"
+#include "core/resource_manager.h"
 #include "official/vulkan.h"
 #include "serialise/serialiser.h"
 #include "vk_dispatchtables.h"
@@ -93,7 +94,7 @@ AddressMode MakeAddressMode(VkSamplerAddressMode addr);
 void MakeBorderColor(VkBorderColor border, FloatVector *BorderColor);
 CompareFunction MakeCompareFunc(VkCompareOp func);
 TextureFilter MakeFilter(VkFilter minFilter, VkFilter magFilter, VkSamplerMipmapMode mipmapMode,
-                         bool anisoEnable, bool compareEnable);
+                         bool anisoEnable, bool compareEnable, VkSamplerReductionModeEXT reduction);
 LogicOperation MakeLogicOp(VkLogicOp op);
 BlendMultiplier MakeBlendMultiplier(VkBlendFactor blend);
 BlendOperation MakeBlendOp(VkBlendOp op);
@@ -212,6 +213,8 @@ private:
 enum
 {
   VkCheckExt_AMD_neg_viewport,
+  VkCheckExt_EXT_conserv_rast,
+  VkCheckExt_EXT_vertex_divisor,
   VkCheckExt_Max,
 };
 
@@ -231,43 +234,44 @@ enum VkFlagWithNoBits
   FlagWithNoBits_Dummy_Bit = 1,
 };
 
-// utility function for when we're modifying one struct in a pNext chain, this
-// lets us just copy across a struct unmodified into some temporary memory and
-// append it onto a pNext chain we're building
+size_t GetNextPatchSize(const void *next);
+void PatchNextChain(const char *structName, byte *&tempMem, VkGenericStruct *infoStruct);
+
 template <typename VkStruct>
-void CopyNextChainedStruct(byte *&tempMem, const VkGenericStruct *nextInput,
-                           VkGenericStruct *&nextChainTail)
+const VkGenericStruct *FindNextStruct(const VkStruct *haystack, VkStructureType needle)
 {
-  const VkStruct *instruct = (const VkStruct *)nextInput;
-  VkStruct *outstruct = (VkStruct *)tempMem;
+  if(!haystack)
+    return NULL;
 
-  tempMem = (byte *)(outstruct + 1);
+  const VkGenericStruct *next = (const VkGenericStruct *)haystack->pNext;
+  while(next)
+  {
+    if(next->sType == needle)
+      return next;
 
-  // copy the struct, nothing to unwrap
-  *outstruct = *instruct;
+    next = next->pNext;
+  }
 
-  // default to NULL. It will be overwritten next time if there is a next object
-  outstruct->pNext = NULL;
-
-  // append this onto the chain
-  nextChainTail->pNext = (const VkGenericStruct *)outstruct;
-  nextChainTail = (VkGenericStruct *)outstruct;
+  return NULL;
 }
 
-// this is similar to the above function, but for use after we've modified a struct locally
-// e.g. to unwrap some members or patch flags, etc.
 template <typename VkStruct>
-void AppendModifiedChainedStruct(byte *&tempMem, VkStruct *outputStruct,
-                                 VkGenericStruct *&nextChainTail)
+VkGenericStruct *FindNextStruct(VkStruct *haystack, VkStructureType needle)
 {
-  tempMem = (byte *)(outputStruct + 1);
+  if(!haystack)
+    return NULL;
 
-  // default to NULL. It will be overwritten in the next step if there is a next object
-  outputStruct->pNext = NULL;
+  VkGenericStruct *next = (VkGenericStruct *)haystack->pNext;
+  while(next)
+  {
+    if(next->sType == needle)
+      return next;
 
-  // append this onto the chain
-  nextChainTail->pNext = (const VkGenericStruct *)outputStruct;
-  nextChainTail = (VkGenericStruct *)outputStruct;
+    // assume non-const pNext in the original struct
+    next = (VkGenericStruct *)next->pNext;
+  }
+
+  return NULL;
 }
 
 enum class MemoryScope : uint8_t
@@ -316,6 +320,10 @@ struct MemoryAllocation
 // Writing is unambiguously during capture mode, so we don't have to check both in that case.
 #define IsReplayingAndReading() (ser.IsReading() && IsReplayMode(m_State))
 
+struct VkResourceRecord;
+
+FrameRefType GetRefType(VkDescriptorType descType);
+
 // the possible contents of a descriptor set slot,
 // taken from the VkWriteDescriptorSet
 struct DescriptorSetSlot
@@ -323,6 +331,9 @@ struct DescriptorSetSlot
   VkDescriptorBufferInfo bufferInfo;
   VkDescriptorImageInfo imageInfo;
   VkBufferView texelBufferView;
+
+  void RemoveBindRefs(VkResourceRecord *record);
+  void AddBindRefs(VkResourceRecord *record, FrameRefType ref);
 };
 
 DECLARE_REFLECTION_STRUCT(DescriptorSetSlot);
@@ -439,6 +450,24 @@ enum class VulkanChunk : uint32_t
   vkRegisterDeviceEventEXT,
   vkRegisterDisplayEventEXT,
   vkCmdIndirectSubCommand,
+  vkCmdPushDescriptorSetKHR,
+  vkCmdPushDescriptorSetWithTemplateKHR,
+  vkCreateDescriptorUpdateTemplate,
+  vkUpdateDescriptorSetWithTemplate,
+  vkBindBufferMemory2,
+  vkBindImageMemory2,
+  vkCmdWriteBufferMarkerAMD,
+  vkSetDebugUtilsObjectNameEXT,
+  vkQueueBeginDebugUtilsLabelEXT,
+  vkQueueEndDebugUtilsLabelEXT,
+  vkQueueInsertDebugUtilsLabelEXT,
+  vkCmdBeginDebugUtilsLabelEXT,
+  vkCmdEndDebugUtilsLabelEXT,
+  vkCmdInsertDebugUtilsLabelEXT,
+  vkCreateSamplerYcbcrConversion,
+  vkCmdSetDeviceMask,
+  vkCmdDispatchBase,
+  vkGetDeviceQueue2,
   Max,
 };
 
@@ -448,34 +477,36 @@ DECLARE_REFLECTION_ENUM(VulkanChunk);
 // directly as-if it were the original type, then on replay load up the resource if available.
 // Really this is only one type of serialisation, but we declare a couple of overloads to account
 // for resources being accessed through different interfaces in different functions
-#define SERIALISE_VK_HANDLES()            \
-  SERIALISE_HANDLE(VkInstance)            \
-  SERIALISE_HANDLE(VkPhysicalDevice)      \
-  SERIALISE_HANDLE(VkDevice)              \
-  SERIALISE_HANDLE(VkQueue)               \
-  SERIALISE_HANDLE(VkCommandBuffer)       \
-  SERIALISE_HANDLE(VkFence)               \
-  SERIALISE_HANDLE(VkDeviceMemory)        \
-  SERIALISE_HANDLE(VkBuffer)              \
-  SERIALISE_HANDLE(VkImage)               \
-  SERIALISE_HANDLE(VkSemaphore)           \
-  SERIALISE_HANDLE(VkEvent)               \
-  SERIALISE_HANDLE(VkQueryPool)           \
-  SERIALISE_HANDLE(VkBufferView)          \
-  SERIALISE_HANDLE(VkImageView)           \
-  SERIALISE_HANDLE(VkShaderModule)        \
-  SERIALISE_HANDLE(VkPipelineCache)       \
-  SERIALISE_HANDLE(VkPipelineLayout)      \
-  SERIALISE_HANDLE(VkRenderPass)          \
-  SERIALISE_HANDLE(VkPipeline)            \
-  SERIALISE_HANDLE(VkDescriptorSetLayout) \
-  SERIALISE_HANDLE(VkSampler)             \
-  SERIALISE_HANDLE(VkDescriptorPool)      \
-  SERIALISE_HANDLE(VkDescriptorSet)       \
-  SERIALISE_HANDLE(VkFramebuffer)         \
-  SERIALISE_HANDLE(VkCommandPool)         \
-  SERIALISE_HANDLE(VkSwapchainKHR)        \
-  SERIALISE_HANDLE(VkSurfaceKHR)
+#define SERIALISE_VK_HANDLES()                 \
+  SERIALISE_HANDLE(VkInstance)                 \
+  SERIALISE_HANDLE(VkPhysicalDevice)           \
+  SERIALISE_HANDLE(VkDevice)                   \
+  SERIALISE_HANDLE(VkQueue)                    \
+  SERIALISE_HANDLE(VkCommandBuffer)            \
+  SERIALISE_HANDLE(VkFence)                    \
+  SERIALISE_HANDLE(VkDeviceMemory)             \
+  SERIALISE_HANDLE(VkBuffer)                   \
+  SERIALISE_HANDLE(VkImage)                    \
+  SERIALISE_HANDLE(VkSemaphore)                \
+  SERIALISE_HANDLE(VkEvent)                    \
+  SERIALISE_HANDLE(VkQueryPool)                \
+  SERIALISE_HANDLE(VkBufferView)               \
+  SERIALISE_HANDLE(VkImageView)                \
+  SERIALISE_HANDLE(VkShaderModule)             \
+  SERIALISE_HANDLE(VkPipelineCache)            \
+  SERIALISE_HANDLE(VkPipelineLayout)           \
+  SERIALISE_HANDLE(VkRenderPass)               \
+  SERIALISE_HANDLE(VkPipeline)                 \
+  SERIALISE_HANDLE(VkDescriptorSetLayout)      \
+  SERIALISE_HANDLE(VkSampler)                  \
+  SERIALISE_HANDLE(VkDescriptorPool)           \
+  SERIALISE_HANDLE(VkDescriptorSet)            \
+  SERIALISE_HANDLE(VkFramebuffer)              \
+  SERIALISE_HANDLE(VkCommandPool)              \
+  SERIALISE_HANDLE(VkSwapchainKHR)             \
+  SERIALISE_HANDLE(VkSurfaceKHR)               \
+  SERIALISE_HANDLE(VkDescriptorUpdateTemplate) \
+  SERIALISE_HANDLE(VkSamplerYcbcrConversion)
 
 #define SERIALISE_HANDLE(type) DECLARE_REFLECTION_STRUCT(type)
 
@@ -580,10 +611,28 @@ DECLARE_REFLECTION_STRUCT(VkImageBlit);
 DECLARE_REFLECTION_STRUCT(VkImageResolve);
 DECLARE_REFLECTION_STRUCT(VkSwapchainCreateInfoKHR);
 DECLARE_REFLECTION_STRUCT(VkDebugMarkerMarkerInfoEXT);
+DECLARE_REFLECTION_STRUCT(VkDescriptorUpdateTemplateEntry);
+DECLARE_REFLECTION_STRUCT(VkDescriptorUpdateTemplateCreateInfo);
+DECLARE_REFLECTION_STRUCT(VkBindBufferMemoryInfo);
+DECLARE_REFLECTION_STRUCT(VkBindImageMemoryInfo);
+DECLARE_REFLECTION_STRUCT(VkPipelineRasterizationConservativeStateCreateInfoEXT);
+DECLARE_REFLECTION_STRUCT(VkPipelineTessellationDomainOriginStateCreateInfo);
+DECLARE_REFLECTION_STRUCT(VkImageViewUsageCreateInfo);
+DECLARE_REFLECTION_STRUCT(VkInputAttachmentAspectReference);
+DECLARE_REFLECTION_STRUCT(VkRenderPassInputAttachmentAspectCreateInfo);
+DECLARE_REFLECTION_STRUCT(VkVertexInputBindingDivisorDescriptionEXT);
+DECLARE_REFLECTION_STRUCT(VkPipelineVertexInputDivisorStateCreateInfoEXT);
+DECLARE_REFLECTION_STRUCT(VkSamplerReductionModeCreateInfoEXT);
+DECLARE_REFLECTION_STRUCT(VkDebugUtilsLabelEXT);
+DECLARE_REFLECTION_STRUCT(VkSamplerYcbcrConversionCreateInfo);
+DECLARE_REFLECTION_STRUCT(VkRenderPassMultiviewCreateInfo);
+DECLARE_REFLECTION_STRUCT(VkDeviceQueueInfo2);
 
 DECLARE_DESERIALISE_TYPE(VkDeviceCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkBufferCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkBufferViewCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkImageCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkImageViewCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkBindSparseInfo);
 DECLARE_DESERIALISE_TYPE(VkSubmitInfo);
 DECLARE_DESERIALISE_TYPE(VkDescriptorSetAllocateInfo);
@@ -591,14 +640,42 @@ DECLARE_DESERIALISE_TYPE(VkFramebufferCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkRenderPassCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkRenderPassBeginInfo);
 DECLARE_DESERIALISE_TYPE(VkCommandBufferBeginInfo);
+DECLARE_DESERIALISE_TYPE(VkCommandPoolCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkCommandBufferAllocateInfo);
 DECLARE_DESERIALISE_TYPE(VkPipelineCacheCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkPipelineLayoutCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkShaderModuleCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkGraphicsPipelineCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkComputePipelineCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkDescriptorPoolCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkQueryPoolCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkSemaphoreCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkEventCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkFenceCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkSamplerCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkMemoryAllocateInfo);
+DECLARE_DESERIALISE_TYPE(VkMemoryBarrier);
+DECLARE_DESERIALISE_TYPE(VkBufferMemoryBarrier);
+DECLARE_DESERIALISE_TYPE(VkImageMemoryBarrier);
 DECLARE_DESERIALISE_TYPE(VkWriteDescriptorSet);
+DECLARE_DESERIALISE_TYPE(VkCopyDescriptorSet);
 DECLARE_DESERIALISE_TYPE(VkDescriptorSetLayoutCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkDescriptorUpdateTemplateCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkMappedMemoryRange);
+DECLARE_DESERIALISE_TYPE(VkSwapchainCreateInfoKHR);
+DECLARE_DESERIALISE_TYPE(VkDebugMarkerMarkerInfoEXT);
+DECLARE_DESERIALISE_TYPE(VkBindBufferMemoryInfo);
+DECLARE_DESERIALISE_TYPE(VkBindImageMemoryInfo);
+DECLARE_DESERIALISE_TYPE(VkPipelineRasterizationConservativeStateCreateInfoEXT);
+DECLARE_DESERIALISE_TYPE(VkPipelineTessellationDomainOriginStateCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkImageViewUsageCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkRenderPassInputAttachmentAspectCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkPipelineVertexInputDivisorStateCreateInfoEXT);
+DECLARE_DESERIALISE_TYPE(VkSamplerReductionModeCreateInfoEXT);
+DECLARE_DESERIALISE_TYPE(VkDebugUtilsLabelEXT);
+DECLARE_DESERIALISE_TYPE(VkSamplerYcbcrConversionCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkRenderPassMultiviewCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkDeviceQueueInfo2);
 
 DECLARE_REFLECTION_ENUM(VkFlagWithNoBits);
 DECLARE_REFLECTION_ENUM(VkQueueFlagBits);
@@ -663,3 +740,14 @@ DECLARE_REFLECTION_ENUM(VkSurfaceTransformFlagBitsKHR);
 DECLARE_REFLECTION_ENUM(VkCompositeAlphaFlagBitsKHR);
 DECLARE_REFLECTION_ENUM(VkColorSpaceKHR);
 DECLARE_REFLECTION_ENUM(VkPresentModeKHR);
+DECLARE_REFLECTION_ENUM(VkDescriptorUpdateTemplateType);
+DECLARE_REFLECTION_ENUM(VkConservativeRasterizationModeEXT);
+DECLARE_REFLECTION_ENUM(VkTessellationDomainOrigin);
+DECLARE_REFLECTION_ENUM(VkSamplerReductionModeEXT);
+DECLARE_REFLECTION_ENUM(VkSamplerYcbcrModelConversion);
+DECLARE_REFLECTION_ENUM(VkSamplerYcbcrRange);
+DECLARE_REFLECTION_ENUM(VkChromaLocation);
+DECLARE_REFLECTION_ENUM(VkDeviceQueueCreateFlagBits);
+DECLARE_REFLECTION_ENUM(VkSubpassDescriptionFlagBits);
+DECLARE_REFLECTION_ENUM(VkDescriptorSetLayoutCreateFlagBits);
+DECLARE_REFLECTION_ENUM(VkSwapchainCreateFlagBitsKHR);

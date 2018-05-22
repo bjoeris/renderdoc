@@ -540,7 +540,7 @@ void WrappedOpenGL::RenderOverlayStr(float x, float y, const char *text)
 
   RDCASSERT(strlen(text) < (size_t)FONT_MAX_CHARS);
 
-  ContextData &ctxdata = m_ContextData[GetCtx()];
+  ContextData &ctxdata = GetCtxData();
 
   if(!ctxdata.built || !ctxdata.ready)
     return;
@@ -555,8 +555,8 @@ void WrappedOpenGL::RenderOverlayStr(float x, float y, const char *text)
     ubo->TextPosition.x = x;
     ubo->TextPosition.y = y;
 
-    ubo->FontScreenAspect.x = 1.0f / float(m_InitParams.width);
-    ubo->FontScreenAspect.y = 1.0f / float(m_InitParams.height);
+    ubo->FontScreenAspect.x = 1.0f / RDCMAX(1.0f, float(m_InitParams.width));
+    ubo->FontScreenAspect.y = 1.0f / RDCMAX(1.0f, float(m_InitParams.height));
 
     ubo->TextSize = ctxdata.CharSize;
     ubo->FontScreenAspect.x *= ctxdata.CharAspect;

@@ -230,7 +230,7 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
       if(diff > 2 * 24 * 60 * 60)
       {
         // update the check date on the stored bug
-        GUIInvoke::call([this, b, now]() {
+        GUIInvoke::call(this, [this, b, now]() {
           for(BugReport &bug : m_Ctx.Config().CrashReport_ReportedBugs)
           {
             if(bug.reportId == b.reportId)
@@ -286,6 +286,8 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
   });
 
   ui->action_Start_Replay_Loop->setEnabled(false);
+  ui->action_Open_RGP_Profile->setEnabled(false);
+  ui->action_Create_RGP_Profile->setEnabled(false);
   ui->action_Resolve_Symbols->setEnabled(false);
   ui->action_Resolve_Symbols->setText(tr("Resolve Symbols"));
 
@@ -508,7 +510,7 @@ void MainWindow::OnCaptureTrigger(const QString &exe, const QString &workingDir,
     ExecuteResult ret =
         m_Ctx.Replay().ExecuteAndInject(exe, workingDir, cmdLine, env, capturefile, opts);
 
-    GUIInvoke::call([this, exe, ret, callback]() {
+    GUIInvoke::call(this, [this, exe, ret, callback]() {
 
       if(ret.status == ReplayStatus::JDWPFailure)
       {
@@ -566,7 +568,7 @@ void MainWindow::OnInjectTrigger(uint32_t PID, const rdcarray<EnvironmentModific
     ExecuteResult ret =
         RENDERDOC_InjectIntoProcess(PID, env, capturefile.toUtf8().data(), opts, false);
 
-    GUIInvoke::call([this, PID, ret, callback]() {
+    GUIInvoke::call(this, [this, PID, ret, callback]() {
 
       if(ret.status == ReplayStatus::JDWPFailure)
       {
@@ -1067,8 +1069,10 @@ void MainWindow::PopulateRecentCaptureFiles()
   int idx = 1;
   for(int i = m_Ctx.Config().RecentCaptureFiles.count() - 1; i >= 0; i--)
   {
-    const QString &filename = m_Ctx.Config().RecentCaptureFiles[i];
-    ui->menu_Recent_Capture_Files->addAction(QFormatStr("&%1 %2").arg(idx).arg(filename),
+    QString filename = m_Ctx.Config().RecentCaptureFiles[i];
+    QString filenameDisplay = filename;
+    filenameDisplay.replace(QLatin1Char('&'), lit("&&"));
+    ui->menu_Recent_Capture_Files->addAction(QFormatStr("&%1 %2").arg(idx).arg(filenameDisplay),
                                              [this, filename] { recentCaptureFile(filename); });
     idx++;
 
@@ -1094,8 +1098,10 @@ void MainWindow::PopulateRecentCaptureSettings()
   int idx = 1;
   for(int i = m_Ctx.Config().RecentCaptureSettings.count() - 1; i >= 0; i--)
   {
-    const QString &filename = m_Ctx.Config().RecentCaptureSettings[i];
-    ui->menu_Recent_Capture_Settings->addAction(QFormatStr("&%1 %2").arg(idx).arg(filename),
+    QString filename = m_Ctx.Config().RecentCaptureSettings[i];
+    QString filenameDisplay = filename;
+    filenameDisplay.replace(QLatin1Char('&'), lit("&&"));
+    ui->menu_Recent_Capture_Settings->addAction(QFormatStr("&%1 %2").arg(idx).arg(filenameDisplay),
                                                 [this, filename] { recentCaptureSetting(filename); });
     idx++;
 
@@ -1507,7 +1513,7 @@ void MainWindow::remoteProbe()
 {
   if(!m_Ctx.IsCaptureLoaded() && !m_Ctx.IsCaptureLoading())
   {
-    GUIInvoke::call([this] { m_Ctx.Config().AddAndroidHosts(); });
+    GUIInvoke::call(this, [this] { m_Ctx.Config().AddAndroidHosts(); });
 
     for(RemoteHost *host : m_Ctx.Config().RemoteHosts)
     {
@@ -1553,7 +1559,7 @@ void MainWindow::messageCheck()
           disconnected = true;
       }
 
-      GUIInvoke::call([this, disconnected, msgs] {
+      GUIInvoke::call(this, [this, disconnected, msgs] {
         // if we just got disconnected while replaying a capture, alert the user.
         if(disconnected)
         {
@@ -1586,7 +1592,7 @@ void MainWindow::messageCheck()
     if(m_Ctx.Replay().CurrentRemote())
       m_Ctx.Replay().PingRemote();
 
-    GUIInvoke::call([this]() {
+    GUIInvoke::call(this, [this]() {
       if(m_Ctx.Replay().CurrentRemote() && !m_Ctx.Replay().CurrentRemote()->serverRunning)
       {
         contextChooser->setIcon(Icons::cross());
@@ -1729,7 +1735,7 @@ void MainWindow::switchContext()
 
       if(!host->serverRunning && !host->runCommand.isEmpty())
       {
-        GUIInvoke::call([this]() {
+        GUIInvoke::call(this, [this]() {
           statusText->setText(tr("Running remote server command..."));
           statusProgress->setVisible(true);
           statusProgress->setMaximum(0);
@@ -1740,7 +1746,7 @@ void MainWindow::switchContext()
         // check if it's running now
         host->CheckStatus();
 
-        GUIInvoke::call([this]() { statusProgress->setVisible(false); });
+        GUIInvoke::call(this, [this]() { statusProgress->setVisible(false); });
       }
 
       ReplayStatus status = ReplayStatus::Succeeded;
@@ -1750,7 +1756,7 @@ void MainWindow::switchContext()
         status = m_Ctx.Replay().ConnectToRemoteServer(host);
       }
 
-      GUIInvoke::call([this, host, status]() {
+      GUIInvoke::call(this, [this, host, status]() {
         contextChooser->setIcon(host->serverRunning && !host->busy ? Icons::connect()
                                                                    : Icons::disconnect());
 
@@ -1817,6 +1823,9 @@ void MainWindow::OnCaptureLoaded()
   ui->action_Recompress_Capture->setEnabled(true);
 
   ui->action_Start_Replay_Loop->setEnabled(true);
+  ui->action_Open_RGP_Profile->setEnabled(
+      m_Ctx.Replay().GetCaptureAccess()->FindSectionByType(SectionType::AMDRGPProfile) >= 0);
+  ui->action_Create_RGP_Profile->setEnabled(m_Ctx.APIProps().rgpCapture && m_Ctx.IsCaptureLocal());
 
   setCaptureHasErrors(!m_Ctx.DebugMessages().empty());
 
@@ -1825,7 +1834,7 @@ void MainWindow::OnCaptureLoaded()
   m_Ctx.Replay().AsyncInvoke([this](IReplayController *) {
     bool hasResolver = m_Ctx.Replay().GetCaptureAccess()->HasCallstacks();
 
-    GUIInvoke::call([this, hasResolver]() {
+    GUIInvoke::call(this, [this, hasResolver]() {
       ui->action_Resolve_Symbols->setEnabled(hasResolver);
       ui->action_Resolve_Symbols->setText(hasResolver ? tr("Resolve Symbols")
                                                       : tr("Resolve Symbols - None in capture"));
@@ -1847,6 +1856,8 @@ void MainWindow::OnCaptureClosed()
   ui->menu_Export_As->setEnabled(false);
 
   ui->action_Start_Replay_Loop->setEnabled(false);
+  ui->action_Open_RGP_Profile->setEnabled(false);
+  ui->action_Create_RGP_Profile->setEnabled(false);
 
   contextChooser->setEnabled(true);
 
@@ -1969,7 +1980,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 
 void MainWindow::on_action_Close_Capture_triggered()
 {
-  PromptCloseCapture();
+  (void)PromptCloseCapture();
 }
 
 void MainWindow::on_action_Save_Capture_Inplace_triggered()
@@ -2246,6 +2257,97 @@ void MainWindow::on_action_Start_Replay_Loop_triggered()
   m_Ctx.Replay().CancelReplayLoop();
 }
 
+void MainWindow::on_action_Open_RGP_Profile_triggered()
+{
+  if(!m_Ctx.IsCaptureLoaded())
+    return;
+
+  int idx = m_Ctx.Replay().GetCaptureAccess()->FindSectionByType(SectionType::AMDRGPProfile);
+
+  if(idx < 0)
+    return;
+
+  QString path = QDir::temp().absoluteFilePath(lit("renderdoc_extracted.rgp"));
+
+  QFile f(path);
+  if(f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+  {
+    bytebuf buf = m_Ctx.Replay().GetCaptureAccess()->GetSectionContents(idx);
+
+    f.write((const char *)buf.data(), (qint64)buf.size());
+    f.flush();
+  }
+  else
+  {
+    qCritical() << "Couldn't open temporary file " << path << " for write";
+    return;
+  }
+
+  m_Ctx.OpenRGPProfile(path);
+}
+
+void MainWindow::on_action_Create_RGP_Profile_triggered()
+{
+  if(!m_Ctx.IsCaptureLoaded())
+    return;
+
+  if(m_Ctx.Replay().GetCaptureAccess()->FindSectionByType(SectionType::AMDRGPProfile) >= 0)
+  {
+    QMessageBox::StandardButton res = RDDialog::question(
+        this, tr("Existing RGP profile"), tr("Capture already contains an RGP profile. Overwrite?"),
+        QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+
+    if(res != QMessageBox::Yes)
+      return;
+  }
+
+  QDialog popup;
+  popup.setWindowFlags(popup.windowFlags() & ~Qt::WindowContextHelpButtonHint);
+  popup.setWindowIcon(windowIcon());
+  popup.resize(128, 16);
+  popup.setWindowTitle(tr("Making RGP Profile from %1").arg(m_Ctx.GetCaptureFilename()));
+
+  WindowingData winData = m_Ctx.CreateWindowingData(popup.winId());
+
+  rdcstr path;
+
+  m_Ctx.Replay().AsyncInvoke([this, winData, &popup, &path](IReplayController *r) {
+    path = r->CreateRGPProfile(winData);
+    GUIInvoke::call(this, [&popup]() { popup.close(); });
+  });
+
+  RDDialog::show(&popup);
+
+  qInfo() << "RGP Capture created at" << QString(path);
+  m_Ctx.OpenRGPProfile(path);
+
+  if(!path.isEmpty())
+  {
+    QFile f(path);
+    if(f.open(QIODevice::ReadOnly))
+    {
+      QByteArray contents = f.readAll();
+
+      bytebuf buf;
+      buf.resize(contents.count());
+      memcpy(&buf[0], contents.data(), contents.count());
+
+      SectionProperties props;
+      props.type = SectionType::AMDRGPProfile;
+      props.version = 1;
+      props.flags = SectionFlags::ZstdCompressed;
+
+      m_Ctx.Replay().GetCaptureAccess()->WriteSection(props, buf);
+
+      ui->action_Open_RGP_Profile->setEnabled(true);
+    }
+    else
+    {
+      qCritical() << "Couldn't read from temporary RGP capture at " << QString(path);
+    }
+  }
+}
+
 void MainWindow::on_action_Attach_to_Running_Instance_triggered()
 {
   on_action_Manage_Remote_Servers_triggered();
@@ -2469,7 +2571,7 @@ void MainWindow::dropEvent(QDropEvent *event)
   {
     // we defer this so we can return immediately and unblock whichever application dropped the
     // item.
-    GUIInvoke::defer([this, fn]() { LoadFromFilename(fn, false); });
+    GUIInvoke::defer(this, [this, fn]() { LoadFromFilename(fn, false); });
   }
 }
 

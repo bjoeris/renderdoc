@@ -26,36 +26,48 @@
 
 #include "official/vk_layer.h"
 
+// extensions made core in 1.1
+#define VK11 VK_MAKE_VERSION(1, 1, 0)
+
+// extensions that are not core in any version
+#define VKXX VK_MAKE_VERSION(99, 99, 0)
+
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
 
 #define HookInitInstance_PlatformSpecific()                       \
   HookInitExtension(VK_KHR_win32_surface, CreateWin32SurfaceKHR); \
   HookInitExtension(VK_KHR_win32_surface, GetPhysicalDeviceWin32PresentationSupportKHR);
 
-#define HookInitDevice_PlatformSpecific() \
+#define HookInitDevice_PlatformSpecific()                                             \
   HookInitExtension(VK_NV_win32_keyed_mutex, GetMemoryWin32HandleNV);                 \
   HookInitExtension(VK_KHR_external_memory_win32, GetMemoryWin32HandleKHR);           \
   HookInitExtension(VK_KHR_external_memory_win32, GetMemoryWin32HandlePropertiesKHR); \
   HookInitExtension(VK_KHR_external_semaphore_win32, ImportSemaphoreWin32HandleKHR);  \
-  HookInitExtension(VK_KHR_external_semaphore_win32, GetSemaphoreWin32HandleKHR);
+  HookInitExtension(VK_KHR_external_semaphore_win32, GetSemaphoreWin32HandleKHR);     \
+  HookInitExtension(VK_KHR_external_fence_win32, ImportFenceWin32HandleKHR);          \
+  HookInitExtension(VK_KHR_external_fence_win32, GetFenceWin32HandleKHR);
 
-#define HookDefine_PlatformSpecific()                                                          \
-  HookDefine4(VkResult, vkCreateWin32SurfaceKHR, VkInstance, instance,                         \
-              const VkWin32SurfaceCreateInfoKHR *, pCreateInfo, const VkAllocationCallbacks *, \
-              pAllocator, VkSurfaceKHR *, pSurface);                                           \
-  HookDefine2(VkBool32, vkGetPhysicalDeviceWin32PresentationSupportKHR, VkPhysicalDevice,      \
-              physicalDevice, uint32_t, queueFamilyIndex);                                     \
-  HookDefine4(VkResult, vkGetMemoryWin32HandleNV, VkDevice, device, VkDeviceMemory, memory,    \
-              VkExternalMemoryHandleTypeFlagsNV, handleType, HANDLE *, pHandle);               \
-  HookDefine3(VkResult, vkGetMemoryWin32HandleKHR, VkDevice, device,                           \
-              const VkMemoryGetWin32HandleInfoKHR *, pGetWin32HandleInfo, HANDLE *, pHandle);  \
-  HookDefine4(VkResult, vkGetMemoryWin32HandlePropertiesKHR, VkDevice, device,                 \
-              VkExternalMemoryHandleTypeFlagBitsKHR, handleType, HANDLE, handle,               \
-              VkMemoryWin32HandlePropertiesKHR *, pMemoryWin32HandleProperties);               \
-  HookDefine2(VkResult, vkImportSemaphoreWin32HandleKHR, VkDevice, device,                     \
-              const VkImportSemaphoreWin32HandleInfoKHR *, pImportSemaphoreWin32HandleInfo);   \
-  HookDefine3(VkResult, vkGetSemaphoreWin32HandleKHR, VkDevice, device,                        \
-              const VkSemaphoreGetWin32HandleInfoKHR *, pGetWin32HandleInfo, HANDLE *, pHandle);
+#define HookDefine_PlatformSpecific()                                                            \
+  HookDefine4(VkResult, vkCreateWin32SurfaceKHR, VkInstance, instance,                           \
+              const VkWin32SurfaceCreateInfoKHR *, pCreateInfo, const VkAllocationCallbacks *,   \
+              pAllocator, VkSurfaceKHR *, pSurface);                                             \
+  HookDefine2(VkBool32, vkGetPhysicalDeviceWin32PresentationSupportKHR, VkPhysicalDevice,        \
+              physicalDevice, uint32_t, queueFamilyIndex);                                       \
+  HookDefine4(VkResult, vkGetMemoryWin32HandleNV, VkDevice, device, VkDeviceMemory, memory,      \
+              VkExternalMemoryHandleTypeFlagsNV, handleType, HANDLE *, pHandle);                 \
+  HookDefine3(VkResult, vkGetMemoryWin32HandleKHR, VkDevice, device,                             \
+              const VkMemoryGetWin32HandleInfoKHR *, pGetWin32HandleInfo, HANDLE *, pHandle);    \
+  HookDefine4(VkResult, vkGetMemoryWin32HandlePropertiesKHR, VkDevice, device,                   \
+              VkExternalMemoryHandleTypeFlagBitsKHR, handleType, HANDLE, handle,                 \
+              VkMemoryWin32HandlePropertiesKHR *, pMemoryWin32HandleProperties);                 \
+  HookDefine2(VkResult, vkImportSemaphoreWin32HandleKHR, VkDevice, device,                       \
+              const VkImportSemaphoreWin32HandleInfoKHR *, pImportSemaphoreWin32HandleInfo);     \
+  HookDefine3(VkResult, vkGetSemaphoreWin32HandleKHR, VkDevice, device,                          \
+              const VkSemaphoreGetWin32HandleInfoKHR *, pGetWin32HandleInfo, HANDLE *, pHandle); \
+  HookDefine2(VkResult, vkImportFenceWin32HandleKHR, VkDevice, device,                           \
+              const VkImportFenceWin32HandleInfoKHR *, pImportFenceWin32HandleInfo);             \
+  HookDefine3(VkResult, vkGetFenceWin32HandleKHR, VkDevice, device,                              \
+              const VkFenceGetWin32HandleInfoKHR *, pGetWin32HandleInfo, HANDLE *, pHandle);
 
 #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
 
@@ -69,7 +81,7 @@
               const VkAndroidSurfaceCreateInfoKHR *, pCreateInfo, const VkAllocationCallbacks *, \
               pAllocator, VkSurfaceKHR *, pSurface);
 
-#else // linux subsytems
+#else
 
 #if defined(VK_USE_PLATFORM_XCB_KHR)
 
@@ -85,38 +97,38 @@
               physicalDevice, uint32_t, queueFamilyIndex, xcb_connection_t *, connection,    \
               xcb_visualid_t, visual_id);
 
-#else // defined(VK_USE_PLATFORM_XCB_KHR)
+#else
 
 #define HookInitInstance_PlatformSpecific_Xcb()
 #define HookDefine_PlatformSpecific_Xcb()
 
-#endif // defined(VK_USE_PLATFORM_XCB_KHR)
+#endif
 
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
 
-#define HookInitInstance_PlatformSpecific_Xlib()                \
-  HookInitExtension(VK_KHR_xlib_surface, CreateXlibSurfaceKHR); \
+#define HookInitInstance_PlatformSpecific_Xlib()                                       \
+  HookInitExtension(VK_KHR_xlib_surface, CreateXlibSurfaceKHR);                        \
   HookInitExtension(VK_KHR_xlib_surface, GetPhysicalDeviceXlibPresentationSupportKHR); \
   HookInitExtension(VK_EXT_acquire_xlib_display, AcquireXlibDisplayEXT);               \
   HookInitExtension(VK_EXT_acquire_xlib_display, GetRandROutputDisplayEXT);
 
-#define HookDefine_PlatformSpecific_Xlib()                                                    \
-  HookDefine4(VkResult, vkCreateXlibSurfaceKHR, VkInstance, instance,                         \
-              const VkXlibSurfaceCreateInfoKHR *, pCreateInfo, const VkAllocationCallbacks *, \
-              pAllocator, VkSurfaceKHR *, pSurface);                                          \
-  HookDefine4(VkBool32, vkGetPhysicalDeviceXlibPresentationSupportKHR, VkPhysicalDevice,      \
+#define HookDefine_PlatformSpecific_Xlib()                                                         \
+  HookDefine4(VkResult, vkCreateXlibSurfaceKHR, VkInstance, instance,                              \
+              const VkXlibSurfaceCreateInfoKHR *, pCreateInfo, const VkAllocationCallbacks *,      \
+              pAllocator, VkSurfaceKHR *, pSurface);                                               \
+  HookDefine4(VkBool32, vkGetPhysicalDeviceXlibPresentationSupportKHR, VkPhysicalDevice,           \
               physicalDevice, uint32_t, queueFamilyIndex, Display *, dpy, VisualID, visualID);     \
   HookDefine3(VkResult, vkAcquireXlibDisplayEXT, VkPhysicalDevice, physicalDevice, Display *, dpy, \
               VkDisplayKHR, display);                                                              \
   HookDefine4(VkResult, vkGetRandROutputDisplayEXT, VkPhysicalDevice, physicalDevice, Display *,   \
               dpy, RROutput, rrOutput, VkDisplayKHR *, pDisplay);
 
-#else // defined(VK_USE_PLATFORM_XLIB_KHR)
+#else
 
 #define HookInitInstance_PlatformSpecific_Xlib()
 #define HookDefine_PlatformSpecific_Xlib()
 
-#endif // defined(VK_USE_PLATFORM_XLIB_KHR)
+#endif
 
 #if defined(VK_USE_PLATFORM_YETI_GOOGLE)
 
@@ -136,6 +148,7 @@
 #define HookDefine_PlatformSpecific_Yeti()
 
 #endif // defined(VK_USE_PLATFORM_YETI_GOOGLE)
+
 
 #define HookInitInstance_PlatformSpecific() \
   HookInitInstance_PlatformSpecific_Xcb() HookInitInstance_PlatformSpecific_Xlib() HookInitInstance_PlatformSpecific_Yeti()
@@ -287,102 +300,162 @@
 
 // for simplicity and since the check itself is platform agnostic,
 // these aren't protected in platform defines
-#define CheckInstanceExts()         \
-  CheckExt(VK_KHR_xlib_surface);    \
-  CheckExt(VK_GOOGLE_yeti_surface); \
-  CheckExt(VK_KHR_xcb_surface);     \
-  CheckExt(VK_KHR_win32_surface);   \
-  CheckExt(VK_KHR_android_surface); \
-  CheckExt(VK_KHR_surface);         \
-  CheckExt(VK_EXT_debug_report);    \
-  CheckExt(VK_KHR_display);         \
-  CheckExt(VK_NV_external_memory_capabilities);     \
-  CheckExt(VK_KHR_get_physical_device_properties2); \
-  CheckExt(VK_EXT_display_surface_counter);         \
-  CheckExt(VK_EXT_direct_mode_display);             \
-  CheckExt(VK_EXT_acquire_xlib_display);            \
-  CheckExt(VK_KHR_external_memory_capabilities);    \
-  CheckExt(VK_KHR_external_semaphore_capabilities);
+#define CheckInstanceExts()                            \
+  CheckExt(KHR_xlib_surface, VKXX);                    \
+  CheckExt(GOOGLE_yeti_surface, VKXX);                 \
+  CheckExt(KHR_xcb_surface, VKXX);                     \
+  CheckExt(KHR_win32_surface, VKXX);                   \
+  CheckExt(KHR_android_surface, VKXX);                 \
+  CheckExt(KHR_surface, VKXX);                         \
+  CheckExt(EXT_debug_report, VKXX);                    \
+  CheckExt(KHR_display, VKXX);                         \
+  CheckExt(NV_external_memory_capabilities, VKXX);     \
+  CheckExt(KHR_get_physical_device_properties2, VK11); \
+  CheckExt(EXT_display_surface_counter, VKXX);         \
+  CheckExt(EXT_direct_mode_display, VKXX);             \
+  CheckExt(EXT_acquire_xlib_display, VKXX);            \
+  CheckExt(KHR_external_memory_capabilities, VK11);    \
+  CheckExt(KHR_external_semaphore_capabilities, VK11); \
+  CheckExt(KHR_external_fence_capabilities, VK11);     \
+  CheckExt(EXT_debug_utils, VKXX);                     \
+  CheckExt(KHR_device_group_creation, VK11);           \
+  CheckExt(protected_memory, VK11);
 
-#define CheckDeviceExts()                \
-  CheckExt(VK_EXT_debug_marker);         \
-  CheckExt(VK_KHR_swapchain);            \
-  CheckExt(VK_KHR_display_swapchain);    \
-  CheckExt(VK_NV_external_memory);       \
-  CheckExt(VK_NV_external_memory_win32); \
-  CheckExt(VK_NV_win32_keyed_mutex);         \
-  CheckExt(VK_KHR_maintenance1);             \
-  CheckExt(VK_EXT_display_control);          \
-  CheckExt(VK_KHR_external_memory);          \
-  CheckExt(VK_KHR_external_memory_win32);    \
-  CheckExt(VK_KHR_external_memory_fd);       \
-  CheckExt(VK_KHR_external_semaphore);       \
-  CheckExt(VK_KHR_external_semaphore_win32); \
-  CheckExt(VK_KHR_external_semaphore_fd);    \
-  CheckExt(VK_KHR_get_memory_requirements2); \
-  CheckExt(VK_AMD_shader_info);
+#define CheckDeviceExts()                         \
+  CheckExt(EXT_debug_marker, VKXX);               \
+  CheckExt(KHR_swapchain, VKXX);                  \
+  CheckExt(KHR_display_swapchain, VKXX);          \
+  CheckExt(NV_external_memory, VKXX);             \
+  CheckExt(NV_external_memory_win32, VKXX);       \
+  CheckExt(NV_win32_keyed_mutex, VKXX);           \
+  CheckExt(KHR_maintenance1, VK11);               \
+  CheckExt(KHR_maintenance2, VK11);               \
+  CheckExt(KHR_maintenance3, VK11);               \
+  CheckExt(EXT_display_control, VKXX);            \
+  CheckExt(KHR_external_memory, VK11);            \
+  CheckExt(KHR_external_memory_win32, VKXX);      \
+  CheckExt(KHR_external_memory_fd, VKXX);         \
+  CheckExt(KHR_external_semaphore, VK11);         \
+  CheckExt(KHR_external_semaphore_win32, VKXX);   \
+  CheckExt(KHR_external_semaphore_fd, VKXX);      \
+  CheckExt(KHR_external_fence, VK11);             \
+  CheckExt(KHR_external_fence_win32, VKXX);       \
+  CheckExt(KHR_external_fence_fd, VKXX);          \
+  CheckExt(KHR_get_memory_requirements2, VK11);   \
+  CheckExt(AMD_shader_info, VKXX);                \
+  CheckExt(KHR_push_descriptor, VKXX);            \
+  CheckExt(KHR_descriptor_update_template, VK11); \
+  CheckExt(KHR_bind_memory2, VK11);               \
+  CheckExt(EXT_conservative_rasterization, VKXX); \
+  CheckExt(EXT_global_priority, VKXX);            \
+  CheckExt(AMD_buffer_marker, VKXX);              \
+  CheckExt(EXT_vertex_attribute_divisor, VKXX);   \
+  CheckExt(EXT_sampler_filter_minmax, VKXX);      \
+  CheckExt(KHR_sampler_ycbcr_conversion, VK11);   \
+  CheckExt(KHR_device_group, VK11);
 
-#define HookInitVulkanInstanceExts()                                             \
-  HookInitExtension(VK_KHR_surface, DestroySurfaceKHR);                          \
-  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfaceSupportKHR);         \
-  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfaceCapabilitiesKHR);    \
-  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfaceFormatsKHR);         \
-  HookInitExtension(VK_KHR_surface, GetPhysicalDeviceSurfacePresentModesKHR);    \
-  HookInitExtension(VK_EXT_debug_report, CreateDebugReportCallbackEXT);          \
-  HookInitExtension(VK_EXT_debug_report, DestroyDebugReportCallbackEXT);         \
-  HookInitExtension(VK_EXT_debug_report, DebugReportMessageEXT);                 \
-  HookInitExtension(VK_KHR_display, GetPhysicalDeviceDisplayPropertiesKHR);      \
-  HookInitExtension(VK_KHR_display, GetPhysicalDeviceDisplayPlanePropertiesKHR); \
-  HookInitExtension(VK_KHR_display, GetDisplayPlaneSupportedDisplaysKHR);        \
-  HookInitExtension(VK_KHR_display, GetDisplayModePropertiesKHR);                \
-  HookInitExtension(VK_KHR_display, CreateDisplayModeKHR);                       \
-  HookInitExtension(VK_KHR_display, GetDisplayPlaneCapabilitiesKHR);             \
-  HookInitExtension(VK_KHR_display, CreateDisplayPlaneSurfaceKHR);               \
-  HookInitExtension(VK_NV_external_memory_capabilities,                          \
-                    GetPhysicalDeviceExternalImageFormatPropertiesNV);           \
-  HookInitExtension(VK_KHR_get_physical_device_properties2, GetPhysicalDeviceFeatures2KHR);         \
-  HookInitExtension(VK_KHR_get_physical_device_properties2, GetPhysicalDeviceProperties2KHR);       \
-  HookInitExtension(VK_KHR_get_physical_device_properties2, GetPhysicalDeviceFormatProperties2KHR); \
-  HookInitExtension(VK_KHR_get_physical_device_properties2,                                         \
-                    GetPhysicalDeviceImageFormatProperties2KHR);                                    \
-  HookInitExtension(VK_KHR_get_physical_device_properties2,                                         \
-                    GetPhysicalDeviceQueueFamilyProperties2KHR);                                    \
-  HookInitExtension(VK_KHR_get_physical_device_properties2, GetPhysicalDeviceMemoryProperties2KHR); \
-  HookInitExtension(VK_KHR_get_physical_device_properties2,                                         \
-                    GetPhysicalDeviceSparseImageFormatProperties2KHR);                              \
-  HookInitExtension(VK_EXT_direct_mode_display, ReleaseDisplayEXT);                                 \
-  HookInitExtension(VK_EXT_display_surface_counter, GetPhysicalDeviceSurfaceCapabilities2EXT);      \
-  HookInitExtension(VK_KHR_external_memory_capabilities,                                            \
-                    GetPhysicalDeviceExternalBufferPropertiesKHR);                                  \
-  HookInitExtension(VK_KHR_external_semaphore_capabilities,                                         \
-                    GetPhysicalDeviceExternalSemaphorePropertiesKHR);                               \
+#define HookInitVulkanInstanceExts()                                                                 \
+  HookInitExtension(KHR_surface, DestroySurfaceKHR);                                                 \
+  HookInitExtension(KHR_surface, GetPhysicalDeviceSurfaceSupportKHR);                                \
+  HookInitExtension(KHR_surface, GetPhysicalDeviceSurfaceCapabilitiesKHR);                           \
+  HookInitExtension(KHR_surface, GetPhysicalDeviceSurfaceFormatsKHR);                                \
+  HookInitExtension(KHR_surface, GetPhysicalDeviceSurfacePresentModesKHR);                           \
+  HookInitExtension(EXT_debug_report, CreateDebugReportCallbackEXT);                                 \
+  HookInitExtension(EXT_debug_report, DestroyDebugReportCallbackEXT);                                \
+  HookInitExtension(EXT_debug_report, DebugReportMessageEXT);                                        \
+  HookInitExtension(KHR_display, GetPhysicalDeviceDisplayPropertiesKHR);                             \
+  HookInitExtension(KHR_display, GetPhysicalDeviceDisplayPlanePropertiesKHR);                        \
+  HookInitExtension(KHR_display, GetDisplayPlaneSupportedDisplaysKHR);                               \
+  HookInitExtension(KHR_display, GetDisplayModePropertiesKHR);                                       \
+  HookInitExtension(KHR_display, CreateDisplayModeKHR);                                              \
+  HookInitExtension(KHR_display, GetDisplayPlaneCapabilitiesKHR);                                    \
+  HookInitExtension(KHR_display, CreateDisplayPlaneSurfaceKHR);                                      \
+  HookInitExtension(NV_external_memory_capabilities,                                                 \
+                    GetPhysicalDeviceExternalImageFormatPropertiesNV);                               \
+  HookInitPromotedExtension(KHR_get_physical_device_properties2, GetPhysicalDeviceFeatures2, KHR);   \
+  HookInitPromotedExtension(KHR_get_physical_device_properties2, GetPhysicalDeviceProperties2, KHR); \
+  HookInitPromotedExtension(KHR_get_physical_device_properties2,                                     \
+                            GetPhysicalDeviceFormatProperties2, KHR);                                \
+  HookInitPromotedExtension(KHR_get_physical_device_properties2,                                     \
+                            GetPhysicalDeviceImageFormatProperties2, KHR);                           \
+  HookInitPromotedExtension(KHR_get_physical_device_properties2,                                     \
+                            GetPhysicalDeviceQueueFamilyProperties2, KHR);                           \
+  HookInitPromotedExtension(KHR_get_physical_device_properties2,                                     \
+                            GetPhysicalDeviceMemoryProperties2, KHR);                                \
+  HookInitPromotedExtension(KHR_get_physical_device_properties2,                                     \
+                            GetPhysicalDeviceSparseImageFormatProperties2, KHR);                     \
+  HookInitExtension(EXT_direct_mode_display, ReleaseDisplayEXT);                                     \
+  HookInitExtension(EXT_display_surface_counter, GetPhysicalDeviceSurfaceCapabilities2EXT);          \
+  HookInitPromotedExtension(KHR_external_memory_capabilities,                                        \
+                            GetPhysicalDeviceExternalBufferProperties, KHR);                         \
+  HookInitPromotedExtension(KHR_external_semaphore_capabilities,                                     \
+                            GetPhysicalDeviceExternalSemaphoreProperties, KHR);                      \
+  HookInitPromotedExtension(KHR_external_fence_capabilities,                                         \
+                            GetPhysicalDeviceExternalFenceProperties, KHR);                          \
+  HookInitExtension(EXT_debug_utils, CreateDebugUtilsMessengerEXT);                                  \
+  HookInitExtension(EXT_debug_utils, DestroyDebugUtilsMessengerEXT);                                 \
+  HookInitExtension(EXT_debug_utils, SubmitDebugUtilsMessageEXT);                                    \
+  HookInitPromotedExtension(KHR_device_group_creation, EnumeratePhysicalDeviceGroups, KHR);          \
+  /* Not technically accurate - part of KHR_device_group - but these extensions are linked and */    \
+  /* should always be present/not present together. Keying from the instance extension ensures */    \
+  /* we'll load this function correctly when populating dispatch tables. */                          \
+  HookInitExtension(KHR_device_group_creation &&KHR_surface, GetPhysicalDevicePresentRectanglesKHR); \
   HookInitInstance_PlatformSpecific()
 
-#define HookInitVulkanDeviceExts()                                        \
-  HookInitExtension(VK_EXT_debug_marker, DebugMarkerSetObjectTagEXT);     \
-  HookInitExtension(VK_EXT_debug_marker, DebugMarkerSetObjectNameEXT);    \
-  HookInitExtension(VK_EXT_debug_marker, CmdDebugMarkerBeginEXT);         \
-  HookInitExtension(VK_EXT_debug_marker, CmdDebugMarkerEndEXT);           \
-  HookInitExtension(VK_EXT_debug_marker, CmdDebugMarkerInsertEXT);        \
-  HookInitExtension(VK_KHR_swapchain, CreateSwapchainKHR);                \
-  HookInitExtension(VK_KHR_swapchain, DestroySwapchainKHR);               \
-  HookInitExtension(VK_KHR_swapchain, GetSwapchainImagesKHR);             \
-  HookInitExtension(VK_KHR_swapchain, AcquireNextImageKHR);               \
-  HookInitExtension(VK_KHR_swapchain, QueuePresentKHR);                   \
-  HookInitExtension(VK_KHR_display_swapchain, CreateSharedSwapchainsKHR); \
-  HookInitExtension(VK_KHR_maintenance1, TrimCommandPoolKHR);                               \
-  HookInitExtension(VK_EXT_display_control, DisplayPowerControlEXT);                        \
-  HookInitExtension(VK_EXT_display_control, RegisterDeviceEventEXT);                        \
-  HookInitExtension(VK_EXT_display_control, RegisterDisplayEventEXT);                       \
-  HookInitExtension(VK_EXT_display_control, GetSwapchainCounterEXT);                        \
-  HookInitExtension(VK_KHR_external_memory_fd, GetMemoryFdKHR);                             \
-  HookInitExtension(VK_KHR_external_memory_fd, GetMemoryFdPropertiesKHR);                   \
-  HookInitExtension(VK_KHR_external_semaphore_fd, ImportSemaphoreFdKHR);                    \
-  HookInitExtension(VK_KHR_external_semaphore_fd, GetSemaphoreFdKHR);                       \
-  HookInitExtension(VK_KHR_get_memory_requirements2, GetBufferMemoryRequirements2KHR);      \
-  HookInitExtension(VK_KHR_get_memory_requirements2, GetImageMemoryRequirements2KHR);       \
-  HookInitExtension(VK_KHR_get_memory_requirements2, GetImageSparseMemoryRequirements2KHR); \
-  HookInitExtension(VK_AMD_shader_info, GetShaderInfoAMD);                                  \
+#define HookInitVulkanDeviceExts()                                                                 \
+  HookInitExtension(EXT_debug_marker, DebugMarkerSetObjectTagEXT);                                 \
+  HookInitExtension(EXT_debug_marker, DebugMarkerSetObjectNameEXT);                                \
+  HookInitExtension(EXT_debug_marker, CmdDebugMarkerBeginEXT);                                     \
+  HookInitExtension(EXT_debug_marker, CmdDebugMarkerEndEXT);                                       \
+  HookInitExtension(EXT_debug_marker, CmdDebugMarkerInsertEXT);                                    \
+  HookInitExtension(KHR_swapchain, CreateSwapchainKHR);                                            \
+  HookInitExtension(KHR_swapchain, DestroySwapchainKHR);                                           \
+  HookInitExtension(KHR_swapchain, GetSwapchainImagesKHR);                                         \
+  HookInitExtension(KHR_swapchain, AcquireNextImageKHR);                                           \
+  HookInitExtension(KHR_swapchain, QueuePresentKHR);                                               \
+  HookInitExtension(KHR_display_swapchain, CreateSharedSwapchainsKHR);                             \
+  HookInitPromotedExtension(KHR_maintenance1, TrimCommandPool, KHR);                               \
+  HookInitExtension(EXT_display_control, DisplayPowerControlEXT);                                  \
+  HookInitExtension(EXT_display_control, RegisterDeviceEventEXT);                                  \
+  HookInitExtension(EXT_display_control, RegisterDisplayEventEXT);                                 \
+  HookInitExtension(EXT_display_control, GetSwapchainCounterEXT);                                  \
+  HookInitExtension(KHR_external_memory_fd, GetMemoryFdKHR);                                       \
+  HookInitExtension(KHR_external_memory_fd, GetMemoryFdPropertiesKHR);                             \
+  HookInitExtension(KHR_external_semaphore_fd, ImportSemaphoreFdKHR);                              \
+  HookInitExtension(KHR_external_semaphore_fd, GetSemaphoreFdKHR);                                 \
+  HookInitExtension(KHR_external_fence_fd, ImportFenceFdKHR);                                      \
+  HookInitExtension(KHR_external_fence_fd, GetFenceFdKHR);                                         \
+  HookInitPromotedExtension(KHR_get_memory_requirements2, GetBufferMemoryRequirements2, KHR);      \
+  HookInitPromotedExtension(KHR_get_memory_requirements2, GetImageMemoryRequirements2, KHR);       \
+  HookInitPromotedExtension(KHR_get_memory_requirements2, GetImageSparseMemoryRequirements2, KHR); \
+  HookInitExtension(AMD_shader_info, GetShaderInfoAMD);                                            \
+  HookInitExtension(KHR_push_descriptor, CmdPushDescriptorSetKHR);                                 \
+  HookInitPromotedExtension(KHR_descriptor_update_template, CreateDescriptorUpdateTemplate, KHR);  \
+  HookInitPromotedExtension(KHR_descriptor_update_template, DestroyDescriptorUpdateTemplate, KHR); \
+  HookInitPromotedExtension(KHR_descriptor_update_template, UpdateDescriptorSetWithTemplate, KHR); \
+  HookInitExtension(KHR_push_descriptor &&KHR_descriptor_update_template,                          \
+                    CmdPushDescriptorSetWithTemplateKHR);                                          \
+  HookInitPromotedExtension(KHR_bind_memory2, BindBufferMemory2, KHR);                             \
+  HookInitPromotedExtension(KHR_bind_memory2, BindImageMemory2, KHR);                              \
+  HookInitPromotedExtension(KHR_maintenance3, GetDescriptorSetLayoutSupport, KHR);                 \
+  HookInitExtension(AMD_buffer_marker, CmdWriteBufferMarkerAMD);                                   \
+  HookInitExtension(EXT_debug_utils, SetDebugUtilsObjectNameEXT);                                  \
+  HookInitExtension(EXT_debug_utils, SetDebugUtilsObjectTagEXT);                                   \
+  HookInitExtension(EXT_debug_utils, QueueBeginDebugUtilsLabelEXT);                                \
+  HookInitExtension(EXT_debug_utils, QueueEndDebugUtilsLabelEXT);                                  \
+  HookInitExtension(EXT_debug_utils, QueueInsertDebugUtilsLabelEXT);                               \
+  HookInitExtension(EXT_debug_utils, CmdBeginDebugUtilsLabelEXT);                                  \
+  HookInitExtension(EXT_debug_utils, CmdEndDebugUtilsLabelEXT);                                    \
+  HookInitExtension(EXT_debug_utils, CmdInsertDebugUtilsLabelEXT);                                 \
+  HookInitPromotedExtension(KHR_sampler_ycbcr_conversion, CreateSamplerYcbcrConversion, KHR);      \
+  HookInitPromotedExtension(KHR_sampler_ycbcr_conversion, DestroySamplerYcbcrConversion, KHR);     \
+  HookInitPromotedExtension(KHR_device_group, GetDeviceGroupPeerMemoryFeatures, KHR);              \
+  HookInitPromotedExtension(KHR_device_group, CmdSetDeviceMask, KHR);                              \
+  HookInitPromotedExtension(KHR_device_group, CmdDispatchBase, KHR);                               \
+  HookInitExtension(KHR_device_group &&KHR_surface, GetDeviceGroupPresentCapabilitiesKHR);         \
+  HookInitExtension(KHR_device_group &&KHR_surface, GetDeviceGroupSurfacePresentModesKHR);         \
+  HookInitExtension(KHR_device_group &&KHR_swapchain, AcquireNextImage2KHR);                       \
+  HookInitExtension(protected_memory, GetDeviceQueue2);                                            \
   HookInitDevice_PlatformSpecific()
 
 #define DefineHooks()                                                                                \
@@ -735,24 +808,24 @@
               VkImageUsageFlags, usage, VkImageCreateFlags, flags,                                   \
               VkExternalMemoryHandleTypeFlagsNV, externalHandleType,                                 \
               VkExternalImageFormatPropertiesNV *, pExternalImageFormatProperties);                  \
-  HookDefine3(void, vkTrimCommandPoolKHR, VkDevice, device, VkCommandPool, commandPool,              \
-              VkCommandPoolTrimFlagsKHR, flags);                                                     \
-  HookDefine2(void, vkGetPhysicalDeviceFeatures2KHR, VkPhysicalDevice, physicalDevice,               \
-              VkPhysicalDeviceFeatures2KHR *, pFeatures);                                            \
-  HookDefine2(void, vkGetPhysicalDeviceProperties2KHR, VkPhysicalDevice, physicalDevice,             \
-              VkPhysicalDeviceProperties2KHR *, pProperties);                                        \
-  HookDefine3(void, vkGetPhysicalDeviceFormatProperties2KHR, VkPhysicalDevice, physicalDevice,       \
-              VkFormat, format, VkFormatProperties2KHR *, pFormatProperties);                        \
-  HookDefine3(VkResult, vkGetPhysicalDeviceImageFormatProperties2KHR, VkPhysicalDevice,              \
-              physicalDevice, const VkPhysicalDeviceImageFormatInfo2KHR *, pImageFormatInfo,         \
-              VkImageFormatProperties2KHR *, pImageFormatProperties);                                \
-  HookDefine3(void, vkGetPhysicalDeviceQueueFamilyProperties2KHR, VkPhysicalDevice, physicalDevice,  \
-              uint32_t *, pCount, VkQueueFamilyProperties2KHR *, pQueueFamilyProperties);            \
-  HookDefine2(void, vkGetPhysicalDeviceMemoryProperties2KHR, VkPhysicalDevice, physicalDevice,       \
-              VkPhysicalDeviceMemoryProperties2KHR *, pMemoryProperties);                            \
-  HookDefine4(void, vkGetPhysicalDeviceSparseImageFormatProperties2KHR, VkPhysicalDevice,            \
-              physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2KHR *, pFormatInfo,        \
-              uint32_t *, pPropertyCount, VkSparseImageFormatProperties2KHR *, pProperties);         \
+  HookDefine3(void, vkTrimCommandPool, VkDevice, device, VkCommandPool, commandPool,                 \
+              VkCommandPoolTrimFlags, flags);                                                        \
+  HookDefine2(void, vkGetPhysicalDeviceFeatures2, VkPhysicalDevice, physicalDevice,                  \
+              VkPhysicalDeviceFeatures2 *, pFeatures);                                               \
+  HookDefine2(void, vkGetPhysicalDeviceProperties2, VkPhysicalDevice, physicalDevice,                \
+              VkPhysicalDeviceProperties2 *, pProperties);                                           \
+  HookDefine3(void, vkGetPhysicalDeviceFormatProperties2, VkPhysicalDevice, physicalDevice,          \
+              VkFormat, format, VkFormatProperties2 *, pFormatProperties);                           \
+  HookDefine3(VkResult, vkGetPhysicalDeviceImageFormatProperties2, VkPhysicalDevice,                 \
+              physicalDevice, const VkPhysicalDeviceImageFormatInfo2 *, pImageFormatInfo,            \
+              VkImageFormatProperties2 *, pImageFormatProperties);                                   \
+  HookDefine3(void, vkGetPhysicalDeviceQueueFamilyProperties2, VkPhysicalDevice, physicalDevice,     \
+              uint32_t *, pCount, VkQueueFamilyProperties2 *, pQueueFamilyProperties);               \
+  HookDefine2(void, vkGetPhysicalDeviceMemoryProperties2, VkPhysicalDevice, physicalDevice,          \
+              VkPhysicalDeviceMemoryProperties2 *, pMemoryProperties);                               \
+  HookDefine4(void, vkGetPhysicalDeviceSparseImageFormatProperties2, VkPhysicalDevice,               \
+              physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2 *, pFormatInfo,           \
+              uint32_t *, pPropertyCount, VkSparseImageFormatProperties2 *, pProperties);            \
   HookDefine3(VkResult, vkGetPhysicalDeviceSurfaceCapabilities2EXT, VkPhysicalDevice,                \
               physicalDevice, VkSurfaceKHR, surface, VkSurfaceCapabilities2EXT *,                    \
               pSurfaceCapabilities);                                                                 \
@@ -767,35 +840,115 @@
               VkSurfaceCounterFlagBitsEXT, counter, uint64_t *, pCounterValue);                      \
   HookDefine2(VkResult, vkReleaseDisplayEXT, VkPhysicalDevice, physicalDevice, VkDisplayKHR,         \
               display);                                                                              \
-  HookDefine3(void, vkGetPhysicalDeviceExternalBufferPropertiesKHR, VkPhysicalDevice,                \
-              physicalDevice, const VkPhysicalDeviceExternalBufferInfoKHR *, pExternalBufferInfo,    \
-              VkExternalBufferPropertiesKHR *, pExternalBufferProperties);                           \
+  HookDefine3(void, vkGetPhysicalDeviceExternalBufferProperties, VkPhysicalDevice, physicalDevice,   \
+              const VkPhysicalDeviceExternalBufferInfo *, pExternalBufferInfo,                       \
+              VkExternalBufferProperties *, pExternalBufferProperties);                              \
   HookDefine3(VkResult, vkGetMemoryFdKHR, VkDevice, device, const VkMemoryGetFdInfoKHR *,            \
               pGetFdInfo, int *, pFd);                                                               \
   HookDefine4(VkResult, vkGetMemoryFdPropertiesKHR, VkDevice, device,                                \
-              VkExternalMemoryHandleTypeFlagBitsKHR, handleType, int, fd,                            \
-              VkMemoryFdPropertiesKHR *, pMemoryFdProperties);                                       \
-  HookDefine3(void, vkGetPhysicalDeviceExternalSemaphorePropertiesKHR, VkPhysicalDevice,             \
-              physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfoKHR *,                      \
-              pExternalSemaphoreInfo, VkExternalSemaphorePropertiesKHR *,                            \
-              pExternalSemaphoreProperties);                                                         \
+              VkExternalMemoryHandleTypeFlagBits, handleType, int, fd, VkMemoryFdPropertiesKHR *,    \
+              pMemoryFdProperties);                                                                  \
+  HookDefine3(void, vkGetPhysicalDeviceExternalSemaphoreProperties, VkPhysicalDevice,                \
+              physicalDevice, const VkPhysicalDeviceExternalSemaphoreInfo *, pExternalSemaphoreInfo, \
+              VkExternalSemaphoreProperties *, pExternalSemaphoreProperties);                        \
   HookDefine2(VkResult, vkImportSemaphoreFdKHR, VkDevice, device,                                    \
               const VkImportSemaphoreFdInfoKHR *, pImportSemaphoreFdInfo);                           \
   HookDefine3(VkResult, vkGetSemaphoreFdKHR, VkDevice, device, const VkSemaphoreGetFdInfoKHR *,      \
               pGetFdInfo, int *, pFd);                                                               \
-  HookDefine3(void, vkGetImageMemoryRequirements2KHR, VkDevice, device,                              \
-              const VkImageMemoryRequirementsInfo2KHR *, pInfo, VkMemoryRequirements2KHR *,          \
+  HookDefine3(void, vkGetPhysicalDeviceExternalFenceProperties, VkPhysicalDevice, physicalDevice,    \
+              const VkPhysicalDeviceExternalFenceInfo *, pExternalFenceInfo,                         \
+              VkExternalFenceProperties *, pExternalFenceProperties);                                \
+  HookDefine2(VkResult, vkImportFenceFdKHR, VkDevice, device, const VkImportFenceFdInfoKHR *,        \
+              pImportFenceFdInfo);                                                                   \
+  HookDefine3(VkResult, vkGetFenceFdKHR, VkDevice, device, const VkFenceGetFdInfoKHR *,              \
+              pGetFdInfo, int *, pFd);                                                               \
+  HookDefine3(void, vkGetImageMemoryRequirements2, VkDevice, device,                                 \
+              const VkImageMemoryRequirementsInfo2 *, pInfo, VkMemoryRequirements2 *,                \
               pMemoryRequirements);                                                                  \
-  HookDefine3(void, vkGetBufferMemoryRequirements2KHR, VkDevice, device,                             \
-              const VkBufferMemoryRequirementsInfo2KHR *, pInfo, VkMemoryRequirements2KHR *,         \
+  HookDefine3(void, vkGetBufferMemoryRequirements2, VkDevice, device,                                \
+              const VkBufferMemoryRequirementsInfo2 *, pInfo, VkMemoryRequirements2 *,               \
               pMemoryRequirements);                                                                  \
-  HookDefine4(void, vkGetImageSparseMemoryRequirements2KHR, VkDevice, device,                        \
-              const VkImageSparseMemoryRequirementsInfo2KHR *, pInfo, uint32_t *,                    \
-              pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2KHR *,                  \
+  HookDefine4(void, vkGetImageSparseMemoryRequirements2, VkDevice, device,                           \
+              const VkImageSparseMemoryRequirementsInfo2 *, pInfo, uint32_t *,                       \
+              pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2 *,                     \
               pSparseMemoryRequirements);                                                            \
   HookDefine6(VkResult, vkGetShaderInfoAMD, VkDevice, device, VkPipeline, pipeline,                  \
               VkShaderStageFlagBits, shaderStage, VkShaderInfoTypeAMD, infoType, size_t *,           \
               pInfoSize, void *, pInfo);                                                             \
+  HookDefine6(void, vkCmdPushDescriptorSetKHR, VkCommandBuffer, commandBuffer,                       \
+              VkPipelineBindPoint, pipelineBindPoint, VkPipelineLayout, layout, uint32_t, set,       \
+              uint32_t, descriptorWriteCount, const VkWriteDescriptorSet *, pDescriptorWrites);      \
+  HookDefine4(VkResult, vkCreateDescriptorUpdateTemplate, VkDevice, device,                          \
+              const VkDescriptorUpdateTemplateCreateInfo *, pCreateInfo,                             \
+              const VkAllocationCallbacks *, pAllocator, VkDescriptorUpdateTemplate *,               \
+              pDescriptorUpdateTemplate);                                                            \
+  HookDefine3(void, vkDestroyDescriptorUpdateTemplate, VkDevice, device, VkDescriptorUpdateTemplate, \
+              descriptorUpdateTemplate, const VkAllocationCallbacks *, pAllocator);                  \
+  HookDefine4(void, vkUpdateDescriptorSetWithTemplate, VkDevice, device, VkDescriptorSet,            \
+              descriptorSet, VkDescriptorUpdateTemplate, descriptorUpdateTemplate, const void *,     \
+              pData);                                                                                \
+  HookDefine5(void, vkCmdPushDescriptorSetWithTemplateKHR, VkCommandBuffer, commandBuffer,           \
+              VkDescriptorUpdateTemplate, descriptorUpdateTemplate, VkPipelineLayout, layout,        \
+              uint32_t, set, const void *, pData);                                                   \
+  HookDefine3(VkResult, vkBindBufferMemory2, VkDevice, device, uint32_t, bindInfoCount,              \
+              const VkBindBufferMemoryInfo *, pBindInfos);                                           \
+  HookDefine3(VkResult, vkBindImageMemory2, VkDevice, device, uint32_t, bindInfoCount,               \
+              const VkBindImageMemoryInfo *, pBindInfos);                                            \
+  HookDefine3(void, vkGetDescriptorSetLayoutSupport, VkDevice, device,                               \
+              const VkDescriptorSetLayoutCreateInfo *, pCreateInfo,                                  \
+              VkDescriptorSetLayoutSupport *, pSupport);                                             \
+  HookDefine5(void, vkCmdWriteBufferMarkerAMD, VkCommandBuffer, commandBuffer,                       \
+              VkPipelineStageFlagBits, pipelineStage, VkBuffer, dstBuffer, VkDeviceSize,             \
+              dstOffset, uint32_t, marker);                                                          \
+  HookDefine2(VkResult, vkSetDebugUtilsObjectNameEXT, VkDevice, device,                              \
+              const VkDebugUtilsObjectNameInfoEXT *, pNameInfo);                                     \
+  HookDefine2(VkResult, vkSetDebugUtilsObjectTagEXT, VkDevice, device,                               \
+              const VkDebugUtilsObjectTagInfoEXT *, pTagInfo);                                       \
+  HookDefine2(void, vkQueueBeginDebugUtilsLabelEXT, VkQueue, queue, const VkDebugUtilsLabelEXT *,    \
+              pLabelInfo);                                                                           \
+  HookDefine1(void, vkQueueEndDebugUtilsLabelEXT, VkQueue, queue);                                   \
+  HookDefine2(void, vkQueueInsertDebugUtilsLabelEXT, VkQueue, queue, const VkDebugUtilsLabelEXT *,   \
+              pLabelInfo);                                                                           \
+  HookDefine2(void, vkCmdBeginDebugUtilsLabelEXT, VkCommandBuffer, commandBuffer,                    \
+              const VkDebugUtilsLabelEXT *, pLabelInfo);                                             \
+  HookDefine1(void, vkCmdEndDebugUtilsLabelEXT, VkCommandBuffer, commandBuffer);                     \
+  HookDefine2(void, vkCmdInsertDebugUtilsLabelEXT, VkCommandBuffer, commandBuffer,                   \
+              const VkDebugUtilsLabelEXT *, pLabelInfo);                                             \
+  HookDefine4(VkResult, vkCreateDebugUtilsMessengerEXT, VkInstance, instance,                        \
+              const VkDebugUtilsMessengerCreateInfoEXT *, pCreateInfo,                               \
+              const VkAllocationCallbacks *, pAllocator, VkDebugUtilsMessengerEXT *, pMessenger);    \
+  HookDefine3(void, vkDestroyDebugUtilsMessengerEXT, VkInstance, instance,                           \
+              VkDebugUtilsMessengerEXT, messenger, const VkAllocationCallbacks *, pAllocator);       \
+  HookDefine4(void, vkSubmitDebugUtilsMessageEXT, VkInstance, instance,                              \
+              VkDebugUtilsMessageSeverityFlagBitsEXT, messageSeverity,                               \
+              VkDebugUtilsMessageTypeFlagsEXT, messageTypes,                                         \
+              const VkDebugUtilsMessengerCallbackDataEXT *, pCallbackData);                          \
+  HookDefine4(VkResult, vkCreateSamplerYcbcrConversion, VkDevice, device,                            \
+              const VkSamplerYcbcrConversionCreateInfo *, pCreateInfo,                               \
+              const VkAllocationCallbacks *, pAllocator, VkSamplerYcbcrConversion *,                 \
+              pYcbcrConversion);                                                                     \
+  HookDefine3(void, vkDestroySamplerYcbcrConversion, VkDevice, device, VkSamplerYcbcrConversion,     \
+              ycbcrConversion, const VkAllocationCallbacks *, pAllocator);                           \
+  HookDefine3(VkResult, vkEnumeratePhysicalDeviceGroups, VkInstance, instance, uint32_t *,           \
+              pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties *,                          \
+              pPhysicalDeviceGroupProperties);                                                       \
+  HookDefine5(void, vkGetDeviceGroupPeerMemoryFeatures, VkDevice, device, uint32_t, heapIndex,       \
+              uint32_t, localDeviceIndex, uint32_t, remoteDeviceIndex, VkPeerMemoryFeatureFlags *,   \
+              pPeerMemoryFeatures);                                                                  \
+  HookDefine2(void, vkCmdSetDeviceMask, VkCommandBuffer, commandBuffer, uint32_t, deviceMask);       \
+  HookDefine7(void, vkCmdDispatchBase, VkCommandBuffer, commandBuffer, uint32_t, baseGroupX,         \
+              uint32_t, baseGroupY, uint32_t, baseGroupZ, uint32_t, groupCountX, uint32_t,           \
+              groupCountY, uint32_t, groupCountZ);                                                   \
+  HookDefine2(VkResult, vkGetDeviceGroupPresentCapabilitiesKHR, VkDevice, device,                    \
+              VkDeviceGroupPresentCapabilitiesKHR *, pDeviceGroupPresentCapabilities);               \
+  HookDefine3(VkResult, vkGetDeviceGroupSurfacePresentModesKHR, VkDevice, device, VkSurfaceKHR,      \
+              surface, VkDeviceGroupPresentModeFlagsKHR *, pModes);                                  \
+  HookDefine4(VkResult, vkGetPhysicalDevicePresentRectanglesKHR, VkPhysicalDevice, physicalDevice,   \
+              VkSurfaceKHR, surface, uint32_t *, pRectCount, VkRect2D *, pRects);                    \
+  HookDefine3(VkResult, vkAcquireNextImage2KHR, VkDevice, device,                                    \
+              const VkAcquireNextImageInfoKHR *, pAcquireInfo, uint32_t *, pImageIndex);             \
+  HookDefine3(void, vkGetDeviceQueue2, VkDevice, device, const VkDeviceQueueInfo2 *, pQueueInfo,     \
+              VkQueue *, pQueue);                                                                    \
   HookDefine_PlatformSpecific()
 
 struct VkLayerInstanceDispatchTableExtended : VkLayerInstanceDispatchTable

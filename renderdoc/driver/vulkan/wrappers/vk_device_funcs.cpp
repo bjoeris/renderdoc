@@ -175,17 +175,32 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
 
   AddRequiredExtensions(true, params.Extensions, supportedExtensions);
 
-  if(supportedExtensions.find(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) ==
-     supportedExtensions.end())
+  // after 1.0, VK_KHR_get_physical_device_properties2 is promoted to core, but enable it if it's
+  // reported as available, just in case.
+  if(params.APIVersion >= VK_API_VERSION_1_0)
   {
-    RDCWARN("Unsupported required instance extension for AMD performance counters '%s'",
-            VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    if(supportedExtensions.find(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) !=
+       supportedExtensions.end())
+    {
+      if(std::find(params.Extensions.begin(), params.Extensions.end(),
+                   VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) == params.Extensions.end())
+        params.Extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
   }
   else
   {
-    if(std::find(params.Extensions.begin(), params.Extensions.end(),
-                 VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) == params.Extensions.end())
-      params.Extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    if(supportedExtensions.find(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) ==
+       supportedExtensions.end())
+    {
+      RDCWARN("Unsupported required instance extension for AMD performance counters '%s'",
+              VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
+    else
+    {
+      if(std::find(params.Extensions.begin(), params.Extensions.end(),
+                   VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME) == params.Extensions.end())
+        params.Extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
   }
 
   // verify that extensions & layers are supported
@@ -235,6 +250,9 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
       extscstr,
   };
 
+  if(params.APIVersion >= VK_API_VERSION_1_0)
+    renderdocAppInfo.apiVersion = params.APIVersion;
+
   m_Instance = VK_NULL_HANDLE;
 
   VkResult ret = GetInstanceDispatchTable(NULL)->CreateInstance(&instinfo, NULL, &m_Instance);
@@ -242,10 +260,11 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
   InstanceDeviceInfo extInfo;
 
 #undef CheckExt
-#define CheckExt(name)                                    \
-  if(!strcmp(instinfo.ppEnabledExtensionNames[i], #name)) \
-  {                                                       \
-    extInfo.ext_##name = true;                            \
+#define CheckExt(name, ver)                                       \
+  if(!strcmp(instinfo.ppEnabledExtensionNames[i], "VK_" #name) || \
+     (int)renderdocAppInfo.apiVersion >= ver)                     \
+  {                                                               \
+    extInfo.ext_##name = true;                                    \
   }
 
   for(uint32_t i = 0; i < instinfo.enabledExtensionCount; i++)
@@ -410,8 +429,14 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
 
   modifiedCreateInfo.ppEnabledExtensionNames = addedExts;
 
+  // override applicationInfo with RenderDoc's, but preserve apiVersion
   if(modifiedCreateInfo.pApplicationInfo)
+  {
+    if(modifiedCreateInfo.pApplicationInfo->apiVersion >= VK_API_VERSION_1_0)
+      renderdocAppInfo.apiVersion = modifiedCreateInfo.pApplicationInfo->apiVersion;
+
     modifiedCreateInfo.pApplicationInfo = &renderdocAppInfo;
+  }
 
   VkResult ret = createFunc(&modifiedCreateInfo, pAllocator, pInstance);
 
@@ -431,11 +456,17 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
 
   record->instDevInfo = new InstanceDeviceInfo();
 
+  record->instDevInfo->vulkanVersion = VK_API_VERSION_1_0;
+
+  if(renderdocAppInfo.apiVersion > VK_API_VERSION_1_0)
+    record->instDevInfo->vulkanVersion = renderdocAppInfo.apiVersion;
+
 #undef CheckExt
-#define CheckExt(name)                                              \
-  if(!strcmp(modifiedCreateInfo.ppEnabledExtensionNames[i], #name)) \
-  {                                                                 \
-    record->instDevInfo->ext_##name = true;                         \
+#define CheckExt(name, ver)                                                 \
+  if(!strcmp(modifiedCreateInfo.ppEnabledExtensionNames[i], "VK_" #name) || \
+     record->instDevInfo->vulkanVersion >= ver)                             \
+  {                                                                         \
+    record->instDevInfo->ext_##name = true;                                 \
   }
 
   for(uint32_t i = 0; i < modifiedCreateInfo.enabledExtensionCount; i++)
@@ -574,10 +605,9 @@ void WrappedVulkan::vkDestroyInstance(VkInstance instance, const VkAllocationCal
   // application is well behaved. If not, we just leak.
 
   ObjDisp(m_Instance)->DestroyInstance(Unwrap(m_Instance), NULL);
-  GetResourceManager()->ReleaseWrappedResource(m_Instance);
-
   RenderDoc::Inst().RemoveDeviceFrameCapturer(LayerDisp(m_Instance));
 
+  GetResourceManager()->ReleaseWrappedResource(m_Instance);
   m_Instance = VK_NULL_HANDLE;
 }
 
@@ -971,6 +1001,14 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
                  VK_AMD_NEGATIVE_VIEWPORT_HEIGHT_EXTENSION_NAME) != Extensions.end())
       m_ExtensionsEnabled[VkCheckExt_AMD_neg_viewport] = true;
 
+    if(std::find(Extensions.begin(), Extensions.end(),
+                 VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME) != Extensions.end())
+      m_ExtensionsEnabled[VkCheckExt_EXT_conserv_rast] = true;
+
+    if(std::find(Extensions.begin(), Extensions.end(),
+                 VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME) != Extensions.end())
+      m_ExtensionsEnabled[VkCheckExt_EXT_vertex_divisor] = true;
+
     std::vector<string> Layers;
     for(uint32_t i = 0; i < createInfo.enabledLayerCount; i++)
       Layers.push_back(createInfo.ppEnabledLayerNames[i]);
@@ -1040,6 +1078,7 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
         {
           m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;
           RDCERR("Capture requires extension '%s' which is not supported", Extensions[i].c_str());
+          SAFE_DELETE_ARRAY(extArray);
           return false;
         }
 
@@ -1129,6 +1168,70 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
     VkPhysicalDeviceFeatures availFeatures = {0};
     ObjDisp(physicalDevice)->GetPhysicalDeviceFeatures(Unwrap(physicalDevice), &availFeatures);
 
+#define CHECK_PHYS_FEATURE(feature)                                                           \
+  if(enabledFeatures.feature && !availFeatures.feature)                                       \
+  {                                                                                           \
+    m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;                              \
+    RDCERR("Capture requires physical device feature '" #feature "' which is not supported"); \
+    return false;                                                                             \
+  }
+
+    CHECK_PHYS_FEATURE(robustBufferAccess);
+    CHECK_PHYS_FEATURE(fullDrawIndexUint32);
+    CHECK_PHYS_FEATURE(imageCubeArray);
+    CHECK_PHYS_FEATURE(independentBlend);
+    CHECK_PHYS_FEATURE(geometryShader);
+    CHECK_PHYS_FEATURE(tessellationShader);
+    CHECK_PHYS_FEATURE(sampleRateShading);
+    CHECK_PHYS_FEATURE(dualSrcBlend);
+    CHECK_PHYS_FEATURE(logicOp);
+    CHECK_PHYS_FEATURE(multiDrawIndirect);
+    CHECK_PHYS_FEATURE(drawIndirectFirstInstance);
+    CHECK_PHYS_FEATURE(depthClamp);
+    CHECK_PHYS_FEATURE(depthBiasClamp);
+    CHECK_PHYS_FEATURE(fillModeNonSolid);
+    CHECK_PHYS_FEATURE(depthBounds);
+    CHECK_PHYS_FEATURE(wideLines);
+    CHECK_PHYS_FEATURE(largePoints);
+    CHECK_PHYS_FEATURE(alphaToOne);
+    CHECK_PHYS_FEATURE(multiViewport);
+    CHECK_PHYS_FEATURE(samplerAnisotropy);
+    CHECK_PHYS_FEATURE(textureCompressionETC2);
+    CHECK_PHYS_FEATURE(textureCompressionASTC_LDR);
+    CHECK_PHYS_FEATURE(textureCompressionBC);
+    CHECK_PHYS_FEATURE(occlusionQueryPrecise);
+    CHECK_PHYS_FEATURE(pipelineStatisticsQuery);
+    CHECK_PHYS_FEATURE(vertexPipelineStoresAndAtomics);
+    CHECK_PHYS_FEATURE(fragmentStoresAndAtomics);
+    CHECK_PHYS_FEATURE(shaderTessellationAndGeometryPointSize);
+    CHECK_PHYS_FEATURE(shaderImageGatherExtended);
+    CHECK_PHYS_FEATURE(shaderStorageImageExtendedFormats);
+    CHECK_PHYS_FEATURE(shaderStorageImageMultisample);
+    CHECK_PHYS_FEATURE(shaderStorageImageReadWithoutFormat);
+    CHECK_PHYS_FEATURE(shaderStorageImageWriteWithoutFormat);
+    CHECK_PHYS_FEATURE(shaderUniformBufferArrayDynamicIndexing);
+    CHECK_PHYS_FEATURE(shaderSampledImageArrayDynamicIndexing);
+    CHECK_PHYS_FEATURE(shaderStorageBufferArrayDynamicIndexing);
+    CHECK_PHYS_FEATURE(shaderStorageImageArrayDynamicIndexing);
+    CHECK_PHYS_FEATURE(shaderClipDistance);
+    CHECK_PHYS_FEATURE(shaderCullDistance);
+    CHECK_PHYS_FEATURE(shaderFloat64);
+    CHECK_PHYS_FEATURE(shaderInt64);
+    CHECK_PHYS_FEATURE(shaderInt16);
+    CHECK_PHYS_FEATURE(shaderResourceResidency);
+    CHECK_PHYS_FEATURE(shaderResourceMinLod);
+    CHECK_PHYS_FEATURE(sparseBinding);
+    CHECK_PHYS_FEATURE(sparseResidencyBuffer);
+    CHECK_PHYS_FEATURE(sparseResidencyImage2D);
+    CHECK_PHYS_FEATURE(sparseResidencyImage3D);
+    CHECK_PHYS_FEATURE(sparseResidency2Samples);
+    CHECK_PHYS_FEATURE(sparseResidency4Samples);
+    CHECK_PHYS_FEATURE(sparseResidency8Samples);
+    CHECK_PHYS_FEATURE(sparseResidency16Samples);
+    CHECK_PHYS_FEATURE(sparseResidencyAliased);
+    CHECK_PHYS_FEATURE(variableMultisampleRate);
+    CHECK_PHYS_FEATURE(inheritedQueries);
+
     if(availFeatures.depthClamp)
       enabledFeatures.depthClamp = true;
     else
@@ -1167,6 +1270,11 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       RDCWARN(
           "shaderStorageImageMultisample = false, save/load from 2DMS textures will not be "
           "possible");
+
+    if(availFeatures.fragmentStoresAndAtomics)
+      enabledFeatures.fragmentStoresAndAtomics = true;
+    else
+      RDCWARN("fragmentStoresAndAtomics = false, quad overdraw overlay will not be available");
 
     if(availFeatures.sampleRateShading)
       enabledFeatures.sampleRateShading = true;
@@ -1209,10 +1317,11 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
     InstanceDeviceInfo extInfo;
 
 #undef CheckExt
-#define CheckExt(name)                                      \
-  if(!strcmp(createInfo.ppEnabledExtensionNames[i], #name)) \
-  {                                                         \
-    extInfo.ext_##name = true;                              \
+#define CheckExt(name, ver)                                         \
+  if(!strcmp(createInfo.ppEnabledExtensionNames[i], "VK_" #name) || \
+     (int)renderdocAppInfo.apiVersion >= ver)                       \
+  {                                                                 \
+    extInfo.ext_##name = true;                                      \
   }
 
     for(uint32_t i = 0; i < createInfo.enabledExtensionCount; i++)
@@ -1249,6 +1358,10 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
 
     ObjDisp(physicalDevice)
         ->GetPhysicalDeviceFeatures(Unwrap(physicalDevice), &m_PhysicalDeviceData.features);
+
+    RDCASSERT(m_PhysicalDeviceData.props.limits.maxBoundDescriptorSets <
+                  ARRAY_COUNT(BakedCmdBufferInfo::pushDescriptorID),
+              m_PhysicalDeviceData.props.limits.maxBoundDescriptorSets);
 
     for(int i = VK_FORMAT_BEGIN_RANGE + 1; i < VK_FORMAT_END_RANGE; i++)
       ObjDisp(physicalDevice)
@@ -1504,8 +1617,10 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
 
       record->instDevInfo = new InstanceDeviceInfo();
 
+      record->instDevInfo->vulkanVersion = GetRecord(m_Instance)->instDevInfo->vulkanVersion;
+
 #undef CheckExt
-#define CheckExt(name) \
+#define CheckExt(name, ver) \
   record->instDevInfo->ext_##name = GetRecord(m_Instance)->instDevInfo->ext_##name;
 
       // inherit extension enablement from instance, that way GetDeviceProcAddress can check
@@ -1513,10 +1628,11 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
       CheckInstanceExts();
 
 #undef CheckExt
-#define CheckExt(name)                                      \
-  if(!strcmp(createInfo.ppEnabledExtensionNames[i], #name)) \
-  {                                                         \
-    record->instDevInfo->ext_##name = true;                 \
+#define CheckExt(name, ver)                                         \
+  if(!strcmp(createInfo.ppEnabledExtensionNames[i], "VK_" #name) || \
+     GetRecord(m_Instance)->instDevInfo->vulkanVersion >= ver)      \
+  {                                                                 \
+    record->instDevInfo->ext_##name = true;                         \
   }
 
       for(uint32_t i = 0; i < createInfo.enabledExtensionCount; i++)

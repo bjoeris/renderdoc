@@ -126,6 +126,12 @@ public:
   // jumps to the byte after the current chunk, can be called any time after BeginChunk
   void SkipCurrentChunk();
 
+  //////////////////////////////////////////
+  // Version checking
+
+  void SetVersion(uint64_t version) { m_Version = version; }
+  // assume that we always write the latest version, so on writing the version check always passes.
+  bool VersionCheck(uint64_t req) { return IsWriting() || m_Version >= req; }
   // enable 'streaming mode' for ephemeral transfers like temporary I/O over sockets, where there's
   // no need for the chunk length - avoids needing to seek internally in a stream that might not
   // support seeking to fixup lengths, while also not requiring conservative length estimates
@@ -134,6 +140,11 @@ public:
   SDFile &GetStructuredFile() { return *m_StructuredFile; }
   void WriteStructuredFile(const SDFile &file, RENDERDOC_ProgressCallback progress);
   void SetDrawChunk() { m_DrawChunk = true; }
+  // the struct argument allows nested structs to pass a bit of data so a child struct can have
+  // context from a parent struct if needed to serialise properly. Rarely used, primarily to be able
+  // to flag if some context-sensitive members might be invalid
+  void SetStructArg(uint64_t arg) { m_StructArg = arg; }
+  uint64_t GetStructArg() { return m_StructArg; }
   //////////////////////////////////////////
   // Public serialisation interface
 
@@ -1561,6 +1572,9 @@ private:
   }
 
   void *m_pUserData = NULL;
+  uint64_t m_Version = 0;
+
+  uint64_t m_StructArg = 0;
 
   StreamWriter *m_Write = NULL;
   StreamReader *m_Read = NULL;

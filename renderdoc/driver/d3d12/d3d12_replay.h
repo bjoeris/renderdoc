@@ -53,6 +53,7 @@ public:
   D3D12Replay();
 
   D3D12DebugManager *GetDebugManager() { return m_DebugManager; }
+  void SetRGP(AMDRGPControl *rgp) { m_RGP = rgp; }
   void SetProxy(bool proxy) { m_Proxy = proxy; }
   bool IsRemoteProxy() { return m_Proxy; }
   void Shutdown();
@@ -104,6 +105,7 @@ public:
     return ret;
   }
 
+  AMDRGPControl *GetRGPControl() { return m_RGP; }
   uint64_t MakeOutputWindow(WindowingData window, bool depth);
   void DestroyOutputWindow(uint64_t id);
   bool CheckResizeOutputWindow(uint64_t id);
@@ -192,7 +194,7 @@ private:
   void FillRegisterSpaces(const D3D12RenderState::RootSignature &rootSig,
                           rdcarray<D3D12Pipe::RegisterSpace> &spaces,
                           D3D12_SHADER_VISIBILITY visibility);
-  void FillResourceView(D3D12Pipe::View &view, D3D12Descriptor *desc);
+  void FillResourceView(D3D12Pipe::View &view, const D3D12Descriptor *desc);
 
   void ClearPostVSCache();
 
@@ -386,6 +388,9 @@ private:
   std::vector<ResourceDescription> m_Resources;
   std::map<ResourceId, size_t> m_ResourceIdx;
 
+  bool m_ISAChecked = false;
+  bool m_ISAAvailable = false;
+
   D3D12Pipe::State m_PipelineState;
   D3D11Pipe::State m_D3D11State;
   VKPipe::State m_VKState;
@@ -398,6 +403,7 @@ private:
   IDXGIFactory4 *m_pFactory = NULL;
 
   AMDCounters *m_pAMDCounters = NULL;
+  AMDRGPControl *m_RGP = NULL;
 
   D3D12AMDDrawCallback *m_pAMDDrawCallback = NULL;
 

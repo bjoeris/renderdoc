@@ -28,6 +28,7 @@
 #include <time.h>
 #include "common/dds_readwrite.h"
 #include "driver/ihv/amd/amd_isa.h"
+#include "driver/ihv/amd/amd_rgp.h"
 #include "jpeg-compressor/jpgd.h"
 #include "jpeg-compressor/jpge.h"
 #include "maths/formatpacking.h"
@@ -355,6 +356,8 @@ MeshFormat ReplayController::GetPostVSData(uint32_t instID, MeshDataStage stage)
     return MeshFormat();
 
   instID = RDCMIN(instID, draw->numInstances - 1);
+
+  m_pDevice->InitPostVSBuffers(draw->eventId);
 
   return m_pDevice->GetPostVSBuffers(draw->eventId, instID, stage);
 }
@@ -1166,6 +1169,9 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
       {
         const char *err = NULL;
 
+        EXRHeader exrHeader;
+        InitEXRHeader(&exrHeader);
+
         EXRImage exrImage;
         InitEXRImage(&exrImage);
 
@@ -1176,19 +1182,21 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
 
         // must be in this order as many viewers don't pay attention to channels and just assume
         // they are in this order
-        const char *bgraNames[4] = {"A", "B", "G", "R"};
+        EXRChannelInfo bgraChannels[4] = {
+            {"A"}, {"B"}, {"G"}, {"R"},
+        };
 
-        exrImage.num_channels = 4;
-        exrImage.channel_names = bgraNames;
+        exrHeader.num_channels = 4;
+        exrHeader.channels = bgraChannels;
         exrImage.images = (unsigned char **)abgr;
         exrImage.width = td.width;
         exrImage.height = td.height;
-        exrImage.pixel_types = pixTypes;
-        exrImage.requested_pixel_types = reqTypes;
+        exrHeader.pixel_types = pixTypes;
+        exrHeader.requested_pixel_types = reqTypes;
 
         unsigned char *mem = NULL;
 
-        size_t ret = SaveMultiChannelEXRToMemory(&exrImage, &mem, &err);
+        size_t ret = SaveEXRImageToMemory(&exrImage, &exrHeader, &mem, &err);
 
         success = (ret > 0);
         if(success)
@@ -1394,6 +1402,75 @@ rdcarray<ShaderVariable> ReplayController::GetCBufferVariableContents(
 rdcarray<WindowingSystem> ReplayController::GetSupportedWindowSystems()
 {
   return m_pDevice->GetSupportedWindowSystems();
+}
+
+rdcstr ReplayController::CreateRGPProfile(WindowingData window)
+{
+  AMDRGPControl *rgp = m_pDevice->GetRGPControl();
+
+  if(!rgp)
+  {
+    RDCERR("RGP Capture is not supported on this API implementation");
+    return "";
+  }
+
+  std::string path = FileIO::GetTempFolderFilename() + "/renderdoc_rgp_capture.rgp";
+
+  ReplayOutput *output = CreateOutput(window, ReplayOutputType::Texture);
+
+  TextureDisplay d = {};
+  output->SetTextureDisplay(d);
+
+  // prime the pump
+  for(int i = 0; i < 5; i++)
+  {
+    m_pDevice->ReplayLog(10000000, eReplay_Full);
+    output->Display();
+  }
+
+  bool captureTriggered = rgp->TriggerCapture(path);
+  if(!captureTriggered)
+  {
+    RDCERR("Failed to trigger an RGP Capture.");
+    return "";
+  }
+
+  // delay a while to make sure the profiling is ready to go
+  Threading::Sleep(5000);
+
+  // replay for capture. We do this a few times since doing it only once doesn't seem to pick up
+  // (6-7 runs needed)
+  for(int i = 0; i < 10; i++)
+  {
+    if(rgp->HasCapture())
+    {
+      RDCDEBUG("Got profile after %d runs", i);
+      break;
+    }
+
+    output->Display();
+    m_pDevice->ReplayLog(10000000, eReplay_Full);
+  }
+
+  output->Display();
+
+  // restore back to where we were
+  m_pDevice->ReplayLog(m_EventID, eReplay_Full);
+
+  ShutdownOutput(output);
+
+  // wait for 5 seconds for the capture to become ready
+  for(int i = 0; i < 50; i++)
+  {
+    if(rgp->HasCapture())
+      return path;
+
+    Threading::Sleep(100);
+  }
+
+  RDCERR("Didn't get capture after 5 seconds");
+
+  return "";
 }
 
 void ReplayController::ReplayLoop(WindowingData window, ResourceId texid)

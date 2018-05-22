@@ -166,6 +166,8 @@ set(sources
     3rdparty/pugixml/pugiconfig.hpp
     3rdparty/lz4/lz4.c
     3rdparty/lz4/lz4.h
+    3rdparty/miniz/miniz.c
+    3rdparty/miniz/miniz.h
     3rdparty/zstd/bitstream.h
     3rdparty/zstd/compiler.h
     3rdparty/zstd/entropy_common.c
@@ -259,6 +261,9 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR APPLE)
     set_source_files_properties(3rdparty/tinyexr/tinyexr.cpp
         PROPERTIES COMPILE_FLAGS "-Wno-extra -Wno-unused-function")
 
+    set_source_files_properties(3rdparty/miniz/miniz.c
+        PROPERTIES COMPILE_FLAGS "-Wno-attributes")
+
     # Need to add -Wno-unknown-warning-option since some clang versions don't have
     # -Wno-shift-negative-value available
     set_source_files_properties(3rdparty/jpeg-compressor/jpgd.cpp
@@ -270,6 +275,13 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR APPLE)
 
         set_property(SOURCE strings/utf8printf.cpp
             APPEND_STRING PROPERTY COMPILE_FLAGS " -Wno-unknown-warning -Wno-format-truncation")
+    endif()
+    # Need to add -Wno-unknown-warning-option since only newer clang versions have
+    # -Wno-unused-lambda-capture available
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND APPLE)
+	       # Only clang has this warning. Fixing it in this file causes a compile error on windows
+	       set_source_files_properties(os/os_specific.cpp
+	           PROPERTIES COMPILE_FLAGS "-Wno-unknown-warning-option -Wno-unused-lambda-capture")
     endif()
 endif()
 

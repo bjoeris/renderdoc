@@ -130,6 +130,12 @@ private:
 
   static std::map<uint64_t, GLWindowingData> m_ActiveContexts;
 
+  ContextPair m_EmptyPair;
+  uint64_t m_CurCtxPairTLS;
+  std::vector<ContextPair *> m_CtxPairs;
+
+  uintptr_t m_ShareGroupID;
+
   std::vector<GLWindowingData> m_LastContexts;
 
 public:
@@ -346,10 +352,6 @@ private:
   GLuint m_FakeBB_FBO;
   GLuint m_FakeBB_Color;
   GLuint m_FakeBB_DepthStencil;
-  GLuint m_FakeVAO;
-  GLsizeiptr m_FakeIdxSize;
-
-  ResourceId m_FakeVAOID;
   ResourceId m_FBO0_ID;
 
   uint32_t m_InitChunkIndex = 0;
@@ -364,6 +366,9 @@ private:
 
   template <typename SerialiserType>
   bool Serialise_CaptureScope(SerialiserType &ser);
+
+  template <typename SerialiserType>
+  bool Serialise_ContextInit(SerialiserType &ser);
 
   bool HasSuccessfulCapture(CaptureFailReason &reason)
   {
@@ -385,6 +390,7 @@ private:
     ContextData()
     {
       ctx = NULL;
+      shareGroup = NULL;
 
       built = ready = false;
       attribsCreate = false;
@@ -405,6 +411,8 @@ private:
     }
 
     void *ctx;
+
+    void *shareGroup;
 
     bool built;
     bool ready;
@@ -492,16 +500,23 @@ private:
   void RemoveReplacement(ResourceId id);
   void FreeTargetResource(ResourceId id);
 
-  struct QueuedInitialStateFetch
+  struct QueuedResource
   {
     GLResource res;
 
-    bool operator<(const QueuedInitialStateFetch &o) const { return res.Context < o.res.Context; }
+    bool operator<(const QueuedResource &o) const
+    {
+      return res.ContextShareGroup < o.res.ContextShareGroup;
+    }
   };
 
-  vector<QueuedInitialStateFetch> m_QueuedInitialFetches;
+  vector<QueuedResource> m_QueuedInitialFetches;
+  vector<QueuedResource> m_QueuedReleases;
 
   void QueuePrepareInitialState(GLResource res);
+  void QueueResourceRelease(GLResource res);
+
+  void ReleaseResource(GLResource res);
 
   static const int FONT_TEX_WIDTH = 256;
   static const int FONT_TEX_HEIGHT = 128;
@@ -555,7 +570,8 @@ public:
   bool isGLESMode() { return m_DriverType == RDCDriver::OpenGLES; }
   RDCDriver GetDriverType() { return m_DriverType; }
   GLInitParams &GetInitParams() { return m_InitParams; }
-  static void *GetCtx();
+  ContextPair &GetCtx();
+  void *ShareCtx(void *ctx) { return ctx ? m_ContextData[ctx].shareGroup : NULL; }
   void SetStructuredExport(uint64_t sectionVersion)
   {
     m_SectionVersion = sectionVersion;
@@ -581,7 +597,6 @@ public:
   ReplayStatus ReadLogInitialisation(RDCFile *rdc, bool storeStructuredBuffers);
 
   GLuint GetFakeBBFBO() { return m_FakeBB_FBO; }
-  GLuint GetFakeVAO() { return m_FakeVAO; }
   FrameRecord &GetFrameRecord() { return m_FrameRecord; }
   const APIEvent &GetEvent(uint32_t eventId);
 
@@ -592,7 +607,8 @@ public:
   vector<EventUsage> GetUsage(ResourceId id) { return m_ResourceUses[id]; }
   void CreateContext(GLWindowingData winData, void *shareContext, GLInitParams initParams,
                      bool core, bool attribsCreate);
-  void RegisterContext(GLWindowingData winData, void *shareContext, bool core, bool attribsCreate);
+  void RegisterReplayContext(GLWindowingData winData, void *shareContext, bool core,
+                             bool attribsCreate);
   void DeleteContext(void *contextHandle);
   void ActivateContext(GLWindowingData winData);
   void WindowSize(void *windowHandle, uint32_t w, uint32_t h);

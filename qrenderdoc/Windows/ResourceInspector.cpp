@@ -24,6 +24,7 @@
 
 #include "ResourceInspector.h"
 #include <QKeyEvent>
+#include "3rdparty/toolwindowmanager/ToolWindowManagerArea.h"
 #include "Widgets/Extended/RDHeaderView.h"
 #include "ui_ResourceInspector.h"
 
@@ -129,16 +130,55 @@ ResourceInspector::ResourceInspector(ICaptureContext &ctx, QWidget *parent)
 
     ui->relatedResources->setColumns({tr("Type"), tr("Resource")});
     header->setColumnStretchHints({-1, 1});
-
-    ui->relatedResources->setClearSelectionOnFocusLoss(true);
   }
 
-  ui->resourceUsage->setColumns({tr("EID"), tr("Usage")});
+  {
+    RDHeaderView *header = new RDHeaderView(Qt::Horizontal, this);
+    ui->resourceUsage->setHeader(header);
+
+    ui->resourceUsage->setColumns({tr("EID"), tr("Usage")});
+    header->setColumnStretchHints({-1, 1});
+  }
 
   QObject::connect(ui->resourceList, &QListView::activated, this,
                    &ResourceInspector::resource_doubleClicked);
   QObject::connect(ui->relatedResources, &QTreeView::activated, this,
                    &ResourceInspector::resource_doubleClicked);
+
+  ui->dockarea->addToolWindow(ui->resourceListWidget, ToolWindowManager::EmptySpace);
+  ui->dockarea->setToolWindowProperties(ui->resourceListWidget, ToolWindowManager::HideCloseButton);
+
+  ui->dockarea->addToolWindow(
+      ui->relatedResources,
+      ToolWindowManager::AreaReference(ToolWindowManager::LeftOf,
+                                       ui->dockarea->areaOf(ui->resourceListWidget), 0.75f));
+  ui->dockarea->setToolWindowProperties(ui->relatedResources, ToolWindowManager::HideCloseButton);
+
+  ui->dockarea->addToolWindow(ui->initChunks, ToolWindowManager::AreaReference(
+                                                  ToolWindowManager::BottomOf,
+                                                  ui->dockarea->areaOf(ui->relatedResources), 0.5f));
+  ui->dockarea->setToolWindowProperties(ui->initChunks, ToolWindowManager::HideCloseButton);
+
+  ui->dockarea->addToolWindow(
+      ui->resourceUsage,
+      ToolWindowManager::AreaReference(ToolWindowManager::RightOf,
+                                       ui->dockarea->areaOf(ui->relatedResources), 0.5f));
+  ui->dockarea->setToolWindowProperties(ui->resourceUsage, ToolWindowManager::HideCloseButton);
+
+  ui->dockarea->setAllowFloatingWindow(false);
+
+  ui->relatedResources->setWindowTitle(tr("Related Resources"));
+  ui->initChunks->setWindowTitle(tr("Resource Initialisation Parameters"));
+  ui->resourceUsage->setWindowTitle(tr("Usage in Frame"));
+  ui->resourceListWidget->setWindowTitle(tr("Resource List"));
+
+  QVBoxLayout *vertical = new QVBoxLayout(this);
+
+  vertical->setSpacing(3);
+  vertical->setContentsMargins(3, 3, 3, 3);
+
+  vertical->addWidget(ui->titleWidget);
+  vertical->addWidget(ui->dockarea);
 
   Inspect(ResourceId());
 
@@ -163,7 +203,11 @@ void ResourceInspector::Inspect(ResourceId id)
 
   m_Entries.clear();
 
-  m_ResourceModel->reset();
+  if(m_ResourceCacheID != m_Ctx.ResourceNameCacheID())
+  {
+    m_ResourceCacheID = m_Ctx.ResourceNameCacheID();
+    m_ResourceModel->reset();
+  }
 
   if(m_Ctx.HasResourceCustomName(id))
     ui->resetName->show();
@@ -182,7 +226,7 @@ void ResourceInspector::Inspect(ResourceId id)
 
     rdcarray<ShaderEntryPoint> entries = r->GetShaderEntryPoints(id);
 
-    GUIInvoke::call([this, id, entries, usage] {
+    GUIInvoke::call(this, [this, entries, usage] {
 
       if(!entries.isEmpty())
       {
@@ -190,22 +234,21 @@ void ResourceInspector::Inspect(ResourceId id)
         ui->viewContents->setVisible(true);
       }
 
-      CombineUsageEvents(
-          m_Ctx, usage, [this, id](uint32_t startEID, uint32_t endEID, ResourceUsage use) {
-            QString text;
+      CombineUsageEvents(m_Ctx, usage, [this](uint32_t startEID, uint32_t endEID, ResourceUsage use) {
+        QString text;
 
-            if(startEID == endEID)
-              text = QFormatStr("EID %1").arg(startEID);
-            else
-              text = QFormatStr("EID %1-%2").arg(startEID).arg(endEID);
+        if(startEID == endEID)
+          text = QFormatStr("EID %1").arg(startEID);
+        else
+          text = QFormatStr("EID %1-%2").arg(startEID).arg(endEID);
 
-            RDTreeWidgetItem *item =
-                new RDTreeWidgetItem({text, ToQStr(use, m_Ctx.APIProps().pipelineType)});
-            item->setData(0, ResourceIdRole, QVariant(endEID));
-            item->setData(1, ResourceIdRole, QVariant(endEID));
+        RDTreeWidgetItem *item =
+            new RDTreeWidgetItem({text, ToQStr(use, m_Ctx.APIProps().pipelineType)});
+        item->setData(0, ResourceIdRole, QVariant(endEID));
+        item->setData(1, ResourceIdRole, QVariant(endEID));
 
-            ui->resourceUsage->addTopLevelItem(item);
-          });
+        ui->resourceUsage->addTopLevelItem(item);
+      });
     });
   });
 
@@ -232,8 +275,9 @@ void ResourceInspector::Inspect(ResourceId id)
       derivedResources.push_back(qMakePair(derived, m_Ctx.GetResourceName(derived)));
 
     std::sort(derivedResources.begin(), derivedResources.end(),
-              [this](const QPair<ResourceId, QString> &a,
-                     const QPair<ResourceId, QString> &b) -> bool { return a.second < b.second; });
+              [](const QPair<ResourceId, QString> &a, const QPair<ResourceId, QString> &b) -> bool {
+                return a.second < b.second;
+              });
 
     for(const QPair<ResourceId, QString> &derived : derivedResources)
     {
@@ -280,6 +324,7 @@ void ResourceInspector::OnCaptureLoaded()
   ui->renameResource->setEnabled(true);
 
   m_ResourceModel->reset();
+  m_ResourceCacheID = m_Ctx.ResourceNameCacheID();
 }
 
 void ResourceInspector::OnCaptureClosed()
@@ -304,7 +349,11 @@ void ResourceInspector::OnEventChanged(uint32_t eventId)
 {
   Inspect(m_Resource);
 
-  m_ResourceModel->reset();
+  if(m_ResourceCacheID != m_Ctx.ResourceNameCacheID())
+  {
+    m_ResourceCacheID = m_Ctx.ResourceNameCacheID();
+    m_ResourceModel->reset();
+  }
 }
 
 void ResourceInspector::on_renameResource_clicked()
@@ -414,13 +463,13 @@ void ResourceInspector::on_viewContents_clicked()
 
     ResourceId id = m_Resource;
     ICaptureContext *ctx = &m_Ctx;
-    m_Ctx.Replay().AsyncInvoke([ctx, id, entry](IReplayController *r) {
+    m_Ctx.Replay().AsyncInvoke([this, ctx, id, entry](IReplayController *r) {
       ShaderReflection *refl = r->GetShader(id, entry);
 
       if(!refl)
         return;
 
-      GUIInvoke::call([ctx, refl] {
+      GUIInvoke::call(this, [ctx, refl] {
         IShaderViewer *viewer = ctx->ViewShader(refl, ResourceId());
 
         ctx->AddDockWindow(viewer->Widget(), DockReference::MainToolArea, NULL);

@@ -166,6 +166,7 @@ struct Formatter
   static void shutdown();
 
   static QString Format(double f, bool hex = false);
+  static QString HumanFormat(uint64_t u);
   static QString Format(uint64_t u, bool hex = false)
   {
     return QFormatStr("%1").arg(u, hex ? 16 : 0, hex ? 16 : 10, QLatin1Char('0')).toUpper();
@@ -227,29 +228,32 @@ struct OverloadedSlot
 // wise not to require a higher version that necessary.
 #include <functional>
 
+#include <QPointer>
+
 class GUIInvoke : public QObject
 {
 private:
   Q_OBJECT
-  GUIInvoke(const std::function<void()> &f) : func(f) {}
-  GUIInvoke() {}
+  GUIInvoke(QObject *obj, const std::function<void()> &f) : ptr(obj), func(f) {}
+  QPointer<QObject> ptr;
   std::function<void()> func;
 
   static int methodIndex;
 
 public:
   static void init();
-  static void call(const std::function<void()> &f);
-  static void blockcall(const std::function<void()> &f);
+  static void call(QObject *obj, const std::function<void()> &f);
+  static void blockcall(QObject *obj, const std::function<void()> &f);
   static bool onUIThread();
 
   // same as call() above, but it doesn't check for an instant call on the UI thread
-  static void defer(const std::function<void()> &f);
+  static void defer(QObject *obj, const std::function<void()> &f);
 
 protected slots:
   void doInvoke()
   {
-    func();
+    if(ptr)
+      func();
     deleteLater();
   }
 };
@@ -525,6 +529,7 @@ typedef std::function<bool()> ProgressFinishedMethod;
 QStringList ParseArgsList(const QString &args);
 bool IsRunningAsAdmin();
 bool RunProcessAsAdmin(const QString &fullExecutablePath, const QStringList &params,
+                       QWidget *parent = NULL,
                        std::function<void()> finishedCallback = std::function<void()>());
 
 void RevealFilenameInExternalFileBrowser(const QString &filePath);
@@ -538,6 +543,8 @@ void UpdateTransferProgress(qint64 xfer, qint64 total, QElapsedTimer *timer,
 void setEnabledMultiple(const QList<QWidget *> &widgets, bool enabled);
 
 QString GetSystemUsername();
+
+void BringToForeground(QWidget *window);
 
 bool IsDarkTheme();
 

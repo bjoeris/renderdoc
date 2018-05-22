@@ -980,9 +980,9 @@ void D3D11PipelineStateViewer::setShaderState(const D3D11Pipe::Shader &stage, RD
         filter += QFormatStr(" %1x").arg(s.maxAnisotropy);
 
       if(s.filter.filter == FilterFunction::Comparison)
-        filter = QFormatStr(" (%1)").arg(ToQStr(s.compareFunction));
+        filter += QFormatStr(" (%1)").arg(ToQStr(s.compareFunction));
       else if(s.filter.filter != FilterFunction::Normal)
-        filter = QFormatStr(" (%1)").arg(ToQStr(s.filter.filter));
+        filter += QFormatStr(" (%1)").arg(ToQStr(s.filter.filter));
 
       RDTreeWidgetItem *node = new RDTreeWidgetItem(
           {slotname, s.resourceId, addressing, filter,
@@ -1319,9 +1319,10 @@ void D3D11PipelineStateViewer::setState()
           {tr("Index"), state.inputAssembly.indexBuffer.resourceId, draw ? draw->indexByteWidth : 0,
            state.inputAssembly.indexBuffer.byteOffset, (qulonglong)length, QString()});
 
-      node->setTag(
-          QVariant::fromValue(D3D11VBIBTag(state.inputAssembly.indexBuffer.resourceId,
-                                           draw ? draw->indexOffset * draw->indexByteWidth : 0)));
+      node->setTag(QVariant::fromValue(
+          D3D11VBIBTag(state.inputAssembly.indexBuffer.resourceId,
+                       state.inputAssembly.indexBuffer.byteOffset +
+                           (draw ? draw->indexOffset * draw->indexByteWidth : 0))));
 
       if(!ibufferUsed)
         setInactiveRow(node);
@@ -1339,9 +1340,10 @@ void D3D11PipelineStateViewer::setState()
       RDTreeWidgetItem *node = new RDTreeWidgetItem(
           {tr("Index"), tr("No Buffer Set"), lit("-"), lit("-"), lit("-"), QString()});
 
-      node->setTag(
-          QVariant::fromValue(D3D11VBIBTag(state.inputAssembly.indexBuffer.resourceId,
-                                           draw ? draw->indexOffset * draw->indexByteWidth : 0)));
+      node->setTag(QVariant::fromValue(
+          D3D11VBIBTag(state.inputAssembly.indexBuffer.resourceId,
+                       state.inputAssembly.indexBuffer.byteOffset +
+                           (draw ? draw->indexOffset * draw->indexByteWidth : 0))));
 
       setEmptyRow(node);
 
@@ -1547,7 +1549,9 @@ void D3D11PipelineStateViewer::setState()
   ui->depthBiasClamp->setText(Formatter::Format(state.rasterizer.state.depthBiasClamp));
   ui->slopeScaledBias->setText(Formatter::Format(state.rasterizer.state.slopeScaledDepthBias));
   ui->forcedSampleCount->setText(QString::number(state.rasterizer.state.forcedSampleCount));
-  ui->conservativeRaster->setPixmap(state.rasterizer.state.conservativeRasterization ? tick : cross);
+  ui->conservativeRaster->setPixmap(
+      state.rasterizer.state.conservativeRasterization != ConservativeRaster::Disabled ? tick
+                                                                                       : cross);
 
   ////////////////////////////////////////////////
   // Predication
@@ -2787,7 +2791,8 @@ void D3D11PipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const D3D11Pipe
         {rs.state.scissorEnable ? tr("Yes") : tr("No"),
          rs.state.antialiasedLines ? tr("Yes") : tr("No"),
          rs.state.multisampleEnable ? tr("Yes") : tr("No"), rs.state.forcedSampleCount,
-         rs.state.conservativeRasterization ? tr("Yes") : tr("No")});
+         rs.state.conservativeRasterization != ConservativeRaster::Disabled ? tr("Yes")
+                                                                            : tr("No")});
 
     xml.writeStartElement(lit("p"));
     xml.writeEndElement();
@@ -3130,7 +3135,7 @@ void D3D11PipelineStateViewer::on_debugThread_clicked()
     {
       r->FreeTrace(trace);
 
-      GUIInvoke::call([this]() {
+      GUIInvoke::call(this, [this]() {
         RDDialog::critical(
             this, tr("Error debugging"),
             tr("Error debugging thread - make sure a valid group and thread is selected"));
@@ -3146,7 +3151,7 @@ void D3D11PipelineStateViewer::on_debugThread_clicked()
                                .arg(thread.t[1])
                                .arg(thread.t[2]);
 
-    GUIInvoke::call([this, debugContext, trace]() {
+    GUIInvoke::call(this, [this, debugContext, trace]() {
 
       const ShaderReflection *shaderDetails =
           m_Ctx.CurPipelineState().GetShaderReflection(ShaderStage::Compute);

@@ -951,9 +951,11 @@ struct DrawcallDescription
     baseVertex = 0;
     vertexOffset = 0;
     instanceOffset = 0;
+    drawIndex = 0;
 
     dispatchDimension[0] = dispatchDimension[1] = dispatchDimension[2] = 0;
     dispatchThreadsDimension[0] = dispatchThreadsDimension[1] = dispatchThreadsDimension[2] = 0;
+    dispatchBase[0] = dispatchBase[1] = dispatchBase[2] = 0;
 
     indexByteWidth = 0;
     topology = Topology::Unknown;
@@ -1009,11 +1011,20 @@ struct DrawcallDescription
       "For instanced drawcalls, the offset applied before looking up instanced vertex inputs.");
   uint32_t instanceOffset;
 
+  DOCUMENT(R"(The index of this draw in an call with multiple draws, e.g. an indirect draw.
+
+0 if not part of a multi-draw.
+)");
+  uint32_t drawIndex;
+
   DOCUMENT("The 3D number of workgroups to dispatch in a dispatch call.");
   uint32_t dispatchDimension[3];
 
   DOCUMENT("The 3D size of each workgroup in threads if the call allows an override, or 0 if not.");
   uint32_t dispatchThreadsDimension[3];
+
+  DOCUMENT("The 3D base offset of the workgroup ID if the call allows an override, or 0 if not.");
+  uint32_t dispatchBase[3];
 
   DOCUMENT(R"(The width in bytes of each index.
 
@@ -1087,6 +1098,9 @@ Currently this is only true for OpenGL where the superfluous indirect in the bin
 worked around by re-sorting bindings.
 )");
   bool shadersMutable = false;
+
+  DOCUMENT("``True`` if the driver and system are configured to allow creating RGP captures.");
+  bool rgpCapture = false;
 
 #if !defined(SWIG)
   // flags about edge-case parts of the APIs that might be used in the capture.
@@ -1381,16 +1395,16 @@ DOCUMENT("Contains the bytes and metadata describing a thumbnail.");
 struct Thumbnail
 {
   DOCUMENT("The :class:`FileType` of the data in the thumbnail.");
-  FileType type;
+  FileType type = FileType::Raw;
 
   DOCUMENT("The ``bytes`` byte array containing the raw data.");
   bytebuf data;
 
   DOCUMENT("The width of the thumbnail image.");
-  uint32_t width;
+  uint32_t width = 0;
 
   DOCUMENT("The height of the thumbnail image.");
-  uint32_t height;
+  uint32_t height = 0;
 };
 
 DECLARE_REFLECTION_STRUCT(Thumbnail);

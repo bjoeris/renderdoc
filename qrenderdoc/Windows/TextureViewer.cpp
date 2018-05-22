@@ -733,7 +733,7 @@ void TextureViewer::RT_PickPixelsAndUpdate(IReplayController *)
   m_CurPixelValue = pickValue;
   m_CurRealValue = realValue;
 
-  GUIInvoke::call([this]() { UI_UpdateStatusText(); });
+  GUIInvoke::call(this, [this]() { UI_UpdateStatusText(); });
 }
 
 void TextureViewer::RT_PickHoverAndUpdate(IReplayController *)
@@ -747,7 +747,7 @@ void TextureViewer::RT_PickHoverAndUpdate(IReplayController *)
 
   m_CurHoverValue = pickValue;
 
-  GUIInvoke::call([this]() { UI_UpdateStatusText(); });
+  GUIInvoke::call(this, [this]() { UI_UpdateStatusText(); });
 }
 
 void TextureViewer::RT_UpdateAndDisplay(IReplayController *)
@@ -755,7 +755,7 @@ void TextureViewer::RT_UpdateAndDisplay(IReplayController *)
   if(m_Output != NULL)
     m_Output->SetTextureDisplay(m_TexDisplay);
 
-  GUIInvoke::call([this]() { ui->render->update(); });
+  GUIInvoke::call(this, [this]() { ui->render->update(); });
 }
 
 void TextureViewer::RT_UpdateVisualRange(IReplayController *)
@@ -784,7 +784,7 @@ void TextureViewer::RT_UpdateVisualRange(IReplayController *)
     if(!histogram.isEmpty())
       memcpy(histogramVec.data(), histogram.data(), histogram.byteSize());
 
-    GUIInvoke::call([this, histogramVec]() {
+    GUIInvoke::call(this, [this, histogramVec]() {
       ui->rangeHistogram->setHistogramRange(ui->rangeHistogram->rangeMin(),
                                             ui->rangeHistogram->rangeMax());
       ui->rangeHistogram->setHistogramData(histogramVec);
@@ -1591,6 +1591,58 @@ void TextureViewer::SetupTextureTabs()
                    &TextureViewer::textureTab_Closing);
 
   textureTabs->disableUserDrop();
+
+  textureTabs->tabBar()->setContextMenuPolicy(Qt::CustomContextMenu);
+
+  QObject::connect(textureTabs->tabBar(), &QTabBar::customContextMenuRequested, this,
+                   &TextureViewer::textureTab_Menu);
+}
+
+void TextureViewer::textureTab_Menu(const QPoint &pos)
+{
+  ToolWindowManagerArea *textureTabs = ui->dockarea->areaOf(ui->renderContainer);
+
+  int tabIndex = textureTabs->tabBar()->tabAt(pos);
+
+  if(tabIndex == -1)
+    return;
+
+  QAction closeTab(tr("Close tab"), this);
+  QAction closeOtherTabs(tr("Close other tabs"), this);
+  QAction closeRightTabs(tr("Close tabs to the right"), this);
+
+  if(textureTabs->widget(tabIndex) == ui->renderContainer)
+    closeTab.setEnabled(false);
+
+  QMenu contextMenu(this);
+
+  contextMenu.addAction(&closeTab);
+  contextMenu.addAction(&closeOtherTabs);
+  contextMenu.addAction(&closeRightTabs);
+
+  QObject::connect(&closeTab, &QAction::triggered, [this, textureTabs, tabIndex]() {
+    // remove the tab at this index
+    textureTabs->removeTab(tabIndex);
+  });
+
+  QObject::connect(&closeRightTabs, &QAction::triggered, [this, textureTabs, tabIndex]() {
+    // remove all tabs with a greater index
+    while(textureTabs->count() > tabIndex + 1)
+      textureTabs->removeTab(tabIndex + 1);
+  });
+
+  QObject::connect(&closeOtherTabs, &QAction::triggered, [this, textureTabs, tabIndex]() {
+    // remove all tabs with a greater index
+    while(textureTabs->count() > tabIndex + 1)
+      textureTabs->removeTab(tabIndex + 1);
+
+    // remove all tabs at index 1 until there's only two, these are the ones between the locked tab
+    // 0 and the tabIndex
+    while(textureTabs->count() > 2)
+      textureTabs->removeTab(1);
+  });
+
+  RDDialog::show(&contextMenu, QCursor::pos());
 }
 
 void TextureViewer::textureTab_Changed(int index)
@@ -1710,7 +1762,7 @@ void TextureViewer::ViewTexture(ResourceId ID, bool focus)
 {
   if(QThread::currentThread() != QCoreApplication::instance()->thread())
   {
-    GUIInvoke::call([this, ID, focus] { this->ViewTexture(ID, focus); });
+    GUIInvoke::call(this, [this, ID, focus] { this->ViewTexture(ID, focus); });
     return;
   }
 
@@ -2108,7 +2160,7 @@ void TextureViewer::thumb_clicked(QMouseEvent *e)
       m_Ctx.Replay().AsyncInvoke([this, id](IReplayController *r) {
         rdcarray<EventUsage> usage = r->GetUsage(id);
 
-        GUIInvoke::call([this, id, usage]() { OpenResourceContextMenu(id, usage); });
+        GUIInvoke::call(this, [this, id, usage]() { OpenResourceContextMenu(id, usage); });
       });
     }
   }
@@ -2496,7 +2548,7 @@ void TextureViewer::OnCaptureLoaded()
 
     RT_UpdateAndDisplay(r);
 
-    GUIInvoke::call([this]() { OnEventChanged(m_Ctx.CurEvent()); });
+    GUIInvoke::call(this, [this]() { OnEventChanged(m_Ctx.CurEvent()); });
   });
 
   m_Watcher = new QFileSystemWatcher({configFilePath(QString())}, this);
@@ -3131,7 +3183,7 @@ void TextureViewer::AutoFitRange()
 
       if(changeRange)
       {
-        GUIInvoke::call([this, minval, maxval]() {
+        GUIInvoke::call(this, [this, minval, maxval]() {
           ui->rangeHistogram->setRange(minval, maxval);
           INVOKE_MEMFN(RT_UpdateVisualRange);
         });
@@ -3479,11 +3531,11 @@ void TextureViewer::on_debugPixelContext_clicked()
       r->FreeTrace(trace);
 
       // if we couldn't debug the pixel on this event, open up a pixel history
-      GUIInvoke::call([this]() { on_pixelHistory_clicked(); });
+      GUIInvoke::call(this, [this]() { on_pixelHistory_clicked(); });
       return;
     }
 
-    GUIInvoke::call([this, x, y, trace]() {
+    GUIInvoke::call(this, [this, x, y, trace]() {
       QString debugContext = tr("Pixel %1,%2").arg(x).arg(y);
 
       const ShaderReflection *shaderDetails =
@@ -3535,7 +3587,7 @@ void TextureViewer::on_pixelHistory_clicked()
           r->PixelHistory(texptr->resourceId, (uint32_t)x, (int32_t)y, m_TexDisplay.sliceFace,
                           m_TexDisplay.mip, m_TexDisplay.sampleIdx, m_TexDisplay.typeHint);
 
-      GUIInvoke::call([hist, histWidget, history] {
+      GUIInvoke::call(this, [hist, histWidget, history] {
         if(histWidget)
           hist->SetHistory(history);
       });
@@ -3694,10 +3746,10 @@ void TextureViewer::reloadCustomShaders(const QString &filter)
           if(m_CustomShaderEditor.contains(key))
           {
             IShaderViewer *editor = m_CustomShaderEditor[key];
-            GUIInvoke::call([editor, errors]() { editor->ShowErrors(errors); });
+            GUIInvoke::call(editor->Widget(), [editor, errors]() { editor->ShowErrors(errors); });
           }
 
-          GUIInvoke::call([this, fn, key, id]() {
+          GUIInvoke::call(this, [this, fn, key, id]() {
             QString prevtext = ui->customShader->currentText();
             ui->customShader->addItem(fn);
             ui->customShader->setCurrentText(prevtext);

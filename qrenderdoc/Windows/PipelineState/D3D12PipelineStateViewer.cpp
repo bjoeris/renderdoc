@@ -679,7 +679,7 @@ void D3D12PipelineStateViewer::addResourceRow(const D3D12ViewTag &view,
 
   bool viewDetails = false;
 
-  if(view.space == D3D12ViewTag::OMDepth)
+  if(view.type == D3D12ViewTag::OMDepth)
     viewDetails = m_Ctx.CurD3D12PipelineState().outputMerger.depthReadOnly ||
                   m_Ctx.CurD3D12PipelineState().outputMerger.stencilReadOnly;
 
@@ -691,8 +691,7 @@ void D3D12PipelineStateViewer::addResourceRow(const D3D12ViewTag &view,
 
   // if a target is set to RTVs or DSV, it is implicitly used
   if(filledSlot)
-    usedSlot =
-        usedSlot || view.space == D3D12ViewTag::OMTarget || view.space == D3D12ViewTag::OMDepth;
+    usedSlot = usedSlot || view.type == D3D12ViewTag::OMTarget || view.type == D3D12ViewTag::OMDepth;
 
   if(showNode(usedSlot, filledSlot))
   {
@@ -701,7 +700,7 @@ void D3D12PipelineStateViewer::addResourceRow(const D3D12ViewTag &view,
     if(shaderInput && !shaderInput->name.empty())
       regname += lit(": ") + shaderInput->name;
 
-    if(view.space == D3D12ViewTag::OMDepth)
+    if(view.type == D3D12ViewTag::OMDepth)
       regname = tr("Depth");
 
     uint32_t w = 1, h = 1, d = 1;
@@ -781,8 +780,16 @@ void D3D12PipelineStateViewer::addResourceRow(const D3D12ViewTag &view,
         viewDetails = true;
     }
 
-    RDTreeWidgetItem *node = new RDTreeWidgetItem(
-        {rootel, view.space, regname, r.resourceId, typeName, w, h, d, a, format, QString()});
+    RDTreeWidgetItem *node = NULL;
+
+    if(view.type == D3D12ViewTag::OMTarget)
+      node = new RDTreeWidgetItem({view.reg, r.resourceId, typeName, w, h, d, a, format, QString()});
+    else if(view.type == D3D12ViewTag::OMDepth)
+      node =
+          new RDTreeWidgetItem({tr("Depth"), r.resourceId, typeName, w, h, d, a, format, QString()});
+    else
+      node = new RDTreeWidgetItem(
+          {rootel, view.space, regname, r.resourceId, typeName, w, h, d, a, format, QString()});
 
     node->setTag(QVariant::fromValue(view));
 
@@ -1335,9 +1342,10 @@ void D3D12PipelineStateViewer::setState()
           {tr("Index"), state.inputAssembly.indexBuffer.resourceId, draw ? draw->indexByteWidth : 0,
            (qulonglong)state.inputAssembly.indexBuffer.byteOffset, (qulonglong)length, QString()});
 
-      node->setTag(
-          QVariant::fromValue(D3D12VBIBTag(state.inputAssembly.indexBuffer.resourceId,
-                                           draw ? draw->indexOffset * draw->indexByteWidth : 0)));
+      node->setTag(QVariant::fromValue(
+          D3D12VBIBTag(state.inputAssembly.indexBuffer.resourceId,
+                       state.inputAssembly.indexBuffer.byteOffset +
+                           (draw ? draw->indexOffset * draw->indexByteWidth : 0))));
 
       if(!ibufferUsed)
         setInactiveRow(node);
@@ -1355,9 +1363,10 @@ void D3D12PipelineStateViewer::setState()
       RDTreeWidgetItem *node = new RDTreeWidgetItem(
           {tr("Index"), tr("No Buffer Set"), lit("-"), lit("-"), lit("-"), QString()});
 
-      node->setTag(
-          QVariant::fromValue(D3D12VBIBTag(state.inputAssembly.indexBuffer.resourceId,
-                                           draw ? draw->indexOffset * draw->indexByteWidth : 0)));
+      node->setTag(QVariant::fromValue(
+          D3D12VBIBTag(state.inputAssembly.indexBuffer.resourceId,
+                       state.inputAssembly.indexBuffer.byteOffset +
+                           (draw ? draw->indexOffset * draw->indexByteWidth : 0))));
 
       setEmptyRow(node);
 
@@ -1518,7 +1527,9 @@ void D3D12PipelineStateViewer::setState()
   ui->depthBiasClamp->setText(Formatter::Format(state.rasterizer.state.depthBiasClamp));
   ui->slopeScaledBias->setText(Formatter::Format(state.rasterizer.state.slopeScaledDepthBias));
   ui->forcedSampleCount->setText(QString::number(state.rasterizer.state.forcedSampleCount));
-  ui->conservativeRaster->setPixmap(state.rasterizer.state.conservativeRasterization ? tick : cross);
+  ui->conservativeRaster->setPixmap(
+      state.rasterizer.state.conservativeRasterization != ConservativeRaster::Disabled ? tick
+                                                                                       : cross);
 
   ////////////////////////////////////////////////
   // Output Merger
@@ -2768,7 +2779,7 @@ void D3D12PipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const D3D12Pipe
               tr("Conservative Raster"), tr("Sample Mask")},
         {rs.state.antialiasedLines ? tr("Yes") : tr("No"),
          rs.state.multisampleEnable ? tr("Yes") : tr("No"), rs.state.forcedSampleCount,
-         rs.state.conservativeRasterization ? tr("Yes") : tr("No"),
+         rs.state.conservativeRasterization != ConservativeRaster::Disabled ? tr("Yes") : tr("No"),
          Formatter::Format(rs.sampleMask, true)});
 
     xml.writeStartElement(lit("p"));

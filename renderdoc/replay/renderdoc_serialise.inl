@@ -480,9 +480,11 @@ void DoSerialise(SerialiserType &ser, DrawcallDescription &el)
   SERIALISE_MEMBER(indexOffset);
   SERIALISE_MEMBER(vertexOffset);
   SERIALISE_MEMBER(instanceOffset);
+  SERIALISE_MEMBER(drawIndex);
 
   SERIALISE_MEMBER(dispatchDimension);
   SERIALISE_MEMBER(dispatchThreadsDimension);
+  SERIALISE_MEMBER(dispatchBase);
 
   SERIALISE_MEMBER(indexByteWidth);
   SERIALISE_MEMBER(topology);
@@ -500,7 +502,7 @@ void DoSerialise(SerialiserType &ser, DrawcallDescription &el)
   SERIALISE_MEMBER(events);
   SERIALISE_MEMBER(children);
 
-  SIZE_CHECK(248);
+  SIZE_CHECK(264);
 }
 
 template <typename SerialiserType>
@@ -1765,10 +1767,11 @@ void DoSerialise(SerialiserType &ser, VKPipe::DescriptorSet &el)
 {
   SERIALISE_MEMBER(layoutResourceId);
   SERIALISE_MEMBER(descriptorSetResourceId);
+  SERIALISE_MEMBER(pushDescriptor);
 
   SERIALISE_MEMBER(bindings);
 
-  SIZE_CHECK(32);
+  SIZE_CHECK(40);
 }
 
 template <typename SerialiserType>
@@ -1818,8 +1821,9 @@ void DoSerialise(SerialiserType &ser, VKPipe::VertexBinding &el)
   SERIALISE_MEMBER(vertexBufferBinding);
   SERIALISE_MEMBER(byteStride);
   SERIALISE_MEMBER(perInstance);
+  SERIALISE_MEMBER(instanceDivisor);
 
-  SIZE_CHECK(12);
+  SIZE_CHECK(16);
 }
 
 template <typename SerialiserType>
@@ -1870,8 +1874,9 @@ template <typename SerialiserType>
 void DoSerialise(SerialiserType &ser, VKPipe::Tessellation &el)
 {
   SERIALISE_MEMBER(numControlPoints);
+  SERIALISE_MEMBER(domainOriginUpperLeft);
 
-  SIZE_CHECK(4);
+  SIZE_CHECK(8);
 }
 
 template <typename SerialiserType>
@@ -1900,12 +1905,15 @@ void DoSerialise(SerialiserType &ser, VKPipe::Rasterizer &el)
   SERIALISE_MEMBER(fillMode);
   SERIALISE_MEMBER(cullMode);
 
+  SERIALISE_MEMBER(conservativeRasterization);
+  SERIALISE_MEMBER(extraPrimitiveOverestimationSize);
+
   SERIALISE_MEMBER(depthBias);
   SERIALISE_MEMBER(depthBiasClamp);
   SERIALISE_MEMBER(slopeScaledDepthBias);
   SERIALISE_MEMBER(lineWidth);
 
-  SIZE_CHECK(28);
+  SIZE_CHECK(36);
 }
 
 template <typename SerialiserType>
@@ -2062,7 +2070,7 @@ void DoSerialise(SerialiserType &ser, VKPipe::State &el)
 
   SERIALISE_MEMBER(images);
 
-  SIZE_CHECK(1304);
+  SIZE_CHECK(1312);
 }
 
 #pragma endregion Vulkan pipeline state

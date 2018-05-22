@@ -218,7 +218,8 @@ struct DescriptorSet
   bool operator==(const DescriptorSet &o) const
   {
     return layoutResourceId == o.layoutResourceId &&
-           descriptorSetResourceId == o.descriptorSetResourceId && bindings == o.bindings;
+           descriptorSetResourceId == o.descriptorSetResourceId &&
+           pushDescriptor == o.pushDescriptor && bindings == o.bindings;
   }
   bool operator<(const DescriptorSet &o) const
   {
@@ -226,6 +227,8 @@ struct DescriptorSet
       return layoutResourceId < o.layoutResourceId;
     if(!(descriptorSetResourceId == o.descriptorSetResourceId))
       return descriptorSetResourceId < o.descriptorSetResourceId;
+    if(!(pushDescriptor == o.pushDescriptor))
+      return pushDescriptor < o.pushDescriptor;
     if(!(bindings == o.bindings))
       return bindings < o.bindings;
     return false;
@@ -234,6 +237,8 @@ struct DescriptorSet
   ResourceId layoutResourceId;
   DOCUMENT("The :class:`ResourceId` of the descriptor set object.");
   ResourceId descriptorSetResourceId;
+  DOCUMENT("Indicates if this is a virtual 'push' descriptor set.");
+  bool pushDescriptor = false;
 
   DOCUMENT(R"(A list of :class:`VKDescriptorBinding` with the bindings within this set.
 This list is indexed by the binding, so it may be sparse (some entries do not contain any elements).
@@ -315,7 +320,7 @@ struct VertexBinding
   bool operator==(const VertexBinding &o) const
   {
     return vertexBufferBinding == o.vertexBufferBinding && byteStride == o.byteStride &&
-           perInstance == o.perInstance;
+           perInstance == o.perInstance && instanceDivisor == o.instanceDivisor;
   }
   bool operator<(const VertexBinding &o) const
   {
@@ -325,6 +330,8 @@ struct VertexBinding
       return byteStride < o.byteStride;
     if(!(perInstance == o.perInstance))
       return perInstance < o.perInstance;
+    if(!(instanceDivisor == o.instanceDivisor))
+      return instanceDivisor < o.instanceDivisor;
     return false;
   }
   DOCUMENT("The vertex binding where data will be sourced from.");
@@ -333,6 +340,14 @@ struct VertexBinding
   uint32_t byteStride = 0;
   DOCUMENT("``True`` if the vertex data is instance-rate.");
   bool perInstance = false;
+  DOCUMENT(R"(The instance rate divisor.
+
+If this is ``0`` then every vertex gets the same value.
+
+If it's ``1`` then one element is read for each instance, and for ``N`` greater than ``1`` then
+``N`` instances read the same element before advancing.
+)");
+  uint32_t instanceDivisor = 1;
 };
 
 DOCUMENT("Describes a single Vulkan vertex buffer binding.")
@@ -418,6 +433,9 @@ struct Tessellation
 {
   DOCUMENT("The number of control points in each input patch.");
   uint32_t numControlPoints = 0;
+
+  DOCUMENT("``True`` if the tessellation domain origin is upper-left, ``False`` if lower-left.");
+  bool domainOriginUpperLeft = true;
 };
 
 DOCUMENT("Describes a combined viewport and scissor region.");
@@ -452,10 +470,20 @@ to ``0.0`` to ``1.0`` and not clipped.
 ``False`` if clockwise polygons are front-facing.
 )");
   bool frontCCW = false;
-  DOCUMENT("The polygon fill mode.");
+  DOCUMENT("The polygon :class:`FillMode`.");
   FillMode fillMode = FillMode::Solid;
-  DOCUMENT("The polygon culling mode.");
+  DOCUMENT("The polygon :class:`CullMode`.");
   CullMode cullMode = CullMode::NoCull;
+
+  DOCUMENT("The active conservative rasterization mode.");
+  ConservativeRaster conservativeRasterization = ConservativeRaster::Disabled;
+
+  DOCUMENT(R"(The extra size in pixels to increase primitives by during conservative rasterization,
+in the x and y directions in screen space.
+
+See :data:`conservativeRasterizationMode`
+)");
+  float extraPrimitiveOverestimationSize = 0.0f;
 
   DOCUMENT("The fixed depth bias value to apply to z-values.");
   float depthBias = 0.0f;

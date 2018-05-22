@@ -30,8 +30,9 @@
 
 enum class FeatureCheck
 {
-  NoCheck,
-  ShaderMSAAStorage,
+  NoCheck = 0x0,
+  ShaderMSAAStorage = 0x1,
+  FragmentStores = 0x2,
 };
 
 BITMASK_OPERATORS(FeatureCheck);
@@ -69,9 +70,9 @@ static const BuiltinShaderConfig builtinShaders[] = {
     {BuiltinShader::OutlineFS, EmbeddedResource(glsl_outline_frag), SPIRVShaderStage::Fragment,
      FeatureCheck::NoCheck, true},
     {BuiltinShader::QuadResolveFS, EmbeddedResource(glsl_quadresolve_frag),
-     SPIRVShaderStage::Fragment, FeatureCheck::NoCheck, true},
+     SPIRVShaderStage::Fragment, FeatureCheck::FragmentStores, true},
     {BuiltinShader::QuadWriteFS, EmbeddedResource(glsl_quadwrite_frag), SPIRVShaderStage::Fragment,
-     FeatureCheck::NoCheck, false},
+     FeatureCheck::FragmentStores, false},
     {BuiltinShader::TrisizeGS, EmbeddedResource(glsl_trisize_geom), SPIRVShaderStage::Geometry,
      FeatureCheck::NoCheck, true},
     {BuiltinShader::TrisizeFS, EmbeddedResource(glsl_trisize_frag), SPIRVShaderStage::Fragment,
@@ -145,6 +146,12 @@ VulkanShaderCache::VulkanShaderCache(WrappedVulkan *driver)
       {
         continue;
       }
+    }
+
+    if(config.checks & FeatureCheck::FragmentStores)
+    {
+      if(!features.fragmentStoresAndAtomics)
+        continue;
     }
 
     if(config.stage == SPIRVShaderStage::Geometry && !features.geometryShader)
@@ -349,6 +356,25 @@ void VulkanShaderCache::MakeGraphicsPipelineInfo(VkGraphicsPipelineCreateInfo &p
                                                                  : VK_VERTEX_INPUT_RATE_VERTEX;
   }
 
+  static VkPipelineVertexInputDivisorStateCreateInfoEXT vertexDivisor = {
+      VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT,
+  };
+  static VkVertexInputBindingDivisorDescriptionEXT vibindDivisors[128] = {};
+
+  if(m_pDriver->m_ExtensionsEnabled[VkCheckExt_EXT_vertex_divisor])
+  {
+    vertexDivisor.pVertexBindingDivisors = vibindDivisors;
+    vertexDivisor.vertexBindingDivisorCount = vi.vertexBindingDescriptionCount;
+
+    for(uint32_t i = 0; i < vi.vertexBindingDescriptionCount; i++)
+    {
+      vibindDivisors[i].binding = i;
+      vibindDivisors[i].divisor = pipeInfo.vertexBindings[i].instanceDivisor;
+    }
+
+    vi.pNext = &vertexDivisor;
+  }
+
   RDCASSERT(ARRAY_COUNT(viattr) >= pipeInfo.vertexAttrs.size());
   RDCASSERT(ARRAY_COUNT(vibind) >= pipeInfo.vertexBindings.size());
 
@@ -383,7 +409,8 @@ void VulkanShaderCache::MakeGraphicsPipelineInfo(VkGraphicsPipelineCreateInfo &p
   RDCASSERT(ARRAY_COUNT(scissors) >= pipeInfo.scissors.size());
 
   static VkPipelineRasterizationStateCreateInfo rs = {
-      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+  };
 
   rs.depthClampEnable = pipeInfo.depthClampEnable;
   rs.rasterizerDiscardEnable = pipeInfo.rasterizerDiscardEnable,
@@ -395,6 +422,17 @@ void VulkanShaderCache::MakeGraphicsPipelineInfo(VkGraphicsPipelineCreateInfo &p
   rs.depthBiasClamp = pipeInfo.depthBiasClamp;
   rs.depthBiasSlopeFactor = pipeInfo.depthBiasSlopeFactor;
   rs.lineWidth = pipeInfo.lineWidth;
+
+  static VkPipelineRasterizationConservativeStateCreateInfoEXT conservRast = {
+      VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT,
+  };
+
+  if(m_pDriver->m_ExtensionsEnabled[VkCheckExt_EXT_conserv_rast])
+  {
+    conservRast.conservativeRasterizationMode = pipeInfo.conservativeRasterizationMode;
+    conservRast.extraPrimitiveOverestimationSize = pipeInfo.extraPrimitiveOverestimationSize;
+    rs.pNext = &conservRast;
+  }
 
   static VkPipelineMultisampleStateCreateInfo msaa = {
       VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};

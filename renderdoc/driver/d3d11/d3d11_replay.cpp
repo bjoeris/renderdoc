@@ -157,12 +157,27 @@ void D3D11Replay::CreateResources()
 
   RenderDoc::Inst().SetProgress(LoadProgress::DebugManagerInit, 0.9f);
 
-  AMDCounters *countersAMD = new AMDCounters();
-  NVCounters *countersNV = new NVCounters();
+  AMDCounters *countersAMD = NULL;
+  NVCounters *countersNV = NULL;
+
+  if(m_Vendor == GPUVendor::AMD)
+  {
+    RDCLOG("AMD GPU detected - trying to initialise AMD counters");
+    countersAMD = new AMDCounters();
+  }
+  else if(m_Vendor == GPUVendor::nVidia)
+  {
+    RDCLOG("nVidia GPU detected - trying to initialise nVidia counters");
+    countersNV = new NVCounters();
+  }
+  else
+  {
+    RDCLOG("%s GPU detected - no counters available", ToStr(m_Vendor).c_str());
+  }
 
   ID3D11Device *d3dDevice = m_pDevice->GetReal();
 
-  if(countersAMD->Init(AMDCounters::ApiType::Dx11, (void *)d3dDevice))
+  if(countersAMD && countersAMD->Init(AMDCounters::ApiType::Dx11, (void *)d3dDevice))
   {
     m_pAMDCounters = countersAMD;
   }
@@ -172,7 +187,7 @@ void D3D11Replay::CreateResources()
     m_pAMDCounters = NULL;
   }
 
-  if(countersNV->Init(d3dDevice))
+  if(countersNV && countersNV->Init(d3dDevice))
   {
     m_pNVCounters = countersNV;
   }
@@ -990,8 +1005,13 @@ void D3D11Replay::SavePipelineState()
       if(CanQuery<ID3D11RasterizerState2>(rs->RS.State))
       {
         ((ID3D11RasterizerState2 *)rs->RS.State)->GetDesc2(&desc2);
+
+        // D3D only supports overestimate conservative raster (underestimated can be emulated using
+        // coverage information in the shader)
         ret.rasterizer.state.conservativeRasterization =
-            desc2.ConservativeRaster == D3D11_CONSERVATIVE_RASTERIZATION_MODE_ON;
+            desc2.ConservativeRaster == D3D11_CONSERVATIVE_RASTERIZATION_MODE_ON
+                ? ConservativeRaster::Overestimate
+                : ConservativeRaster::Disabled;
       }
 
       ret.rasterizer.state.resourceId = rm->GetOriginalID(GetIDForResource(rs->RS.State));

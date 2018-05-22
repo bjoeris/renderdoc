@@ -39,8 +39,9 @@
 // on the python thread.
 struct CaptureContextInvoker : ICaptureContext
 {
+  PythonShell *m_Shell;
   ICaptureContext &m_Ctx;
-  CaptureContextInvoker(ICaptureContext &ctx) : m_Ctx(ctx) {}
+  CaptureContextInvoker(PythonShell *shell, ICaptureContext &ctx) : m_Shell(shell), m_Ctx(ctx) {}
   virtual ~CaptureContextInvoker() {}
   //
   ///////////////////////////////////////////////////////////////////////
@@ -99,18 +100,11 @@ struct CaptureContextInvoker : ICaptureContext
   {
     return m_Ctx.GetDrawcall(eventId);
   }
-  virtual void CreateRGPMapping(uint32_t version) override
+  virtual bool OpenRGPProfile(const rdcstr &filename) override
   {
-    return m_Ctx.CreateRGPMapping(version);
+    return m_Ctx.OpenRGPProfile(filename);
   }
-  virtual uint32_t GetRGPIdFromEventId(uint32_t eventId) override
-  {
-    return m_Ctx.GetRGPIdFromEventId(eventId);
-  }
-  virtual uint32_t GetEventIdFromRGPId(uint32_t RGPId) override
-  {
-    return m_Ctx.GetEventIdFromRGPId(RGPId);
-  }
+  virtual IRGPInterop *GetRGPInterop() override { return m_Ctx.GetRGPInterop(); }
   virtual const SDFile &GetStructuredFile() override { return m_Ctx.GetStructuredFile(); }
   virtual WindowingSystem CurWindowingSystem() override { return m_Ctx.CurWindowingSystem(); }
   virtual WindowingData CreateWindowingData(uintptr_t winId) override
@@ -147,7 +141,7 @@ struct CaptureContextInvoker : ICaptureContext
   {
     if(!GUIInvoke::onUIThread())
     {
-      GUIInvoke::blockcall([this, ptr, params...]() { (m_Ctx.*ptr)(params...); });
+      GUIInvoke::blockcall(m_Shell, [this, ptr, params...]() { (m_Ctx.*ptr)(params...); });
 
       return;
     }
@@ -161,7 +155,8 @@ struct CaptureContextInvoker : ICaptureContext
     if(!GUIInvoke::onUIThread())
     {
       R ret;
-      GUIInvoke::blockcall([this, &ret, ptr, params...]() { ret = (m_Ctx.*ptr)(params...); });
+      GUIInvoke::blockcall(m_Shell,
+                           [this, &ret, ptr, params...]() { ret = (m_Ctx.*ptr)(params...); });
 
       return ret;
     }
@@ -454,7 +449,7 @@ PythonShell::PythonShell(ICaptureContext &ctx, QWidget *parent)
 {
   ui->setupUi(this);
 
-  m_ThreadCtx = new CaptureContextInvoker(m_Ctx);
+  m_ThreadCtx = new CaptureContextInvoker(this, m_Ctx);
 
   QObject::connect(ui->lineInput, &RDLineEdit::keyPress, this, &PythonShell::interactive_keypress);
   QObject::connect(ui->helpSearch, &RDLineEdit::keyPress, this, &PythonShell::helpSearch_keypress);
@@ -688,7 +683,7 @@ void PythonShell::on_runScript_clicked()
     context->executeString(lit("script.py"), script);
     scriptContext = NULL;
 
-    GUIInvoke::call([this, context]() {
+    GUIInvoke::call(this, [this, context]() {
       context->Finish();
       enableButtons(true);
     });

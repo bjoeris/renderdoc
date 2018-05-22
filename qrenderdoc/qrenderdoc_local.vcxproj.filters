@@ -705,6 +705,15 @@
     <ClCompile Include="Code\Interface\SPIRVDisassembler.cpp">
       <Filter>Code\Interface</Filter>
     </ClCompile>
+    <ClCompile Include="Widgets\CollapseGroupBox.cpp">
+      <Filter>Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="Code\RGPInterop.cpp">
+      <Filter>Code</Filter>
+    </ClCompile>
+    <ClCompile Include="$(IntDir)generated\moc_CollapseGroupBox.cpp">
+      <Filter>Generated Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="3rdparty\flowlayout\FlowLayout.h">
@@ -1054,6 +1063,9 @@
     </ClInclude>
     <ClInclude Include="Code\pyrenderdoc\interface_check.h">
       <Filter>Code\pyrenderdoc</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\RGPInterop.h">
+      <Filter>Code</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -1423,6 +1435,9 @@
     </CustomBuild>
     <CustomBuild Include="Windows\Dialogs\UpdateDialog.ui">
       <Filter>Windows\Dialogs</Filter>
+    </CustomBuild>
+    <CustomBuild Include="Widgets\CollapseGroupBox.h">
+      <Filter>Widgets</Filter>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>

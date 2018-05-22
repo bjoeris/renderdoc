@@ -24,6 +24,7 @@
 
 #include "vk_replay.h"
 #include <float.h>
+#include "driver/ihv/amd/amd_rgp.h"
 #include "maths/camera.h"
 #include "maths/matrix.h"
 #include "serialise/rdcfile.h"
@@ -65,6 +66,8 @@ VulkanResourceManager *VulkanReplay::GetResourceManager()
 
 void VulkanReplay::Shutdown()
 {
+  SAFE_DELETE(m_RGP);
+
   m_pDriver->Shutdown();
   delete m_pDriver;
 }
@@ -77,6 +80,7 @@ APIProperties VulkanReplay::GetAPIProperties()
   ret.localRenderer = GraphicsAPI::Vulkan;
   ret.degraded = false;
   ret.shadersMutable = false;
+  ret.rgpCapture = m_RGP != NULL && m_RGP->DriverSupportsInterop();
 
   return ret;
 }
@@ -870,6 +874,8 @@ void VulkanReplay::SavePipelineState()
       m_VulkanPipelineState.vertexInput.bindings[i].vertexBufferBinding =
           p.vertexBindings[i].vbufferBinding;
       m_VulkanPipelineState.vertexInput.bindings[i].perInstance = p.vertexBindings[i].perInstance;
+      m_VulkanPipelineState.vertexInput.bindings[i].instanceDivisor =
+          p.vertexBindings[i].instanceDivisor;
     }
 
     m_VulkanPipelineState.vertexInput.vertexBuffers.resize(state.vbuffers.size());
@@ -909,6 +915,9 @@ void VulkanReplay::SavePipelineState()
 
     // Tessellation
     m_VulkanPipelineState.tessellation.numControlPoints = p.patchControlPoints;
+
+    m_VulkanPipelineState.tessellation.domainOriginUpperLeft =
+        p.tessellationDomainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT;
 
     // Viewport/Scissors
     size_t numViewScissors = p.viewportCount;
@@ -952,6 +961,22 @@ void VulkanReplay::SavePipelineState()
     m_VulkanPipelineState.rasterizer.depthClampEnable = p.depthClampEnable;
     m_VulkanPipelineState.rasterizer.rasterizerDiscardEnable = p.rasterizerDiscardEnable;
     m_VulkanPipelineState.rasterizer.frontCCW = p.frontFace == VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
+    m_VulkanPipelineState.rasterizer.conservativeRasterization = ConservativeRaster::Disabled;
+    switch(p.conservativeRasterizationMode)
+    {
+      case VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT:
+        m_VulkanPipelineState.rasterizer.conservativeRasterization =
+            ConservativeRaster::Underestimate;
+        break;
+      case VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT:
+        m_VulkanPipelineState.rasterizer.conservativeRasterization = ConservativeRaster::Overestimate;
+        break;
+      default: break;
+    }
+
+    m_VulkanPipelineState.rasterizer.extraPrimitiveOverestimationSize =
+        p.extraPrimitiveOverestimationSize;
 
     switch(p.polygonMode)
     {
@@ -1194,7 +1219,18 @@ void VulkanReplay::SavePipelineState()
 
         ResourceId layoutId = m_pDriver->m_DescriptorSetState[src].layout;
 
-        dst.descriptorSetResourceId = rm->GetOriginalID(src);
+        // push descriptors don't have a real descriptor set backing them
+        if(c.m_DescSetLayout[layoutId].flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR)
+        {
+          dst.descriptorSetResourceId = ResourceId();
+          dst.pushDescriptor = true;
+        }
+        else
+        {
+          dst.descriptorSetResourceId = rm->GetOriginalID(src);
+          dst.pushDescriptor = false;
+        }
+
         dst.layoutResourceId = rm->GetOriginalID(layoutId);
         dst.bindings.resize(m_pDriver->m_DescriptorSetState[src].currentBindings.size());
         for(size_t b = 0; b < m_pDriver->m_DescriptorSetState[src].currentBindings.size(); b++)
@@ -1271,7 +1307,8 @@ void VulkanReplay::SavePipelineState()
 
                 // sampler info
                 el.filter = MakeFilter(sampl.minFilter, sampl.magFilter, sampl.mipmapMode,
-                                       sampl.maxAnisotropy > 1.0f, sampl.compareEnable);
+                                       sampl.maxAnisotropy > 1.0f, sampl.compareEnable,
+                                       sampl.reductionMode);
                 el.addressU = MakeAddressMode(sampl.address[0]);
                 el.addressV = MakeAddressMode(sampl.address[1]);
                 el.addressW = MakeAddressMode(sampl.address[2]);
@@ -1308,6 +1345,9 @@ void VulkanReplay::SavePipelineState()
                 dst.bindings[b].binds[a].firstSlice = c.m_ImageView[viewid].range.baseArrayLayer;
                 dst.bindings[b].binds[a].numMips = c.m_ImageView[viewid].range.levelCount;
                 dst.bindings[b].binds[a].numSlices = c.m_ImageView[viewid].range.layerCount;
+
+                // temporary hack, store image layout enum in byteOffset as it's not used for images
+                dst.bindings[b].binds[a].byteOffset = info[a].imageInfo.imageLayout;
               }
               else
               {
@@ -1332,6 +1372,8 @@ void VulkanReplay::SavePipelineState()
                 dst.bindings[b].binds[a].resourceResourceId =
                     rm->GetOriginalID(c.m_BufferView[viewid].buffer);
                 dst.bindings[b].binds[a].byteOffset = c.m_BufferView[viewid].offset;
+                dst.bindings[b].binds[a].viewFormat =
+                    MakeResourceFormat(c.m_BufferView[viewid].format);
                 if(dynamicOffset)
                 {
                   union
@@ -1411,6 +1453,12 @@ void VulkanReplay::SavePipelineState()
         img.layouts[l].baseLayer = it->second.subresourceStates[l].subresourceRange.baseArrayLayer;
         img.layouts[l].numLayer = it->second.subresourceStates[l].subresourceRange.layerCount;
         img.layouts[l].numMip = it->second.subresourceStates[l].subresourceRange.levelCount;
+      }
+
+      if(img.layouts.empty())
+      {
+        img.layouts.push_back(VKPipe::ImageLayout());
+        img.layouts[0].name = "Unknown";
       }
 
       i++;
@@ -3435,11 +3483,18 @@ ReplayStatus Vulkan_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
 
   InitReplayTables(module);
 
+  AMDRGPControl *rgp = new AMDRGPControl();
+
+  if(!rgp->Initialised())
+    SAFE_DELETE(rgp);
+
   WrappedVulkan *vk = new WrappedVulkan();
   ReplayStatus status = vk->Initialise(initParams, ver);
 
   if(status != ReplayStatus::Succeeded)
   {
+    SAFE_DELETE(rgp);
+
     delete vk;
     return status;
   }
@@ -3447,6 +3502,7 @@ ReplayStatus Vulkan_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
   RDCLOG("Created device.");
   VulkanReplay *replay = vk->GetReplay();
   replay->SetProxy(rdc == NULL);
+  replay->SetRGP(rgp);
 
   *driver = (IReplayDriver *)replay;
 

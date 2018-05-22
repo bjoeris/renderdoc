@@ -483,6 +483,7 @@ bool WrappedVulkan::Serialise_vkCmdDrawIndirect(SerialiserType &ser, VkCommandBu
         multi.numInstances = params.instanceCount;
         multi.vertexOffset = params.firstVertex;
         multi.instanceOffset = params.firstInstance;
+        multi.drawIndex = i;
 
         multi.name = "vkCmdDrawIndirect[" + ToStr(i) + "](<" + ToStr(multi.numIndices) + ", " +
                      ToStr(multi.numInstances) + ">)";
@@ -800,6 +801,7 @@ bool WrappedVulkan::Serialise_vkCmdDrawIndexedIndirect(SerialiserType &ser,
         multi.vertexOffset = params.vertexOffset;
         multi.indexOffset = params.firstIndex;
         multi.instanceOffset = params.firstInstance;
+        multi.drawIndex = i;
 
         multi.name = "vkCmdDrawIndexedIndirect[" + ToStr(i) + "](<" + ToStr(multi.numIndices) +
                      ", " + ToStr(multi.numInstances) + ">)";
@@ -2136,6 +2138,103 @@ void WrappedVulkan::vkCmdClearAttachments(VkCommandBuffer commandBuffer, uint32_
   }
 }
 
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkCmdDispatchBase(SerialiserType &ser, VkCommandBuffer commandBuffer,
+                                                uint32_t baseGroupX, uint32_t baseGroupY,
+                                                uint32_t baseGroupZ, uint32_t groupCountX,
+                                                uint32_t groupCountY, uint32_t groupCountZ)
+{
+  SERIALISE_ELEMENT(commandBuffer);
+  SERIALISE_ELEMENT(baseGroupX);
+  SERIALISE_ELEMENT(baseGroupY);
+  SERIALISE_ELEMENT(baseGroupZ);
+  SERIALISE_ELEMENT(groupCountX);
+  SERIALISE_ELEMENT(groupCountY);
+  SERIALISE_ELEMENT(groupCountZ);
+
+  Serialise_DebugMessages(ser);
+
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+  {
+    m_LastCmdBufferID = GetResourceManager()->GetOriginalID(GetResID(commandBuffer));
+
+    if(IsActiveReplaying(m_State))
+    {
+      if(InRerecordRange(m_LastCmdBufferID))
+      {
+        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
+
+        uint32_t eventId = HandlePreCallback(commandBuffer, DrawFlags::Dispatch);
+
+        ObjDisp(commandBuffer)
+            ->CmdDispatchBase(Unwrap(commandBuffer), baseGroupX, baseGroupY, baseGroupZ,
+                              groupCountX, groupCountY, groupCountZ);
+
+        if(eventId && m_DrawcallCallback->PostDispatch(eventId, commandBuffer))
+        {
+          ObjDisp(commandBuffer)
+              ->CmdDispatchBase(Unwrap(commandBuffer), baseGroupX, baseGroupY, baseGroupZ,
+                                groupCountX, groupCountY, groupCountZ);
+          m_DrawcallCallback->PostRedispatch(eventId, commandBuffer);
+        }
+      }
+    }
+    else
+    {
+      ObjDisp(commandBuffer)
+          ->CmdDispatchBase(Unwrap(commandBuffer), baseGroupX, baseGroupY, baseGroupZ, groupCountX,
+                            groupCountY, groupCountZ);
+
+      {
+        AddEvent();
+
+        DrawcallDescription draw;
+        draw.name = StringFormat::Fmt("vkCmdDispatchBase(%u, %u, %u)", groupCountX, groupCountY,
+                                      groupCountZ);
+        draw.dispatchDimension[0] = groupCountX;
+        draw.dispatchDimension[1] = groupCountY;
+        draw.dispatchDimension[2] = groupCountZ;
+        draw.dispatchBase[0] = baseGroupX;
+        draw.dispatchBase[1] = baseGroupY;
+        draw.dispatchBase[2] = baseGroupZ;
+
+        draw.flags |= DrawFlags::Dispatch;
+
+        AddDrawcall(draw, true);
+      }
+    }
+  }
+
+  return true;
+}
+
+void WrappedVulkan::vkCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX,
+                                      uint32_t baseGroupY, uint32_t baseGroupZ, uint32_t groupCountX,
+                                      uint32_t groupCountY, uint32_t groupCountZ)
+{
+  SCOPED_DBG_SINK();
+
+  SERIALISE_TIME_CALL(ObjDisp(commandBuffer)
+                          ->CmdDispatchBase(Unwrap(commandBuffer), baseGroupX, baseGroupY,
+                                            baseGroupZ, groupCountX, groupCountY, groupCountZ));
+
+  if(IsCaptureMode(m_State))
+  {
+    VkResourceRecord *record = GetRecord(commandBuffer);
+
+    CACHE_THREAD_SERIALISER();
+
+    ser.SetDrawChunk();
+    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdDispatchBase);
+    Serialise_vkCmdDispatchBase(ser, commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX,
+                                groupCountY, groupCountZ);
+
+    record->AddChunk(scope.Get());
+  }
+}
+
 INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdDraw, VkCommandBuffer commandBuffer, uint32_t vertexCount,
                                 uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
 
@@ -2197,3 +2296,7 @@ INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdResolveImage, VkCommandBuffer command
                                 VkImage srcImage, VkImageLayout srcImageLayout, VkImage dstImage,
                                 VkImageLayout dstImageLayout, uint32_t regionCount,
                                 const VkImageResolve *pRegions);
+
+INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdDispatchBase, VkCommandBuffer commandBuffer,
+                                uint32_t baseGroupX, uint32_t baseGroupY, uint32_t baseGroupZ,
+                                uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);

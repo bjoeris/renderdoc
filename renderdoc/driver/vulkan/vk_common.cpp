@@ -242,6 +242,266 @@ bool VkInitParams::IsSupportedVersion(uint64_t ver)
   return false;
 }
 
+// utility function for when we're modifying one struct in a pNext chain, this
+// lets us just copy across a struct unmodified into some temporary memory and
+// append it onto a pNext chain we're building
+template <typename VkStruct>
+void CopyNextChainedStruct(byte *&tempMem, const VkGenericStruct *nextInput,
+                           VkGenericStruct *&nextChainTail)
+{
+  const VkStruct *instruct = (const VkStruct *)nextInput;
+  VkStruct *outstruct = (VkStruct *)tempMem;
+
+  tempMem = (byte *)(outstruct + 1);
+
+  // copy the struct, nothing to unwrap
+  *outstruct = *instruct;
+
+  // default to NULL. It will be overwritten next time if there is a next object
+  outstruct->pNext = NULL;
+
+  // append this onto the chain
+  nextChainTail->pNext = (const VkGenericStruct *)outstruct;
+  nextChainTail = (VkGenericStruct *)outstruct;
+}
+
+// this is similar to the above function, but for use after we've modified a struct locally
+// e.g. to unwrap some members or patch flags, etc.
+template <typename VkStruct>
+void AppendModifiedChainedStruct(byte *&tempMem, VkStruct *outputStruct,
+                                 VkGenericStruct *&nextChainTail)
+{
+  tempMem = (byte *)(outputStruct + 1);
+
+  // default to NULL. It will be overwritten in the next step if there is a next object
+  outputStruct->pNext = NULL;
+
+  // append this onto the chain
+  nextChainTail->pNext = (const VkGenericStruct *)outputStruct;
+  nextChainTail = (VkGenericStruct *)outputStruct;
+}
+
+size_t GetNextPatchSize(const void *pNext)
+{
+  const VkGenericStruct *next = (const VkGenericStruct *)pNext;
+  size_t memSize = 0;
+
+  while(next)
+  {
+    // VkMemoryAllocateInfo
+    if(next->sType == VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV)
+      memSize += sizeof(VkDedicatedAllocationMemoryAllocateInfoNV);
+    else if(next->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO)
+      memSize += sizeof(VkMemoryDedicatedAllocateInfo);
+    else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_NV)
+      memSize += sizeof(VkExportMemoryAllocateInfoNV);
+    else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO)
+      memSize += sizeof(VkExportMemoryAllocateInfo);
+    else if(next->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR)
+      memSize += sizeof(VkImportMemoryFdInfoKHR);
+
+#ifdef VK_NV_external_memory_win32
+    else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_NV)
+      memSize += sizeof(VkExportMemoryWin32HandleInfoNV);
+    else if(next->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_NV)
+      memSize += sizeof(VkImportMemoryWin32HandleInfoNV);
+#else
+    else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_NV)
+      RDCERR("Support for VK_NV_external_memory_win32 not compiled in");
+    else if(next->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_NV)
+      RDCERR("Support for VK_NV_external_memory_win32 not compiled in");
+#endif
+
+#ifdef VK_KHR_external_memory_win32
+    else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
+      memSize += sizeof(VkExportMemoryWin32HandleInfoKHR);
+    else if(next->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
+      memSize += sizeof(VkImportMemoryWin32HandleInfoKHR);
+#else
+    else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
+      RDCERR("Support for VK_KHR_external_memory_win32 not compiled in");
+    else if(next->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
+      RDCERR("Support for VK_KHR_external_memory_win32 not compiled in");
+#endif
+
+    // vkSamplerCreateInfo
+    else if(next->sType == VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO)
+      memSize += sizeof(VkSamplerYcbcrConversionInfo);
+    else if(next->sType == VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT)
+      memSize += sizeof(VkSamplerReductionModeCreateInfoEXT);
+
+    // VkImageCreateInfo
+    else if(next->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO)
+      memSize += sizeof(VkExternalMemoryImageCreateInfo);
+    else if(next->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_NV)
+      memSize += sizeof(VkExternalMemoryImageCreateInfoNV);
+    else if(next->sType == VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR)
+      memSize += sizeof(VkImageSwapchainCreateInfoKHR);
+    else if(next->sType == VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_IMAGE_CREATE_INFO_NV)
+      memSize += sizeof(VkDedicatedAllocationImageCreateInfoNV);
+
+    // VkBindImageMemoryInfo
+    else if(next->sType == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR)
+      memSize += sizeof(VkBindImageMemorySwapchainInfoKHR);
+    else if(next->sType == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO)
+      memSize += sizeof(VkBindImageMemoryDeviceGroupInfo);
+    else if(next->sType == VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO)
+      memSize += sizeof(VkBindImagePlaneMemoryInfo);
+
+    next = next->pNext;
+  }
+
+  return memSize;
+}
+
+void PatchNextChain(const char *structName, byte *&tempMem, VkGenericStruct *infoStruct)
+{
+  VkGenericStruct *nextChainTail = infoStruct;
+  const VkGenericStruct *nextInput = (const VkGenericStruct *)infoStruct->pNext;
+  while(nextInput)
+  {
+    // unwrap and replace the dedicated allocation struct in the chain
+    if(nextInput->sType == VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV)
+    {
+      const VkDedicatedAllocationMemoryAllocateInfoNV *dedicatedIn =
+          (const VkDedicatedAllocationMemoryAllocateInfoNV *)nextInput;
+      VkDedicatedAllocationMemoryAllocateInfoNV *dedicatedOut =
+          (VkDedicatedAllocationMemoryAllocateInfoNV *)tempMem;
+
+      // copy and unwrap the struct
+      dedicatedOut->sType = dedicatedIn->sType;
+      dedicatedOut->buffer = Unwrap(dedicatedIn->buffer);
+      dedicatedOut->image = Unwrap(dedicatedIn->image);
+
+      AppendModifiedChainedStruct(tempMem, dedicatedOut, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO)
+    {
+      const VkMemoryDedicatedAllocateInfo *dedicatedIn =
+          (const VkMemoryDedicatedAllocateInfo *)nextInput;
+      VkMemoryDedicatedAllocateInfo *dedicatedOut = (VkMemoryDedicatedAllocateInfo *)tempMem;
+
+      // copy and unwrap the struct
+      dedicatedOut->sType = dedicatedIn->sType;
+      dedicatedOut->buffer = Unwrap(dedicatedIn->buffer);
+      dedicatedOut->image = Unwrap(dedicatedIn->image);
+
+      AppendModifiedChainedStruct(tempMem, dedicatedOut, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_NV)
+    {
+      CopyNextChainedStruct<VkExportMemoryAllocateInfoNV>(tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO)
+    {
+      CopyNextChainedStruct<VkExportMemoryAllocateInfo>(tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR)
+    {
+      CopyNextChainedStruct<VkImportMemoryFdInfoKHR>(tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
+    {
+#ifdef VK_KHR_external_memory_win32
+      CopyNextChainedStruct<VkExportMemoryWin32HandleInfoKHR>(tempMem, nextInput, nextChainTail);
+#else
+      RDCERR("Support for VK_KHR_external_memory_win32 not compiled in");
+#endif
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
+    {
+#ifdef VK_KHR_external_memory_win32
+      CopyNextChainedStruct<VkImportMemoryWin32HandleInfoKHR>(tempMem, nextInput, nextChainTail);
+#else
+      RDCERR("Support for VK_KHR_external_memory_win32 not compiled in");
+#endif
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_NV)
+    {
+#ifdef VK_NV_external_memory_win32
+      CopyNextChainedStruct<VkExportMemoryWin32HandleInfoNV>(tempMem, nextInput, nextChainTail);
+#else
+      RDCERR("Support for VK_NV_external_memory_win32 not compiled in");
+#endif
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_NV)
+    {
+#ifdef VK_NV_external_memory_win32
+      CopyNextChainedStruct<VkImportMemoryWin32HandleInfoNV>(tempMem, nextInput, nextChainTail);
+#else
+      RDCERR("Support for VK_NV_external_memory_win32 not compiled in");
+#endif
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO)
+    {
+      const VkSamplerYcbcrConversionInfo *ycbcrIn = (const VkSamplerYcbcrConversionInfo *)nextInput;
+      VkSamplerYcbcrConversionInfo *ycbcrOut = (VkSamplerYcbcrConversionInfo *)tempMem;
+
+      // copy and unwrap the struct
+      ycbcrOut->sType = ycbcrIn->sType;
+      ycbcrOut->conversion = Unwrap(ycbcrIn->conversion);
+
+      AppendModifiedChainedStruct(tempMem, ycbcrOut, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT)
+    {
+      CopyNextChainedStruct<VkSamplerReductionModeCreateInfoEXT>(tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO)
+    {
+      CopyNextChainedStruct<VkExternalMemoryImageCreateInfo>(tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_NV)
+    {
+      CopyNextChainedStruct<VkExternalMemoryImageCreateInfoNV>(tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR)
+    {
+      const VkImageSwapchainCreateInfoKHR *swapIn = (const VkImageSwapchainCreateInfoKHR *)nextInput;
+      VkImageSwapchainCreateInfoKHR *swapOut = (VkImageSwapchainCreateInfoKHR *)tempMem;
+
+      // copy and unwrap the struct
+      swapOut->sType = swapIn->sType;
+      swapOut->swapchain = Unwrap(swapIn->swapchain);
+
+      AppendModifiedChainedStruct(tempMem, swapOut, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_IMAGE_CREATE_INFO_NV)
+    {
+      CopyNextChainedStruct<VkDedicatedAllocationImageCreateInfoNV>(tempMem, nextInput,
+                                                                    nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR)
+    {
+      const VkBindImageMemorySwapchainInfoKHR *swapIn =
+          (const VkBindImageMemorySwapchainInfoKHR *)nextInput;
+      VkBindImageMemorySwapchainInfoKHR *swapOut = (VkBindImageMemorySwapchainInfoKHR *)tempMem;
+
+      // copy and unwrap the struct
+      swapOut->sType = swapIn->sType;
+      swapOut->swapchain = Unwrap(swapIn->swapchain);
+
+      AppendModifiedChainedStruct(tempMem, swapOut, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO)
+    {
+      CopyNextChainedStruct<VkBindImageMemoryDeviceGroupInfo>(tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO)
+    {
+      CopyNextChainedStruct<VkBindImagePlaneMemoryInfo>(tempMem, nextInput, nextChainTail);
+    }
+    else
+    {
+      RDCERR("unrecognised struct %d in %s pNext chain", nextInput->sType, structName);
+      // can't patch this struct, have to just copy it and hope it's the last in the chain
+      nextChainTail->pNext = nextInput;
+    }
+
+    nextInput = nextInput->pNext;
+  }
+}
+
 VkAccessFlags MakeAccessMask(VkImageLayout layout)
 {
   switch(layout)
@@ -272,7 +532,7 @@ void ReplacePresentableImageLayout(VkImageLayout &layout)
 
 void ReplaceExternalQueueFamily(uint32_t &srcQueueFamily, uint32_t &dstQueueFamily)
 {
-  if(srcQueueFamily == VK_QUEUE_FAMILY_EXTERNAL_KHR || dstQueueFamily == VK_QUEUE_FAMILY_EXTERNAL_KHR)
+  if(srcQueueFamily == VK_QUEUE_FAMILY_EXTERNAL || dstQueueFamily == VK_QUEUE_FAMILY_EXTERNAL)
   {
     // we should ignore this family transition since we're not synchronising with an
     // external access.
@@ -1493,7 +1753,7 @@ static FilterMode MakeFilterMode(VkSamplerMipmapMode f)
 }
 
 TextureFilter MakeFilter(VkFilter minFilter, VkFilter magFilter, VkSamplerMipmapMode mipmapMode,
-                         bool anisoEnable, bool compareEnable)
+                         bool anisoEnable, bool compareEnable, VkSamplerReductionModeEXT reduction)
 {
   TextureFilter ret;
 
@@ -1508,6 +1768,23 @@ TextureFilter MakeFilter(VkFilter minFilter, VkFilter magFilter, VkSamplerMipmap
     ret.mip = MakeFilterMode(mipmapMode);
   }
   ret.filter = compareEnable ? FilterFunction::Comparison : FilterFunction::Normal;
+
+  if(compareEnable)
+  {
+    ret.filter = FilterFunction::Comparison;
+  }
+  else
+  {
+    switch(reduction)
+    {
+      default:
+      case VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE_EXT:
+        ret.filter = FilterFunction::Normal;
+        break;
+      case VK_SAMPLER_REDUCTION_MODE_MIN_EXT: ret.filter = FilterFunction::Minimum; break;
+      case VK_SAMPLER_REDUCTION_MODE_MAX_EXT: ret.filter = FilterFunction::Maximum; break;
+    }
+  }
 
   return ret;
 }
@@ -1682,4 +1959,98 @@ VkDriverInfo::VkDriverInfo(const VkPhysicalDeviceProperties &physProps)
 
   // not fixed yet
   qualcommLeakingUBOOffsets = m_Vendor == GPUVendor::Qualcomm;
+}
+
+FrameRefType GetRefType(VkDescriptorType descType)
+{
+  switch(descType)
+  {
+    case VK_DESCRIPTOR_TYPE_SAMPLER:
+    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: return eFrameRef_Read; break;
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: return eFrameRef_Write; break;
+    default: RDCERR("Unexpected descriptor type");
+  }
+
+  return eFrameRef_Read;
+}
+
+void DescriptorSetSlot::RemoveBindRefs(VkResourceRecord *record)
+{
+  if(texelBufferView != VK_NULL_HANDLE)
+  {
+    record->RemoveBindFrameRef(GetResID(texelBufferView));
+
+    VkResourceRecord *viewRecord = GetRecord(texelBufferView);
+    if(viewRecord && viewRecord->baseResource != ResourceId())
+      record->RemoveBindFrameRef(viewRecord->baseResource);
+  }
+  if(imageInfo.imageView != VK_NULL_HANDLE)
+  {
+    record->RemoveBindFrameRef(GetResID(imageInfo.imageView));
+
+    VkResourceRecord *viewRecord = GetRecord(imageInfo.imageView);
+    if(viewRecord)
+    {
+      record->RemoveBindFrameRef(viewRecord->baseResource);
+      if(viewRecord->baseResourceMem != ResourceId())
+        record->RemoveBindFrameRef(viewRecord->baseResourceMem);
+    }
+  }
+  if(imageInfo.sampler != VK_NULL_HANDLE)
+  {
+    record->RemoveBindFrameRef(GetResID(imageInfo.sampler));
+  }
+  if(bufferInfo.buffer != VK_NULL_HANDLE)
+  {
+    record->RemoveBindFrameRef(GetResID(bufferInfo.buffer));
+
+    VkResourceRecord *bufRecord = GetRecord(bufferInfo.buffer);
+    if(bufRecord && bufRecord->baseResource != ResourceId())
+      record->RemoveBindFrameRef(bufRecord->baseResource);
+  }
+
+  // NULL everything out now so that we don't accidentally reference an object
+  // that was removed already
+  texelBufferView = VK_NULL_HANDLE;
+  bufferInfo.buffer = VK_NULL_HANDLE;
+  imageInfo.imageView = VK_NULL_HANDLE;
+  imageInfo.sampler = VK_NULL_HANDLE;
+}
+
+void DescriptorSetSlot::AddBindRefs(VkResourceRecord *record, FrameRefType ref)
+{
+  if(texelBufferView != VK_NULL_HANDLE)
+  {
+    record->AddBindFrameRef(GetResID(texelBufferView), eFrameRef_Read,
+                            GetRecord(texelBufferView)->sparseInfo != NULL);
+    if(GetRecord(texelBufferView)->baseResource != ResourceId())
+      record->AddBindFrameRef(GetRecord(texelBufferView)->baseResource, ref);
+  }
+  if(imageInfo.imageView != VK_NULL_HANDLE)
+  {
+    record->AddBindFrameRef(GetResID(imageInfo.imageView), eFrameRef_Read,
+                            GetRecord(imageInfo.imageView)->sparseInfo != NULL);
+    record->AddBindFrameRef(GetRecord(imageInfo.imageView)->baseResource, ref);
+    if(GetRecord(imageInfo.imageView)->baseResourceMem != ResourceId())
+      record->AddBindFrameRef(GetRecord(imageInfo.imageView)->baseResourceMem, eFrameRef_Read);
+  }
+  if(imageInfo.sampler != VK_NULL_HANDLE)
+  {
+    record->AddBindFrameRef(GetResID(imageInfo.sampler), eFrameRef_Read);
+  }
+  if(bufferInfo.buffer != VK_NULL_HANDLE)
+  {
+    record->AddBindFrameRef(GetResID(bufferInfo.buffer), eFrameRef_Read,
+                            GetRecord(bufferInfo.buffer)->sparseInfo != NULL);
+    if(GetRecord(bufferInfo.buffer)->baseResource != ResourceId())
+      record->AddBindFrameRef(GetRecord(bufferInfo.buffer)->baseResource, ref);
+  }
 }

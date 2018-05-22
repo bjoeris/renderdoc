@@ -88,6 +88,8 @@ win32 {
 		LIBS += $$_PRO_FILE_PWD_/3rdparty/pyside/x64/shiboken2.lib
 	}
 
+	LIBS += user32.lib
+
 	# Link against the core library
 	LIBS += $$DESTDIR/renderdoc.lib
 
@@ -134,7 +136,7 @@ win32 {
 		ICON = $$OSX_ICONFILE
 
 		INFO_PLIST_PATH = $$shell_quote($$DESTDIR/$${TARGET}.app/Contents/Info.plist)
-		QMAKE_POST_LINK += $$_PRO_FILE_PWD_/../scripts/set_plist_version.sh $${RENDERDOC_VERSION}.0 $${INFO_PLIST_PATH}
+		QMAKE_POST_LINK += $$_PRO_FILE_PWD_/../util/set_plist_version.sh $${RENDERDOC_VERSION}.0 $${INFO_PLIST_PATH}
 	} else {
 		QT += x11extras
 		DEFINES += RENDERDOC_PLATFORM_POSIX RENDERDOC_PLATFORM_LINUX RENDERDOC_WINDOWING_XLIB RENDERDOC_WINDOWING_XCB
@@ -162,6 +164,7 @@ SOURCES += Code/qrenderdoc.cpp \
     Code/QRDUtils.cpp \
     Code/FormatElement.cpp \
     Code/Resources.cpp \
+    Code/RGPInterop.cpp \
     Code/pyrenderdoc/PythonContext.cpp \
     Code/Interface/QRDInterface.cpp \
     Code/Interface/Analytics.cpp \
@@ -190,6 +193,7 @@ SOURCES += Code/qrenderdoc.cpp \
     Widgets/ThumbnailStrip.cpp \
     Widgets/TextureGoto.cpp \
     Widgets/RangeHistogram.cpp \
+    Widgets/CollapseGroupBox.cpp \
     Windows/Dialogs/TextureSaveDialog.cpp \
     Windows/Dialogs/CaptureDialog.cpp \
     Windows/Dialogs/LiveCapture.cpp \
@@ -234,6 +238,7 @@ HEADERS += Code/CaptureContext.h \
     Code/ScintillaSyntax.h \
     Code/QRDUtils.h \
     Code/Resources.h \
+    Code/RGPInterop.h \
     Code/pyrenderdoc/PythonContext.h \
     Code/pyrenderdoc/pyconversion.h \
     Code/pyrenderdoc/interface_check.h \
@@ -263,6 +268,7 @@ HEADERS += Code/CaptureContext.h \
     Widgets/ThumbnailStrip.h \
     Widgets/TextureGoto.h \
     Widgets/RangeHistogram.h \
+    Widgets/CollapseGroupBox.h \
     Windows/Dialogs/TextureSaveDialog.h \
     Windows/Dialogs/CaptureDialog.h \
     Windows/Dialogs/LiveCapture.h \

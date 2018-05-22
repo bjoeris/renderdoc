@@ -2215,6 +2215,11 @@ string SPVModule::Disassemble(const string &entryPoint)
   for(size_t s = 0; s < sourceexts.size(); s++)
     retDisasm += StringFormat::Fmt(" + %s\n", sourceexts[s]->str.c_str());
 
+  if(!sourceFiles.empty())
+    retDisasm += "Source files:\n";
+  for(size_t s = 0; s < sourceFiles.size(); s++)
+    retDisasm += "    " + sourceFiles[s].first + "\n";
+
   retDisasm += "\n";
 
   if(!extensions.empty())
@@ -3693,6 +3698,9 @@ ShaderBuiltin BuiltInToSystemAttribute(ShaderStage stage, const spv::BuiltIn el)
     case spv::BuiltInFragDepth: return ShaderBuiltin::DepthOutput;
     case spv::BuiltInVertexIndex: return ShaderBuiltin::VertexIndex;
     case spv::BuiltInInstanceIndex: return ShaderBuiltin::InstanceIndex;
+    case spv::BuiltInBaseVertex: return ShaderBuiltin::BaseVertex;
+    case spv::BuiltInBaseInstance: return ShaderBuiltin::BaseInstance;
+    case spv::BuiltInDrawIndex: return ShaderBuiltin::DrawIndex;
     default: break;
   }
 
@@ -3833,16 +3841,17 @@ void AddSignatureParameter(bool isInput, ShaderStage stage, uint32_t id, uint32_
     return;
   }
 
-  switch(type->baseType ? type->baseType->type : type->type)
+  SPVTypeData *primType = type->baseType ? type->baseType : type;
+
+  switch(primType->type)
   {
     case SPVTypeData::eBool:
     case SPVTypeData::eUInt: sig.compType = CompType::UInt; break;
     case SPVTypeData::eSInt: sig.compType = CompType::SInt; break;
-    case SPVTypeData::eFloat: sig.compType = CompType::Float; break;
-    default:
-      RDCERR("Unexpected base type of input/output signature %u",
-             type->baseType ? type->baseType->type : type->type);
+    case SPVTypeData::eFloat:
+      sig.compType = primType->bitCount == 64 ? CompType::Double : CompType::Float;
       break;
+    default: RDCERR("Unexpected base type of input/output signature %u", primType->type); break;
   }
 
   sig.compCount = type->vectorSize;
@@ -3963,12 +3972,15 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
   // TODO sort these so that the entry point is in the first file
   if(!sourceFiles.empty())
   {
-    reflection.debugInfo.files.resize(sourceFiles.size());
+    reflection.debugInfo.files.reserve(sourceFiles.size());
 
     for(size_t i = 0; i < sourceFiles.size(); i++)
     {
-      reflection.debugInfo.files[i].filename = sourceFiles[i].first;
-      reflection.debugInfo.files[i].contents = sourceFiles[i].second;
+      // skip any empty source files
+      if(sourceFiles[i].second.empty())
+        continue;
+
+      reflection.debugInfo.files.push_back({sourceFiles[i].first, sourceFiles[i].second});
     }
   }
 
@@ -4444,6 +4456,37 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
     cblocks.push_back(cblockpair(bindmap, cblock));
   }
 
+  // look for execution modes that affect the reflection and apply them
+  for(SPVInstruction *inst : entries)
+  {
+    if(inst->entry && inst->entry->name == entryPoint)
+    {
+      for(const SPVExecutionMode &mode : inst->entry->modes)
+      {
+        if(mode.mode == spv::ExecutionModeDepthGreater)
+        {
+          for(SigParameter &sig : outputs)
+          {
+            if(sig.systemValue == ShaderBuiltin::DepthOutput)
+              sig.systemValue = ShaderBuiltin::DepthOutputGreaterEqual;
+          }
+          break;
+        }
+        if(mode.mode == spv::ExecutionModeDepthLess)
+        {
+          for(SigParameter &sig : outputs)
+          {
+            if(sig.systemValue == ShaderBuiltin::DepthOutput)
+              sig.systemValue = ShaderBuiltin::DepthOutputLessEqual;
+          }
+          break;
+        }
+      }
+
+      break;
+    }
+  }
+
   // sort system value semantics to the start of the list
   struct sig_param_sort
   {
@@ -4598,7 +4641,8 @@ void ParseSPIRV(uint32_t *spirv, size_t spirvLength, SPVModule &module)
   module.moduleVersion.major = uint8_t((packedVersion & 0x00ff0000) >> 16);
   module.moduleVersion.minor = uint8_t((packedVersion & 0x0000ff00) >> 8);
 
-  if(packedVersion != spv::Version)
+  // support 1.0 to 1.3, don't care about if the API would support it.
+  if(packedVersion < 0x00010000 || packedVersion > 0x00010300)
   {
     RDCERR("Unsupported SPIR-V version: %08x", spirv[1]);
     return;

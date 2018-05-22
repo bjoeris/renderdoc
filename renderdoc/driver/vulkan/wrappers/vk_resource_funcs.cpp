@@ -140,6 +140,102 @@
 
 // Memory functions
 
+template <>
+VkBindBufferMemoryInfo *WrappedVulkan::UnwrapInfos(const VkBindBufferMemoryInfo *info, uint32_t count)
+{
+  VkBindBufferMemoryInfo *ret = GetTempArray<VkBindBufferMemoryInfo>(count);
+
+  memcpy(ret, info, count * sizeof(VkBindBufferMemoryInfo));
+
+  for(uint32_t i = 0; i < count; i++)
+  {
+    ret[i].buffer = Unwrap(ret[i].buffer);
+    ret[i].memory = Unwrap(ret[i].memory);
+  }
+
+  return ret;
+}
+
+template <>
+VkBindImageMemoryInfo *WrappedVulkan::UnwrapInfos(const VkBindImageMemoryInfo *info, uint32_t count)
+{
+  size_t memSize = sizeof(VkBindImageMemoryInfo) * count;
+
+  for(uint32_t i = 0; i < count; i++)
+    memSize += GetNextPatchSize(info[i].pNext);
+
+  byte *tempMem = GetTempMemory(memSize);
+
+  VkBindImageMemoryInfo *ret = (VkBindImageMemoryInfo *)tempMem;
+
+  tempMem += sizeof(VkBindImageMemoryInfo) * count;
+
+  memcpy(ret, info, count * sizeof(VkBindImageMemoryInfo));
+
+  for(uint32_t i = 0; i < count; i++)
+  {
+    PatchNextChain("VkBindImageMemoryInfo", tempMem, (VkGenericStruct *)&ret[i]);
+    ret[i].image = Unwrap(ret[i].image);
+    ret[i].memory = Unwrap(ret[i].memory);
+  }
+
+  return ret;
+}
+
+bool WrappedVulkan::CheckMemoryRequirements(const char *resourceName, ResourceId memId,
+                                            VkDeviceSize memoryOffset, VkMemoryRequirements mrq)
+{
+  // verify that the memory meets basic requirements. If not, something changed and we should
+  // bail loading this capture. This is a bit of an under-estimate since we just make sure
+  // there's enough space left in the memory, that doesn't mean that there aren't overlaps due
+  // to increased size requirements.
+  ResourceId memOrigId = GetResourceManager()->GetOriginalID(memId);
+
+  VulkanCreationInfo::Memory &memInfo = m_CreationInfo.m_Memory[memId];
+  uint32_t bit = 1U << memInfo.memoryTypeIndex;
+
+  // verify type
+  if((mrq.memoryTypeBits & bit) == 0)
+  {
+    RDCERR(
+        "Trying to bind %s to memory %llu which is type %u, "
+        "but only these types are allowed: %08x.\n"
+        "This is most likely caused by incompatible hardware or drivers between capture and "
+        "replay, causing a change in memory requirements.",
+        resourceName, memOrigId, memInfo.memoryTypeIndex, mrq.memoryTypeBits);
+    m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;
+    return false;
+  }
+
+  // verify offset alignment
+  if((memoryOffset % mrq.alignment) != 0)
+  {
+    RDCERR(
+        "Trying to bind %s to memory %llu which is type %u, "
+        "but offset 0x%llx doesn't satisfy alignment 0x%llx.\n"
+        "This is most likely caused by incompatible hardware or drivers between capture and "
+        "replay, causing a change in memory requirements.",
+        resourceName, memOrigId, memInfo.memoryTypeIndex, memoryOffset, mrq.alignment);
+    m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;
+    return false;
+  }
+
+  // verify size
+  if(mrq.size > memInfo.size - memoryOffset)
+  {
+    RDCERR(
+        "Trying to bind %s to memory %llu which is type %u, "
+        "but at offset 0x%llx the reported size of 0x%llx won't fit the 0x%llx bytes of memory.\n"
+        "This is most likely caused by incompatible hardware or drivers between capture and "
+        "replay, causing a change in memory requirements.",
+        resourceName, memOrigId, memInfo.memoryTypeIndex, memoryOffset, mrq.size, memInfo.size);
+    m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;
+    return false;
+  }
+
+  return true;
+}
+
 template <typename SerialiserType>
 bool WrappedVulkan::Serialise_vkAllocateMemory(SerialiserType &ser, VkDevice device,
                                                const VkMemoryAllocateInfo *pAllocateInfo,
@@ -279,145 +375,9 @@ VkResult WrappedVulkan::vkAllocateMemory(VkDevice device, const VkMemoryAllocate
     ObjDisp(device)->DestroyBuffer(Unwrap(device), buf, NULL);
   }
 
-  size_t memSize = 0;
+  byte *tempMem = GetTempMemory(GetNextPatchSize(info.pNext));
 
-  // we don't have to unwrap every struct, but unwrapping a struct means we need to copy
-  // the previous one in the chain locally to modify the pNext pointer. So we just copy
-  // all of them locally
-  {
-    const VkGenericStruct *next = (const VkGenericStruct *)info.pNext;
-    while(next)
-    {
-      // we need to unwrap these structs
-      if(next->sType == VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV)
-        memSize += sizeof(VkDedicatedAllocationMemoryAllocateInfoNV);
-      else if(next->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR)
-        memSize += sizeof(VkMemoryDedicatedAllocateInfoKHR);
-      // the rest we don't need to unwrap, but we need to copy locally for chaining
-      else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_NV)
-        memSize += sizeof(VkExportMemoryAllocateInfoNV);
-      else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR)
-        memSize += sizeof(VkExportMemoryAllocateInfoKHR);
-      else if(next->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR)
-        memSize += sizeof(VkImportMemoryFdInfoKHR);
-
-#ifdef VK_NV_external_memory_win32
-      else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_NV)
-        memSize += sizeof(VkExportMemoryWin32HandleInfoNV);
-      else if(next->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_NV)
-        memSize += sizeof(VkImportMemoryWin32HandleInfoNV);
-#else
-      else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_NV)
-        RDCERR("Support for VK_NV_external_memory_win32 not compiled in");
-      else if(next->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_NV)
-        RDCERR("Support for VK_NV_external_memory_win32 not compiled in");
-#endif
-
-#ifdef VK_KHR_external_memory_win32
-      else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
-        memSize += sizeof(VkExportMemoryWin32HandleInfoKHR);
-      else if(next->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
-        memSize += sizeof(VkImportMemoryWin32HandleInfoKHR);
-#else
-      else if(next->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
-        RDCERR("Support for VK_KHR_external_memory_win32 not compiled in");
-      else if(next->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
-        RDCERR("Support for VK_KHR_external_memory_win32 not compiled in");
-#endif
-
-      next = next->pNext;
-    }
-  }
-
-  byte *tempMem = GetTempMemory(memSize);
-
-  {
-    VkGenericStruct *nextChainTail = (VkGenericStruct *)&info;
-    const VkGenericStruct *nextInput = (const VkGenericStruct *)info.pNext;
-    while(nextInput)
-    {
-      // unwrap and replace the dedicated allocation struct in the chain
-      if(nextInput->sType == VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV)
-      {
-        const VkDedicatedAllocationMemoryAllocateInfoNV *dedicatedIn =
-            (const VkDedicatedAllocationMemoryAllocateInfoNV *)nextInput;
-        VkDedicatedAllocationMemoryAllocateInfoNV *dedicatedOut =
-            (VkDedicatedAllocationMemoryAllocateInfoNV *)tempMem;
-
-        // copy and unwrap the struct
-        dedicatedOut->sType = dedicatedIn->sType;
-        dedicatedOut->buffer = Unwrap(dedicatedIn->buffer);
-        dedicatedOut->image = Unwrap(dedicatedIn->image);
-
-        AppendModifiedChainedStruct(tempMem, dedicatedOut, nextChainTail);
-      }
-      else if(nextInput->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR)
-      {
-        const VkMemoryDedicatedAllocateInfoKHR *dedicatedIn =
-            (const VkMemoryDedicatedAllocateInfoKHR *)nextInput;
-        VkMemoryDedicatedAllocateInfoKHR *dedicatedOut = (VkMemoryDedicatedAllocateInfoKHR *)tempMem;
-
-        // copy and unwrap the struct
-        dedicatedOut->sType = dedicatedIn->sType;
-        dedicatedOut->buffer = Unwrap(dedicatedIn->buffer);
-        dedicatedOut->image = Unwrap(dedicatedIn->image);
-
-        AppendModifiedChainedStruct(tempMem, dedicatedOut, nextChainTail);
-      }
-      else if(nextInput->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_NV)
-      {
-        CopyNextChainedStruct<VkExportMemoryAllocateInfoNV>(tempMem, nextInput, nextChainTail);
-      }
-      else if(nextInput->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR)
-      {
-        CopyNextChainedStruct<VkExportMemoryAllocateInfoKHR>(tempMem, nextInput, nextChainTail);
-      }
-      else if(nextInput->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR)
-      {
-        CopyNextChainedStruct<VkImportMemoryFdInfoKHR>(tempMem, nextInput, nextChainTail);
-      }
-      else if(nextInput->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
-      {
-#ifdef VK_KHR_external_memory_win32
-        CopyNextChainedStruct<VkExportMemoryWin32HandleInfoKHR>(tempMem, nextInput, nextChainTail);
-#else
-        RDCERR("Support for VK_KHR_external_memory_win32 not compiled in");
-#endif
-      }
-      else if(nextInput->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_KHR)
-      {
-#ifdef VK_KHR_external_memory_win32
-        CopyNextChainedStruct<VkImportMemoryWin32HandleInfoKHR>(tempMem, nextInput, nextChainTail);
-#else
-        RDCERR("Support for VK_KHR_external_memory_win32 not compiled in");
-#endif
-      }
-      else if(nextInput->sType == VK_STRUCTURE_TYPE_EXPORT_MEMORY_WIN32_HANDLE_INFO_NV)
-      {
-#ifdef VK_NV_external_memory_win32
-        CopyNextChainedStruct<VkExportMemoryWin32HandleInfoNV>(tempMem, nextInput, nextChainTail);
-#else
-        RDCERR("Support for VK_NV_external_memory_win32 not compiled in");
-#endif
-      }
-      else if(nextInput->sType == VK_STRUCTURE_TYPE_IMPORT_MEMORY_WIN32_HANDLE_INFO_NV)
-      {
-#ifdef VK_NV_external_memory_win32
-        CopyNextChainedStruct<VkImportMemoryWin32HandleInfoNV>(tempMem, nextInput, nextChainTail);
-#else
-        RDCERR("Support for VK_NV_external_memory_win32 not compiled in");
-#endif
-      }
-      else
-      {
-        RDCERR("unrecognised struct %d in vkAllocateMemoryInfo pNext chain", nextInput->sType);
-        // can't patch this struct, have to just copy it and hope it's the last in the chain
-        nextChainTail->pNext = nextInput;
-      }
-
-      nextInput = nextInput->pNext;
-    }
-  }
+  PatchNextChain("VkMemoryAllocateInfo", tempMem, (VkGenericStruct *)&info);
 
   VkResult ret;
   SERIALISE_TIME_CALL(
@@ -879,54 +839,14 @@ bool WrappedVulkan::Serialise_vkBindBufferMemory(SerialiserType &ser, VkDevice d
     ResourceId resOrigId = GetResourceManager()->GetOriginalID(GetResID(buffer));
     ResourceId memOrigId = GetResourceManager()->GetOriginalID(GetResID(memory));
 
-    // verify that the memory meets basic requirements. If not, something changed and we should bail
-    // loading this capture. This is a bit of an under-estimate since we just make sure there's
-    // enough space left in the memory, that doesn't mean that there aren't overlaps due to
-    // increased size requirements.
     VkMemoryRequirements mrq = {};
     ObjDisp(device)->GetBufferMemoryRequirements(Unwrap(device), Unwrap(buffer), &mrq);
 
-    VulkanCreationInfo::Memory &memInfo = m_CreationInfo.m_Memory[GetResID(memory)];
-    uint32_t bit = 1U << memInfo.memoryTypeIndex;
+    bool ok = CheckMemoryRequirements(StringFormat::Fmt("Buffer %llu", resOrigId).c_str(),
+                                      GetResID(memory), memoryOffset, mrq);
 
-    // verify type
-    if((mrq.memoryTypeBits & bit) == 0)
-    {
-      RDCERR(
-          "Trying to bind buffer %llu to memory %llu which is type %u, "
-          "but only these types are allowed: %08x.\n"
-          "This is most likely caused by incompatible hardware or drivers between capture and "
-          "replay, causing a change in memory requirements.",
-          resOrigId, memOrigId, memInfo.memoryTypeIndex, mrq.memoryTypeBits);
-      m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;
+    if(!ok)
       return false;
-    }
-
-    // verify offset alignment
-    if((memoryOffset % mrq.alignment) != 0)
-    {
-      RDCERR(
-          "Trying to bind buffer %llu to memory %llu which is type %u, "
-          "but offset 0x%llx doesn't satisfy alignment 0x%llx.\n"
-          "This is most likely caused by incompatible hardware or drivers between capture and "
-          "replay, causing a change in memory requirements.",
-          resOrigId, memOrigId, memInfo.memoryTypeIndex, memoryOffset, mrq.alignment);
-      m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;
-      return false;
-    }
-
-    // verify size
-    if(mrq.size > memInfo.size - memoryOffset)
-    {
-      RDCERR(
-          "Trying to bind buffer %llu to memory %llu which is type %u, "
-          "but at offset 0x%llx the reported size of 0x%llx won't fit the 0x%llx bytes of memory.\n"
-          "This is most likely caused by incompatible hardware or drivers between capture and "
-          "replay, causing a change in memory requirements.",
-          resOrigId, memOrigId, memInfo.memoryTypeIndex, memoryOffset, mrq.size, memInfo.size);
-      m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;
-      return false;
-    }
 
     ObjDisp(device)->BindBufferMemory(Unwrap(device), Unwrap(buffer), Unwrap(memory), memoryOffset);
 
@@ -990,54 +910,14 @@ bool WrappedVulkan::Serialise_vkBindImageMemory(SerialiserType &ser, VkDevice de
     ResourceId resOrigId = GetResourceManager()->GetOriginalID(GetResID(image));
     ResourceId memOrigId = GetResourceManager()->GetOriginalID(GetResID(memory));
 
-    // verify that the memory meets basic requirements. If not, something changed and we should bail
-    // loading this capture. This is a bit of an under-estimate since we just make sure there's
-    // enough space left in the memory, that doesn't mean that there aren't overlaps due to
-    // increased size requirements.
     VkMemoryRequirements mrq = {};
     ObjDisp(device)->GetImageMemoryRequirements(Unwrap(device), Unwrap(image), &mrq);
 
-    VulkanCreationInfo::Memory &memInfo = m_CreationInfo.m_Memory[GetResID(memory)];
-    uint32_t bit = 1U << memInfo.memoryTypeIndex;
+    bool ok = CheckMemoryRequirements(StringFormat::Fmt("Image %llu", resOrigId).c_str(),
+                                      GetResID(memory), memoryOffset, mrq);
 
-    // verify type
-    if((mrq.memoryTypeBits & bit) == 0)
-    {
-      RDCERR(
-          "Trying to bind image %llu to memory %llu which is type %u, "
-          "but only these types are allowed: %08x.\n"
-          "This is most likely caused by incompatible hardware or drivers between capture and "
-          "replay, causing a change in memory requirements.",
-          resOrigId, memOrigId, memInfo.memoryTypeIndex, mrq.memoryTypeBits);
-      m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;
+    if(!ok)
       return false;
-    }
-
-    // verify offset alignment
-    if((memoryOffset % mrq.alignment) != 0)
-    {
-      RDCERR(
-          "Trying to bind image %llu to memory %llu which is type %u, "
-          "but offset 0x%llx doesn't satisfy alignment 0x%llx.\n"
-          "This is most likely caused by incompatible hardware or drivers between capture and "
-          "replay, causing a change in memory requirements.",
-          resOrigId, memOrigId, memInfo.memoryTypeIndex, memoryOffset, mrq.alignment);
-      m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;
-      return false;
-    }
-
-    // verify size
-    if(mrq.size > memInfo.size - memoryOffset)
-    {
-      RDCERR(
-          "Trying to bind image %llu to memory %llu which is type %u, "
-          "but at offset 0x%llx the reported size of 0x%llx won't fit the 0x%llx bytes of memory.\n"
-          "This is most likely caused by incompatible hardware or drivers between capture and "
-          "replay, causing a change in memory requirements.",
-          resOrigId, memOrigId, memInfo.memoryTypeIndex, memoryOffset, mrq.size, memInfo.size);
-      m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;
-      return false;
-    }
 
     ObjDisp(device)->BindImageMemory(Unwrap(device), Unwrap(image), Unwrap(memory), memoryOffset);
 
@@ -1500,6 +1380,10 @@ VkResult WrappedVulkan::vkCreateImage(VkDevice device, const VkImageCreateInfo *
     }
   }
 
+  byte *tempMem = GetTempMemory(GetNextPatchSize(createInfo_adjusted.pNext));
+
+  PatchNextChain("VkImageCreateInfo", tempMem, (VkGenericStruct *)&createInfo_adjusted);
+
   VkResult ret;
   SERIALISE_TIME_CALL(
       ret = ObjDisp(device)->CreateImage(Unwrap(device), &createInfo_adjusted, pAllocator, pImage));
@@ -1537,7 +1421,7 @@ VkResult WrappedVulkan::vkCreateImage(VkDevice device, const VkImageCreateInfo *
       while(next)
       {
         if(next->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_NV ||
-           next->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR)
+           next->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO)
         {
           isExternal = true;
           break;
@@ -1767,6 +1651,177 @@ VkResult WrappedVulkan::vkCreateImageView(VkDevice device, const VkImageViewCrea
   return ret;
 }
 
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkBindBufferMemory2(SerialiserType &ser, VkDevice device,
+                                                  uint32_t bindInfoCount,
+                                                  const VkBindBufferMemoryInfo *pBindInfos)
+{
+  SERIALISE_ELEMENT(device);
+  SERIALISE_ELEMENT(bindInfoCount);
+  SERIALISE_ELEMENT_ARRAY(pBindInfos, bindInfoCount);
+
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+  {
+    for(uint32_t i = 0; i < bindInfoCount; i++)
+    {
+      const VkBindBufferMemoryInfo &bindInfo = pBindInfos[i];
+
+      ResourceId resOrigId = GetResourceManager()->GetOriginalID(GetResID(bindInfo.buffer));
+      ResourceId memOrigId = GetResourceManager()->GetOriginalID(GetResID(bindInfo.memory));
+
+      VkMemoryRequirements mrq = {};
+      ObjDisp(device)->GetBufferMemoryRequirements(Unwrap(device), Unwrap(bindInfo.buffer), &mrq);
+
+      bool ok = CheckMemoryRequirements(StringFormat::Fmt("Buffer %llu", resOrigId).c_str(),
+                                        GetResID(bindInfo.memory), bindInfo.memoryOffset, mrq);
+
+      if(!ok)
+        return false;
+
+      GetReplay()->GetResourceDesc(memOrigId).derivedResources.push_back(resOrigId);
+      GetReplay()->GetResourceDesc(resOrigId).parentResources.push_back(memOrigId);
+
+      AddResourceCurChunk(memOrigId);
+      AddResourceCurChunk(resOrigId);
+    }
+
+    VkBindBufferMemoryInfo *unwrapped = UnwrapInfos(pBindInfos, bindInfoCount);
+    ObjDisp(device)->BindBufferMemory2(Unwrap(device), bindInfoCount, unwrapped);
+  }
+
+  return true;
+}
+
+VkResult WrappedVulkan::vkBindBufferMemory2(VkDevice device, uint32_t bindInfoCount,
+                                            const VkBindBufferMemoryInfo *pBindInfos)
+{
+  VkBindBufferMemoryInfo *unwrapped = UnwrapInfos(pBindInfos, bindInfoCount);
+
+  VkResult ret;
+  SERIALISE_TIME_CALL(
+      ret = ObjDisp(device)->BindBufferMemory2(Unwrap(device), bindInfoCount, unwrapped));
+
+  if(IsCaptureMode(m_State))
+  {
+    for(uint32_t i = 0; i < bindInfoCount; i++)
+    {
+      VkResourceRecord *bufrecord = GetRecord(pBindInfos[i].buffer);
+      VkResourceRecord *memrecord = GetRecord(pBindInfos[i].memory);
+
+      Chunk *chunk = NULL;
+
+      // we split this batch-bind up, so that each bind goes into the right record
+      {
+        CACHE_THREAD_SERIALISER();
+
+        SCOPED_SERIALISE_CHUNK(VulkanChunk::vkBindBufferMemory2);
+        Serialise_vkBindBufferMemory2(ser, device, bindInfoCount, pBindInfos);
+
+        chunk = scope.Get();
+      }
+
+      // memory object bindings are immutable and must happen before creation or use,
+      // so this can always go into the record, even if a resource is created and bound
+      // to memory mid-frame
+      bufrecord->AddChunk(chunk);
+
+      bufrecord->AddParent(memrecord);
+      bufrecord->baseResource = memrecord->GetResourceID();
+    }
+  }
+
+  return ret;
+}
+
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkBindImageMemory2(SerialiserType &ser, VkDevice device,
+                                                 uint32_t bindInfoCount,
+                                                 const VkBindImageMemoryInfo *pBindInfos)
+{
+  SERIALISE_ELEMENT(device);
+  SERIALISE_ELEMENT(bindInfoCount);
+  SERIALISE_ELEMENT_ARRAY(pBindInfos, bindInfoCount);
+
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+  {
+    for(uint32_t i = 0; i < bindInfoCount; i++)
+    {
+      const VkBindImageMemoryInfo &bindInfo = pBindInfos[i];
+
+      ResourceId resOrigId = GetResourceManager()->GetOriginalID(GetResID(bindInfo.image));
+      ResourceId memOrigId = GetResourceManager()->GetOriginalID(GetResID(bindInfo.memory));
+
+      VkMemoryRequirements mrq = {};
+      ObjDisp(device)->GetImageMemoryRequirements(Unwrap(device), Unwrap(bindInfo.image), &mrq);
+
+      bool ok = CheckMemoryRequirements(StringFormat::Fmt("Image %llu", resOrigId).c_str(),
+                                        GetResID(bindInfo.memory), bindInfo.memoryOffset, mrq);
+
+      if(!ok)
+        return false;
+
+      GetReplay()->GetResourceDesc(memOrigId).derivedResources.push_back(resOrigId);
+      GetReplay()->GetResourceDesc(resOrigId).parentResources.push_back(memOrigId);
+
+      AddResourceCurChunk(memOrigId);
+      AddResourceCurChunk(resOrigId);
+    }
+
+    VkBindImageMemoryInfo *unwrapped = UnwrapInfos(pBindInfos, bindInfoCount);
+    ObjDisp(device)->BindImageMemory2(Unwrap(device), bindInfoCount, unwrapped);
+  }
+
+  return true;
+}
+
+VkResult WrappedVulkan::vkBindImageMemory2(VkDevice device, uint32_t bindInfoCount,
+                                           const VkBindImageMemoryInfo *pBindInfos)
+{
+  VkBindImageMemoryInfo *unwrapped = UnwrapInfos(pBindInfos, bindInfoCount);
+  VkResult ret;
+  SERIALISE_TIME_CALL(
+      ret = ObjDisp(device)->BindImageMemory2(Unwrap(device), bindInfoCount, unwrapped));
+
+  if(IsCaptureMode(m_State))
+  {
+    for(uint32_t i = 0; i < bindInfoCount; i++)
+    {
+      VkResourceRecord *imgrecord = GetRecord(pBindInfos[i].image);
+      VkResourceRecord *memrecord = GetRecord(pBindInfos[i].memory);
+
+      Chunk *chunk = NULL;
+
+      // we split this batch-bind up, so that each bind goes into the right record
+      {
+        CACHE_THREAD_SERIALISER();
+
+        SCOPED_SERIALISE_CHUNK(VulkanChunk::vkBindImageMemory2);
+        Serialise_vkBindImageMemory2(ser, device, 1, pBindInfos + i);
+
+        chunk = scope.Get();
+      }
+
+      // memory object bindings are immutable and must happen before creation or use,
+      // so this can always go into the record, even if a resource is created and bound
+      // to memory mid-frame
+      imgrecord->AddChunk(chunk);
+
+      imgrecord->AddParent(memrecord);
+
+      // images are a base resource but we want to track where their memory comes from.
+      // Anything that looks up a baseResource for an image knows not to chase further
+      // than the image.
+      imgrecord->baseResource = memrecord->GetResourceID();
+    }
+  }
+
+  return ret;
+}
+
 INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkAllocateMemory, VkDevice device,
                                 const VkMemoryAllocateInfo *pAllocateInfo,
                                 const VkAllocationCallbacks *pAllocator, VkDeviceMemory *pMemory);
@@ -1797,3 +1852,9 @@ INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateImage, VkDevice device,
 INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateImageView, VkDevice device,
                                 const VkImageViewCreateInfo *pCreateInfo,
                                 const VkAllocationCallbacks *pAllocator, VkImageView *pView);
+
+INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkBindBufferMemory2, VkDevice device,
+                                uint32_t bindInfoCount, const VkBindBufferMemoryInfo *pBindInfos);
+
+INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkBindImageMemory2, VkDevice device,
+                                uint32_t bindInfoCount, const VkBindImageMemoryInfo *pBindInfos);

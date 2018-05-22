@@ -210,7 +210,7 @@ void GLReplay::SetReplayData(GLWindowingData data)
 {
   m_ReplayCtx = data;
   if(m_pDriver != NULL)
-    m_pDriver->RegisterContext(m_ReplayCtx, NULL, true, true);
+    m_pDriver->RegisterReplayContext(m_ReplayCtx, NULL, true, true);
 
   InitDebugData();
 
@@ -486,7 +486,7 @@ void GLReplay::CacheTexture(ResourceId id)
 
     gl.glGetTextureLevelParameterivEXT(res.resource.name, levelQueryType, 0,
                                        eGL_TEXTURE_BUFFER_SIZE, (GLint *)&tex.byteSize);
-    tex.width = uint32_t(tex.byteSize / (tex.format.compByteWidth * tex.format.compCount));
+    tex.width = uint32_t(tex.byteSize / RDCMAX(1, tex.format.compByteWidth * tex.format.compCount));
 
     m_CachedTextures[id] = tex;
     return;
@@ -662,7 +662,7 @@ void GLReplay::SavePipelineState()
 
   // Index buffer
 
-  void *ctx = m_ReplayCtx.ctx;
+  ContextPair &ctx = gl.GetCtx();
 
   GLuint ibuffer = 0;
   gl.glGetIntegerv(eGL_ELEMENT_ARRAY_BUFFER_BINDING, (GLint *)&ibuffer);
@@ -1976,7 +1976,7 @@ void GLReplay::FillCBufferVariables(ResourceId shader, string entryPoint, uint32
     else
     {
       ResourceId id =
-          m_pDriver->GetResourceManager()->GetID(ProgramPipeRes(m_ReplayCtx.ctx, curProg));
+          m_pDriver->GetResourceManager()->GetID(ProgramPipeRes(m_pDriver->GetCtx(), curProg));
       auto &pipeDetails = m_pDriver->m_Pipelines[id];
 
       size_t s = ShaderIdx(shaderDetails.type);

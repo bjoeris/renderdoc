@@ -286,9 +286,14 @@ byte *PixelUnpackState::Unpack(byte *pixels, GLsizei width, GLsizei height, GLsi
   size_t align = 1;
   // "If the number of bits per element is not 1, 2, 4, or 8 times the number of
   // bits in a GL ubyte, then k = nl for all values of a"
-  // ie. alignment is only used for pixel formats of those pixel sizes.
-  if(pixelSize == 1 || pixelSize == 2 || pixelSize == 4 || pixelSize == 8)
+  // ie. alignment is only used for pixel formats with N-byte elements.
+  if(basetype == eGL_UNSIGNED_BYTE || basetype == eGL_BYTE || basetype == eGL_UNSIGNED_SHORT ||
+     basetype == eGL_SHORT || basetype == eGL_UNSIGNED_INT || basetype == eGL_INT ||
+     basetype == eGL_HALF_FLOAT || basetype == eGL_FLOAT || basetype == eGL_UNSIGNED_INT_8_8_8_8 ||
+     basetype == eGL_UNSIGNED_INT_8_8_8_8_REV)
+  {
     align = RDCMAX(align, (size_t)alignment);
+  }
 
   byte *dest = ret;
 
@@ -520,7 +525,7 @@ void GLRenderState::MarkDirty(WrappedOpenGL *gl)
 {
   GLResourceManager *manager = gl->GetResourceManager();
 
-  void *ctx = gl->GetCtx();
+  ContextPair &ctx = gl->GetCtx();
 
   GLint maxCount = 0;
   GLuint name = 0;
@@ -706,9 +711,9 @@ bool GLRenderState::CheckEnableDisableParam(GLenum pname)
 
 void GLRenderState::FetchState(WrappedOpenGL *gl)
 {
-  void *ctx = WrappedOpenGL::GetCtx();
+  ContextPair &ctx = gl->GetCtx();
 
-  if(ctx == NULL)
+  if(ctx.ctx == NULL)
   {
     ContextPresent = false;
     return;
@@ -739,18 +744,23 @@ void GLRenderState::FetchState(WrappedOpenGL *gl)
           sizeof(Tex2DMSArray) == sizeof(Samplers),
       "All texture arrays should be identically sized");
 
-#if ENABLED(RDOC_DEVEL)
-  if(TextureRes(ctx, 0).Context != NULL)
-    RDCFATAL("Texture resources are context-specific - we assume they aren't");
-  if(BufferRes(ctx, 0).Context != NULL)
-    RDCFATAL("Buffer resources are context-specific - we assume they aren't");
-  if(SamplerRes(ctx, 0).Context != NULL)
-    RDCFATAL("Sampler resources are context-specific - we assume they aren't");
-#endif
-
   for(GLuint i = 0; i < RDCMIN(maxTextures, (GLuint)ARRAY_COUNT(Tex2D)); i++)
   {
     m_Real->glActiveTexture(GLenum(eGL_TEXTURE0 + i));
+
+    // textures are always shared
+    Tex1D[i].ContextShareGroup = ctx.shareGroup;
+    Tex2D[i].ContextShareGroup = ctx.shareGroup;
+    Tex3D[i].ContextShareGroup = ctx.shareGroup;
+    Tex1DArray[i].ContextShareGroup = ctx.shareGroup;
+    Tex2DArray[i].ContextShareGroup = ctx.shareGroup;
+    TexCube[i].ContextShareGroup = ctx.shareGroup;
+    TexRect[i].ContextShareGroup = ctx.shareGroup;
+    TexBuffer[i].ContextShareGroup = ctx.shareGroup;
+    Tex2DMS[i].ContextShareGroup = ctx.shareGroup;
+    Tex2DMSArray[i].ContextShareGroup = ctx.shareGroup;
+    TexCubeArray[i].ContextShareGroup = ctx.shareGroup;
+    Samplers[i].ContextShareGroup = ctx.shareGroup;
 
     if(!IsGLES)
       m_Real->glGetIntegerv(eGL_TEXTURE_BINDING_1D, (GLint *)&Tex1D[i].name);
@@ -800,6 +810,9 @@ void GLRenderState::FetchState(WrappedOpenGL *gl)
     for(GLuint i = 0; i < RDCMIN(maxImages, (GLuint)ARRAY_COUNT(Images)); i++)
     {
       GLboolean layered = GL_FALSE;
+
+      // textures are always shared
+      Images[i].res.ContextShareGroup = ctx.shareGroup;
 
       m_Real->glGetIntegeri_v(eGL_IMAGE_BINDING_NAME, i, (GLint *)&Images[i].res.name);
       m_Real->glGetIntegeri_v(eGL_IMAGE_BINDING_LEVEL, i, (GLint *)&Images[i].level);
@@ -925,6 +938,10 @@ void GLRenderState::FetchState(WrappedOpenGL *gl)
     RDCEraseEl(Subroutines);
   }
 
+  // buffers are always shared
+  for(size_t i = 0; i < ARRAY_COUNT(BufferBindings); i++)
+    BufferBindings[i].ContextShareGroup = ctx.shareGroup;
+
   m_Real->glGetIntegerv(eGL_ARRAY_BUFFER_BINDING, (GLint *)&BufferBindings[eBufIdx_Array].name);
   m_Real->glGetIntegerv(eGL_COPY_READ_BUFFER_BINDING,
                         (GLint *)&BufferBindings[eBufIdx_Copy_Read].name);
@@ -995,6 +1012,9 @@ void GLRenderState::FetchState(WrappedOpenGL *gl)
     m_Real->glGetIntegerv(idxBufs[b].maxcount, &maxCount);
     for(int i = 0; i < idxBufs[b].count && i < maxCount; i++)
     {
+      // buffers are always shared
+      idxBufs[b].bufs[i].res.ContextShareGroup = ctx.shareGroup;
+
       m_Real->glGetIntegeri_v(idxBufs[b].binding, i, (GLint *)&idxBufs[b].bufs[i].res.name);
       m_Real->glGetInteger64i_v(idxBufs[b].start, i, (GLint64 *)&idxBufs[b].bufs[i].start);
       m_Real->glGetInteger64i_v(idxBufs[b].size, i, (GLint64 *)&idxBufs[b].bufs[i].size);
@@ -1255,9 +1275,9 @@ void GLRenderState::FetchState(WrappedOpenGL *gl)
 
 void GLRenderState::ApplyState(WrappedOpenGL *gl)
 {
-  void *ctx = WrappedOpenGL::GetCtx();
+  ContextPair &ctx = gl->GetCtx();
 
-  if(!ContextPresent || ctx == NULL)
+  if(!ContextPresent || ctx.ctx == NULL)
     return;
 
   for(GLuint i = 0; i < eEnabled_Count; i++)
@@ -1317,10 +1337,7 @@ void GLRenderState::ApplyState(WrappedOpenGL *gl)
 
   m_Real->glActiveTexture(ActiveTexture);
 
-  if(VAO.name)
-    m_Real->glBindVertexArray(VAO.name);
-  else
-    m_Real->glBindVertexArray(gl->GetFakeVAO());
+  m_Real->glBindVertexArray(VAO.name);
 
   if(HasExt[ARB_transform_feedback2])
     m_Real->glBindTransformFeedback(eGL_TRANSFORM_FEEDBACK, FeedbackObj.name);
@@ -1543,7 +1560,7 @@ void GLRenderState::ApplyState(WrappedOpenGL *gl)
 
   // this will always return true during capture, but on replay we only do
   // this work if we're on the replay context
-  if(gl->GetReplay()->IsReplayContext(ctx))
+  if(gl->GetReplay()->IsReplayContext(ctx.ctx))
   {
     // apply drawbuffers/readbuffer to default framebuffer
     m_Real->glBindFramebuffer(eGL_READ_FRAMEBUFFER, gl->GetFakeBBFBO());

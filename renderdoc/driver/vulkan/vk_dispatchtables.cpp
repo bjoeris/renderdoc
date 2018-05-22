@@ -74,12 +74,38 @@ void InitInstanceExtensionTables(VkInstance instance, InstanceDeviceInfo *info)
 
   instance = Unwrap(instance);
 
+#undef CheckExt
+#define CheckExt(name, ver)     \
+  bool name = info->ext_##name; \
+  (void)name;
+
 #undef HookInitExtension
-#define HookInitExtension(ext, func) \
-  if(info->ext_##ext)                \
-  {                                  \
-    InstanceGPA(func);               \
+#define HookInitExtension(cond, func) \
+  if(cond)                            \
+  {                                   \
+    InstanceGPA(func);                \
   }
+
+// for promoted extensions, we check both suffixed and non-suffixed functions individually, make
+// sure that either they are identical or one came back as NULL, then cross-promote so if we got
+// either, we set the other. This makes it easier to handle promoted extensions without crazy
+// multiple paths
+#undef HookInitPromotedExtension
+#define HookInitPromotedExtension(cond, func, suffix)                              \
+  if(cond)                                                                         \
+  {                                                                                \
+    InstanceGPA(func);                                                             \
+    InstanceGPA(CONCAT(func, suffix));                                             \
+    RDCASSERT(table->func == table->CONCAT(func, suffix) || table->func == NULL || \
+                  table->CONCAT(func, suffix) == NULL,                             \
+              (void *)table->func, (void *)table->CONCAT(func, suffix));           \
+    if(table->func == NULL)                                                        \
+      table->func = table->CONCAT(func, suffix);                                   \
+    if(table->CONCAT(func, suffix) == NULL)                                        \
+      table->CONCAT(func, suffix) = table->func;                                   \
+  }
+
+  CheckInstanceExts();
 
   InstanceGPA(EnumerateDeviceExtensionProperties);
   InstanceGPA(EnumerateDeviceLayerProperties);
@@ -100,11 +126,26 @@ void InitDeviceExtensionTables(VkDevice device, InstanceDeviceInfo *info)
   device = Unwrap(device);
 
 #undef HookInitExtension
-#define HookInitExtension(ext, func) \
-  if(info->ext_##ext)                \
-  {                                  \
-    DeviceGPA(func);                 \
+#define HookInitExtension(cond, func) \
+  if(cond)                            \
+  {                                   \
+    DeviceGPA(func);                  \
   }
+
+#undef HookInitPromotedExtension
+#define HookInitPromotedExtension(cond, func, suffix) \
+  if(cond)                                            \
+  {                                                   \
+    DeviceGPA(func);                                  \
+    DeviceGPA(CONCAT(func, suffix));                  \
+    if(table->func == NULL)                           \
+      table->func = table->CONCAT(func, suffix);      \
+    if(table->CONCAT(func, suffix) == NULL)           \
+      table->CONCAT(func, suffix) = table->func;      \
+  }
+
+  CheckInstanceExts();
+  CheckDeviceExts();
 
   HookInitVulkanDeviceExts();
 }

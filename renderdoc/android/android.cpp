@@ -31,15 +31,17 @@
 
 namespace Android
 {
-void adbForwardPorts(int index, const std::string &deviceID, uint16_t jdwpPort, int pid)
+void adbForwardPorts(int index, const std::string &deviceID, uint16_t jdwpPort, int pid, bool silent)
 {
   const char *forwardCommand = "forward tcp:%i localabstract:renderdoc_%i";
   int offs = RenderDoc_AndroidPortOffset * (index + 1);
 
   adbExecCommand(deviceID, StringFormat::Fmt(forwardCommand, RenderDoc_RemoteServerPort + offs,
-                                             RenderDoc_RemoteServerPort));
+                                             RenderDoc_RemoteServerPort),
+                 ".", silent);
   adbExecCommand(deviceID, StringFormat::Fmt(forwardCommand, RenderDoc_FirstTargetControlPort + offs,
-                                             RenderDoc_FirstTargetControlPort));
+                                             RenderDoc_FirstTargetControlPort),
+                 ".", silent);
 
   if(jdwpPort && pid)
     adbExecCommand(deviceID, StringFormat::Fmt("forward tcp:%hu jdwp:%i", jdwpPort, pid));
@@ -82,6 +84,46 @@ std::string GetDefaultActivityForPackage(const std::string &deviceID, const std:
     if(!strncmp(line.c_str(), "name=", 5))
     {
       return line.substr(5);
+    }
+  }
+
+  // when failed to find default activiy with cmd package on Android 6.0
+  // try using pm dump like in this example:
+  // $ adb shell pm dump com.android.gles3jni
+  // DUMP OF SERVICE package:
+  //  Activity Resolver Table:
+  //    Non-Data Actions:
+  //        android.intent.action.MAIN:
+  //          d97b36a com.android.gles3jni/.GLES3JNIActivity filter fa39fb9
+  // ...
+
+  activity = adbExecCommand(deviceID, StringFormat::Fmt("shell pm dump %s", packageName.c_str()));
+
+  lines.clear();
+  split(activity.strStdout, lines, '\n');
+
+  size_t numOfLines = lines.size();
+  const char *intentFilter = "android.intent.action.MAIN:";
+  size_t intentFilterSize = strlen(intentFilter);
+
+  for(size_t idx = 0; idx < numOfLines; idx++)
+  {
+    std::string line = trim(lines[idx]);
+    if(!strncmp(line.c_str(), intentFilter, intentFilterSize) && idx + 1 < numOfLines)
+    {
+      std::string activityName = trim(lines[idx + 1]);
+      size_t startPos = activityName.find("/");
+      if(startPos == std::string::npos)
+      {
+        RDCWARN("Failed to find default activity");
+        return "";
+      }
+      size_t endPos = activityName.find(" ", startPos + 1);
+      if(endPos == std::string::npos)
+      {
+        endPos = activityName.length();
+      }
+      return activityName.substr(startPos + 1, endPos - startPos - 1);
     }
   }
 
@@ -220,7 +262,7 @@ ExecuteResult StartAndroidPackageForCapture(const char *host, const char *packag
     jdwpPort = 0;
   }
 
-  adbForwardPorts(index, deviceID, jdwpPort, pid);
+  adbForwardPorts(index, deviceID, jdwpPort, pid, false);
 
   // sleep a little to let the ports initialise
   Threading::Sleep(500);
@@ -305,10 +347,15 @@ bool InstallRenderDocServer(const std::string &deviceID)
   paths.push_back(customPath);
 #endif
 
-  paths.push_back(exeDir + "/plugins/android/");                       // Windows install
-  paths.push_back(exeDir + "/../share/renderdoc/plugins/android/");    // Linux install
-  paths.push_back(exeDir + "/../../build-android/bin/");               // Local build
-  paths.push_back(exeDir + "/../../../../../build-android/bin/");      // macOS build
+  std::string suff = GetRenderDocPackageForABI(abis[0], '-');
+  suff.erase(0, strlen(RENDERDOC_ANDROID_PACKAGE_BASE));
+
+  paths.push_back(exeDir + "/plugins/android/");                                 // Windows install
+  paths.push_back(exeDir + "/../share/renderdoc/plugins/android/");              // Linux install
+  paths.push_back(exeDir + "/../../build-android/bin/");                         // Local build
+  paths.push_back(exeDir + "/../../build-android" + suff + "/bin/");             // Local ABI build
+  paths.push_back(exeDir + "/../../../../../build-android/bin/");                // macOS build
+  paths.push_back(exeDir + "/../../../../../build-android" + suff + "/bin/");    // macOS ABI build
 
   // use the first ABI for searching
   std::string apk = GetRenderDocPackageForABI(abis[0]);
@@ -339,7 +386,17 @@ bool InstallRenderDocServer(const std::string &deviceID)
 
   for(ABI abi : abis)
   {
-    apk = apksFolder + GetRenderDocPackageForABI(abi) + ".apk";
+    apk = apksFolder;
+
+    size_t abiSuffix = apk.find(suff);
+    if(abiSuffix != std::string::npos)
+    {
+      std::string abisuff = GetRenderDocPackageForABI(abi, '-');
+      abisuff.erase(0, strlen(RENDERDOC_ANDROID_PACKAGE_BASE));
+      apk.replace(abiSuffix, suff.size(), abisuff);
+    }
+
+    apk += GetRenderDocPackageForABI(abi) + ".apk";
 
     if(!FileIO::exists(apk.c_str()))
       RDCWARN(
@@ -461,7 +518,7 @@ bool CheckAndroidServerVersion(const string &deviceID)
 
 void ResetCaptureSettings(const std::string &deviceID)
 {
-  Android::adbExecCommand(deviceID, "shell setprop debug.vulkan.layers :");
+  Android::adbExecCommand(deviceID, "shell setprop debug.vulkan.layers :", ".", true);
 }
 };    // namespace Android
 
@@ -509,7 +566,7 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_EnumerateAndroidDevices(rdc
       ret += StringFormat::Fmt("adb:%d:%s", idx, tokens[0].c_str());
 
       // Forward the ports so we can see if a remoteserver/captured app is already running.
-      Android::adbForwardPorts(idx, tokens[0], 0, 0);
+      Android::adbForwardPorts(idx, tokens[0], 0, 0, true);
 
       idx++;
     }
@@ -551,7 +608,7 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_StartAndroidRemoteServer(co
   if(abis.empty())
     return;
 
-  Android::adbForwardPorts(index, deviceID, 0, 0);
+  Android::adbForwardPorts(index, deviceID, 0, 0, false);
   Android::ResetCaptureSettings(deviceID);
 
   // launch the first ABI, as the default 'most compatible' package

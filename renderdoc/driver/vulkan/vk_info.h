@@ -35,7 +35,9 @@ struct DescSetLayout
   void Init(VulkanResourceManager *resourceMan, VulkanCreationInfo &info,
             const VkDescriptorSetLayoutCreateInfo *pCreateInfo);
 
-  void CreateBindingsArray(vector<DescriptorSetSlot *> &descBindings);
+  void CreateBindingsArray(std::vector<DescriptorSetSlot *> &descBindings) const;
+  void UpdateBindingsArray(const DescSetLayout &prevLayout,
+                           std::vector<DescriptorSetSlot *> &descBindings) const;
 
   struct Binding
   {
@@ -71,9 +73,39 @@ struct DescSetLayout
   vector<Binding> bindings;
 
   uint32_t dynamicCount;
+  VkDescriptorSetLayoutCreateFlags flags;
 
   bool operator==(const DescSetLayout &other) const;
   bool operator!=(const DescSetLayout &other) const { return !(*this == other); }
+};
+
+struct DescUpdateTemplateApplication
+{
+  std::vector<VkDescriptorBufferInfo> bufInfo;
+  std::vector<VkDescriptorImageInfo> imgInfo;
+  std::vector<VkBufferView> bufView;
+
+  std::vector<VkWriteDescriptorSet> writes;
+};
+
+struct DescUpdateTemplate
+{
+  void Init(VulkanResourceManager *resourceMan, VulkanCreationInfo &info,
+            const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo);
+
+  void Apply(const void *pData, DescUpdateTemplateApplication &application);
+
+  DescSetLayout layout;
+
+  VkPipelineBindPoint bindPoint;
+
+  size_t dataByteSize;
+
+  uint32_t texelBufferViewCount;
+  uint32_t bufferInfoCount;
+  uint32_t imageInfoCount;
+
+  std::vector<VkDescriptorUpdateTemplateEntry> updates;
 };
 
 struct VulkanCreationInfo
@@ -123,6 +155,9 @@ struct VulkanCreationInfo
       uint32_t vbufferBinding;
       uint32_t bytestride;
       bool perInstance;
+
+      // VkVertexInputBindingDivisorDescriptionEXT
+      uint32_t instanceDivisor;
     };
     vector<Binding> vertexBindings;
 
@@ -142,6 +177,9 @@ struct VulkanCreationInfo
     // VkPipelineTessellationStateCreateInfo
     uint32_t patchControlPoints;
 
+    // VkPipelineTessellationDomainOriginStateCreateInfo
+    VkTessellationDomainOrigin tessellationDomainOrigin;
+
     // VkPipelineViewportStateCreateInfo
     uint32_t viewportCount;
     vector<VkViewport> viewports;
@@ -158,6 +196,10 @@ struct VulkanCreationInfo
     float depthBiasClamp;
     float depthBiasSlopeFactor;
     float lineWidth;
+
+    // VkPipelineRasterizationConservativeStateCreateInfoEXT
+    VkConservativeRasterizationModeEXT conservativeRasterizationMode;
+    float extraPrimitiveOverestimationSize;
 
     // VkPipelineMultisampleStateCreateInfo
     VkSampleCountFlagBits rasterizationSamples;
@@ -288,6 +330,7 @@ struct VulkanCreationInfo
               const VkBufferViewCreateInfo *pCreateInfo);
 
     ResourceId buffer;
+    VkFormat format;
     uint64_t offset;
     uint64_t size;
   };
@@ -329,8 +372,16 @@ struct VulkanCreationInfo
     float maxLod;
     VkBorderColor borderColor;
     bool unnormalizedCoordinates;
+    VkSamplerReductionModeEXT reductionMode;
   };
   map<ResourceId, Sampler> m_Sampler;
+
+  struct YCbCrSampler
+  {
+    void Init(VulkanResourceManager *resourceMan, VulkanCreationInfo &info,
+              const VkSamplerYcbcrConversionCreateInfo *pCreateInfo);
+  };
+  map<ResourceId, YCbCrSampler> m_YCbCrSampler;
 
   struct ImageView
   {
@@ -386,4 +437,5 @@ struct VulkanCreationInfo
   map<ResourceId, string> m_Names;
   map<ResourceId, SwapchainInfo> m_SwapChain;
   map<ResourceId, DescSetLayout> m_DescSetLayout;
+  map<ResourceId, DescUpdateTemplate> m_DescUpdateTemplate;
 };
