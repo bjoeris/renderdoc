@@ -1168,12 +1168,12 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
     VkPhysicalDeviceFeatures availFeatures = {0};
     ObjDisp(physicalDevice)->GetPhysicalDeviceFeatures(Unwrap(physicalDevice), &availFeatures);
 
-#define CHECK_PHYS_FEATURE(feature)                                                           \
-  if(enabledFeatures.feature && !availFeatures.feature)                                       \
-  {                                                                                           \
-    m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported;                              \
-    RDCERR("Capture requires physical device feature '" #feature "' which is not supported"); \
-    return false;                                                                             \
+#define CHECK_PHYS_FEATURE(feature)                                                            \
+  if(enabledFeatures.feature && !availFeatures.feature)                                        \
+  {                                                                                            \
+    RDCWARN("Capture requires physical device feature '" #feature "' which is not supported"); \
+    RDCWARN("RenderDoc replay disables '" #feature "' to attempt forced replay");              \
+    enabledFeatures.feature = availFeatures.feature;                                           \
   }
 
     CHECK_PHYS_FEATURE(robustBufferAccess);
