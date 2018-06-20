@@ -71,18 +71,24 @@ vector<GPUCounter> GLReplay::EnumerateCounters()
   vector<GPUCounter> ret;
 
   ret.push_back(GPUCounter::EventGPUDuration);
-  ret.push_back(GPUCounter::InputVerticesRead);
-  ret.push_back(GPUCounter::IAPrimitives);
-  ret.push_back(GPUCounter::GSPrimitives);
-  ret.push_back(GPUCounter::RasterizerInvocations);
-  ret.push_back(GPUCounter::RasterizedPrimitives);
-  ret.push_back(GPUCounter::SamplesWritten);
-  ret.push_back(GPUCounter::VSInvocations);
-  ret.push_back(GPUCounter::TCSInvocations);
-  ret.push_back(GPUCounter::TESInvocations);
-  ret.push_back(GPUCounter::GSInvocations);
-  ret.push_back(GPUCounter::PSInvocations);
-  ret.push_back(GPUCounter::CSInvocations);
+
+  if(HasExt[ARB_occlusion_query2])
+    ret.push_back(GPUCounter::SamplesPassed);
+
+  if(HasExt[ARB_pipeline_statistics_query])
+  {
+    ret.push_back(GPUCounter::InputVerticesRead);
+    ret.push_back(GPUCounter::IAPrimitives);
+    ret.push_back(GPUCounter::GSPrimitives);
+    ret.push_back(GPUCounter::RasterizerInvocations);
+    ret.push_back(GPUCounter::RasterizedPrimitives);
+    ret.push_back(GPUCounter::VSInvocations);
+    ret.push_back(GPUCounter::TCSInvocations);
+    ret.push_back(GPUCounter::TESInvocations);
+    ret.push_back(GPUCounter::GSInvocations);
+    ret.push_back(GPUCounter::PSInvocations);
+    ret.push_back(GPUCounter::CSInvocations);
+  }
 
   if(m_pAMDCounters)
   {
@@ -163,8 +169,8 @@ CounterDescription GLReplay::DescribeCounter(GPUCounter counterID)
       desc.resultType = CompType::UInt;
       desc.unit = CounterUnit::Absolute;
       break;
-    case GPUCounter::SamplesWritten:
-      desc.name = "Samples Written";
+    case GPUCounter::SamplesPassed:
+      desc.name = "Samples Passed";
       desc.description = "Number of samples that passed depth/stencil test.";
       desc.resultByteWidth = 8;
       desc.resultType = CompType::UInt;
@@ -244,7 +250,7 @@ GLenum glCounters[] = {
     eGL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB,    // GPUCounter::GSPrimitives
     eGL_CLIPPING_INPUT_PRIMITIVES_ARB,             // GPUCounter::RasterizerInvocations
     eGL_CLIPPING_OUTPUT_PRIMITIVES_ARB,            // GPUCounter::RasterizedPrimitives
-    eGL_SAMPLES_PASSED,                            // GPUCounter::SamplesWritten
+    eGL_SAMPLES_PASSED,                            // GPUCounter::SamplesPassed
     eGL_VERTEX_SHADER_INVOCATIONS_ARB,             // GPUCounter::VSInvocations
     eGL_TESS_CONTROL_SHADER_PATCHES_ARB,           // GPUCounter::TCSInvocations
     eGL_TESS_EVALUATION_SHADER_INVOCATIONS_ARB,    // GPUCounter::TESInvocations
@@ -341,6 +347,12 @@ void GLReplay::FillTimersAMD(uint32_t *eventStartID, uint32_t *sampleIndex,
 
 vector<CounterResult> GLReplay::FetchCountersAMD(const vector<GPUCounter> &counters)
 {
+  if(!m_pAMDCounters->BeginMeasurementMode(AMDCounters::ApiType::Ogl, m_ReplayCtx.ctx))
+  {
+    return vector<CounterResult>();
+  }
+
+  uint32_t sessionID = m_pAMDCounters->CreateSession();
   m_pAMDCounters->DisableAllCounters();
 
   // enable counters it needs
@@ -352,7 +364,7 @@ vector<CounterResult> GLReplay::FetchCountersAMD(const vector<GPUCounter> &count
     m_pAMDCounters->EnableCounter(counters[i]);
   }
 
-  uint32_t sessionID = m_pAMDCounters->BeginSession();
+  m_pAMDCounters->BeginSession(sessionID);
 
   uint32_t passCount = m_pAMDCounters->GetPassCount();
 
@@ -363,7 +375,7 @@ vector<CounterResult> GLReplay::FetchCountersAMD(const vector<GPUCounter> &count
   for(uint32_t p = 0; p < passCount; p++)
   {
     m_pAMDCounters->BeginPass();
-
+    m_pAMDCounters->BeginCommandList();
     uint32_t eventStartID = 0;
 
     sampleIndex = 0;
@@ -371,13 +383,18 @@ vector<CounterResult> GLReplay::FetchCountersAMD(const vector<GPUCounter> &count
     eventIDs.clear();
 
     FillTimersAMD(&eventStartID, &sampleIndex, &eventIDs, m_pDriver->GetRootDraw());
-
+    m_pAMDCounters->EndCommandList();
     m_pAMDCounters->EndPass();
   }
 
-  m_pAMDCounters->EndSesssion();
+  m_pAMDCounters->EndSesssion(sessionID);
 
-  return m_pAMDCounters->GetCounterData(sessionID, sampleIndex, eventIDs, counters);
+  std::vector<CounterResult> ret =
+      m_pAMDCounters->GetCounterData(sessionID, sampleIndex, eventIDs, counters);
+
+  m_pAMDCounters->EndMeasurementMode();
+
+  return ret;
 }
 
 vector<CounterResult> GLReplay::FetchCounters(const vector<GPUCounter> &allCounters)

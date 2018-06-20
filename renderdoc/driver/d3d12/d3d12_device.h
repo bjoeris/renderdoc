@@ -228,11 +228,13 @@ class WrappedID3D12CommandQueue;
   template <typename SerialiserType>                         \
   bool CONCAT(Serialise_, func(SerialiserType &ser, __VA_ARGS__));
 
-class WrappedID3D12Device : public IFrameCapturer, public ID3DDevice, public ID3D12Device1
+class WrappedID3D12Device : public IFrameCapturer, public ID3DDevice, public ID3D12Device3
 {
 private:
   ID3D12Device *m_pDevice;
   ID3D12Device1 *m_pDevice1;
+  ID3D12Device2 *m_pDevice2;
+  ID3D12Device3 *m_pDevice3;
 
   // list of all queues being captured
   std::vector<WrappedID3D12CommandQueue *> m_Queues;
@@ -310,7 +312,7 @@ private:
 
   bool m_AppControlledCapture;
 
-  Threading::CriticalSection m_CapTransitionLock;
+  Threading::RWLock m_CapTransitionLock;
   CaptureState m_State;
 
   uint32_t m_SubmitCounter = 0;
@@ -349,7 +351,7 @@ private:
   {
     D3D12_CPU_DESCRIPTOR_HANDLE rtvs[8];
 
-    ID3D12CommandQueue *queue;
+    WrappedID3D12CommandQueue *queue;
 
     int32_t lastPresentedBuffer;
   };
@@ -366,11 +368,14 @@ private:
   bool Serialise_CaptureScope(SerialiserType &ser);
   void EndCaptureFrame(ID3D12Resource *presentImage);
 
+  bool m_debugLayerEnabled;
+
 public:
   static const int AllocPoolCount = 4;
   ALLOCATE_WITH_WRAPPED_POOL(WrappedID3D12Device, AllocPoolCount);
 
-  WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitParams *params);
+  WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitParams *params, bool enabledDebugLayer);
+  bool IsDebugLayerEnabled() const { return m_debugLayerEnabled; }
   virtual ~WrappedID3D12Device();
 
   UINT GetUnwrappedDescriptorIncrement(D3D12_DESCRIPTOR_HEAP_TYPE type)
@@ -392,7 +397,7 @@ public:
   D3D12ResourceManager *GetResourceManager() { return m_ResourceManager; }
   D3D12ShaderCache *GetShaderCache() { return m_ShaderCache; }
   ResourceId GetResourceID() { return m_ResourceID; }
-  Threading::CriticalSection &GetCapTransitionLock() { return m_CapTransitionLock; }
+  Threading::RWLock &GetCapTransitionLock() { return m_CapTransitionLock; }
   void ReleaseSwapchainResources(IDXGISwapChain *swap, IUnknown **backbuffers, int numBackbuffers);
   void FirstFrame(WrappedIDXGISwapChain4 *swap);
   FrameRecord &GetFrameRecord() { return m_FrameRecord; }
@@ -458,11 +463,11 @@ public:
       submittedcmds.clear();
     }
 
-    vector<ID3D12GraphicsCommandList *> freecmds;
+    vector<ID3D12GraphicsCommandList2 *> freecmds;
     // -> GetNextCmd() ->
-    vector<ID3D12GraphicsCommandList *> pendingcmds;
+    vector<ID3D12GraphicsCommandList2 *> pendingcmds;
     // -> ExecuteLists() ->
-    vector<ID3D12GraphicsCommandList *> submittedcmds;
+    vector<ID3D12GraphicsCommandList2 *> submittedcmds;
     // -> FlushLists()--------back to freecmds--------^
   } m_InternalCmds;
 
@@ -470,18 +475,19 @@ public:
   // creating fewer temporary lists and making too bloated lists
   static const int initialStateMaxBatch = 100;
   int initStateCurBatch;
-  ID3D12GraphicsCommandList *initStateCurList;
+  ID3D12GraphicsCommandList2 *initStateCurList;
 
-  ID3D12GraphicsCommandList *GetNewList();
-  ID3D12GraphicsCommandList *GetInitialStateList();
+  ID3D12GraphicsCommandList2 *GetNewList();
+  ID3D12GraphicsCommandList2 *GetInitialStateList();
   void CloseInitialStateList();
   ID3D12Resource *GetUploadBuffer(uint64_t chunkOffset, uint64_t byteSize);
   void ApplyInitialContents();
 
   void AddCaptureSubmission();
 
-  void ExecuteList(ID3D12GraphicsCommandList *list, ID3D12CommandQueue *queue = NULL);
-  void ExecuteLists(ID3D12CommandQueue *queue = NULL);
+  void ExecuteList(ID3D12GraphicsCommandList2 *list, WrappedID3D12CommandQueue *queue = NULL,
+                   bool InFrameCaptureBoundary = false);
+  void ExecuteLists(WrappedID3D12CommandQueue *queue = NULL, bool InFrameCaptureBoundary = false);
   void FlushLists(bool forceSync = false, ID3D12CommandQueue *queue = NULL);
 
   void GPUSync(ID3D12CommandQueue *queue = NULL, ID3D12Fence *fence = NULL);
@@ -562,6 +568,11 @@ public:
   void CheckForDeath();
 
   void ReleaseResource(ID3D12DeviceChild *pResource);
+
+  // helper function that takes an expanded descriptor, but downcasts it to the regular descriptor
+  // if the new creation method isn't available.
+  HRESULT CreatePipeState(D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC &desc,
+                          ID3D12PipelineState **state);
 
   // Resource
   IMPLEMENT_FUNCTION_THREAD_SERIALISED(void, SetName, ID3D12DeviceChild *pResource, const char *Name);
@@ -775,4 +786,21 @@ public:
                                        _In_reads_(NumObjects) ID3D12Pageable *const *ppObjects,
                                        _In_reads_(NumObjects)
                                            const D3D12_RESIDENCY_PRIORITY *pPriorities);
+
+  IMPLEMENT_FUNCTION_THREAD_SERIALISED(virtual HRESULT STDMETHODCALLTYPE, CreatePipelineState,
+                                       const D3D12_PIPELINE_STATE_STREAM_DESC *pDesc, REFIID riid,
+                                       _COM_Outptr_ void **ppPipelineState);
+
+  IMPLEMENT_FUNCTION_THREAD_SERIALISED(virtual HRESULT STDMETHODCALLTYPE,
+                                       OpenExistingHeapFromAddress, _In_ const void *pAddress,
+                                       REFIID riid, _COM_Outptr_ void **ppvHeap);
+
+  IMPLEMENT_FUNCTION_THREAD_SERIALISED(virtual HRESULT STDMETHODCALLTYPE,
+                                       OpenExistingHeapFromFileMapping, _In_ HANDLE hFileMapping,
+                                       REFIID riid, _COM_Outptr_ void **ppvHeap);
+
+  IMPLEMENT_FUNCTION_THREAD_SERIALISED(virtual HRESULT STDMETHODCALLTYPE, EnqueueMakeResident,
+                                       D3D12_RESIDENCY_FLAGS Flags, UINT NumObjects,
+                                       _In_reads_(NumObjects) ID3D12Pageable *const *ppObjects,
+                                       _In_ ID3D12Fence *pFenceToSignal, UINT64 FenceValueToSignal);
 };

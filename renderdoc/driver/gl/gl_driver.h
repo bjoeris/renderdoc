@@ -117,6 +117,8 @@ private:
 
   bool m_MarkedActive = false;
 
+  bool m_UseVRMarkers;
+
   GLReplay m_Replay;
   RDCDriver m_DriverType;
 
@@ -130,13 +132,15 @@ private:
 
   static std::map<uint64_t, GLWindowingData> m_ActiveContexts;
 
-  ContextPair m_EmptyPair;
-  uint64_t m_CurCtxPairTLS;
-  std::vector<ContextPair *> m_CtxPairs;
+  GLContextTLSData m_EmptyTLSData;
+  uint64_t m_CurCtxDataTLS;
+  std::vector<GLContextTLSData *> m_CtxDataVector;
 
   uintptr_t m_ShareGroupID;
 
   std::vector<GLWindowingData> m_LastContexts;
+
+  std::set<void *> m_AcceptedCtx;
 
 public:
   enum
@@ -304,7 +308,21 @@ private:
     GLuint prog;
     int version;
 
-    void Compile(WrappedOpenGL &gl, ResourceId id, GLuint realShader);
+    // used for if the application actually uploaded SPIR-V
+    std::vector<uint32_t> spirvWords;
+
+    // the parameters passed to glSpecializeShader
+    std::string entryPoint;
+    std::vector<uint32_t> specIDs;
+    std::vector<uint32_t> specValues;
+
+    // pre-calculated bindpoint mapping for SPIR-V shaders. NOT valid for normal GLSL shaders
+    ShaderBindpointMapping mapping;
+
+    void ProcessCompilation(WrappedOpenGL &gl, ResourceId id, GLuint realShader);
+    void ProcessSPIRVCompilation(WrappedOpenGL &gl, ResourceId id, GLuint realShader,
+                                 const GLchar *pEntryPoint, GLuint numSpecializationConstants,
+                                 const GLuint *pConstantIndex, const GLuint *pConstantValue);
   };
 
   struct ProgramData
@@ -354,6 +372,8 @@ private:
   GLuint m_FakeBB_DepthStencil;
   ResourceId m_FBO0_ID;
 
+  GLuint m_Fake_VAO0;
+
   uint32_t m_InitChunkIndex = 0;
 
   bool ProcessChunk(ReadSerialiser &ser, GLChunk chunk);
@@ -373,7 +393,7 @@ private:
   bool HasSuccessfulCapture(CaptureFailReason &reason)
   {
     reason = m_FailureReason;
-    return m_SuccessfulCapture && m_ContextRecord->NumChunks() > 0;
+    return m_SuccessfulCapture;
   }
   void AttemptCapture();
   template <typename SerialiserType>
@@ -382,6 +402,7 @@ private:
   void FinishCapture();
   void ContextEndFrame();
 
+  void CleanupResourceRecord(GLResourceRecord *record, bool freeParents);
   void CleanupCapture();
   void FreeCaptureData();
 
@@ -401,13 +422,14 @@ private:
       CharSize = CharAspect = 0.0f;
       RDCEraseEl(m_TextureRecord);
       RDCEraseEl(m_BufferRecord);
-      m_VertexArrayRecord = m_FeedbackRecord = m_DrawFramebufferRecord = NULL;
+      m_VertexArrayRecord = m_FeedbackRecord = m_DrawFramebufferRecord = m_ContextDataRecord = NULL;
       m_ReadFramebufferRecord = NULL;
       m_Renderbuffer = ResourceId();
       m_TextureUnit = 0;
       m_ProgramPipeline = m_Program = 0;
       RDCEraseEl(m_ClientMemoryVBOs);
       m_ClientMemoryIBO = 0;
+      m_ContextDataResourceID = ResourceId();
     }
 
     void *ctx;
@@ -434,6 +456,8 @@ private:
     void AssociateWindow(WrappedOpenGL *gl, void *wndHandle);
 
     void CreateDebugData(const GLHookSet &gl);
+
+    void CreateResourceRecord(WrappedOpenGL *gl, void *suppliedCtx);
 
     bool Legacy()
     {
@@ -469,6 +493,9 @@ private:
     // temporary VBOs so that input mesh data is recorded. See struct ClientMemoryData
     GLuint m_ClientMemoryVBOs[16];
     GLuint m_ClientMemoryIBO;
+
+    ResourceId m_ContextDataResourceID;
+    GLResourceRecord *m_ContextDataRecord;
   };
 
   struct ClientMemoryData
@@ -571,6 +598,8 @@ public:
   RDCDriver GetDriverType() { return m_DriverType; }
   GLInitParams &GetInitParams() { return m_InitParams; }
   ContextPair &GetCtx();
+  GLResourceRecord *GetContextRecord();
+
   void *ShareCtx(void *ctx) { return ctx ? m_ContextData[ctx].shareGroup : NULL; }
   void SetStructuredExport(uint64_t sectionVersion)
   {
@@ -596,6 +625,7 @@ public:
   void ReplayLog(uint32_t startEventID, uint32_t endEventID, ReplayLogType replayType);
   ReplayStatus ReadLogInitialisation(RDCFile *rdc, bool storeStructuredBuffers);
 
+  GLuint GetFakeVAO0() { return m_Fake_VAO0; }
   GLuint GetFakeBBFBO() { return m_FakeBB_FBO; }
   FrameRecord &GetFrameRecord() { return m_FrameRecord; }
   const APIEvent &GetEvent(uint32_t eventId);
@@ -615,6 +645,8 @@ public:
   void SwapBuffers(void *windowHandle);
   void CreateVRAPITextureSwapChain(GLuint tex, GLenum textureType, GLenum internalformat,
                                    GLsizei width, GLsizei height, GLint levels);
+  void HandleVRFrameMarkers(const GLchar *buf, GLsizei length);
+  void DisableVRFrameMarkers();
 
   void FirstFrame(void *ctx, void *wndHandle);
 
@@ -698,7 +730,7 @@ public:
   IMPLEMENT_FUNCTION_SERIALISED(void, glPixelStoref, GLenum pname, GLfloat param);
   IMPLEMENT_FUNCTION_SERIALISED(void, glPolygonMode, GLenum face, GLenum mode);
   IMPLEMENT_FUNCTION_SERIALISED(void, glPolygonOffset, GLfloat factor, GLfloat units);
-  IMPLEMENT_FUNCTION_SERIALISED(void, glPolygonOffsetClampEXT, GLfloat factor, GLfloat units,
+  IMPLEMENT_FUNCTION_SERIALISED(void, glPolygonOffsetClamp, GLfloat factor, GLfloat units,
                                 GLfloat clamp);
   IMPLEMENT_FUNCTION_SERIALISED(void, glPatchParameteri, GLenum pname, GLint param);
   IMPLEMENT_FUNCTION_SERIALISED(void, glPatchParameterfv, GLenum pname, const GLfloat *params);
@@ -1670,10 +1702,10 @@ public:
                                 GLsizei drawcount, GLsizei stride);
   IMPLEMENT_FUNCTION_SERIALISED(void, glMultiDrawElementsIndirect, GLenum mode, GLenum type,
                                 const void *indirect, GLsizei drawcount, GLsizei stride);
-  IMPLEMENT_FUNCTION_SERIALISED(void, glMultiDrawArraysIndirectCountARB, GLenum mode,
+  IMPLEMENT_FUNCTION_SERIALISED(void, glMultiDrawArraysIndirectCount, GLenum mode,
                                 const void *indirect, GLintptr drawcount, GLsizei maxdrawcount,
                                 GLsizei stride);
-  IMPLEMENT_FUNCTION_SERIALISED(void, glMultiDrawElementsIndirectCountARB, GLenum mode, GLenum type,
+  IMPLEMENT_FUNCTION_SERIALISED(void, glMultiDrawElementsIndirectCount, GLenum mode, GLenum type,
                                 const void *indirect, GLintptr drawcount, GLsizei maxdrawcount,
                                 GLsizei stride);
   IMPLEMENT_FUNCTION_SERIALISED(void, glDrawArraysIndirect, GLenum mode, const void *indirect);
@@ -2214,6 +2246,8 @@ public:
                                 GLfloat minZ, GLfloat minW, GLfloat maxX, GLfloat maxY,
                                 GLfloat maxZ, GLfloat maxW);
 
+  void glMaxShaderCompilerThreadsKHR(GLuint count);
+
   template <typename SerialiserType>
   bool Serialise_glFramebufferTexture2DMultisampleEXT(SerialiserType &ser, GLuint framebuffer,
                                                       GLenum target, GLenum attachment,
@@ -2221,6 +2255,10 @@ public:
                                                       GLsizei samples);
   void glFramebufferTexture2DMultisampleEXT(GLenum target, GLenum attachment, GLenum textarget,
                                             GLuint texture, GLint level, GLsizei samples);
+
+  IMPLEMENT_FUNCTION_SERIALISED(void, glSpecializeShader, GLuint shader, const GLchar *pEntryPoint,
+                                GLuint numSpecializationConstants, const GLuint *pConstantIndex,
+                                const GLuint *pConstantValue);
 };
 
 class ScopedDebugContext

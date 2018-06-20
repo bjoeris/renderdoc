@@ -138,14 +138,7 @@ struct VulkanCreationInfo
       ShaderBindpointMapping *mapping;
       SPIRVPatchData *patchData;
 
-      vector<byte> specdata;
-      struct SpecInfo
-      {
-        uint32_t specID;
-        byte *data;
-        size_t size;
-      };
-      vector<SpecInfo> specialization;
+      vector<SpecConstant> specialization;
     };
     Shader shaders[6];
 
@@ -274,6 +267,8 @@ struct VulkanCreationInfo
       vector<VkImageLayout> inputLayouts;
       vector<VkImageLayout> colorLayouts;
       VkImageLayout depthstencilLayout;
+
+      std::vector<uint32_t> multiviews;
     };
     vector<Subpass> subpasses;
 
@@ -438,4 +433,7 @@ struct VulkanCreationInfo
   map<ResourceId, SwapchainInfo> m_SwapChain;
   map<ResourceId, DescSetLayout> m_DescSetLayout;
   map<ResourceId, DescUpdateTemplate> m_DescUpdateTemplate;
+
+  // just contains the queueFamilyIndex (after remapping)
+  map<ResourceId, uint32_t> m_Queue;
 };

@@ -1020,6 +1020,7 @@ BufferViewer::BufferViewer(ICaptureContext &ctx, bool meshview, QWidget *parent)
 
   ui->rowOffset->setFont(Formatter::PreferredFont());
   ui->instance->setFont(Formatter::PreferredFont());
+  ui->viewIndex->setFont(Formatter::PreferredFont());
   ui->camSpeed->setFont(Formatter::PreferredFont());
   ui->fovGuess->setFont(Formatter::PreferredFont());
   ui->aspectGuess->setFont(Formatter::PreferredFont());
@@ -1147,6 +1148,8 @@ void BufferViewer::SetupRawView()
   ui->syncViews->setVisible(false);
   ui->instanceLabel->setVisible(false);
   ui->instance->setVisible(false);
+  ui->viewLabel->setVisible(false);
+  ui->viewIndex->setVisible(false);
 
   ui->vsinData->setWindowTitle(tr("Buffer Contents"));
   ui->vsinData->setFrameShape(QFrame::NoFrame);
@@ -1419,7 +1422,7 @@ void BufferViewer::OnEventChanged(uint32_t eventId)
     m_ModelGSOut->primRestart = 0;
 
     if(m_Ctx.CurPipelineState().IsStripRestartEnabled() && draw &&
-       (draw->flags & DrawFlags::UseIBuffer) && IsStrip(draw->topology))
+       (draw->flags & DrawFlags::Indexed) && IsStrip(draw->topology))
     {
       m_ModelVSIn->primRestart = m_Ctx.CurPipelineState().GetStripRestartIndex();
 
@@ -1459,6 +1462,19 @@ void BufferViewer::OnEventChanged(uint32_t eventId)
 
   if(draw)
     ui->instance->setMaximum(qMax(0, int(draw->numInstances) - 1));
+
+  uint32_t numViews = m_Ctx.CurPipelineState().MultiviewBroadcastCount();
+
+  if(draw && numViews > 1)
+  {
+    ui->viewIndex->setEnabled(true);
+    ui->viewIndex->setMaximum(qMax(0, int(numViews) - 1));
+  }
+  else
+  {
+    ui->viewIndex->setEnabled(false);
+    ui->viewIndex->setValue(0);
+  }
 
   if(m_MeshView)
   {
@@ -1581,7 +1597,7 @@ void BufferViewer::RT_FetchMeshData(IReplayController *r)
   rdcarray<BoundVBuffer> vbs = m_Ctx.CurPipelineState().GetVBuffers();
 
   bytebuf idata;
-  if(ib.resourceId != ResourceId() && draw && (draw->flags & DrawFlags::UseIBuffer))
+  if(ib.resourceId != ResourceId() && draw && (draw->flags & DrawFlags::Indexed))
     idata = r->GetBufferData(ib.resourceId, ib.byteOffset + draw->indexOffset * draw->indexByteWidth,
                              draw->numIndices * draw->indexByteWidth);
 
@@ -1595,7 +1611,7 @@ void BufferViewer::RT_FetchMeshData(IReplayController *r)
     m_ModelVSIn->indices->data = (byte *)indices;
     m_ModelVSIn->indices->end = (byte *)(indices + draw->numIndices);
   }
-  else if(draw && (draw->flags & DrawFlags::UseIBuffer))
+  else if(draw && (draw->flags & DrawFlags::Indexed))
   {
     indices = new uint32_t[1];
     m_ModelVSIn->indices->data = (byte *)indices;
@@ -1659,11 +1675,15 @@ void BufferViewer::RT_FetchMeshData(IReplayController *r)
     bool pi = false;
     bool pv = false;
 
+    uint32_t maxAttrOffset = 0;
+
     for(const FormatElement &col : m_ModelVSIn->columns)
     {
       if(col.buffer == vbIdx)
       {
         used = true;
+
+        maxAttrOffset = qMax(maxAttrOffset, col.offset);
 
         if(col.perinstance)
           pi = true;
@@ -1701,7 +1721,7 @@ void BufferViewer::RT_FetchMeshData(IReplayController *r)
     if(used)
     {
       bytebuf bufdata = r->GetBufferData(vb.resourceId, vb.byteOffset + offset * vb.byteStride,
-                                         (maxIdx + 1) * vb.byteStride);
+                                         (maxIdx + 1) * vb.byteStride + maxAttrOffset);
 
       buf->data = new byte[bufdata.size()];
       memcpy(buf->data, bufdata.data(), bufdata.size());
@@ -1712,14 +1732,14 @@ void BufferViewer::RT_FetchMeshData(IReplayController *r)
     m_ModelVSIn->buffers.push_back(buf);
   }
 
-  m_PostVS = r->GetPostVSData(m_Config.curInstance, MeshDataStage::VSOut);
+  m_PostVS = r->GetPostVSData(m_Config.curInstance, m_Config.curView, MeshDataStage::VSOut);
 
   m_ModelVSOut->numRows = m_PostVS.numIndices;
   m_ModelVSOut->unclampedNumRows = 0;
   m_ModelVSOut->baseVertex = m_PostVS.baseVertex;
   m_ModelVSOut->displayBaseVertex = m_ModelVSIn->baseVertex;
 
-  if(draw && m_PostVS.indexResourceId != ResourceId() && (draw->flags & DrawFlags::UseIBuffer))
+  if(draw && m_PostVS.indexResourceId != ResourceId() && (draw->flags & DrawFlags::Indexed))
     idata = r->GetBufferData(m_PostVS.indexResourceId, m_PostVS.indexByteOffset,
                              draw->numIndices * m_PostVS.indexByteStride);
 
@@ -1774,7 +1794,7 @@ void BufferViewer::RT_FetchMeshData(IReplayController *r)
     m_ModelVSOut->buffers.push_back(postvs);
   }
 
-  m_PostGS = r->GetPostVSData(m_Config.curInstance, MeshDataStage::GSOut);
+  m_PostGS = r->GetPostVSData(m_Config.curInstance, m_Config.curView, MeshDataStage::GSOut);
 
   m_ModelGSOut->numRows = m_PostGS.numIndices;
   m_ModelGSOut->unclampedNumRows = 0;
@@ -2148,7 +2168,7 @@ void BufferViewer::updatePreviewColumns()
       m_VSInPosition.indexResourceId = ib.resourceId;
       m_VSInPosition.indexByteOffset = ib.byteOffset + draw->indexOffset * draw->indexByteWidth;
 
-      if((draw->flags & DrawFlags::UseIBuffer) && m_VSInPosition.indexByteStride == 0)
+      if((draw->flags & DrawFlags::Indexed) && m_VSInPosition.indexByteStride == 0)
         m_VSInPosition.indexByteStride = 4U;
 
       {
@@ -2248,7 +2268,7 @@ void BufferViewer::updatePreviewColumns()
 
     m_PostGSPosition.indexByteStride = 0;
 
-    if(!(draw->flags & DrawFlags::UseIBuffer))
+    if(!(draw->flags & DrawFlags::Indexed))
       m_PostVSPosition.indexByteStride = m_VSInPosition.indexByteStride = 0;
 
     m_PostGSPosition.unproject = true;
@@ -2315,7 +2335,7 @@ void BufferViewer::configureMeshColumns()
     // 0xdeadbeef) and we want to clamp.
     uint32_t numRowsUpperBound = 0;
 
-    if(draw->flags & DrawFlags::UseIBuffer)
+    if(draw->flags & DrawFlags::Indexed)
     {
       // In an indexed draw we clamp to however many indices are available in the index buffer
 
@@ -3212,7 +3232,18 @@ void BufferViewer::exportData(const BufferExport &params)
         // offset and sizes
         for(int i = 0; i < model->rowCount(); i++)
         {
-          uint32_t idx = model->data(model->index(i, 1), Qt::DisplayRole).toUInt();
+          // manually calculate the index so that we get the real offset (not the displayed offset)
+          // in the case of vertex output.
+          uint32_t idx = i;
+
+          if(model->indices && model->indices->data)
+          {
+            idx = CalcIndex(model->indices, i, model->baseVertex);
+
+            // completely omit primitive restart indices
+            if(model->primRestart && idx == model->primRestart)
+              continue;
+          }
 
           for(int col = 0; col < cache.count(); col++)
           {
@@ -3554,6 +3585,12 @@ void BufferViewer::on_camSpeed_valueChanged(double value)
 void BufferViewer::on_instance_valueChanged(int value)
 {
   m_Config.curInstance = value;
+  OnEventChanged(m_Ctx.CurEvent());
+}
+
+void BufferViewer::on_viewIndex_valueChanged(int value)
+{
+  m_Config.curView = value;
   OnEventChanged(m_Ctx.CurEvent());
 }
 

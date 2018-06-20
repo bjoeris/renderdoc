@@ -42,6 +42,32 @@ static VkApplicationInfo renderdocAppInfo = {
     VK_API_VERSION_1_0,
 };
 
+// we store the index in the loader table, since it won't be dereferenced and other parts of the
+// code expect to copy it into a wrapped object
+static VkPhysicalDevice MakePhysicalDeviceHandleFromIndex(uint32_t physDeviceIndex)
+{
+  static uintptr_t loaderTable[32];
+  loaderTable[physDeviceIndex] = (0x100 + physDeviceIndex);
+  return VkPhysicalDevice(&loaderTable[physDeviceIndex]);
+}
+
+static uint32_t GetPhysicalDeviceIndexFromHandle(VkPhysicalDevice physicalDevice)
+{
+  return uint32_t((uintptr_t)LayerDisp(physicalDevice) - 0x100);
+}
+
+static bool CheckTransferGranularity(VkExtent3D required, VkExtent3D check)
+{
+  // if the required granularity is (0,0,0) then any is fine - the requirement is always satisfied.
+  if(required.width == required.height && required.height == required.depth && required.depth == 0)
+    return true;
+
+  // otherwise, each dimension must be <= the required dimension (i.e. more fine-grained) to support
+  // any copies we might do.
+  return check.width <= required.width && check.height <= required.height &&
+         check.depth <= required.depth;
+}
+
 // vk_dispatchtables.cpp
 void InitDeviceTable(VkDevice dev, PFN_vkGetDeviceProcAddr gpa);
 void InitInstanceTable(VkInstance inst, PFN_vkGetInstanceProcAddr gpa);
@@ -293,7 +319,7 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
   m_PhysicalDevice = VK_NULL_HANDLE;
   m_Device = VK_NULL_HANDLE;
   m_QueueFamilyIdx = ~0U;
-  m_Queue = VK_NULL_HANDLE;
+  m_PrevQueue = m_Queue = VK_NULL_HANDLE;
   m_InternalCmds.Reset();
 
   if(ObjDisp(m_Instance)->CreateDebugReportCallbackEXT)
@@ -484,7 +510,7 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
   m_PhysicalDevice = VK_NULL_HANDLE;
   m_Device = VK_NULL_HANDLE;
   m_QueueFamilyIdx = ~0U;
-  m_Queue = VK_NULL_HANDLE;
+  m_PrevQueue = m_Queue = VK_NULL_HANDLE;
   m_InternalCmds.Reset();
 
   if(ObjDisp(m_Instance)->CreateDebugReportCallbackEXT)
@@ -539,6 +565,17 @@ void WrappedVulkan::Shutdown()
   {
     ObjDisp(m_Device)->DestroySemaphore(Unwrap(m_Device), Unwrap(m_InternalCmds.freesems[i]), NULL);
     GetResourceManager()->ReleaseWrappedResource(m_InternalCmds.freesems[i]);
+  }
+
+  for(size_t i = 0; i < m_ExternalQueues.size(); i++)
+  {
+    if(m_ExternalQueues[i].buffer != VK_NULL_HANDLE)
+    {
+      GetResourceManager()->ReleaseWrappedResource(m_ExternalQueues[i].buffer);
+
+      ObjDisp(m_Device)->DestroyCommandPool(Unwrap(m_Device), Unwrap(m_ExternalQueues[i].pool), NULL);
+      GetResourceManager()->ReleaseWrappedResource(m_ExternalQueues[i].pool);
+    }
   }
 
   FreeAllMemory(MemoryScope::InitialContents);
@@ -627,7 +664,7 @@ bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(SerialiserType &ser, Vk
   VkPhysicalDeviceMemoryProperties memProps;
   VkPhysicalDeviceFeatures physFeatures;
   uint32_t queueCount = 0;
-  VkQueueFamilyProperties queueProps[16];
+  VkQueueFamilyProperties queueProps[16] = {};
 
   if(ser.IsWriting())
   {
@@ -642,7 +679,7 @@ bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(SerialiserType &ser, Vk
 
     if(queueCount > 16)
     {
-      RDCWARN("More than 16 queues");
+      RDCERR("More than 16 queue families");
       queueCount = 16;
     }
 
@@ -677,6 +714,9 @@ bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(SerialiserType &ser, Vk
       m_OriginalPhysicalDevices[PhysicalDeviceIndex].props = physProps;
       m_OriginalPhysicalDevices[PhysicalDeviceIndex].memProps = memProps;
       m_OriginalPhysicalDevices[PhysicalDeviceIndex].features = physFeatures;
+      m_OriginalPhysicalDevices[PhysicalDeviceIndex].queueCount = queueCount;
+      memcpy(m_OriginalPhysicalDevices[PhysicalDeviceIndex].queueProps, queueProps,
+             sizeof(queueProps));
     }
 
     // match up physical devices to those available on replay as best as possible. In general
@@ -755,11 +795,25 @@ bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(SerialiserType &ser, Vk
 
     pd = m_ReplayPhysicalDevices[bestIdx];
 
-    if(!m_ReplayPhysicalDevicesUsed[bestIdx])
-      GetResourceManager()->AddLiveResource(PhysicalDevice, pd);
-    else
-      GetResourceManager()->ReplaceResource(PhysicalDevice,
-                                            GetResourceManager()->GetOriginalID(GetResID(pd)));
+    {
+      VkPhysicalDevice fakeDevice = MakePhysicalDeviceHandleFromIndex(PhysicalDeviceIndex);
+
+      ResourceId id = ResourceIDGen::GetNewUniqueID();
+      WrappedVkPhysicalDevice *wrapped = new WrappedVkPhysicalDevice(fakeDevice, id);
+
+      GetResourceManager()->AddCurrentResource(id, wrapped);
+
+      if(IsReplayMode(m_State))
+        GetResourceManager()->AddWrapper(wrapped, ToTypedHandle(fakeDevice));
+
+      fakeDevice = (VkPhysicalDevice)wrapped;
+
+      // we want to preserve the separate physical devices until we actually need the real handle,
+      // so don't remap multiple capture-time physical devices to one replay-time physical device
+      // yet. See below in Serialise_vkCreateDevice where this is decoded.
+      // Note this allocation is pooled so we don't have to explicitly delete it.
+      GetResourceManager()->AddLiveResource(PhysicalDevice, fakeDevice);
+    }
 
     AddResource(PhysicalDevice, ResourceType::Device, "Physical Device");
     DerivedResource(m_Instance, PhysicalDevice);
@@ -811,7 +865,6 @@ VkResult WrappedVulkan::vkEnumeratePhysicalDevices(VkInstance instance,
   RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
   m_PhysicalDevices.resize(count);
-  m_SupportedQueueFamilies.resize(count);
 
   for(uint32_t i = 0; i < count; i++)
   {
@@ -864,92 +917,6 @@ VkResult WrappedVulkan::vkEnumeratePhysicalDevices(VkInstance instance,
         }
       }
     }
-
-    // find the queue with the most bits set and only report that one
-
-    {
-      uint32_t queuecount = 0;
-      ObjDisp(m_PhysicalDevices[i])
-          ->GetPhysicalDeviceQueueFamilyProperties(Unwrap(m_PhysicalDevices[i]), &queuecount, NULL);
-
-      VkQueueFamilyProperties *props = new VkQueueFamilyProperties[queuecount];
-      ObjDisp(m_PhysicalDevices[i])
-          ->GetPhysicalDeviceQueueFamilyProperties(Unwrap(m_PhysicalDevices[i]), &queuecount, props);
-
-      uint32_t best = 0;
-
-      // don't need to explicitly check for transfer, because graphics bit
-      // implies it. We do have to check for compute bit, because there might
-      // be a graphics only queue - it just means we have to keep looking
-      // to find the grpahics & compute queue family which is guaranteed.
-      for(uint32_t q = 1; q < queuecount; q++)
-      {
-        // compare current against the known best
-        VkQueueFamilyProperties &currentProps = props[q];
-        VkQueueFamilyProperties &bestProps = props[best];
-
-        const bool currentGraphics = (currentProps.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
-        const bool currentCompute = (currentProps.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
-        const bool currentSparse = (currentProps.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) != 0;
-
-        const bool bestGraphics = (bestProps.queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0;
-        const bool bestCompute = (bestProps.queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
-        const bool bestSparse = (bestProps.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) != 0;
-
-        // if one has graphics bit set, but the other doesn't
-        if(currentGraphics != bestGraphics)
-        {
-          // if current has graphics but best doesn't, we have a new best
-          if(currentGraphics)
-            best = q;
-          continue;
-        }
-
-        if(currentCompute != bestCompute)
-        {
-          // if current has compute but best doesn't, we have a new best
-          if(currentCompute)
-            best = q;
-          continue;
-        }
-
-        // if we've gotten here, both best and current have graphics and compute. Check
-        // to see if the current is somehow better than best (in the case of a tie, we
-        // keep the lower index of queue).
-
-        if(currentSparse != bestSparse)
-        {
-          if(currentSparse)
-            best = q;
-          continue;
-        }
-
-        if(currentProps.timestampValidBits != bestProps.timestampValidBits)
-        {
-          if(currentProps.timestampValidBits > bestProps.timestampValidBits)
-            best = q;
-          continue;
-        }
-
-        if(currentProps.minImageTransferGranularity.width <
-               bestProps.minImageTransferGranularity.width ||
-           currentProps.minImageTransferGranularity.height <
-               bestProps.minImageTransferGranularity.height ||
-           currentProps.minImageTransferGranularity.depth <
-               bestProps.minImageTransferGranularity.depth)
-        {
-          best = q;
-          continue;
-        }
-      }
-
-      // only report a single available queue in this family
-      props[best].queueCount = 1;
-
-      m_SupportedQueueFamilies[i] = std::make_pair(best, props[best]);
-
-      SAFE_DELETE_ARRAY(props);
-    }
   }
 
   if(pPhysicalDeviceCount)
@@ -972,12 +939,25 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
   SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
   SERIALISE_ELEMENT_OPT(pAllocator);
   SERIALISE_ELEMENT_LOCAL(Device, GetResID(*pDevice)).TypedAs("VkDevice");
-  SERIALISE_ELEMENT(m_SupportedQueueFamily).Hidden();
+
+  if(ser.VersionLess(0xD))
+  {
+    uint32_t supportedQueueFamily;    // no longer used
+    SERIALISE_ELEMENT(supportedQueueFamily).Hidden();
+  }
 
   SERIALISE_CHECK_READ_ERRORS();
 
   if(IsReplayingAndReading())
   {
+    // kept around only to call DerivedResource below, as this is the resource that actually has an
+    // original resource ID.
+    VkPhysicalDevice origPhysDevice = physicalDevice;
+
+    // see above in Serialise_vkEnumeratePhysicalDevices where this is encoded
+    uint32_t physicalDeviceIndex = GetPhysicalDeviceIndexFromHandle(Unwrap(physicalDevice));
+    physicalDevice = m_ReplayPhysicalDevices[physicalDeviceIndex];
+
     // we must make any modifications locally, so the free of pointers
     // in the serialised VkDeviceCreateInfo don't double-free
     VkDeviceCreateInfo createInfo = CreateInfo;
@@ -1045,11 +1025,18 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       RDCLOG("Enabling VK_EXT_debug_marker");
     }
 
-    // enable VK_EXT_debug_marker if it's available, to fetch shader disassembly
+    // enable VK_AMD_SHADER_INFO_EXTENSION_NAME if it's available, to fetch shader disassembly
     if(supportedExtensions.find(VK_AMD_SHADER_INFO_EXTENSION_NAME) != supportedExtensions.end())
     {
       Extensions.push_back(VK_AMD_SHADER_INFO_EXTENSION_NAME);
       RDCLOG("Enabling VK_AMD_shader_info");
+    }
+
+    // enable VK_AMD_gpa_interface if it's available, for AMD counter support
+    if(supportedExtensions.find("VK_AMD_gpa_interface") != supportedExtensions.end())
+    {
+      Extensions.push_back("VK_AMD_gpa_interface");
+      RDCLOG("Enabling VK_AMD_gpa_interface");
     }
 
     createInfo.enabledLayerCount = (uint32_t)Layers.size();
@@ -1093,19 +1080,266 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
     uint32_t qCount = 0;
     ObjDisp(physicalDevice)->GetPhysicalDeviceQueueFamilyProperties(Unwrap(physicalDevice), &qCount, NULL);
 
-    VkQueueFamilyProperties *props = new VkQueueFamilyProperties[qCount];
+    if(qCount > 16)
+    {
+      RDCERR("Unexpected number of queue families: %u", qCount);
+      qCount = 16;
+    }
+
+    VkQueueFamilyProperties props[16] = {};
     ObjDisp(physicalDevice)
         ->GetPhysicalDeviceQueueFamilyProperties(Unwrap(physicalDevice), &qCount, props);
 
+    // to aid the search algorithm below, we apply implied transfer bit onto the queue properties.
+    for(uint32_t i = 0; i < qCount; i++)
+    {
+      if(props[i].queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT))
+        props[i].queueFlags |= VK_QUEUE_TRANSFER_BIT;
+    }
+
+    PhysicalDeviceData &origData = m_OriginalPhysicalDevices[physicalDeviceIndex];
+
+    uint32_t origQCount = origData.queueCount;
+    VkQueueFamilyProperties *origprops = origData.queueProps;
+
+    // create queue remapping
+    for(uint32_t origQIndex = 0; origQIndex < origQCount; origQIndex++)
+    {
+      m_QueueRemapping[origQIndex].resize(origprops[origQIndex].queueCount);
+      RDCLOG("Capture describes queue family %u:", origQIndex);
+      RDCLOG("   - %u queues available with %s", origprops[origQIndex].queueCount,
+             ToStr(VkQueueFlagBits(origprops[origQIndex].queueFlags)).c_str());
+      RDCLOG("     %u timestamp bits (%u,%u,%u) granularity",
+             origprops[origQIndex].timestampValidBits,
+             origprops[origQIndex].minImageTransferGranularity.width,
+             origprops[origQIndex].minImageTransferGranularity.height,
+             origprops[origQIndex].minImageTransferGranularity.depth);
+
+      // find the best queue family to map to. We try and find the closest match that is at least
+      // good enough. We want to try and preserve families that were separate before but we need to
+      // ensure the remapped queue family is at least as good as it was at capture time.
+      uint32_t destFamily = 0;
+
+      {
+        // we categorise the original queue as one of four types: universal
+        // (graphics/compute/transfer), graphics/transfer only (rare), compute-only
+        // (compute/transfer) or transfer-only (transfer). We try first to find an exact match, then
+        // move progressively up the priority list to find a broader and broader match.
+        // We don't care about sparse binding - it's just treated as a requirement.
+        enum class SearchType
+        {
+          Failed,
+          Universal,
+          GraphicsTransfer,
+          ComputeTransfer,
+          GraphicsOrComputeTransfer,
+          TransferOnly,
+        } search;
+
+        VkQueueFlags mask = (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT);
+
+        switch(origprops[origQIndex].queueFlags & mask)
+        {
+          case VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT:
+          case VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT:
+            search = SearchType::Universal;
+            break;
+          case VK_QUEUE_GRAPHICS_BIT:
+          case VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT:
+            search = SearchType::GraphicsTransfer;
+            break;
+          case VK_QUEUE_COMPUTE_BIT:
+          case VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT:
+            search = SearchType::ComputeTransfer;
+            break;
+          case VK_QUEUE_TRANSFER_BIT: search = SearchType::TransferOnly; break;
+          default:
+            search = SearchType::Failed;
+            RDCERR("Unexpected set of flags: %s",
+                   ToStr(VkQueueFlagBits(origprops[origQIndex].queueFlags & mask)).c_str());
+            break;
+        }
+
+        bool needSparse = (origprops[origQIndex].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) != 0;
+        VkExtent3D needGranularity = origprops[origQIndex].minImageTransferGranularity;
+
+        while(search != SearchType::Failed)
+        {
+          bool found = false;
+
+          for(uint32_t replayQIndex = 0; replayQIndex < qCount; replayQIndex++)
+          {
+            // ignore queues that couldn't satisfy the required transfer granularity
+            if(!CheckTransferGranularity(needGranularity,
+                                         props[replayQIndex].minImageTransferGranularity))
+              continue;
+
+            // ignore queues that don't have sparse binding, if we need that
+            if(needSparse && ((props[replayQIndex].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) == 0))
+              continue;
+
+            switch(search)
+            {
+              case SearchType::Failed: break;
+              case SearchType::Universal:
+                if((props[replayQIndex].queueFlags & mask) ==
+                   (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT))
+                {
+                  destFamily = replayQIndex;
+                  found = true;
+                }
+                break;
+              case SearchType::GraphicsTransfer:
+                if((props[replayQIndex].queueFlags & mask) ==
+                   (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT))
+                {
+                  destFamily = replayQIndex;
+                  found = true;
+                }
+                break;
+              case SearchType::ComputeTransfer:
+                if((props[replayQIndex].queueFlags & mask) ==
+                   (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT))
+                {
+                  destFamily = replayQIndex;
+                  found = true;
+                }
+                break;
+              case SearchType::GraphicsOrComputeTransfer:
+                if((props[replayQIndex].queueFlags & mask) ==
+                       (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT) ||
+                   (props[replayQIndex].queueFlags & mask) ==
+                       (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT))
+                {
+                  destFamily = replayQIndex;
+                  found = true;
+                }
+                break;
+              case SearchType::TransferOnly:
+                if((props[replayQIndex].queueFlags & mask) == VK_QUEUE_TRANSFER_BIT)
+                {
+                  destFamily = replayQIndex;
+                  found = true;
+                }
+                break;
+            }
+
+            if(found)
+              break;
+          }
+
+          if(found)
+            break;
+
+          // no such queue family found, fall back to the next type of queue to search for
+          switch(search)
+          {
+            case SearchType::Failed: break;
+            case SearchType::Universal: search = SearchType::Failed; break;
+            case SearchType::GraphicsTransfer:
+            case SearchType::ComputeTransfer:
+            case SearchType::GraphicsOrComputeTransfer:
+              // if we didn't find a graphics or compute (and transfer) queue, we have to look for a
+              // universal one
+              search = SearchType::Universal;
+              break;
+            case SearchType::TransferOnly:
+              // when falling back from looking for a transfer-only queue, we consider either
+              // graphics-only or compute-only as better candidates before universal
+              search = SearchType::GraphicsOrComputeTransfer;
+              break;
+          }
+        }
+      }
+
+      RDCLOG("Remapping to queue family %u:", destFamily);
+      RDCLOG("   - %u queues available with %s", props[destFamily].queueCount,
+             ToStr(VkQueueFlagBits(props[destFamily].queueFlags)).c_str());
+      RDCLOG("     %u timestamp bits (%u,%u,%u) granularity", props[destFamily].timestampValidBits,
+             props[destFamily].minImageTransferGranularity.width,
+             props[destFamily].minImageTransferGranularity.height,
+             props[destFamily].minImageTransferGranularity.depth);
+
+      // loop over the queues, wrapping around if necessary to provide enough queues. The idea being
+      // an application is more likely to use early queues than later ones, so if there aren't
+      // enough queues in the family then we should prioritise giving unique queues to the early
+      // indices
+      for(uint32_t q = 0; q < origprops[origQIndex].queueCount; q++)
+      {
+        m_QueueRemapping[origQIndex][q] = {destFamily, q % props[destFamily].queueCount};
+      }
+    }
+
+    VkDeviceQueueCreateInfo *queueCreateInfos =
+        (VkDeviceQueueCreateInfo *)createInfo.pQueueCreateInfos;
+
+    // now apply the remapping to the requested queues
+    for(uint32_t i = 0; i < createInfo.queueCreateInfoCount; i++)
+    {
+      VkDeviceQueueCreateInfo &queueCreate = (VkDeviceQueueCreateInfo &)queueCreateInfos[i];
+
+      uint32_t queueFamily = queueCreate.queueFamilyIndex;
+      queueFamily = m_QueueRemapping[queueFamily][0].family;
+      queueCreate.queueFamilyIndex = queueFamily;
+      uint32_t queueCount = RDCMIN(queueCreate.queueCount, props[queueFamily].queueCount);
+
+      if(queueCount < queueCreate.queueCount)
+        RDCWARN("Truncating queue family request from %u queues to %u queues",
+                queueCreate.queueCount, queueCount);
+
+      queueCreate.queueCount = queueCount;
+    }
+
+    // remove any duplicates that have been created
+    std::vector<VkDeviceQueueCreateInfo> queueInfos;
+
+    for(uint32_t i = 0; i < createInfo.queueCreateInfoCount; i++)
+    {
+      VkDeviceQueueCreateInfo &queue1 = (VkDeviceQueueCreateInfo &)queueCreateInfos[i];
+
+      // if we already have this one in the list, continue
+      bool already = false;
+      for(const VkDeviceQueueCreateInfo &queue2 : queueInfos)
+      {
+        if(queue1.queueFamilyIndex == queue2.queueFamilyIndex)
+        {
+          already = true;
+          break;
+        }
+      }
+
+      if(already)
+        continue;
+
+      // get the 'biggest' queue allocation from all duplicates. That way we ensure we have enough
+      // queues in the queue family to satisfy any remap.
+      VkDeviceQueueCreateInfo biggest = queue1;
+
+      for(uint32_t j = i + 1; j < createInfo.queueCreateInfoCount; j++)
+      {
+        VkDeviceQueueCreateInfo &queue2 = (VkDeviceQueueCreateInfo &)queueCreateInfos[j];
+
+        if(biggest.queueFamilyIndex == queue2.queueFamilyIndex)
+        {
+          if(queue2.queueCount > biggest.queueCount)
+            biggest = queue2;
+        }
+      }
+
+      queueInfos.push_back(biggest);
+    }
+
+    createInfo.queueCreateInfoCount = (uint32_t)queueInfos.size();
+    createInfo.pQueueCreateInfos = queueInfos.data();
+
     bool found = false;
     uint32_t qFamilyIdx = 0;
-    VkQueueFlags search = (VK_QUEUE_GRAPHICS_BIT);
+
+    // we need graphics, and if there is a graphics queue there must be a graphics & compute queue.
+    VkQueueFlags search = (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 
     // for queue priorities, if we need it
     float one = 1.0f;
-
-    // if we need to change the requested queues, it will point to this
-    VkDeviceQueueCreateInfo *modQueues = NULL;
 
     for(uint32_t i = 0; i < createInfo.queueCreateInfoCount; i++)
     {
@@ -1138,27 +1372,25 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
 
       if(!found)
       {
-        SAFE_DELETE_ARRAY(props);
         RDCERR(
             "Can't add a queue with required properties for RenderDoc! Unsupported configuration");
       }
       else
       {
         // we found the queue family, add it
-        modQueues = new VkDeviceQueueCreateInfo[createInfo.queueCreateInfoCount + 1];
-        for(uint32_t i = 0; i < createInfo.queueCreateInfoCount; i++)
-          modQueues[i] = createInfo.pQueueCreateInfos[i];
+        VkDeviceQueueCreateInfo newQueue;
 
-        modQueues[createInfo.queueCreateInfoCount].queueFamilyIndex = qFamilyIdx;
-        modQueues[createInfo.queueCreateInfoCount].queueCount = 1;
-        modQueues[createInfo.queueCreateInfoCount].pQueuePriorities = &one;
+        newQueue.queueFamilyIndex = qFamilyIdx;
+        newQueue.queueCount = 1;
+        newQueue.pQueuePriorities = &one;
 
-        createInfo.pQueueCreateInfos = modQueues;
-        createInfo.queueCreateInfoCount++;
+        queueInfos.push_back(newQueue);
+
+        // reset these in case the vector resized
+        createInfo.queueCreateInfoCount = (uint32_t)queueInfos.size();
+        createInfo.pQueueCreateInfos = queueInfos.data();
       }
     }
-
-    SAFE_DELETE_ARRAY(props);
 
     VkPhysicalDeviceFeatures enabledFeatures = {0};
     if(createInfo.pEnabledFeatures != NULL)
@@ -1306,13 +1538,18 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
 
     vkr = GetDeviceDispatchTable(NULL)->CreateDevice(Unwrap(physicalDevice), &createInfo, NULL,
                                                      &device);
-    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    if(vkr != VK_SUCCESS)
+    {
+      RDCERR("Failed to create logical device: %s", ToStr(vkr).c_str());
+      return false;
+    }
 
     GetResourceManager()->WrapResource(device, device);
     GetResourceManager()->AddLiveResource(Device, device);
 
     AddResource(Device, ResourceType::Device, "Device");
-    DerivedResource(physicalDevice, Device);
+    DerivedResource(origPhysDevice, Device);
 
     InstanceDeviceInfo extInfo;
 
@@ -1350,6 +1587,39 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       GetResourceManager()->WrapResource(Unwrap(device), m_InternalCmds.cmdpool);
     }
 
+    // for each queue family we've remapped to, ensure we have a command pool and command buffer on
+    // that queue, and we'll also use the first queue that the application creates (or fetch our
+    // own).
+    for(uint32_t i = 0; i < createInfo.queueCreateInfoCount; i++)
+    {
+      uint32_t qidx = createInfo.pQueueCreateInfos[i].queueFamilyIndex;
+      m_ExternalQueues.resize(RDCMAX((uint32_t)m_ExternalQueues.size(), qidx + 1));
+
+      VkCommandPoolCreateInfo poolInfo = {
+          VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, NULL,
+          VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, qidx,
+      };
+      vkr = ObjDisp(device)->CreateCommandPool(Unwrap(device), &poolInfo, NULL,
+                                               &m_ExternalQueues[qidx].pool);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].pool);
+
+      VkCommandBufferAllocateInfo cmdInfo = {
+          VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+          NULL,
+          Unwrap(m_ExternalQueues[qidx].pool),
+          VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+          1,
+      };
+
+      vkr = ObjDisp(device)->AllocateCommandBuffers(Unwrap(device), &cmdInfo,
+                                                    &m_ExternalQueues[qidx].buffer);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].buffer);
+    }
+
     ObjDisp(physicalDevice)
         ->GetPhysicalDeviceProperties(Unwrap(physicalDevice), &m_PhysicalDeviceData.props);
 
@@ -1367,6 +1637,9 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       ObjDisp(physicalDevice)
           ->GetPhysicalDeviceFormatProperties(Unwrap(physicalDevice), VkFormat(i),
                                               &m_PhysicalDeviceData.fmtprops[i]);
+
+    m_PhysicalDeviceData.queueCount = qCount;
+    memcpy(m_PhysicalDeviceData.queueProps, props, qCount * sizeof(VkQueueFamilyProperties));
 
     m_PhysicalDeviceData.readbackMemIndex =
         m_PhysicalDeviceData.GetMemoryIndex(~0U, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, 0);
@@ -1392,7 +1665,6 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
 
     m_Replay.CreateResources();
 
-    SAFE_DELETE_ARRAY(modQueues);
     SAFE_DELETE_ARRAY(layerArray);
     SAFE_DELETE_ARRAY(extArray);
   }
@@ -1417,7 +1689,9 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
   // find a queue that supports all capabilities, and if one doesn't exist, add it.
   bool found = false;
   uint32_t qFamilyIdx = 0;
-  VkQueueFlags search = (VK_QUEUE_GRAPHICS_BIT);
+
+  // we need graphics, and if there is a graphics queue there must be a graphics & compute queue.
+  VkQueueFlags search = (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
 
   // for queue priorities, if we need it
   float one = 1.0f;
@@ -1474,24 +1748,20 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
     createInfo.queueCreateInfoCount++;
   }
 
-  SAFE_DELETE_ARRAY(props);
-
   m_QueueFamilies.resize(createInfo.queueCreateInfoCount);
+  m_QueueFamilyCounts.resize(createInfo.queueCreateInfoCount);
   for(size_t i = 0; i < createInfo.queueCreateInfoCount; i++)
   {
     uint32_t family = createInfo.pQueueCreateInfos[i].queueFamilyIndex;
     uint32_t count = createInfo.pQueueCreateInfos[i].queueCount;
     m_QueueFamilies.resize(RDCMAX(m_QueueFamilies.size(), size_t(family + 1)));
+    m_QueueFamilyCounts.resize(RDCMAX(m_QueueFamilies.size(), size_t(family + 1)));
 
     m_QueueFamilies[family] = new VkQueue[count];
+    m_QueueFamilyCounts[family] = count;
     for(uint32_t q = 0; q < count; q++)
       m_QueueFamilies[family][q] = VK_NULL_HANDLE;
   }
-
-  // find the matching physical device
-  for(size_t i = 0; i < m_PhysicalDevices.size(); i++)
-    if(m_PhysicalDevices[i] == physicalDevice)
-      m_SupportedQueueFamily = m_SupportedQueueFamilies[i].first;
 
   VkLayerDeviceCreateInfo *layerCreateInfo = (VkLayerDeviceCreateInfo *)pCreateInfo->pNext;
 
@@ -1505,6 +1775,7 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
 
   if(layerCreateInfo == NULL)
   {
+    SAFE_DELETE_ARRAY(props);
     RDCERR("Couldn't find loader device create info, which is required. Incompatible loader?");
     return VK_ERROR_INITIALIZATION_FAILED;
   }
@@ -1573,7 +1844,7 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
   if(availFeatures.occlusionQueryPrecise)
     enabledFeatures.occlusionQueryPrecise = true;
   else
-    RDCWARN("occlusionQueryPrecise = false, samples written counter will not work");
+    RDCWARN("occlusionQueryPrecise = false, samples passed counter will not be available");
 
   if(availFeatures.pipelineStatisticsQuery)
     enabledFeatures.pipelineStatisticsQuery = true;
@@ -1668,6 +1939,38 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
       GetResourceManager()->WrapResource(Unwrap(device), m_InternalCmds.cmdpool);
     }
 
+    // for each queue family that isn't our own, create a command pool and command buffer on that
+    // queue
+    for(uint32_t i = 0; i < createInfo.queueCreateInfoCount; i++)
+    {
+      uint32_t qidx = createInfo.pQueueCreateInfos[i].queueFamilyIndex;
+      m_ExternalQueues.resize(RDCMAX((uint32_t)m_ExternalQueues.size(), qidx + 1));
+
+      VkCommandPoolCreateInfo poolInfo = {
+          VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, NULL,
+          VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, qidx,
+      };
+      vkr = ObjDisp(device)->CreateCommandPool(Unwrap(device), &poolInfo, NULL,
+                                               &m_ExternalQueues[qidx].pool);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].pool);
+
+      VkCommandBufferAllocateInfo cmdInfo = {
+          VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+          NULL,
+          Unwrap(m_ExternalQueues[qidx].pool),
+          VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+          1,
+      };
+
+      vkr = ObjDisp(device)->AllocateCommandBuffers(Unwrap(device), &cmdInfo,
+                                                    &m_ExternalQueues[qidx].buffer);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      GetResourceManager()->WrapResource(Unwrap(device), m_ExternalQueues[qidx].buffer);
+    }
+
     ObjDisp(physicalDevice)
         ->GetPhysicalDeviceProperties(Unwrap(physicalDevice), &m_PhysicalDeviceData.props);
 
@@ -1689,6 +1992,9 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
     m_PhysicalDeviceData.GPULocalMemIndex = m_PhysicalDeviceData.GetMemoryIndex(
         ~0U, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
+    m_PhysicalDeviceData.queueCount = qCount;
+    memcpy(m_PhysicalDeviceData.queueProps, props, qCount * sizeof(VkQueueFamilyProperties));
+
     m_PhysicalDeviceData.fakeMemProps = GetRecord(physicalDevice)->memProps;
 
     m_ShaderCache = new VulkanShaderCache(this);
@@ -1698,6 +2004,7 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
     m_DebugManager = new VulkanDebugManager(this);
   }
 
+  SAFE_DELETE_ARRAY(props);
   SAFE_DELETE_ARRAY(modQueues);
 
   return ret;
@@ -1740,10 +2047,21 @@ void WrappedVulkan::vkDestroyDevice(VkDevice device, const VkAllocationCallbacks
     GetResourceManager()->ReleaseWrappedResource(m_InternalCmds.freesems[i]);
   }
 
+  for(size_t i = 0; i < m_ExternalQueues.size(); i++)
+  {
+    if(m_ExternalQueues[i].buffer != VK_NULL_HANDLE)
+    {
+      GetResourceManager()->ReleaseWrappedResource(m_ExternalQueues[i].buffer);
+
+      ObjDisp(m_Device)->DestroyCommandPool(Unwrap(m_Device), Unwrap(m_ExternalQueues[i].pool), NULL);
+      GetResourceManager()->ReleaseWrappedResource(m_ExternalQueues[i].pool);
+    }
+  }
+
   m_InternalCmds.Reset();
 
   m_QueueFamilyIdx = ~0U;
-  m_Queue = VK_NULL_HANDLE;
+  m_PrevQueue = m_Queue = VK_NULL_HANDLE;
 
   // destroy the API device immediately. There should be no more
   // resources left in the resource manager device/physical device/instance.

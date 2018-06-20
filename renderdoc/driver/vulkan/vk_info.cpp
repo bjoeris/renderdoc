@@ -172,17 +172,14 @@ void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan, Vulk
 
     if(pCreateInfo->pStages[i].pSpecializationInfo)
     {
-      shad.specdata.resize(pCreateInfo->pStages[i].pSpecializationInfo->dataSize);
-      memcpy(&shad.specdata[0], pCreateInfo->pStages[i].pSpecializationInfo->pData,
-             shad.specdata.size());
+      const byte *data = (const byte *)pCreateInfo->pStages[i].pSpecializationInfo->pData;
 
       const VkSpecializationMapEntry *maps = pCreateInfo->pStages[i].pSpecializationInfo->pMapEntries;
       for(uint32_t s = 0; s < pCreateInfo->pStages[i].pSpecializationInfo->mapEntryCount; s++)
       {
-        Shader::SpecInfo spec;
+        SpecConstant spec;
         spec.specID = maps[s].constantID;
-        spec.data = &shad.specdata[maps[s].offset];
-        spec.size = maps[s].size;
+        spec.data.assign(data + maps[s].offset, data + maps[s].offset + maps[s].size);
         // ignore maps[s].size, assume it's enough for the type
         shad.specialization.push_back(spec);
       }
@@ -423,16 +420,15 @@ void VulkanCreationInfo::Pipeline::Init(VulkanResourceManager *resourceMan, Vulk
 
     if(pCreateInfo->stage.pSpecializationInfo)
     {
-      shad.specdata.resize(pCreateInfo->stage.pSpecializationInfo->dataSize);
-      memcpy(&shad.specdata[0], pCreateInfo->stage.pSpecializationInfo->pData, shad.specdata.size());
+      const byte *data = (const byte *)pCreateInfo->stage.pSpecializationInfo->pData;
 
       const VkSpecializationMapEntry *maps = pCreateInfo->stage.pSpecializationInfo->pMapEntries;
       for(uint32_t s = 0; s < pCreateInfo->stage.pSpecializationInfo->mapEntryCount; s++)
       {
-        Shader::SpecInfo spec;
+        SpecConstant spec;
         spec.specID = maps[s].constantID;
-        spec.data = &shad.specdata[maps[s].offset];
-        spec.size = maps[s].size;
+        spec.data.assign(data + maps[s].offset, data + maps[s].offset + maps[s].size);
+        // ignore maps[s].size, assume it's enough for the type
         shad.specialization.push_back(spec);
       }
     }
@@ -510,6 +506,11 @@ void VulkanCreationInfo::RenderPass::Init(VulkanResourceManager *resourceMan,
   for(uint32_t i = 0; i < pCreateInfo->attachmentCount; i++)
     attachments.push_back(pCreateInfo->pAttachments[i]);
 
+  // VK_KHR_multiview
+  const VkRenderPassMultiviewCreateInfo *multiview =
+      (const VkRenderPassMultiviewCreateInfo *)FindNextStruct(
+          pCreateInfo, VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO);
+
   subpasses.resize(pCreateInfo->subpassCount);
   for(uint32_t subp = 0; subp < pCreateInfo->subpassCount; subp++)
   {
@@ -544,6 +545,16 @@ void VulkanCreationInfo::RenderPass::Init(VulkanResourceManager *resourceMan,
                                       src.pDepthStencilAttachment->attachment != VK_ATTACHMENT_UNUSED
                                   ? src.pDepthStencilAttachment->layout
                                   : VK_IMAGE_LAYOUT_UNDEFINED);
+
+    if(multiview && multiview->subpassCount > 0)
+    {
+      uint32_t mask = multiview->pViewMasks[subp];
+      for(uint32_t i = 0; i < 32; i++)
+      {
+        if(mask & (1 << i))
+          dst.multiviews.push_back(i);
+      }
+    }
   }
 }
 

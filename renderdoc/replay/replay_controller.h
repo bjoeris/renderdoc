@@ -136,10 +136,11 @@ public:
 
   void FetchPipelineState();
 
-  const D3D11Pipe::State &GetD3D11PipelineState();
-  const D3D12Pipe::State &GetD3D12PipelineState();
-  const GLPipe::State &GetGLPipelineState();
-  const VKPipe::State &GetVulkanPipelineState();
+  const D3D11Pipe::State *GetD3D11PipelineState();
+  const D3D12Pipe::State *GetD3D12PipelineState();
+  const GLPipe::State *GetGLPipelineState();
+  const VKPipe::State *GetVulkanPipelineState();
+  const PipeState &GetPipelineState();
 
   rdcarray<rdcstr> GetDisassemblyTargets();
   rdcstr DisassembleShader(ResourceId pipeline, const ShaderReflection *refl, const char *target);
@@ -158,7 +159,8 @@ public:
 
   FrameDescription GetFrameInfo();
   const SDFile &GetStructuredFile();
-  rdcarray<DrawcallDescription> GetDrawcalls();
+  const rdcarray<DrawcallDescription> &GetDrawcalls();
+  void AddFakeMarkers();
   rdcarray<CounterResult> FetchCounters(const rdcarray<GPUCounter> &counters);
   rdcarray<GPUCounter> EnumerateCounters();
   CounterDescription DescribeCounter(GPUCounter counterID);
@@ -178,7 +180,7 @@ public:
   ShaderDebugTrace *DebugThread(const uint32_t groupid[3], const uint32_t threadid[3]);
   void FreeTrace(ShaderDebugTrace *trace);
 
-  MeshFormat GetPostVSData(uint32_t instID, MeshDataStage stage);
+  MeshFormat GetPostVSData(uint32_t instID, uint32_t viewID, MeshDataStage stage);
 
   rdcarray<EventUsage> GetUsage(ResourceId id);
 
@@ -207,6 +209,8 @@ private:
   ReplayStatus PostCreateInit(IReplayDriver *device, RDCFile *rdc);
 
   DrawcallDescription *GetDrawcallByEID(uint32_t eventId);
+  bool ContainsMarker(const rdcarray<DrawcallDescription> &draws);
+  bool PassEquivalent(const DrawcallDescription &a, const DrawcallDescription &b);
 
   IReplayDriver *GetDevice() { return m_pDevice; }
   FrameRecord m_FrameRecord;
@@ -224,6 +228,7 @@ private:
   const D3D12Pipe::State *m_D3D12PipelineState;
   const GLPipe::State *m_GLPipelineState;
   const VKPipe::State *m_VulkanPipelineState;
+  PipeState m_PipeState;
 
   std::vector<ReplayOutput *> m_Outputs;
 

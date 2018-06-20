@@ -52,7 +52,7 @@ struct D3D12QuadOverdrawCallback : public D3D12DrawcallCallback
   {
     m_pDevice->GetQueue()->GetCommandData()->m_DrawcallCallback = NULL;
   }
-  void PreDraw(uint32_t eid, ID3D12GraphicsCommandList *cmd)
+  void PreDraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd)
   {
     if(std::find(m_Events.begin(), m_Events.end(), eid) == m_Events.end())
       return;
@@ -137,7 +137,8 @@ struct D3D12QuadOverdrawCallback : public D3D12DrawcallCallback
 
       RDCASSERT(origPSO->IsGraphics());
 
-      D3D12_GRAPHICS_PIPELINE_STATE_DESC pipeDesc = origPSO->GetGraphicsDesc();
+      D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC pipeDesc;
+      origPSO->Fill(pipeDesc);
 
       for(size_t i = 0; i < ARRAY_COUNT(pipeDesc.BlendState.RenderTarget); i++)
         pipeDesc.BlendState.RenderTarget[i].RenderTargetWriteMask = 0;
@@ -152,8 +153,7 @@ struct D3D12QuadOverdrawCallback : public D3D12DrawcallCallback
 
       pipeDesc.pRootSignature = cache.sig;
 
-      hr = m_pDevice->CreateGraphicsPipelineState(&pipeDesc, __uuidof(ID3D12PipelineState),
-                                                  (void **)&cache.pipe);
+      hr = m_pDevice->CreatePipeState(pipeDesc, &cache.pipe);
       RDCASSERTEQUAL(hr, S_OK);
 
       m_PipelineCache[rs.pipe] = cache;
@@ -213,7 +213,7 @@ struct D3D12QuadOverdrawCallback : public D3D12DrawcallCallback
       rs.ApplyState(cmd);
   }
 
-  bool PostDraw(uint32_t eid, ID3D12GraphicsCommandList *cmd)
+  bool PostDraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd)
   {
     if(std::find(m_Events.begin(), m_Events.end(), eid) == m_Events.end())
       return false;
@@ -227,16 +227,16 @@ struct D3D12QuadOverdrawCallback : public D3D12DrawcallCallback
     return true;
   }
 
-  void PostRedraw(uint32_t eid, ID3D12GraphicsCommandList *cmd)
+  void PostRedraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd)
   {
     // nothing to do
   }
 
   // Dispatches don't rasterize, so do nothing
-  void PreDispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) {}
-  bool PostDispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) { return false; }
-  void PostRedispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) {}
-  void PreCloseCommandList(ID3D12GraphicsCommandList *cmd) {}
+  void PreDispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) {}
+  bool PostDispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) { return false; }
+  void PostRedispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) {}
+  void PreCloseCommandList(ID3D12GraphicsCommandList2 *cmd) {}
   void AliasEvent(uint32_t primary, uint32_t alias)
   {
     // don't care
@@ -334,11 +334,12 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
 
   D3D12_RESOURCE_DESC depthTexDesc = {};
   D3D12_DEPTH_STENCIL_VIEW_DESC dsViewDesc = {};
-  if(dsView.nonsamp.resource)
+  if(dsView.GetResResourceId() != ResourceId())
   {
-    ID3D12Resource *realDepth = dsView.nonsamp.resource;
+    ID3D12Resource *realDepth =
+        m_pDevice->GetResourceManager()->GetCurrentAs<ID3D12Resource>(dsView.GetResResourceId());
 
-    dsViewDesc = dsView.nonsamp.dsv;
+    dsViewDesc = dsView.GetDSV();
 
     depthTexDesc = realDepth->GetDesc();
     depthTexDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
@@ -460,7 +461,8 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
   {
     if(pipe && pipe->IsGraphics())
     {
-      D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = pipe->GetGraphicsDesc();
+      D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC psoDesc;
+      pipe->Fill(psoDesc);
 
       float overlayConsts[4] = {0.8f, 0.1f, 0.8f, 1.0f};
       ID3DBlob *ps = m_pDevice->GetShaderCache()->MakeFixedColShader(overlayConsts);
@@ -471,15 +473,15 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.DepthStencilState.DepthEnable = FALSE;
       psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
       psoDesc.DepthStencilState.StencilEnable = FALSE;
+      psoDesc.DepthStencilState.DepthBoundsTestEnable = FALSE;
 
       psoDesc.BlendState.AlphaToCoverageEnable = FALSE;
       psoDesc.BlendState.IndependentBlendEnable = FALSE;
       psoDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
       psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = 0xf;
       psoDesc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
-      RDCEraseEl(psoDesc.RTVFormats);
-      psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
-      psoDesc.NumRenderTargets = 1;
+      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+      psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;
       psoDesc.SampleDesc.Count = RDCMAX(1U, psoDesc.SampleDesc.Count);
       psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
@@ -501,8 +503,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       list = NULL;
 
       ID3D12PipelineState *pso = NULL;
-      HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, __uuidof(ID3D12PipelineState),
-                                                          (void **)&pso);
+      HRESULT hr = m_pDevice->CreatePipeState(psoDesc, &pso);
       if(FAILED(hr))
       {
         RDCERR("Failed to create overlay pso HRESULT: %s", ToStr(hr).c_str());
@@ -532,7 +533,8 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
   {
     if(pipe && pipe->IsGraphics())
     {
-      D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = pipe->GetGraphicsDesc();
+      D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC psoDesc;
+      pipe->Fill(psoDesc);
 
       D3D12_CULL_MODE origCull = psoDesc.RasterizerState.CullMode;
 
@@ -551,9 +553,8 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
       psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = 0xf;
       psoDesc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
-      RDCEraseEl(psoDesc.RTVFormats);
-      psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
-      psoDesc.NumRenderTargets = 1;
+      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+      psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;
       psoDesc.SampleDesc.Count = RDCMAX(1U, psoDesc.SampleDesc.Count);
       psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
@@ -575,8 +576,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       list = NULL;
 
       ID3D12PipelineState *redPSO = NULL;
-      HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, __uuidof(ID3D12PipelineState),
-                                                          (void **)&redPSO);
+      HRESULT hr = m_pDevice->CreatePipeState(psoDesc, &redPSO);
       if(FAILED(hr))
       {
         RDCERR("Failed to create overlay pso HRESULT: %s", ToStr(hr).c_str());
@@ -590,8 +590,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.PS.BytecodeLength = green->GetBufferSize();
 
       ID3D12PipelineState *greenPSO = NULL;
-      hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, __uuidof(ID3D12PipelineState),
-                                                  (void **)&greenPSO);
+      hr = m_pDevice->CreatePipeState(psoDesc, &greenPSO);
       if(FAILED(hr))
       {
         RDCERR("Failed to create overlay pso HRESULT: %s", ToStr(hr).c_str());
@@ -629,7 +628,8 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
   {
     if(pipe && pipe->IsGraphics())
     {
-      D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = pipe->GetGraphicsDesc();
+      D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC psoDesc;
+      pipe->Fill(psoDesc);
 
       float overlayConsts[] = {200.0f / 255.0f, 255.0f / 255.0f, 0.0f / 255.0f, 1.0f};
       ID3DBlob *ps = m_pDevice->GetShaderCache()->MakeFixedColShader(overlayConsts);
@@ -646,9 +646,8 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
       psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = 0xf;
       psoDesc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
-      RDCEraseEl(psoDesc.RTVFormats);
-      psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
-      psoDesc.NumRenderTargets = 1;
+      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+      psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;
       psoDesc.SampleDesc.Count = RDCMAX(1U, psoDesc.SampleDesc.Count);
       psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
@@ -670,8 +669,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       list = NULL;
 
       ID3D12PipelineState *pso = NULL;
-      HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, __uuidof(ID3D12PipelineState),
-                                                          (void **)&pso);
+      HRESULT hr = m_pDevice->CreatePipeState(psoDesc, &pso);
       if(FAILED(hr))
       {
         RDCERR("Failed to create overlay pso HRESULT: %s", ToStr(hr).c_str());
@@ -722,7 +720,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       {
         const D3D12Descriptor &desc = rts[i];
 
-        if(desc.nonsamp.resource)
+        if(desc.GetResResourceId() != ResourceId())
           Unwrap(list)->ClearRenderTargetView(Unwrap(GetDebugManager()->GetTempDescriptor(desc)),
                                               black, 0, NULL);
       }
@@ -826,15 +824,15 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
 
       events.push_back(eventId);
 
-      D3D12_GRAPHICS_PIPELINE_STATE_DESC pipeDesc = pipe->GetGraphicsDesc();
+      D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC pipeDesc;
+      pipe->Fill(pipeDesc);
       pipeDesc.pRootSignature = m_General.ConstOnlyRootSig;
       pipeDesc.SampleMask = 0xFFFFFFFF;
       pipeDesc.SampleDesc.Count = 1;
       pipeDesc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
 
-      pipeDesc.NumRenderTargets = 1;
-      RDCEraseEl(pipeDesc.RTVFormats);
-      pipeDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+      pipeDesc.RTVFormats.NumRenderTargets = 1;
+      pipeDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
       pipeDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
       pipeDesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
       pipeDesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
@@ -881,7 +879,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
 
       Vec4f viewport(rs.views[0].Width, rs.views[0].Height);
 
-      if(rs.dsv.nonsamp.resource)
+      if(rs.dsv.GetResResourceId() != ResourceId())
       {
         D3D12_CPU_DESCRIPTOR_HANDLE tmpdsv = GetDebugManager()->GetTempDescriptor(rs.dsv);
         list->OMSetRenderTargets(1, &rtv, TRUE, &tmpdsv);
@@ -908,9 +906,9 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
 
         for(uint32_t inst = 0; draw && inst < RDCMAX(1U, draw->numInstances); inst++)
         {
-          MeshFormat fmt = GetPostVSBuffers(events[i], inst, MeshDataStage::GSOut);
+          MeshFormat fmt = GetPostVSBuffers(events[i], inst, 0, MeshDataStage::GSOut);
           if(fmt.vertexResourceId == ResourceId())
-            fmt = GetPostVSBuffers(events[i], inst, MeshDataStage::VSOut);
+            fmt = GetPostVSBuffers(events[i], inst, 0, MeshDataStage::VSOut);
 
           if(fmt.vertexResourceId != ResourceId())
           {
@@ -931,9 +929,8 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
 
             if(pipes[pipeDesc.PrimitiveTopologyType] == NULL)
             {
-              HRESULT hr = m_pDevice->CreateGraphicsPipelineState(
-                  &pipeDesc, __uuidof(ID3D12PipelineState),
-                  (void **)&pipes[pipeDesc.PrimitiveTopologyType]);
+              HRESULT hr =
+                  m_pDevice->CreatePipeState(pipeDesc, &pipes[pipeDesc.PrimitiveTopologyType]);
               RDCASSERTEQUAL(hr, S_OK);
             }
 
@@ -1129,7 +1126,8 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
   {
     if(pipe && pipe->IsGraphics())
     {
-      D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = pipe->GetGraphicsDesc();
+      D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC psoDesc;
+      pipe->Fill(psoDesc);
 
       float redCol[4] = {1.0f, 0.0f, 0.0f, 1.0f};
       ID3DBlob *red = m_pDevice->GetShaderCache()->MakeFixedColShader(redCol);
@@ -1157,11 +1155,11 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       {
         psoDesc.DepthStencilState.DepthEnable = FALSE;
         psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        psoDesc.DepthStencilState.DepthBoundsTestEnable = FALSE;
       }
 
-      RDCEraseEl(psoDesc.RTVFormats);
-      psoDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
-      psoDesc.NumRenderTargets = 1;
+      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+      psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;
       psoDesc.SampleDesc.Count = RDCMAX(1U, psoDesc.SampleDesc.Count);
       psoDesc.BlendState.AlphaToCoverageEnable = FALSE;
@@ -1187,8 +1185,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       list = NULL;
 
       ID3D12PipelineState *greenPSO = NULL;
-      HRESULT hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, __uuidof(ID3D12PipelineState),
-                                                          (void **)&greenPSO);
+      HRESULT hr = m_pDevice->CreatePipeState(psoDesc, &greenPSO);
       if(FAILED(hr))
       {
         RDCERR("Failed to create overlay pso HRESULT: %s", ToStr(hr).c_str());
@@ -1201,13 +1198,13 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
       psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
       psoDesc.DepthStencilState.StencilEnable = FALSE;
+      psoDesc.DepthStencilState.DepthBoundsTestEnable = FALSE;
 
       psoDesc.PS.pShaderBytecode = red->GetBufferPointer();
       psoDesc.PS.BytecodeLength = red->GetBufferSize();
 
       ID3D12PipelineState *redPSO = NULL;
-      hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, __uuidof(ID3D12PipelineState),
-                                                  (void **)&redPSO);
+      hr = m_pDevice->CreatePipeState(psoDesc, &redPSO);
       if(FAILED(hr))
       {
         RDCERR("Failed to create overlay pso HRESULT: %s", ToStr(hr).c_str());

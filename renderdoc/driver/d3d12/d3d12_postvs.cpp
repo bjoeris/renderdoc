@@ -164,7 +164,8 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
   if(!origPSO->IsGraphics())
     return;
 
-  D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = origPSO->GetGraphicsDesc();
+  D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC psoDesc;
+  origPSO->Fill(psoDesc);
 
   if(psoDesc.VS.BytecodeLength == 0)
     return;
@@ -307,13 +308,11 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
     psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
 
     // disable outputs
-    psoDesc.NumRenderTargets = 0;
     RDCEraseEl(psoDesc.RTVFormats);
     psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 
     ID3D12PipelineState *pipe = NULL;
-    hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, __uuidof(ID3D12PipelineState),
-                                                (void **)&pipe);
+    hr = m_pDevice->CreatePipeState(psoDesc, &pipe);
     if(FAILED(hr))
     {
       RDCERR("Couldn't create patched graphics pipeline: HRESULT: %s", ToStr(hr).c_str());
@@ -324,7 +323,8 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
     ID3D12Resource *idxBuf = NULL;
 
     bool recreate = false;
-    uint64_t outputSize = uint64_t(drawcall->numIndices) * drawcall->numInstances * stride;
+    // we add 64 to account for the stream-out data counter
+    uint64_t outputSize = uint64_t(drawcall->numIndices) * drawcall->numInstances * stride + 64;
 
     if(m_SOBufferSize < outputSize)
     {
@@ -336,9 +336,9 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
       recreate = true;
     }
 
-    ID3D12GraphicsCommandList *list = NULL;
+    ID3D12GraphicsCommandList2 *list = NULL;
 
-    if(!(drawcall->flags & DrawFlags::UseIBuffer))
+    if(!(drawcall->flags & DrawFlags::Indexed))
     {
       if(recreate)
       {
@@ -709,7 +709,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
     m_PostVSData[eventId].vsout.nearPlane = nearp;
     m_PostVSData[eventId].vsout.farPlane = farp;
 
-    m_PostVSData[eventId].vsout.useIndices = bool(drawcall->flags & DrawFlags::UseIBuffer);
+    m_PostVSData[eventId].vsout.useIndices = bool(drawcall->flags & DrawFlags::Indexed);
     m_PostVSData[eventId].vsout.numVerts = drawcall->numIndices;
 
     m_PostVSData[eventId].vsout.instStride = 0;
@@ -809,8 +809,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
     psoDesc.PrimitiveTopologyType = origPSO->graphics->PrimitiveTopologyType;
 
     ID3D12PipelineState *pipe = NULL;
-    hr = m_pDevice->CreateGraphicsPipelineState(&psoDesc, __uuidof(ID3D12PipelineState),
-                                                (void **)&pipe);
+    hr = m_pDevice->CreatePipeState(psoDesc, &pipe);
     if(FAILED(hr))
     {
       RDCERR("Couldn't create patched graphics pipeline: HRESULT: %s", ToStr(hr).c_str());
@@ -820,7 +819,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
 
     D3D12_STREAM_OUTPUT_BUFFER_VIEW view;
 
-    ID3D12GraphicsCommandList *list = NULL;
+    ID3D12GraphicsCommandList2 *list = NULL;
 
     view.BufferFilledSizeLocation = m_SOBuffer->GetGPUVirtualAddress();
     view.BufferLocation = m_SOBuffer->GetGPUVirtualAddress() + 64;
@@ -851,7 +850,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
       list->BeginQuery(m_SOQueryHeap, D3D12_QUERY_TYPE_SO_STATISTICS_STREAM0, 0);
 
       // because the result is expanded we don't have to remap index buffers or anything
-      if(drawcall->flags & DrawFlags::UseIBuffer)
+      if(drawcall->flags & DrawFlags::Indexed)
       {
         list->DrawIndexedInstanced(drawcall->numIndices, drawcall->numInstances,
                                    drawcall->indexOffset, drawcall->baseVertex,
@@ -941,7 +940,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
       // each instance wrote.
       for(uint32_t inst = 1; inst <= drawcall->numInstances; inst++)
       {
-        if(drawcall->flags & DrawFlags::UseIBuffer)
+        if(drawcall->flags & DrawFlags::Indexed)
         {
           view.BufferFilledSizeLocation =
               m_SOBuffer->GetGPUVirtualAddress() + (inst - 1) * sizeof(UINT64);
@@ -995,7 +994,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
         list->BeginQuery(m_SOQueryHeap, D3D12_QUERY_TYPE_SO_STATISTICS_STREAM0, 0);
 
         // because the result is expanded we don't have to remap index buffers or anything
-        if(drawcall->flags & DrawFlags::UseIBuffer)
+        if(drawcall->flags & DrawFlags::Indexed)
         {
           list->DrawIndexedInstanced(drawcall->numIndices, drawcall->numInstances,
                                      drawcall->indexOffset, drawcall->baseVertex,
@@ -1300,20 +1299,20 @@ struct D3D12InitPostVSCallback : public D3D12DrawcallCallback
     m_pDevice->GetQueue()->GetCommandData()->m_DrawcallCallback = this;
   }
   ~D3D12InitPostVSCallback() { m_pDevice->GetQueue()->GetCommandData()->m_DrawcallCallback = NULL; }
-  void PreDraw(uint32_t eid, ID3D12GraphicsCommandList *cmd)
+  void PreDraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override
   {
     if(std::find(m_Events.begin(), m_Events.end(), eid) != m_Events.end())
       m_Replay->InitPostVSBuffers(eid);
   }
 
-  bool PostDraw(uint32_t eid, ID3D12GraphicsCommandList *cmd) { return false; }
-  void PostRedraw(uint32_t eid, ID3D12GraphicsCommandList *cmd) {}
+  bool PostDraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override { return false; }
+  void PostRedraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override {}
   // Dispatches don't rasterize, so do nothing
-  void PreDispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) {}
-  bool PostDispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) { return false; }
-  void PostRedispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) {}
-  void PreCloseCommandList(ID3D12GraphicsCommandList *cmd) {}
-  void AliasEvent(uint32_t primary, uint32_t alias)
+  void PreDispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override {}
+  bool PostDispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override { return false; }
+  void PostRedispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override {}
+  void PreCloseCommandList(ID3D12GraphicsCommandList2 *cmd) override {}
+  void AliasEvent(uint32_t primary, uint32_t alias) override
   {
     if(std::find(m_Events.begin(), m_Events.end(), primary) != m_Events.end())
       m_Replay->AliasPostVSBuffers(primary, alias);
@@ -1339,7 +1338,8 @@ void D3D12Replay::InitPostVSBuffers(const vector<uint32_t> &events)
   m_pDevice->ReplayLog(events.front(), events.back(), eReplay_Full);
 }
 
-MeshFormat D3D12Replay::GetPostVSBuffers(uint32_t eventId, uint32_t instID, MeshDataStage stage)
+MeshFormat D3D12Replay::GetPostVSBuffers(uint32_t eventId, uint32_t instID, uint32_t viewID,
+                                         MeshDataStage stage)
 {
   // go through any aliasing
   if(m_PostVSAlias.find(eventId) != m_PostVSAlias.end())
@@ -1347,6 +1347,9 @@ MeshFormat D3D12Replay::GetPostVSBuffers(uint32_t eventId, uint32_t instID, Mesh
 
   D3D12PostVSData postvs;
   RDCEraseEl(postvs);
+
+  // no multiview support
+  (void)viewID;
 
   if(m_PostVSData.find(eventId) != m_PostVSData.end())
     postvs = m_PostVSData[eventId];

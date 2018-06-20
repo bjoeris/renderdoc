@@ -1602,6 +1602,9 @@ void MainWindow::messageCheck()
 
         m_Ctx.Replay().DisconnectFromRemoteServer();
       }
+
+      if(m_Ctx.HasCaptureDialog())
+        m_Ctx.GetCaptureDialog()->UpdateRemoteHost();
     });
   }
 }
@@ -1714,6 +1717,9 @@ void MainWindow::switchContext()
     statusText->setText(QString());
 
     SetTitle();
+
+    if(m_Ctx.HasCaptureDialog())
+      m_Ctx.GetCaptureDialog()->UpdateRemoteHost();
   }
   else
   {
@@ -1788,6 +1794,9 @@ void MainWindow::switchContext()
         }
 
         contextChooser->setEnabled(true);
+
+        if(m_Ctx.HasCaptureDialog())
+          m_Ctx.GetCaptureDialog()->UpdateRemoteHost();
       });
     });
     th->selfDelete(true);
@@ -1879,6 +1888,9 @@ void MainWindow::OnCaptureClosed()
         tr("Remote server disconnected. To attempt to reconnect please select it again."));
     contextChooser->setText(tr("Replay Context: %1").arg(tr("Local")));
     m_Ctx.Replay().DisconnectFromRemoteServer();
+
+    if(m_Ctx.HasCaptureDialog())
+      m_Ctx.GetCaptureDialog()->UpdateRemoteHost();
   }
 }
 
@@ -2226,6 +2238,21 @@ void MainWindow::on_action_Start_Replay_Loop_triggered()
       {
         displayTex = &tex;
         break;
+      }
+    }
+  }
+
+  if(!displayTex)
+  {
+    // if still no texture was found, then use the biggest colour render target
+    for(const TextureDescription &tex : m_Ctx.GetTextures())
+    {
+      if((tex.creationFlags & TextureCategory::ColorTarget) &&
+         tex.format.compType != CompType::Depth && tex.format.type != ResourceFormatType::D16S8 &&
+         tex.format.type != ResourceFormatType::D24S8 && tex.format.type != ResourceFormatType::D32S8)
+      {
+        if(displayTex == NULL || tex.width * tex.height > displayTex->width * displayTex->height)
+          displayTex = &tex;
       }
     }
   }

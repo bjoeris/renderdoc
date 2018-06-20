@@ -42,6 +42,9 @@ static const char *LiveDriverDisassemblyTarget = "Live driver disassembly";
 
 VulkanReplay::VulkanReplay()
 {
+  if(RenderDoc::Inst().GetCrashHandler())
+    RenderDoc::Inst().GetCrashHandler()->RegisterMemoryRegion(this, sizeof(VulkanReplay));
+
   m_pDriver = NULL;
   m_Proxy = false;
 
@@ -130,11 +133,11 @@ vector<uint32_t> VulkanReplay::GetPassEvents(uint32_t eventId)
 
     // if we've come to the start of the log we were outside of a render pass
     // to start with
-    if(start->previous == 0)
+    if(start->previous == NULL)
       return passEvents;
 
     // step back
-    start = m_pDriver->GetDrawcall((uint32_t)start->previous);
+    start = start->previous;
 
     // something went wrong, start->previous was non-zero but we didn't
     // get a draw. Abort
@@ -155,7 +158,7 @@ vector<uint32_t> VulkanReplay::GetPassEvents(uint32_t eventId)
     if(start->flags & (DrawFlags::Drawcall | DrawFlags::PassBoundary))
       passEvents.push_back(start->eventId);
 
-    start = m_pDriver->GetDrawcall((uint32_t)start->next);
+    start = start->next;
   }
 
   return passEvents;
@@ -802,6 +805,9 @@ void VulkanReplay::SavePipelineState()
 
   m_VulkanPipelineState = VKPipe::State();
 
+  m_VulkanPipelineState.pushconsts.resize(state.pushConstSize);
+  memcpy(m_VulkanPipelineState.pushconsts.data(), state.pushconsts, state.pushConstSize);
+
   // General pipeline properties
   m_VulkanPipelineState.compute.pipelineResourceId = rm->GetOriginalID(state.compute.pipeline);
   m_VulkanPipelineState.graphics.pipelineResourceId = rm->GetOriginalID(state.graphics.pipeline);
@@ -831,8 +837,7 @@ void VulkanReplay::SavePipelineState()
       for(size_t s = 0; s < p.shaders[i].specialization.size(); s++)
       {
         stage.specialization[s].specializationId = p.shaders[i].specialization[s].specID;
-        stage.specialization[s].data.assign(p.shaders[i].specialization[s].data,
-                                            p.shaders[i].specialization[s].size);
+        stage.specialization[s].data = p.shaders[i].specialization[s].data;
       }
     }
   }
@@ -908,8 +913,7 @@ void VulkanReplay::SavePipelineState()
       for(size_t s = 0; s < p.shaders[i].specialization.size(); s++)
       {
         stages[i]->specialization[s].specializationId = p.shaders[i].specialization[s].specID;
-        stages[i]->specialization[s].data.assign(p.shaders[i].specialization[s].data,
-                                                 p.shaders[i].specialization[s].size);
+        stages[i]->specialization[s].data = p.shaders[i].specialization[s].data;
       }
     }
 
@@ -1121,6 +1125,9 @@ void VulkanReplay::SavePipelineState()
           c.m_RenderPass[state.renderPass].subpasses[state.subpass].resolveAttachments;
       m_VulkanPipelineState.currentPass.renderpass.depthstencilAttachment =
           c.m_RenderPass[state.renderPass].subpasses[state.subpass].depthstencilAttachment;
+
+      m_VulkanPipelineState.currentPass.renderpass.multiviews =
+          c.m_RenderPass[state.renderPass].subpasses[state.subpass].multiviews;
     }
 
     m_VulkanPipelineState.currentPass.framebuffer.resourceId = rm->GetOriginalID(state.framebuffer);
@@ -1466,201 +1473,6 @@ void VulkanReplay::SavePipelineState()
   }
 }
 
-void VulkanReplay::FillCBufferVariables(rdcarray<ShaderConstant> invars,
-                                        vector<ShaderVariable> &outvars, const bytebuf &data,
-                                        size_t baseOffset)
-{
-  for(size_t v = 0; v < invars.size(); v++)
-  {
-    std::string basename = invars[v].name;
-
-    uint32_t rows = invars[v].type.descriptor.rows;
-    uint32_t cols = invars[v].type.descriptor.columns;
-    uint32_t elems = RDCMAX(1U, invars[v].type.descriptor.elements);
-    bool rowMajor = invars[v].type.descriptor.rowMajorStorage != 0;
-    bool isArray = elems > 1;
-
-    size_t dataOffset =
-        baseOffset + invars[v].reg.vec * sizeof(Vec4f) + invars[v].reg.comp * sizeof(float);
-
-    if(!invars[v].type.members.empty() || (rows == 0 && cols == 0))
-    {
-      ShaderVariable var;
-      var.name = basename;
-      var.rows = var.columns = 0;
-      var.type = VarType::Float;
-      var.rowMajor = rowMajor;
-
-      vector<ShaderVariable> varmembers;
-
-      if(isArray)
-      {
-        for(uint32_t i = 0; i < elems; i++)
-        {
-          ShaderVariable vr;
-          vr.name = StringFormat::Fmt("%s[%u]", basename.c_str(), i);
-          vr.rows = vr.columns = 0;
-          vr.type = VarType::Float;
-          vr.rowMajor = rowMajor;
-
-          vector<ShaderVariable> mems;
-
-          FillCBufferVariables(invars[v].type.members, mems, data, dataOffset);
-
-          dataOffset += invars[v].type.descriptor.arrayByteStride;
-
-          vr.isStruct = true;
-
-          vr.members = mems;
-
-          varmembers.push_back(vr);
-        }
-
-        var.isStruct = false;
-      }
-      else
-      {
-        var.isStruct = true;
-
-        FillCBufferVariables(invars[v].type.members, varmembers, data, dataOffset);
-      }
-
-      {
-        var.members = varmembers;
-        outvars.push_back(var);
-      }
-
-      continue;
-    }
-
-    size_t outIdx = outvars.size();
-    outvars.resize(outvars.size() + 1);
-
-    {
-      outvars[outIdx].name = basename;
-      outvars[outIdx].rows = 1;
-      outvars[outIdx].type = invars[v].type.descriptor.type;
-      outvars[outIdx].isStruct = false;
-      outvars[outIdx].columns = cols;
-      outvars[outIdx].rowMajor = rowMajor;
-
-      size_t elemByteSize = 4;
-      if(outvars[outIdx].type == VarType::Double)
-        elemByteSize = 8;
-
-      ShaderVariable &var = outvars[outIdx];
-
-      if(!isArray)
-      {
-        outvars[outIdx].rows = rows;
-
-        if(dataOffset < data.size())
-        {
-          const byte *d = &data[dataOffset];
-
-          RDCASSERT(rows <= 4 && rows * cols <= 16, rows, cols);
-
-          if(!rowMajor)
-          {
-            uint32_t tmp[16] = {0};
-
-            for(uint32_t c = 0; c < cols; c++)
-            {
-              size_t srcoffs = 4 * elemByteSize * c;
-              size_t dstoffs = rows * elemByteSize * c;
-              memcpy((byte *)(tmp) + dstoffs, d + srcoffs,
-                     RDCMIN(data.size() - dataOffset + srcoffs, elemByteSize * rows));
-            }
-
-            // transpose
-            for(size_t r = 0; r < rows; r++)
-              for(size_t c = 0; c < cols; c++)
-                outvars[outIdx].value.uv[r * cols + c] = tmp[c * rows + r];
-          }
-          else
-          {
-            for(uint32_t r = 0; r < rows; r++)
-            {
-              size_t srcoffs = 4 * elemByteSize * r;
-              size_t dstoffs = cols * elemByteSize * r;
-              memcpy((byte *)(&outvars[outIdx].value.uv[0]) + dstoffs, d + srcoffs,
-                     RDCMIN(data.size() - dataOffset + srcoffs, elemByteSize * cols));
-            }
-          }
-        }
-      }
-      else
-      {
-        var.name = outvars[outIdx].name;
-        var.rows = 0;
-        var.columns = 0;
-
-        bool isMatrix = rows > 1 && cols > 1;
-
-        vector<ShaderVariable> varmembers;
-        varmembers.resize(elems);
-
-        std::string base = outvars[outIdx].name;
-
-        // primary is the 'major' direction
-        // so we copy secondaryDim number of primaryDim-sized elements
-        uint32_t primaryDim = cols;
-        uint32_t secondaryDim = rows;
-        if(isMatrix && rowMajor)
-        {
-          primaryDim = rows;
-          secondaryDim = cols;
-        }
-
-        for(uint32_t e = 0; e < elems; e++)
-        {
-          varmembers[e].name = StringFormat::Fmt("%s[%u]", base.c_str(), e);
-          varmembers[e].rows = rows;
-          varmembers[e].type = invars[v].type.descriptor.type;
-          varmembers[e].isStruct = false;
-          varmembers[e].columns = cols;
-          varmembers[e].rowMajor = rowMajor;
-
-          size_t rowDataOffset = dataOffset;
-
-          dataOffset += invars[v].type.descriptor.arrayByteStride;
-
-          if(rowDataOffset < data.size())
-          {
-            const byte *d = &data[rowDataOffset];
-
-            // each primary element (row or column) is stored in a float4.
-            // we copy some padding here, but that will come out in the wash
-            // when we transpose
-            for(uint32_t s = 0; s < secondaryDim; s++)
-            {
-              uint32_t matStride = primaryDim;
-              if(matStride == 3)
-                matStride = 4;
-              memcpy(&(varmembers[e].value.uv[primaryDim * s]), d + matStride * elemByteSize * s,
-                     RDCMIN(data.size() - rowDataOffset, elemByteSize * primaryDim));
-            }
-
-            if(!rowMajor)
-            {
-              ShaderVariable tmp = varmembers[e];
-              // transpose
-              for(size_t ri = 0; ri < rows; ri++)
-                for(size_t ci = 0; ci < cols; ci++)
-                  varmembers[e].value.uv[ri * cols + ci] = tmp.value.uv[ci * rows + ri];
-            }
-          }
-        }
-
-        {
-          var.isStruct = false;
-          var.members = varmembers;
-        }
-      }
-    }
-  }
-}
-
 void VulkanReplay::FillCBufferVariables(ResourceId shader, string entryPoint, uint32_t cbufSlot,
                                         vector<ShaderVariable> &outvars, const bytebuf &data)
 {
@@ -1689,29 +1501,17 @@ void VulkanReplay::FillCBufferVariables(ResourceId shader, string entryPoint, ui
 
   if(c.bufferBacked)
   {
-    FillCBufferVariables(c.variables, outvars, data, 0);
+    SPIRVFillCBufferVariables(c.variables, outvars, data, 0);
   }
   else
   {
-    // very specialised (and rather ugly) path to display specialization constants
-    // magic constant here matches the one generated in SPVModule::MakeReflection(
-    if(mapping.constantBlocks[c.bindPoint].bindset == 123456)
+    // specialised path to display specialization constants
+    if(mapping.constantBlocks[c.bindPoint].bindset == SpecializationConstantBindSet)
     {
-      outvars.resize(c.variables.size());
-      for(size_t v = 0; v < c.variables.size(); v++)
-      {
-        outvars[v].rows = c.variables[v].type.descriptor.rows;
-        outvars[v].columns = c.variables[v].type.descriptor.columns;
-        outvars[v].isStruct = !c.variables[v].type.members.empty();
-        RDCASSERT(!outvars[v].isStruct);
-        outvars[v].name = c.variables[v].name;
-        outvars[v].type = c.variables[v].type.descriptor.type;
-
-        outvars[v].value.uv[0] = (c.variables[v].defaultValue & 0xFFFFFFFF);
-        outvars[v].value.uv[1] = ((c.variables[v].defaultValue >> 32) & 0xFFFFFFFF);
-      }
-
-      ResourceId pipeline = m_pDriver->m_RenderState.graphics.pipeline;
+      // TODO we shouldn't be looking up the pipeline here, this query should work regardless.
+      ResourceId pipeline = refl.stage == ShaderStage::Compute
+                                ? m_pDriver->m_RenderState.compute.pipeline
+                                : m_pDriver->m_RenderState.graphics.pipeline;
       if(pipeline != ResourceId())
       {
         auto pipeIt = m_pDriver->m_CreationInfo.m_Pipeline.find(pipeline);
@@ -1721,19 +1521,7 @@ void VulkanReplay::FillCBufferVariables(ResourceId shader, string entryPoint, ui
           auto specInfo =
               pipeIt->second.shaders[it->second.m_Reflections[entryPoint].stageIndex].specialization;
 
-          // find any actual values specified
-          for(size_t i = 0; i < specInfo.size(); i++)
-          {
-            for(size_t v = 0; v < c.variables.size(); v++)
-            {
-              if(specInfo[i].specID == c.variables[v].reg.vec)
-              {
-                memcpy(outvars[v].value.uv, specInfo[i].data,
-                       RDCMIN(specInfo[i].size, sizeof(outvars[v].value.uv)));
-                break;
-              }
-            }
-          }
+          FillSpecConstantVariables(c.variables, outvars, specInfo);
         }
       }
     }
@@ -1742,7 +1530,7 @@ void VulkanReplay::FillCBufferVariables(ResourceId shader, string entryPoint, ui
       bytebuf pushdata;
       pushdata.resize(sizeof(m_pDriver->m_RenderState.pushconsts));
       memcpy(&pushdata[0], m_pDriver->m_RenderState.pushconsts, pushdata.size());
-      FillCBufferVariables(c.variables, outvars, pushdata, 0);
+      SPIRVFillCBufferVariables(c.variables, outvars, pushdata, 0);
     }
   }
 }
@@ -2291,6 +2079,8 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
   VkImage tmpImage = VK_NULL_HANDLE;
   VkDeviceMemory tmpMemory = VK_NULL_HANDLE;
 
+  uint32_t srcQueueIndex = layouts.queueFamilyIndex;
+
   VkFramebuffer *tmpFB = NULL;
   VkImageView *tmpView = NULL;
   uint32_t numFBs = 0;
@@ -2314,6 +2104,8 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
 
     wasms = true;
   }
+
+  VkCommandBuffer extQCmd = VK_NULL_HANDLE;
 
   if(params.remap != RemapTexture::NoRemap)
   {
@@ -2383,10 +2175,11 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
         0,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        0,
-        0,    // MULTIDEVICE - need to actually pick the right queue family here maybe?
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_QUEUE_FAMILY_IGNORED,
         tmpImage,
-        {VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS}};
+        {VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS},
+    };
 
     // move tmp image into transfer destination layout
     DoPipelineBarrier(cmd, 1, &dstimBarrier);
@@ -2524,6 +2317,7 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
     m_DebugHeight = oldH;
 
     srcImage = tmpImage;
+    srcQueueIndex = m_pDriver->GetQueueFamilyIndex();
 
     // fetch a new command buffer for copy & readback
     cmd = m_pDriver->GetNextCmd();
@@ -2591,10 +2385,11 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
         0,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        VK_QUEUE_FAMILY_IGNORED,
-        VK_QUEUE_FAMILY_IGNORED,
+        srcQueueIndex,
+        m_pDriver->GetQueueFamilyIndex(),
         srcImage,
-        {srcAspectMask, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS}};
+        {srcAspectMask, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS},
+    };
 
     VkImageMemoryBarrier dstimBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -2603,21 +2398,41 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
         0,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        0,
-        0,    // MULTIDEVICE - need to actually pick the right queue family here maybe?
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_QUEUE_FAMILY_IGNORED,
         tmpImage,
-        {srcAspectMask, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS}};
+        {srcAspectMask, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS},
+    };
 
     // ensure all previous writes have completed
     srcimBarrier.srcAccessMask = VK_ACCESS_ALL_WRITE_BITS;
     // before we go resolving
     srcimBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
+    if(srcimBarrier.srcQueueFamilyIndex != srcimBarrier.dstQueueFamilyIndex)
+    {
+      extQCmd = m_pDriver->GetExtQueueCmd(srcimBarrier.srcQueueFamilyIndex);
+
+      vkr = ObjDisp(extQCmd)->BeginCommandBuffer(Unwrap(extQCmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+    }
+
     for(size_t si = 0; si < layouts.subresourceStates.size(); si++)
     {
       srcimBarrier.subresourceRange = layouts.subresourceStates[si].subresourceRange;
       srcimBarrier.oldLayout = layouts.subresourceStates[si].newLayout;
       DoPipelineBarrier(cmd, 1, &srcimBarrier);
+
+      if(extQCmd != VK_NULL_HANDLE)
+        DoPipelineBarrier(extQCmd, 1, &srcimBarrier);
+    }
+
+    if(extQCmd != VK_NULL_HANDLE)
+    {
+      vkr = ObjDisp(extQCmd)->EndCommandBuffer(Unwrap(extQCmd));
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      m_pDriver->SubmitAndFlushExtQueue(layouts.queueFamilyIndex);
     }
 
     srcimBarrier.oldLayout = srcimBarrier.newLayout;
@@ -2632,12 +2447,23 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
     vt->CmdResolveImage(Unwrap(cmd), srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                         Unwrap(tmpImage), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &resolveRegion);
 
+    std::swap(srcimBarrier.srcQueueFamilyIndex, srcimBarrier.dstQueueFamilyIndex);
+
+    if(extQCmd != VK_NULL_HANDLE)
+    {
+      vkr = ObjDisp(extQCmd)->BeginCommandBuffer(Unwrap(extQCmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+    }
+
     // image layout back to normal
     for(size_t si = 0; si < layouts.subresourceStates.size(); si++)
     {
       srcimBarrier.subresourceRange = layouts.subresourceStates[si].subresourceRange;
       srcimBarrier.newLayout = layouts.subresourceStates[si].newLayout;
       DoPipelineBarrier(cmd, 1, &srcimBarrier);
+
+      if(extQCmd != VK_NULL_HANDLE)
+        DoPipelineBarrier(extQCmd, 1, &srcimBarrier);
     }
 
     // wait for resolve to finish before copy to buffer
@@ -2648,7 +2474,31 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
 
     DoPipelineBarrier(cmd, 1, &dstimBarrier);
 
+    if(extQCmd != VK_NULL_HANDLE)
+    {
+      // ensure this resolve happens before handing back the source image to the original queue
+      vkr = vt->EndCommandBuffer(Unwrap(cmd));
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      m_pDriver->SubmitCmds();
+      m_pDriver->FlushQ();
+
+      vkr = ObjDisp(extQCmd)->EndCommandBuffer(Unwrap(extQCmd));
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      m_pDriver->SubmitAndFlushExtQueue(layouts.queueFamilyIndex);
+
+      extQCmd = VK_NULL_HANDLE;
+
+      // fetch a new command buffer for remaining work
+      cmd = m_pDriver->GetNextCmd();
+
+      vkr = vt->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+    }
+
     srcImage = tmpImage;
+    srcQueueIndex = m_pDriver->GetQueueFamilyIndex();
 
     // these have already been selected, don't need to fetch that subresource
     // when copying back to readback buffer
@@ -2694,10 +2544,11 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
         0,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        VK_QUEUE_FAMILY_IGNORED,
-        VK_QUEUE_FAMILY_IGNORED,
+        srcQueueIndex,
+        m_pDriver->GetQueueFamilyIndex(),
         srcImage,
-        {srcAspectMask, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS}};
+        {srcAspectMask, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS},
+    };
 
     VkImageMemoryBarrier dstimBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -2706,21 +2557,41 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
         0,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_GENERAL,
-        0,
-        0,    // MULTIDEVICE - need to actually pick the right queue family here maybe?
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_QUEUE_FAMILY_IGNORED,
         tmpImage,
-        {srcAspectMask, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS}};
+        {srcAspectMask, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS},
+    };
 
     // ensure all previous writes have completed
     srcimBarrier.srcAccessMask = VK_ACCESS_ALL_WRITE_BITS;
     // before we go copying to array
     srcimBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
+    if(srcimBarrier.srcQueueFamilyIndex != srcimBarrier.dstQueueFamilyIndex)
+    {
+      extQCmd = m_pDriver->GetExtQueueCmd(srcimBarrier.srcQueueFamilyIndex);
+
+      vkr = ObjDisp(extQCmd)->BeginCommandBuffer(Unwrap(extQCmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+    }
+
     for(size_t si = 0; si < layouts.subresourceStates.size(); si++)
     {
       srcimBarrier.subresourceRange = layouts.subresourceStates[si].subresourceRange;
       srcimBarrier.oldLayout = layouts.subresourceStates[si].newLayout;
       DoPipelineBarrier(cmd, 1, &srcimBarrier);
+
+      if(extQCmd != VK_NULL_HANDLE)
+        DoPipelineBarrier(extQCmd, 1, &srcimBarrier);
+    }
+
+    if(extQCmd != VK_NULL_HANDLE)
+    {
+      vkr = ObjDisp(extQCmd)->EndCommandBuffer(Unwrap(extQCmd));
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      m_pDriver->SubmitAndFlushExtQueue(layouts.queueFamilyIndex);
     }
 
     srcimBarrier.oldLayout = srcimBarrier.newLayout;
@@ -2747,6 +2618,14 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
 
     srcimBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
+    if(extQCmd != VK_NULL_HANDLE)
+    {
+      vkr = ObjDisp(extQCmd)->BeginCommandBuffer(Unwrap(extQCmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+    }
+
+    std::swap(srcimBarrier.srcQueueFamilyIndex, srcimBarrier.dstQueueFamilyIndex);
+
     // image layout back to normal
     for(size_t si = 0; si < layouts.subresourceStates.size(); si++)
     {
@@ -2754,6 +2633,9 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
       srcimBarrier.newLayout = layouts.subresourceStates[si].newLayout;
       srcimBarrier.dstAccessMask = MakeAccessMask(srcimBarrier.newLayout);
       DoPipelineBarrier(cmd, 1, &srcimBarrier);
+
+      if(extQCmd != VK_NULL_HANDLE)
+        DoPipelineBarrier(extQCmd, 1, &srcimBarrier);
     }
 
     // wait for copy to finish before copy to buffer
@@ -2764,7 +2646,31 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
 
     DoPipelineBarrier(cmd, 1, &dstimBarrier);
 
+    if(extQCmd != VK_NULL_HANDLE)
+    {
+      // ensure this resolve happens before handing back the source image to the original queue
+      vkr = vt->EndCommandBuffer(Unwrap(cmd));
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      m_pDriver->SubmitCmds();
+      m_pDriver->FlushQ();
+
+      vkr = ObjDisp(extQCmd)->EndCommandBuffer(Unwrap(extQCmd));
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      m_pDriver->SubmitAndFlushExtQueue(layouts.queueFamilyIndex);
+
+      extQCmd = VK_NULL_HANDLE;
+
+      // fetch a new command buffer for remaining work
+      cmd = m_pDriver->GetNextCmd();
+
+      vkr = vt->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+    }
+
     srcImage = tmpImage;
+    srcQueueIndex = m_pDriver->GetQueueFamilyIndex();
   }
 
   VkImageMemoryBarrier srcimBarrier = {
@@ -2774,10 +2680,11 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
       0,
       VK_IMAGE_LAYOUT_UNDEFINED,
       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-      VK_QUEUE_FAMILY_IGNORED,
-      VK_QUEUE_FAMILY_IGNORED,
+      srcQueueIndex,
+      m_pDriver->GetQueueFamilyIndex(),
       srcImage,
-      {srcAspectMask, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS}};
+      {srcAspectMask, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS},
+  };
 
   // if we have no tmpImage, we're copying directly from the real image
   if(tmpImage == VK_NULL_HANDLE)
@@ -2787,11 +2694,30 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
     // before we go resolving
     srcimBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
+    if(srcimBarrier.srcQueueFamilyIndex != srcimBarrier.dstQueueFamilyIndex)
+    {
+      extQCmd = m_pDriver->GetExtQueueCmd(srcimBarrier.srcQueueFamilyIndex);
+
+      vkr = ObjDisp(extQCmd)->BeginCommandBuffer(Unwrap(extQCmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+    }
+
     for(size_t si = 0; si < layouts.subresourceStates.size(); si++)
     {
       srcimBarrier.subresourceRange = layouts.subresourceStates[si].subresourceRange;
       srcimBarrier.oldLayout = layouts.subresourceStates[si].newLayout;
       DoPipelineBarrier(cmd, 1, &srcimBarrier);
+
+      if(extQCmd != VK_NULL_HANDLE)
+        DoPipelineBarrier(extQCmd, 1, &srcimBarrier);
+    }
+
+    if(extQCmd != VK_NULL_HANDLE)
+    {
+      vkr = ObjDisp(extQCmd)->EndCommandBuffer(Unwrap(extQCmd));
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      m_pDriver->SubmitAndFlushExtQueue(layouts.queueFamilyIndex);
     }
   }
 
@@ -2911,6 +2837,14 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
     // ensure transfer has completed
     srcimBarrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
+    std::swap(srcimBarrier.srcQueueFamilyIndex, srcimBarrier.dstQueueFamilyIndex);
+
+    if(extQCmd != VK_NULL_HANDLE)
+    {
+      vkr = ObjDisp(extQCmd)->BeginCommandBuffer(Unwrap(extQCmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+    }
+
     // image layout back to normal
     for(size_t si = 0; si < layouts.subresourceStates.size(); si++)
     {
@@ -2918,6 +2852,9 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
       srcimBarrier.newLayout = layouts.subresourceStates[si].newLayout;
       srcimBarrier.dstAccessMask = MakeAccessMask(srcimBarrier.newLayout);
       DoPipelineBarrier(cmd, 1, &srcimBarrier);
+
+      if(extQCmd != VK_NULL_HANDLE)
+        DoPipelineBarrier(extQCmd, 1, &srcimBarrier);
     }
   }
 
@@ -2940,6 +2877,16 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
 
   m_pDriver->SubmitCmds();
   m_pDriver->FlushQ();
+
+  if(extQCmd != VK_NULL_HANDLE)
+  {
+    vkr = ObjDisp(extQCmd)->EndCommandBuffer(Unwrap(extQCmd));
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    m_pDriver->SubmitAndFlushExtQueue(layouts.queueFamilyIndex);
+
+    extQCmd = VK_NULL_HANDLE;
+  }
 
   // map the buffer and copy to return buffer
   byte *pData = NULL;

@@ -89,6 +89,9 @@ void VkInitParams::Set(const VkInstanceCreateInfo *pCreateInfo, ResourceId inst)
 
 WrappedVulkan::WrappedVulkan() : m_RenderState(this, &m_CreationInfo)
 {
+  if(RenderDoc::Inst().GetCrashHandler())
+    RenderDoc::Inst().GetCrashHandler()->RegisterMemoryRegion(this, sizeof(WrappedVulkan));
+
   if(RenderDoc::Inst().IsReplayApp())
   {
     if(VkMarkerRegion::vk == NULL)
@@ -141,7 +144,6 @@ WrappedVulkan::WrappedVulkan() : m_RenderState(this, &m_CreationInfo)
   m_Device = VK_NULL_HANDLE;
   m_Queue = VK_NULL_HANDLE;
   m_QueueFamilyIdx = 0;
-  m_SupportedQueueFamily = 0;
   m_DbgMsgCallback = VK_NULL_HANDLE;
 
   m_HeaderChunk = NULL;
@@ -208,9 +210,13 @@ VkCommandBuffer WrappedVulkan::GetNextCmd()
   }
   else
   {
-    VkCommandBufferAllocateInfo cmdInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, NULL,
-                                           Unwrap(m_InternalCmds.cmdpool),
-                                           VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1};
+    VkCommandBufferAllocateInfo cmdInfo = {
+        VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        NULL,
+        Unwrap(m_InternalCmds.cmdpool),
+        VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        1,
+    };
     VkResult vkr = ObjDisp(m_Device)->AllocateCommandBuffers(Unwrap(m_Device), &cmdInfo, &ret);
 
     if(m_SetDeviceLoaderData)
@@ -337,6 +343,51 @@ void WrappedVulkan::FlushQ()
                                    m_InternalCmds.submittedcmds.end());
     m_InternalCmds.submittedcmds.clear();
   }
+}
+
+VkCommandBuffer WrappedVulkan::GetExtQueueCmd(uint32_t queueFamilyIdx)
+{
+  if(queueFamilyIdx >= m_ExternalQueues.size())
+  {
+    RDCERR("Unsupported queue family %u", queueFamilyIdx);
+    return VK_NULL_HANDLE;
+  }
+
+  VkCommandBuffer buf = m_ExternalQueues[queueFamilyIdx].buffer;
+
+  ObjDisp(buf)->ResetCommandBuffer(Unwrap(buf), 0);
+
+  return buf;
+}
+
+void WrappedVulkan::SubmitAndFlushExtQueue(uint32_t queueFamilyIdx)
+{
+  if(queueFamilyIdx >= m_ExternalQueues.size())
+  {
+    RDCERR("Unsupported queue family %u", queueFamilyIdx);
+    return;
+  }
+
+  VkCommandBuffer buf = Unwrap(m_ExternalQueues[queueFamilyIdx].buffer);
+
+  VkSubmitInfo submitInfo = {
+      VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      NULL,
+      0,
+      NULL,
+      NULL,    // wait semaphores
+      1,
+      &buf,    // command buffers
+      0,
+      NULL,    // signal semaphores
+  };
+
+  VkQueue q = m_ExternalQueues[queueFamilyIdx].queue;
+
+  VkResult vkr = ObjDisp(q)->QueueSubmit(Unwrap(q), 1, &submitInfo, VK_NULL_HANDLE);
+  RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+  ObjDisp(q)->QueueWaitIdle(Unwrap(q));
 }
 
 uint32_t WrappedVulkan::HandlePreCallback(VkCommandBuffer commandBuffer, DrawFlags type,
@@ -676,6 +727,10 @@ static const VkExtensionProperties supportedExtensions[] = {
     {
         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
         VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_SPEC_VERSION,
+    },
+    {
+        VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME,
+        VK_KHR_GET_SURFACE_CAPABILITIES_2_SPEC_VERSION,
     },
     {
         VK_KHR_MAINTENANCE1_EXTENSION_NAME, VK_KHR_MAINTENANCE1_SPEC_VERSION,
@@ -1037,6 +1092,38 @@ void WrappedVulkan::StartFrameCapture(void *dev, void *wnd)
   // and go into the frame record.
   {
     SCOPED_LOCK(m_CapTransitionLock);
+
+    // wait for all work to finish and apply a memory barrier to ensure all memory is visible
+    for(size_t i = 0; i < m_QueueFamilies.size(); i++)
+    {
+      for(uint32_t q = 0; q < m_QueueFamilyCounts[i]; q++)
+      {
+        if(m_QueueFamilies[i][q] != VK_NULL_HANDLE)
+          ObjDisp(m_QueueFamilies[i][q])->QueueWaitIdle(Unwrap(m_QueueFamilies[i][q]));
+      }
+    }
+
+    {
+      VkMemoryBarrier memBarrier = {
+          VK_STRUCTURE_TYPE_MEMORY_BARRIER, NULL, VK_ACCESS_ALL_WRITE_BITS, VK_ACCESS_ALL_READ_BITS,
+      };
+
+      VkCommandBuffer cmd = GetNextCmd();
+
+      VkResult vkr = VK_SUCCESS;
+
+      VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
+                                            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+
+      vkr = ObjDisp(cmd)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      DoPipelineBarrier(cmd, 1, &memBarrier);
+
+      vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+    }
+
     GetResourceManager()->PrepareInitialContents();
 
     RDCDEBUG("Attempting capture");
@@ -1218,6 +1305,8 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
         {imInfo.extent.width, imInfo.extent.height, 1},
     };
 
+    uint32_t swapQueueIndex = m_ImageLayouts[GetResID(backbuffer)].queueFamilyIndex;
+
     VkImageMemoryBarrier bbBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         NULL,
@@ -1225,24 +1314,41 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
         VK_ACCESS_TRANSFER_READ_BIT,
         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        0,
-        0,    // MULTIDEVICE - need to actually pick the right queue family here maybe?
+        swapQueueIndex,
+        m_QueueFamilyIdx,
         Unwrap(backbuffer),
-        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+    };
 
-    VkImageMemoryBarrier readBarrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-                                        NULL,
-                                        0,
-                                        VK_ACCESS_TRANSFER_WRITE_BIT,
-                                        VK_IMAGE_LAYOUT_UNDEFINED,
-                                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                        VK_QUEUE_FAMILY_IGNORED,
-                                        VK_QUEUE_FAMILY_IGNORED,
-                                        Unwrap(readbackIm),
-                                        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    VkImageMemoryBarrier readBarrier = {
+        VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        NULL,
+        0,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_QUEUE_FAMILY_IGNORED,
+        Unwrap(readbackIm),
+        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+    };
 
     DoPipelineBarrier(cmd, 1, &bbBarrier);
     DoPipelineBarrier(cmd, 1, &readBarrier);
+
+    if(swapQueueIndex != m_QueueFamilyIdx)
+    {
+      VkCommandBuffer extQCmd = GetExtQueueCmd(swapQueueIndex);
+
+      vkr = vt->BeginCommandBuffer(Unwrap(extQCmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      DoPipelineBarrier(extQCmd, 1, &bbBarrier);
+
+      ObjDisp(extQCmd)->EndCommandBuffer(Unwrap(extQCmd));
+
+      SubmitAndFlushExtQueue(swapQueueIndex);
+    }
 
     vt->CmdCopyImage(Unwrap(cmd), Unwrap(backbuffer), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                      Unwrap(readbackIm), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cpy);
@@ -1250,6 +1356,7 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
     // barrier to switch backbuffer back to present layout
     std::swap(bbBarrier.oldLayout, bbBarrier.newLayout);
     std::swap(bbBarrier.srcAccessMask, bbBarrier.dstAccessMask);
+    std::swap(bbBarrier.srcQueueFamilyIndex, bbBarrier.dstQueueFamilyIndex);
 
     readBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     readBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
@@ -1264,6 +1371,20 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
 
     SubmitCmds();
     FlushQ();    // need to wait so we can readback
+
+    if(swapQueueIndex != m_QueueFamilyIdx)
+    {
+      VkCommandBuffer extQCmd = GetExtQueueCmd(swapQueueIndex);
+
+      vkr = vt->BeginCommandBuffer(Unwrap(extQCmd), &beginInfo);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      DoPipelineBarrier(extQCmd, 1, &bbBarrier);
+
+      ObjDisp(extQCmd)->EndCommandBuffer(Unwrap(extQCmd));
+
+      SubmitAndFlushExtQueue(swapQueueIndex);
+    }
 
     // map memory and readback
     byte *pData = NULL;
@@ -1872,7 +1993,7 @@ ReplayStatus WrappedVulkan::ContextReplayLog(CaptureState readType, uint32_t sta
     GetFrameRecord().drawcallList = m_ParentDrawcall.Bake();
 
     DrawcallDescription *previous = NULL;
-    SetupDrawcallPointers(&m_Drawcalls, GetFrameRecord().drawcallList, NULL, previous);
+    SetupDrawcallPointers(m_Drawcalls, GetFrameRecord().drawcallList, NULL, previous);
 
     struct SortEID
     {
@@ -1891,8 +2012,8 @@ ReplayStatus WrappedVulkan::ContextReplayLog(CaptureState readType, uint32_t sta
     for(size_t i = 0; i < m_CleanupEvents.size(); i++)
       ObjDisp(GetDev())->DestroyEvent(Unwrap(GetDev()), m_CleanupEvents[i], NULL);
 
-    vkFreeCommandBuffers(GetDev(), m_InternalCmds.cmdpool, (uint32_t)m_RerecordCmdList.size(),
-                         m_RerecordCmdList.data());
+    for(const std::pair<VkCommandPool, VkCommandBuffer> &rerecord : m_RerecordCmdList)
+      vkFreeCommandBuffers(GetDev(), rerecord.first, 1, &rerecord.second);
   }
 
   m_CleanupEvents.clear();
@@ -1905,6 +2026,24 @@ ReplayStatus WrappedVulkan::ContextReplayLog(CaptureState readType, uint32_t sta
 
 void WrappedVulkan::ApplyInitialContents()
 {
+  // check that we have all external queues necessary
+  for(size_t i = 0; i < m_ExternalQueues.size(); i++)
+  {
+    // if we created a pool (so this is a queue family we're using) but
+    // didn't get a queue at all, fetch our own queue for this family
+    if(m_ExternalQueues[i].queue != VK_NULL_HANDLE || m_ExternalQueues[i].pool == VK_NULL_HANDLE)
+      continue;
+
+    VkQueue queue;
+
+    ObjDisp(m_Device)->GetDeviceQueue(Unwrap(m_Device), (uint32_t)i, 0, &queue);
+
+    GetResourceManager()->WrapResource(Unwrap(m_Device), queue);
+    GetResourceManager()->AddLiveResource(ResourceIDGen::GetNewUniqueID(), queue);
+
+    m_ExternalQueues[i].queue = queue;
+  }
+
   // add a global memory barrier to ensure all writes have finished and are synchronised
   // add memory barrier to ensure this copy completes before any subsequent work
   // this is a very blunt instrument but it ensures we don't get random artifacts around
@@ -2991,7 +3130,7 @@ void WrappedVulkan::AddUsage(VulkanDrawcallTreeNode &drawNode, vector<DebugMessa
   //////////////////////////////
   // Vertex input
 
-  if(d.flags & DrawFlags::UseIBuffer && state.ibuffer != ResourceId())
+  if(d.flags & DrawFlags::Indexed && state.ibuffer != ResourceId())
     drawNode.resourceUsage.push_back(
         std::make_pair(state.ibuffer, EventUsage(e, ResourceUsage::IndexBuffer)));
 

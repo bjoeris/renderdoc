@@ -39,8 +39,11 @@ TEMPLATE_ARRAY_DECLARE(rdcarray);
 %}
 
 %typemap(in) QWidget * {
-  $1 = QWidgetFromPy($input);
-  if($input && !$1)
+  if($input == Py_None)
+    $1 = NULL;
+  else
+    $1 = QWidgetFromPy($input);
+  if($input && $input != Py_None && !$1)
   {
     SWIG_exception_fail(SWIG_TypeError, "in method '$symname' QWidget expected for argument $argnum of type '$1_basetype'");
   }
@@ -71,7 +74,6 @@ TEMPLATE_ARRAY_DECLARE(rdcarray);
 %include <stdint.i>
 
 %include "Code/Interface/QRDInterface.h"
-%include "Code/Interface/CommonPipelineState.h"
 %include "Code/Interface/PersistantConfig.h"
 %include "Code/Interface/RemoteHost.h"
 
@@ -79,10 +81,6 @@ DOCUMENT("");
 
 TEMPLATE_ARRAY_INSTANTIATE(rdcarray, EventBookmark)
 TEMPLATE_ARRAY_INSTANTIATE(rdcarray, SPIRVDisassembler)
-TEMPLATE_ARRAY_INSTANTIATE(rdcarray, BoundVBuffer)
-TEMPLATE_ARRAY_INSTANTIATE(rdcarray, VertexInputAttribute)
-TEMPLATE_ARRAY_INSTANTIATE(rdcarray, BoundResource)
-TEMPLATE_ARRAY_INSTANTIATE(rdcarray, BoundResourceArray)
 TEMPLATE_ARRAY_INSTANTIATE(rdcarray, rdcstrpair)
 TEMPLATE_ARRAY_INSTANTIATE(rdcarray, BugReport)
 TEMPLATE_ARRAY_INSTANTIATE_PTR(rdcarray, ICaptureViewer)

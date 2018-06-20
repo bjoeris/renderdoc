@@ -418,10 +418,10 @@ public:
 
   bool Tick(int type);
 
-  const D3D11Pipe::State &GetD3D11PipelineState() { return m_D3D11PipelineState; }
-  const D3D12Pipe::State &GetD3D12PipelineState() { return m_D3D12PipelineState; }
-  const GLPipe::State &GetGLPipelineState() { return m_GLPipelineState; }
-  const VKPipe::State &GetVulkanPipelineState() { return m_VulkanPipelineState; }
+  const D3D11Pipe::State *GetD3D11PipelineState() { return &m_D3D11PipelineState; }
+  const D3D12Pipe::State *GetD3D12PipelineState() { return &m_D3D12PipelineState; }
+  const GLPipe::State *GetGLPipelineState() { return &m_GLPipelineState; }
+  const VKPipe::State *GetVulkanPipelineState() { return &m_VulkanPipelineState; }
   const SDFile &GetStructuredFile() { return m_StructuredFile; }
   IMPLEMENT_FUNCTION_PROXIED(void, FetchStructuredFile);
 
@@ -466,7 +466,7 @@ public:
   IMPLEMENT_FUNCTION_PROXIED(void, InitPostVSBuffers, uint32_t eventId);
   IMPLEMENT_FUNCTION_PROXIED(void, InitPostVSBuffers, const std::vector<uint32_t> &passEvents);
   IMPLEMENT_FUNCTION_PROXIED(MeshFormat, GetPostVSBuffers, uint32_t eventId, uint32_t instID,
-                             MeshDataStage stage);
+                             uint32_t viewID, MeshDataStage stage);
 
   IMPLEMENT_FUNCTION_PROXIED(ResourceId, RenderOverlay, ResourceId texid, CompType typeHint,
                              DebugOverlay overlay, uint32_t eventId,
@@ -648,6 +648,8 @@ private:
 
   FrameRecord m_FrameRecord;
   APIProperties m_APIProps;
+
+  std::vector<DrawcallDescription *> m_Drawcalls;
 
   SDFile m_StructuredFile;
 

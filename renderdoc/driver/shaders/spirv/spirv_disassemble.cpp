@@ -3701,6 +3701,7 @@ ShaderBuiltin BuiltInToSystemAttribute(ShaderStage stage, const spv::BuiltIn el)
     case spv::BuiltInBaseVertex: return ShaderBuiltin::BaseVertex;
     case spv::BuiltInBaseInstance: return ShaderBuiltin::BaseInstance;
     case spv::BuiltInDrawIndex: return ShaderBuiltin::DrawIndex;
+    case spv::BuiltInViewIndex: return ShaderBuiltin::ViewportIndex;
     default: break;
   }
 
@@ -4413,7 +4414,7 @@ void SPVModule::MakeReflection(ShaderStage stage, const string &entryPoint,
 
     // set something crazy so this doesn't overlap with a real buffer binding
     // also identify this as specialization constant data
-    bindmap.bindset = 123456;    // magic constants :(
+    bindmap.bindset = SpecializationConstantBindSet;
     bindmap.bind = -1;
     bindmap.arraySize = 1;
     bindmap.used = true;

@@ -163,6 +163,9 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTextureEXT(SerialiserType &ser,
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     m_Real.glNamedFramebufferTextureEXT(framebuffer.name, attachment, texture.name, level);
 
     if(IsLoading(m_State) && texture.name)
@@ -215,7 +218,7 @@ void WrappedOpenGL::glNamedFramebufferTextureEXT(GLuint framebuffer, GLenum atta
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -277,7 +280,7 @@ void WrappedOpenGL::glFramebufferTexture(GLenum target, GLenum attachment, GLuin
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -301,6 +304,9 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTexture1DEXT(SerialiserType &ser
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     m_Real.glNamedFramebufferTexture1DEXT(framebuffer.name, attachment, textarget, texture.name,
                                           level);
 
@@ -355,7 +361,7 @@ void WrappedOpenGL::glNamedFramebufferTexture1DEXT(GLuint framebuffer, GLenum at
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -419,7 +425,7 @@ void WrappedOpenGL::glFramebufferTexture1D(GLenum target, GLenum attachment, GLe
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -443,6 +449,9 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTexture2DEXT(SerialiserType &ser
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     m_Real.glNamedFramebufferTexture2DEXT(framebuffer.name, attachment, textarget, texture.name,
                                           level);
 
@@ -497,7 +506,7 @@ void WrappedOpenGL::glNamedFramebufferTexture2DEXT(GLuint framebuffer, GLenum at
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -561,7 +570,7 @@ void WrappedOpenGL::glFramebufferTexture2D(GLenum target, GLenum attachment, GLe
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -586,6 +595,9 @@ bool WrappedOpenGL::Serialise_glFramebufferTexture2DMultisampleEXT(
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     GLuint prevread = 0, prevdraw = 0;
     m_Real.glGetIntegerv(eGL_DRAW_FRAMEBUFFER_BINDING, (GLint *)&prevdraw);
     m_Real.glGetIntegerv(eGL_READ_FRAMEBUFFER_BINDING, (GLint *)&prevread);
@@ -665,7 +677,7 @@ void WrappedOpenGL::glFramebufferTexture2DMultisampleEXT(GLenum target, GLenum a
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -691,6 +703,9 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTexture3DEXT(SerialiserType &ser
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     m_Real.glNamedFramebufferTexture3DEXT(framebuffer.name, attachment, textarget, texture.name,
                                           level, zoffset);
 
@@ -747,7 +762,7 @@ void WrappedOpenGL::glNamedFramebufferTexture3DEXT(GLuint framebuffer, GLenum at
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -812,7 +827,7 @@ void WrappedOpenGL::glFramebufferTexture3D(GLenum target, GLenum attachment, GLe
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -836,6 +851,9 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferRenderbufferEXT(SerialiserType &
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     m_Real.glNamedFramebufferRenderbufferEXT(framebuffer.name, attachment, renderbuffertarget,
                                              renderbuffer.name);
 
@@ -882,7 +900,7 @@ void WrappedOpenGL::glNamedFramebufferRenderbufferEXT(GLuint framebuffer, GLenum
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(RenderbufferRes(GetCtx(), renderbuffer),
                                                         eFrameRef_Read);
@@ -937,7 +955,7 @@ void WrappedOpenGL::glFramebufferRenderbuffer(GLenum target, GLenum attachment,
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(RenderbufferRes(GetCtx(), renderbuffer),
                                                         eFrameRef_Read);
@@ -962,6 +980,9 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTextureLayerEXT(SerialiserType &
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     m_Real.glNamedFramebufferTextureLayerEXT(framebuffer.name, attachment, texture.name, level,
                                              layer);
 
@@ -1016,7 +1037,7 @@ void WrappedOpenGL::glNamedFramebufferTextureLayerEXT(GLuint framebuffer, GLenum
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -1080,7 +1101,7 @@ void WrappedOpenGL::glFramebufferTextureLayer(GLenum target, GLenum attachment, 
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -1180,7 +1201,7 @@ void WrappedOpenGL::glFramebufferTextureMultiviewOVR(GLenum target, GLenum attac
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -1279,7 +1300,7 @@ void WrappedOpenGL::glFramebufferTextureMultisampleMultiviewOVR(GLenum target, G
     }
     else
     {
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       GetResourceManager()->MarkFBOReferenced(record->Resource, eFrameRef_ReadBeforeWrite);
       GetResourceManager()->MarkResourceFrameReferenced(TextureRes(GetCtx(), texture),
                                                         eFrameRef_Read);
@@ -1300,6 +1321,9 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferParameteriEXT(SerialiserType &se
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     if(framebuffer.name)
       m_Real.glNamedFramebufferParameteriEXT(framebuffer.name, pname, param);
   }
@@ -1365,6 +1389,9 @@ bool WrappedOpenGL::Serialise_glFramebufferReadBufferEXT(SerialiserType &ser,
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     // since we are faking the default framebuffer with our own
     // to see the results, replace back/front/left/right with color attachment 0
     if(mode == eGL_BACK_LEFT || mode == eGL_BACK_RIGHT || mode == eGL_BACK ||
@@ -1387,7 +1414,7 @@ void WrappedOpenGL::glFramebufferReadBufferEXT(GLuint framebuffer, GLenum buf)
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     Serialise_glFramebufferReadBufferEXT(ser, framebuffer, buf);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
     GetResourceManager()->MarkFBOReferenced(FramebufferRes(GetCtx(), framebuffer),
                                             eFrameRef_ReadBeforeWrite);
   }
@@ -1416,7 +1443,7 @@ void WrappedOpenGL::glReadBuffer(GLenum mode)
       SCOPED_SERIALISE_CHUNK(gl_CurChunk);
       Serialise_glFramebufferReadBufferEXT(ser, readrecord ? readrecord->Resource.name : 0, mode);
 
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       if(readrecord)
         GetResourceManager()->MarkFBOReferenced(readrecord->Resource, eFrameRef_ReadBeforeWrite);
     }
@@ -1439,6 +1466,9 @@ bool WrappedOpenGL::Serialise_glBindFramebuffer(SerialiserType &ser, GLenum targ
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     m_Real.glBindFramebuffer(target, framebuffer.name);
   }
 
@@ -1455,7 +1485,7 @@ void WrappedOpenGL::glBindFramebuffer(GLenum target, GLuint framebuffer)
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     Serialise_glBindFramebuffer(ser, target, framebuffer);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
     GetResourceManager()->MarkFBOReferenced(FramebufferRes(GetCtx(), framebuffer),
                                             eFrameRef_ReadBeforeWrite);
   }
@@ -1480,6 +1510,9 @@ bool WrappedOpenGL::Serialise_glFramebufferDrawBufferEXT(SerialiserType &ser,
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     // since we are faking the default framebuffer with our own
     // to see the results, replace back/front/left/right with color attachment 0
     if(buf == eGL_BACK_LEFT || buf == eGL_BACK_RIGHT || buf == eGL_BACK || buf == eGL_FRONT_LEFT ||
@@ -1502,7 +1535,7 @@ void WrappedOpenGL::glFramebufferDrawBufferEXT(GLuint framebuffer, GLenum buf)
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     Serialise_glFramebufferDrawBufferEXT(ser, framebuffer, buf);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
     GetResourceManager()->MarkFBOReferenced(FramebufferRes(GetCtx(), framebuffer),
                                             eFrameRef_ReadBeforeWrite);
   }
@@ -1531,7 +1564,7 @@ void WrappedOpenGL::glDrawBuffer(GLenum buf)
       SCOPED_SERIALISE_CHUNK(gl_CurChunk);
       Serialise_glFramebufferDrawBufferEXT(ser, drawrecord ? drawrecord->Resource.name : 0, buf);
 
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       if(drawrecord)
         GetResourceManager()->MarkFBOReferenced(drawrecord->Resource, eFrameRef_ReadBeforeWrite);
     }
@@ -1556,6 +1589,9 @@ bool WrappedOpenGL::Serialise_glFramebufferDrawBuffersEXT(SerialiserType &ser,
 
   if(IsReplayingAndReading())
   {
+    if(framebuffer.name == 0)
+      framebuffer.name = m_FakeBB_FBO;
+
     GLenum *buffers = (GLenum *)bufs;
 
     for(GLsizei i = 0; i < n; i++)
@@ -1583,7 +1619,7 @@ void WrappedOpenGL::glFramebufferDrawBuffersEXT(GLuint framebuffer, GLsizei n, c
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     Serialise_glFramebufferDrawBuffersEXT(ser, framebuffer, n, bufs);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
     GetResourceManager()->MarkFBOReferenced(FramebufferRes(GetCtx(), framebuffer),
                                             eFrameRef_ReadBeforeWrite);
   }
@@ -1615,7 +1651,7 @@ void WrappedOpenGL::glDrawBuffers(GLsizei n, const GLenum *bufs)
       else
         Serialise_glFramebufferDrawBuffersEXT(ser, 0, n, bufs);
 
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
       if(drawrecord)
         GetResourceManager()->MarkFBOReferenced(drawrecord->Resource, eFrameRef_ReadBeforeWrite);
     }
@@ -1768,6 +1804,10 @@ bool WrappedOpenGL::Serialise_glBlitNamedFramebuffer(SerialiserType &ser,
 
   if(IsReplayingAndReading())
   {
+    if(readFramebuffer.name == 0)
+      readFramebuffer.name = m_FakeBB_FBO;
+    if(drawFramebuffer.name == 0)
+      drawFramebuffer.name = m_FakeBB_FBO;
     // use ARB_direct_state_access functions here as we use EXT_direct_state_access elsewhere. If
     // we are running without ARB_dsa support, these functions are emulated in the obvious way. This
     // is necessary since these functions can be serialised even if ARB_dsa was not used originally,
@@ -1898,7 +1938,7 @@ void WrappedOpenGL::glBlitNamedFramebuffer(GLuint readFramebuffer, GLuint drawFr
     Serialise_glBlitNamedFramebuffer(ser, readFramebuffer, drawFramebuffer, srcX0, srcY0, srcX1,
                                      srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
     GetResourceManager()->MarkFBOReferenced(FramebufferRes(GetCtx(), readFramebuffer),
                                             eFrameRef_ReadBeforeWrite);
     GetResourceManager()->MarkFBOReferenced(FramebufferRes(GetCtx(), drawFramebuffer),
@@ -1929,7 +1969,7 @@ void WrappedOpenGL::glBlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLi
     Serialise_glBlitNamedFramebuffer(ser, readFramebuffer, drawFramebuffer, srcX0, srcY0, srcX1,
                                      srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
     GetResourceManager()->MarkFBOReferenced(FramebufferRes(GetCtx(), readFramebuffer),
                                             eFrameRef_ReadBeforeWrite);
     GetResourceManager()->MarkFBOReferenced(FramebufferRes(GetCtx(), drawFramebuffer),
@@ -2171,8 +2211,6 @@ bool WrappedOpenGL::Serialise_glNamedRenderbufferStorageEXT(SerialiserType &ser,
 void WrappedOpenGL::glNamedRenderbufferStorageEXT(GLuint renderbuffer, GLenum internalformat,
                                                   GLsizei width, GLsizei height)
 {
-  internalformat = GetSizedFormat(m_Real, eGL_RENDERBUFFER, internalformat);
-
   SERIALISE_TIME_CALL(
       m_Real.glNamedRenderbufferStorageEXT(renderbuffer, internalformat, width, height));
 
@@ -2209,8 +2247,6 @@ void WrappedOpenGL::glNamedRenderbufferStorageEXT(GLuint renderbuffer, GLenum in
 void WrappedOpenGL::glRenderbufferStorage(GLenum target, GLenum internalformat, GLsizei width,
                                           GLsizei height)
 {
-  internalformat = GetSizedFormat(m_Real, eGL_RENDERBUFFER, internalformat);
-
   SERIALISE_TIME_CALL(m_Real.glRenderbufferStorage(target, internalformat, width, height));
 
   ResourceId rb = GetCtxData().m_Renderbuffer;
@@ -2308,8 +2344,6 @@ void WrappedOpenGL::glNamedRenderbufferStorageMultisampleEXT(GLuint renderbuffer
                                                              GLenum internalformat, GLsizei width,
                                                              GLsizei height)
 {
-  internalformat = GetSizedFormat(m_Real, eGL_RENDERBUFFER, internalformat);
-
   SERIALISE_TIME_CALL(m_Real.glNamedRenderbufferStorageMultisampleEXT(
       renderbuffer, samples, internalformat, width, height));
 
@@ -2347,8 +2381,6 @@ void WrappedOpenGL::glRenderbufferStorageMultisample(GLenum target, GLsizei samp
                                                      GLenum internalformat, GLsizei width,
                                                      GLsizei height)
 {
-  internalformat = GetSizedFormat(m_Real, eGL_RENDERBUFFER, internalformat);
-
   SERIALISE_TIME_CALL(
       m_Real.glRenderbufferStorageMultisample(target, samples, internalformat, width, height));
 

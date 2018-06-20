@@ -97,10 +97,14 @@ void D3D11Replay::ClearPostVSCache()
   m_PostVSData.clear();
 }
 
-MeshFormat D3D11Replay::GetPostVSBuffers(uint32_t eventId, uint32_t instID, MeshDataStage stage)
+MeshFormat D3D11Replay::GetPostVSBuffers(uint32_t eventId, uint32_t instID, uint32_t viewID,
+                                         MeshDataStage stage)
 {
   D3D11PostVSData postvs;
   RDCEraseEl(postvs);
+
+  // no multiview support
+  (void)viewID;
 
   if(m_PostVSData.find(eventId) != m_PostVSData.end())
     postvs = m_PostVSData[eventId];
@@ -307,7 +311,7 @@ void D3D11Replay::InitPostVSBuffers(uint32_t eventId)
 
     ID3D11Buffer *origBuf = idxBuf;
 
-    if(!(drawcall->flags & DrawFlags::UseIBuffer))
+    if(!(drawcall->flags & DrawFlags::Indexed))
     {
       m_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
 
@@ -617,7 +621,7 @@ void D3D11Replay::InitPostVSBuffers(uint32_t eventId)
     m_PostVSData[eventId].vsout.nearPlane = nearp;
     m_PostVSData[eventId].vsout.farPlane = farp;
 
-    m_PostVSData[eventId].vsout.useIndices = bool(drawcall->flags & DrawFlags::UseIBuffer);
+    m_PostVSData[eventId].vsout.useIndices = bool(drawcall->flags & DrawFlags::Indexed);
     m_PostVSData[eventId].vsout.numVerts = drawcall->numIndices;
 
     m_PostVSData[eventId].vsout.instStride = 0;
@@ -731,7 +735,7 @@ void D3D11Replay::InitPostVSBuffers(uint32_t eventId)
 
       if(drawcall->flags & DrawFlags::Instanced)
       {
-        if(drawcall->flags & DrawFlags::UseIBuffer)
+        if(drawcall->flags & DrawFlags::Indexed)
         {
           m_pImmediateContext->DrawIndexedInstanced(drawcall->numIndices, drawcall->numInstances,
                                                     drawcall->indexOffset, drawcall->baseVertex,
@@ -753,7 +757,7 @@ void D3D11Replay::InitPostVSBuffers(uint32_t eventId)
         }
         else
         {
-          if(drawcall->flags & DrawFlags::UseIBuffer)
+          if(drawcall->flags & DrawFlags::Indexed)
           {
             m_pImmediateContext->DrawIndexed(drawcall->numIndices, drawcall->indexOffset,
                                              drawcall->baseVertex);
@@ -813,7 +817,7 @@ void D3D11Replay::InitPostVSBuffers(uint32_t eventId)
       // difference how much each instance wrote.
       for(uint32_t inst = 1; inst <= drawcall->numInstances; inst++)
       {
-        if(drawcall->flags & DrawFlags::UseIBuffer)
+        if(drawcall->flags & DrawFlags::Indexed)
         {
           m_pImmediateContext->SOSetTargets(1, &m_SOBuffer, &offset);
           m_pImmediateContext->Begin(m_SOStatsQueries[inst - 1]);

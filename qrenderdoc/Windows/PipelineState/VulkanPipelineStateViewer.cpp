@@ -395,7 +395,7 @@ void VulkanPipelineStateViewer::setViewDetails(RDTreeWidgetItem *node, const bin
   bool viewdetails = false;
 
   {
-    for(const VKPipe::ImageData &im : m_Ctx.CurVulkanPipelineState().images)
+    for(const VKPipe::ImageData &im : m_Ctx.CurVulkanPipelineState()->images)
     {
       if(im.resourceId == tex->resourceId)
       {
@@ -508,23 +508,23 @@ const VKPipe::Shader *VulkanPipelineStateViewer::stageForSender(QWidget *widget)
   while(widget)
   {
     if(widget == ui->stagesTabs->widget(0))
-      return &m_Ctx.CurVulkanPipelineState().vertexShader;
+      return &m_Ctx.CurVulkanPipelineState()->vertexShader;
     if(widget == ui->stagesTabs->widget(1))
-      return &m_Ctx.CurVulkanPipelineState().vertexShader;
+      return &m_Ctx.CurVulkanPipelineState()->vertexShader;
     if(widget == ui->stagesTabs->widget(2))
-      return &m_Ctx.CurVulkanPipelineState().tessControlShader;
+      return &m_Ctx.CurVulkanPipelineState()->tessControlShader;
     if(widget == ui->stagesTabs->widget(3))
-      return &m_Ctx.CurVulkanPipelineState().tessEvalShader;
+      return &m_Ctx.CurVulkanPipelineState()->tessEvalShader;
     if(widget == ui->stagesTabs->widget(4))
-      return &m_Ctx.CurVulkanPipelineState().geometryShader;
+      return &m_Ctx.CurVulkanPipelineState()->geometryShader;
     if(widget == ui->stagesTabs->widget(5))
-      return &m_Ctx.CurVulkanPipelineState().fragmentShader;
+      return &m_Ctx.CurVulkanPipelineState()->fragmentShader;
     if(widget == ui->stagesTabs->widget(6))
-      return &m_Ctx.CurVulkanPipelineState().fragmentShader;
+      return &m_Ctx.CurVulkanPipelineState()->fragmentShader;
     if(widget == ui->stagesTabs->widget(7))
-      return &m_Ctx.CurVulkanPipelineState().fragmentShader;
+      return &m_Ctx.CurVulkanPipelineState()->fragmentShader;
     if(widget == ui->stagesTabs->widget(8))
-      return &m_Ctx.CurVulkanPipelineState().computeShader;
+      return &m_Ctx.CurVulkanPipelineState()->computeShader;
 
     widget = widget->parentWidget();
   }
@@ -576,6 +576,7 @@ void VulkanPipelineStateViewer::clearState()
 
   ui->conservativeRaster->setText(tr("Disabled"));
   ui->overestimationSize->setText(lit("0.0"));
+  ui->multiview->setText(tr("Disabled"));
 
   ui->sampleCount->setText(lit("1"));
   ui->sampleShading->setPixmap(tick);
@@ -599,8 +600,8 @@ void VulkanPipelineStateViewer::clearState()
   ui->depthFunc->setText(lit("GREATER_EQUAL"));
   ui->depthWrite->setPixmap(tick);
 
-  ui->depthBounds->setText(lit("0.0-1.0"));
   ui->depthBounds->setPixmap(QPixmap());
+  ui->depthBounds->setText(lit("0.0-1.0"));
 
   ui->stencils->clear();
 }
@@ -1496,7 +1497,7 @@ void VulkanPipelineStateViewer::setState()
 
   m_CombinedImageSamplers.clear();
 
-  const VKPipe::State &state = m_Ctx.CurVulkanPipelineState();
+  const VKPipe::State &state = *m_Ctx.CurVulkanPipelineState();
   const DrawcallDescription *draw = m_Ctx.CurDrawcall();
 
   bool showDisabled = ui->showDisabled->isChecked();
@@ -1578,7 +1579,7 @@ void VulkanPipelineStateViewer::setState()
   ui->viBuffers->beginUpdate();
   ui->viBuffers->clear();
 
-  bool ibufferUsed = draw != NULL && (draw->flags & DrawFlags::UseIBuffer);
+  bool ibufferUsed = draw != NULL && (draw->flags & DrawFlags::Indexed);
 
   if(state.inputAssembly.indexBuffer.resourceId != ResourceId())
   {
@@ -1799,6 +1800,22 @@ void VulkanPipelineStateViewer::setState()
   ui->overestimationSize->setText(
       Formatter::Format(state.rasterizer.extraPrimitiveOverestimationSize));
 
+  if(state.currentPass.renderpass.multiviews.isEmpty())
+  {
+    ui->multiview->setText(tr("Disabled"));
+  }
+  else
+  {
+    QString views = tr("Views: ");
+    for(int i = 0; i < state.currentPass.renderpass.multiviews.count(); i++)
+    {
+      if(i > 0)
+        views += lit(", ");
+      views += QString::number(state.currentPass.renderpass.multiviews[i]);
+    }
+    ui->multiview->setText(views);
+  }
+
   ui->sampleCount->setText(QString::number(state.multisample.rasterSamples));
   ui->sampleShading->setPixmap(state.multisample.sampleShadingEnable ? tick : cross);
   ui->minSampleShading->setText(Formatter::Format(state.multisample.minSampleShading));
@@ -1995,9 +2012,9 @@ void VulkanPipelineStateViewer::setState()
 
   if(state.depthStencil.depthBoundsEnable)
   {
+    ui->depthBounds->setPixmap(QPixmap());
     ui->depthBounds->setText(Formatter::Format(state.depthStencil.minDepthBounds) + lit("-") +
                              Formatter::Format(state.depthStencil.maxDepthBounds));
-    ui->depthBounds->setPixmap(QPixmap());
   }
   else
   {
@@ -2226,7 +2243,7 @@ void VulkanPipelineStateViewer::highlightIABind(int slot)
 {
   int idx = ((slot + 1) * 21) % 32;    // space neighbouring colours reasonably distinctly
 
-  const VKPipe::VertexInput &VI = m_Ctx.CurVulkanPipelineState().vertexInput;
+  const VKPipe::VertexInput &VI = m_Ctx.CurVulkanPipelineState()->vertexInput;
 
   QColor col = QColor::fromHslF(float(idx) / 32.0f, 1.0f,
                                 qBound(0.05, palette().color(QPalette::Base).lightnessF(), 0.95));
@@ -2275,7 +2292,7 @@ void VulkanPipelineStateViewer::on_viAttrs_mouseMove(QMouseEvent *e)
 
   vertex_leave(NULL);
 
-  const VKPipe::VertexInput &VI = m_Ctx.CurVulkanPipelineState().vertexInput;
+  const VKPipe::VertexInput &VI = m_Ctx.CurVulkanPipelineState()->vertexInput;
 
   if(idx.isValid())
   {
@@ -2348,8 +2365,8 @@ void VulkanPipelineStateViewer::shaderView_clicked()
   ShaderReflection *shaderDetails = stage->reflection;
 
   ResourceId pipe = stage->stage == ShaderStage::Compute
-                        ? m_Ctx.CurVulkanPipelineState().compute.pipelineResourceId
-                        : m_Ctx.CurVulkanPipelineState().graphics.pipelineResourceId;
+                        ? m_Ctx.CurVulkanPipelineState()->compute.pipelineResourceId
+                        : m_Ctx.CurVulkanPipelineState()->graphics.pipelineResourceId;
 
   IShaderViewer *shad = m_Ctx.ViewShader(shaderDetails, pipe);
 
@@ -2367,8 +2384,8 @@ void VulkanPipelineStateViewer::shaderEdit_clicked()
   const ShaderReflection *shaderDetails = stage->reflection;
 
   ResourceId pipe = stage->stage == ShaderStage::Compute
-                        ? m_Ctx.CurVulkanPipelineState().compute.pipelineResourceId
-                        : m_Ctx.CurVulkanPipelineState().graphics.pipelineResourceId;
+                        ? m_Ctx.CurVulkanPipelineState()->compute.pipelineResourceId
+                        : m_Ctx.CurVulkanPipelineState()->graphics.pipelineResourceId;
 
   if(!shaderDetails)
     return;
@@ -2526,7 +2543,7 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
 
   m_Common.exportHTMLTable(xml, {tr("Primitive Topology"), tr("Tessellation Control Points")},
                            {ToQStr(m_Ctx.CurDrawcall()->topology),
-                            m_Ctx.CurVulkanPipelineState().tessellation.numControlPoints});
+                            m_Ctx.CurVulkanPipelineState()->tessellation.numControlPoints});
 }
 
 void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::Shader &sh)
@@ -2565,8 +2582,8 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
   }
 
   const VKPipe::Pipeline &pipeline =
-      (sh.stage == ShaderStage::Compute ? m_Ctx.CurVulkanPipelineState().compute
-                                        : m_Ctx.CurVulkanPipelineState().graphics);
+      (sh.stage == ShaderStage::Compute ? m_Ctx.CurVulkanPipelineState()->compute
+                                        : m_Ctx.CurVulkanPipelineState()->graphics);
 
   if(shaderDetails && !shaderDetails->constantBlocks.isEmpty())
   {
@@ -2891,7 +2908,7 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
          Formatter::Format(rs.slopeScaledDepthBias), Formatter::Format(rs.lineWidth)});
   }
 
-  const VKPipe::MultiSample &msaa = m_Ctx.CurVulkanPipelineState().multisample;
+  const VKPipe::MultiSample &msaa = m_Ctx.CurVulkanPipelineState()->multisample;
 
   {
     xml.writeStartElement(lit("h3"));
@@ -2905,7 +2922,7 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
          Formatter::Format(msaa.minSampleShading), Formatter::Format(msaa.sampleMask, true)});
   }
 
-  const VKPipe::ViewState &vp = m_Ctx.CurVulkanPipelineState().viewportScissor;
+  const VKPipe::ViewState &vp = m_Ctx.CurVulkanPipelineState()->viewportScissor;
 
   {
     xml.writeStartElement(lit("h3"));
@@ -3188,37 +3205,37 @@ void VulkanPipelineStateViewer::on_exportHTML_clicked()
           xml.writeStartElement(lit("h2"));
           xml.writeCharacters(tr("Input Assembly"));
           xml.writeEndElement();
-          exportHTML(xml, m_Ctx.CurVulkanPipelineState().inputAssembly);
+          exportHTML(xml, m_Ctx.CurVulkanPipelineState()->inputAssembly);
 
           xml.writeStartElement(lit("h2"));
           xml.writeCharacters(tr("Vertex Input"));
           xml.writeEndElement();
-          exportHTML(xml, m_Ctx.CurVulkanPipelineState().vertexInput);
+          exportHTML(xml, m_Ctx.CurVulkanPipelineState()->vertexInput);
           break;
-        case 1: exportHTML(xml, m_Ctx.CurVulkanPipelineState().vertexShader); break;
-        case 2: exportHTML(xml, m_Ctx.CurVulkanPipelineState().tessControlShader); break;
-        case 3: exportHTML(xml, m_Ctx.CurVulkanPipelineState().tessEvalShader); break;
-        case 4: exportHTML(xml, m_Ctx.CurVulkanPipelineState().geometryShader); break;
-        case 5: exportHTML(xml, m_Ctx.CurVulkanPipelineState().rasterizer); break;
-        case 6: exportHTML(xml, m_Ctx.CurVulkanPipelineState().fragmentShader); break;
+        case 1: exportHTML(xml, m_Ctx.CurVulkanPipelineState()->vertexShader); break;
+        case 2: exportHTML(xml, m_Ctx.CurVulkanPipelineState()->tessControlShader); break;
+        case 3: exportHTML(xml, m_Ctx.CurVulkanPipelineState()->tessEvalShader); break;
+        case 4: exportHTML(xml, m_Ctx.CurVulkanPipelineState()->geometryShader); break;
+        case 5: exportHTML(xml, m_Ctx.CurVulkanPipelineState()->rasterizer); break;
+        case 6: exportHTML(xml, m_Ctx.CurVulkanPipelineState()->fragmentShader); break;
         case 7:
           // FB
           xml.writeStartElement(lit("h2"));
           xml.writeCharacters(tr("Color Blend"));
           xml.writeEndElement();
-          exportHTML(xml, m_Ctx.CurVulkanPipelineState().colorBlend);
+          exportHTML(xml, m_Ctx.CurVulkanPipelineState()->colorBlend);
 
           xml.writeStartElement(lit("h2"));
           xml.writeCharacters(tr("Depth Stencil"));
           xml.writeEndElement();
-          exportHTML(xml, m_Ctx.CurVulkanPipelineState().depthStencil);
+          exportHTML(xml, m_Ctx.CurVulkanPipelineState()->depthStencil);
 
           xml.writeStartElement(lit("h2"));
           xml.writeCharacters(tr("Current Pass"));
           xml.writeEndElement();
-          exportHTML(xml, m_Ctx.CurVulkanPipelineState().currentPass);
+          exportHTML(xml, m_Ctx.CurVulkanPipelineState()->currentPass);
           break;
-        case 8: exportHTML(xml, m_Ctx.CurVulkanPipelineState().computeShader); break;
+        case 8: exportHTML(xml, m_Ctx.CurVulkanPipelineState()->computeShader); break;
       }
 
       xml.writeEndElement();

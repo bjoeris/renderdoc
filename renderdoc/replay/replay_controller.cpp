@@ -178,6 +178,9 @@ ReplayController::ReplayController()
   m_D3D12PipelineState = NULL;
   m_GLPipelineState = NULL;
   m_VulkanPipelineState = NULL;
+
+  if(RenderDoc::Inst().GetCrashHandler())
+    RenderDoc::Inst().GetCrashHandler()->RegisterMemoryRegion(this, sizeof(ReplayController));
 }
 
 ReplayController::~ReplayController()
@@ -221,24 +224,29 @@ void ReplayController::SetFrameEvent(uint32_t eventId, bool force)
   }
 }
 
-const D3D11Pipe::State &ReplayController::GetD3D11PipelineState()
+const D3D11Pipe::State *ReplayController::GetD3D11PipelineState()
 {
-  return *m_D3D11PipelineState;
+  return m_D3D11PipelineState;
 }
 
-const D3D12Pipe::State &ReplayController::GetD3D12PipelineState()
+const D3D12Pipe::State *ReplayController::GetD3D12PipelineState()
 {
-  return *m_D3D12PipelineState;
+  return m_D3D12PipelineState;
 }
 
-const GLPipe::State &ReplayController::GetGLPipelineState()
+const GLPipe::State *ReplayController::GetGLPipelineState()
 {
-  return *m_GLPipelineState;
+  return m_GLPipelineState;
 }
 
-const VKPipe::State &ReplayController::GetVulkanPipelineState()
+const VKPipe::State *ReplayController::GetVulkanPipelineState()
 {
-  return *m_VulkanPipelineState;
+  return m_VulkanPipelineState;
+}
+
+const PipeState &ReplayController::GetPipelineState()
+{
+  return m_PipeState;
 }
 
 rdcarray<rdcstr> ReplayController::GetDisassemblyTargets()
@@ -285,9 +293,216 @@ DrawcallDescription *ReplayController::GetDrawcallByEID(uint32_t eventId)
   return m_Drawcalls[eventId];
 }
 
-rdcarray<DrawcallDescription> ReplayController::GetDrawcalls()
+const rdcarray<DrawcallDescription> &ReplayController::GetDrawcalls()
 {
   return m_FrameRecord.drawcallList;
+}
+
+bool ReplayController::ContainsMarker(const rdcarray<DrawcallDescription> &draws)
+{
+  bool ret = false;
+
+  for(const DrawcallDescription &d : draws)
+  {
+    ret |= (d.flags & DrawFlags::PushMarker) &&
+           !(d.flags & (DrawFlags::CmdList | DrawFlags::MultiDraw)) && !d.children.empty();
+    ret |= ContainsMarker(d.children);
+
+    if(ret)
+      break;
+  }
+
+  return ret;
+}
+
+bool ReplayController::PassEquivalent(const DrawcallDescription &a, const DrawcallDescription &b)
+{
+  // executing command lists can have children
+  if(!a.children.empty() || !b.children.empty())
+    return false;
+
+  // don't group draws and compute executes
+  if((a.flags & DrawFlags::Dispatch) != (b.flags & DrawFlags::Dispatch))
+    return false;
+
+  // don't group present with anything
+  if((a.flags & DrawFlags::Present) != (b.flags & DrawFlags::Present))
+    return false;
+
+  // don't group things with different depth outputs
+  if(a.depthOut != b.depthOut)
+    return false;
+
+  int numAOuts = 0, numBOuts = 0;
+  for(int i = 0; i < 8; i++)
+  {
+    if(a.outputs[i] != ResourceId())
+      numAOuts++;
+    if(b.outputs[i] != ResourceId())
+      numBOuts++;
+  }
+
+  int numSame = 0;
+
+  if(a.depthOut != ResourceId())
+  {
+    numAOuts++;
+    numBOuts++;
+    numSame++;
+  }
+
+  for(int i = 0; i < 8; i++)
+  {
+    if(a.outputs[i] != ResourceId())
+    {
+      for(int j = 0; j < 8; j++)
+      {
+        if(a.outputs[i] == b.outputs[j])
+        {
+          numSame++;
+          break;
+        }
+      }
+    }
+    else if(b.outputs[i] != ResourceId())
+    {
+      for(int j = 0; j < 8; j++)
+      {
+        if(a.outputs[j] == b.outputs[i])
+        {
+          numSame++;
+          break;
+        }
+      }
+    }
+  }
+
+  // use a kind of heuristic to group together passes where the outputs are similar enough.
+  // could be useful for example if you're rendering to a gbuffer and sometimes you render
+  // without one target, but the draws are still batched up.
+  if(numSame > RDCMAX(numAOuts, numBOuts) / 2 && RDCMAX(numAOuts, numBOuts) > 1)
+    return true;
+
+  if(numSame == RDCMAX(numAOuts, numBOuts))
+    return true;
+
+  return false;
+}
+
+void ReplayController::AddFakeMarkers()
+{
+  rdcarray<DrawcallDescription> &draws = m_FrameRecord.drawcallList;
+
+  if(ContainsMarker(draws))
+    return;
+
+  std::vector<DrawcallDescription> ret;
+
+  int depthpassID = 1;
+  int copypassID = 1;
+  int computepassID = 1;
+  int passID = 1;
+
+  int start = 0;
+  int refdraw = 0;
+
+  DrawFlags drawFlags = DrawFlags::Copy | DrawFlags::Resolve | DrawFlags::SetMarker |
+                        DrawFlags::APICalls | DrawFlags::CmdList;
+
+  for(int32_t i = 1; i < draws.count(); i++)
+  {
+    if(draws[refdraw].flags & drawFlags)
+    {
+      refdraw = i;
+      continue;
+    }
+
+    if(draws[i].flags & drawFlags)
+      continue;
+
+    if(PassEquivalent(draws[i], draws[refdraw]))
+      continue;
+
+    int end = i - 1;
+
+    if(end - start < 2 || !draws[i].children.empty() || !draws[refdraw].children.empty())
+    {
+      for(int j = start; j <= end; j++)
+        ret.push_back(draws[j]);
+
+      start = i;
+      refdraw = i;
+      continue;
+    }
+
+    int minOutCount = 100;
+    int maxOutCount = 0;
+    bool copyOnly = true;
+
+    for(int j = start; j <= end; j++)
+    {
+      int outCount = 0;
+
+      if(!(draws[j].flags & (DrawFlags::Copy | DrawFlags::Resolve | DrawFlags::Clear)))
+        copyOnly = false;
+
+      for(ResourceId o : draws[j].outputs)
+        if(o != ResourceId())
+          outCount++;
+      minOutCount = RDCMIN(minOutCount, outCount);
+      maxOutCount = RDCMAX(maxOutCount, outCount);
+    }
+
+    DrawcallDescription mark;
+
+    mark.eventId = draws[start].eventId;
+    mark.drawcallId = draws[start].drawcallId;
+
+    mark.flags = DrawFlags::PushMarker;
+    memcpy(mark.outputs, draws[end].outputs, sizeof(mark.outputs));
+    mark.depthOut = draws[end].depthOut;
+
+    mark.name = "Guessed Pass";
+
+    minOutCount = RDCMAX(1, minOutCount);
+
+    const char *targets = draws[end].depthOut == ResourceId() ? "Targets" : "Targets + Depth";
+
+    if(copyOnly)
+      mark.name = StringFormat::Fmt("Copy/Clear Pass #%d", copypassID++);
+    else if(draws[refdraw].flags & DrawFlags::Dispatch)
+      mark.name = StringFormat::Fmt("Compute Pass #%d", computepassID++);
+    else if(maxOutCount == 0)
+      mark.name = StringFormat::Fmt("Depth-only Pass #%d", depthpassID++);
+    else if(minOutCount == maxOutCount)
+      mark.name = StringFormat::Fmt("Colour Pass #%d (%d %s)", passID++, minOutCount, targets);
+    else
+      mark.name = StringFormat::Fmt("Colour Pass #%d (%d-%d %s)", passID++, minOutCount,
+                                    maxOutCount, targets);
+
+    mark.children.resize(end - start + 1);
+
+    for(int j = start; j <= end; j++)
+      mark.children[j - start] = draws[j];
+
+    ret.push_back(mark);
+
+    start = i;
+    refdraw = i;
+  }
+
+  if(start < draws.count())
+  {
+    for(int j = start; j < draws.count(); j++)
+      ret.push_back(draws[j]);
+  }
+
+  m_FrameRecord.drawcallList = ret;
+
+  // re-configure the previous/next pointeres
+  DrawcallDescription *previous = NULL;
+  m_Drawcalls.clear();
+  SetupDrawcallPointers(m_Drawcalls, m_FrameRecord.drawcallList, NULL, previous);
 }
 
 rdcarray<CounterResult> ReplayController::FetchCounters(const rdcarray<GPUCounter> &counters)
@@ -345,7 +560,7 @@ rdcarray<EventUsage> ReplayController::GetUsage(ResourceId id)
   return m_pDevice->GetUsage(id);
 }
 
-MeshFormat ReplayController::GetPostVSData(uint32_t instID, MeshDataStage stage)
+MeshFormat ReplayController::GetPostVSData(uint32_t instID, uint32_t viewID, MeshDataStage stage)
 {
   DrawcallDescription *draw = GetDrawcallByEID(m_EventID);
 
@@ -359,7 +574,7 @@ MeshFormat ReplayController::GetPostVSData(uint32_t instID, MeshDataStage stage)
 
   m_pDevice->InitPostVSBuffers(draw->eventId);
 
-  return m_pDevice->GetPostVSBuffers(draw->eventId, instID, stage);
+  return m_pDevice->GetPostVSBuffers(draw->eventId, instID, viewID, stage);
 }
 
 bytebuf ReplayController::GetBufferData(ResourceId buff, uint64_t offset, uint64_t len)
@@ -1713,7 +1928,8 @@ ReplayStatus ReplayController::PostCreateInit(IReplayDriver *device, RDCFile *rd
     return ReplayStatus::APIReplayFailed;
 
   DrawcallDescription *previous = NULL;
-  SetupDrawcallPointers(&m_Drawcalls, m_FrameRecord.drawcallList, NULL, previous);
+  m_Drawcalls.clear();
+  SetupDrawcallPointers(m_Drawcalls, m_FrameRecord.drawcallList, NULL, previous);
 
   return ReplayStatus::Succeeded;
 }
@@ -1732,8 +1948,11 @@ void ReplayController::FetchPipelineState()
 {
   m_pDevice->SavePipelineState();
 
-  m_D3D11PipelineState = &m_pDevice->GetD3D11PipelineState();
-  m_D3D12PipelineState = &m_pDevice->GetD3D12PipelineState();
-  m_GLPipelineState = &m_pDevice->GetGLPipelineState();
-  m_VulkanPipelineState = &m_pDevice->GetVulkanPipelineState();
+  m_D3D11PipelineState = m_pDevice->GetD3D11PipelineState();
+  m_D3D12PipelineState = m_pDevice->GetD3D12PipelineState();
+  m_GLPipelineState = m_pDevice->GetGLPipelineState();
+  m_VulkanPipelineState = m_pDevice->GetVulkanPipelineState();
+
+  m_PipeState.SetStates(m_APIProps, m_D3D11PipelineState, m_D3D12PipelineState, m_GLPipelineState,
+                        m_VulkanPipelineState);
 }

@@ -140,6 +140,8 @@ struct VulkanPostVSData
     uint32_t vertStride;
     uint32_t instStride;
 
+    uint32_t numViews;
+
     bool useIndices;
     ResourceId idxBuf;
     VkDeviceSize idxOffset;
@@ -208,10 +210,10 @@ public:
   vector<DebugMessage> GetDebugMessages();
 
   void SavePipelineState();
-  const D3D11Pipe::State &GetD3D11PipelineState() { return m_D3D11State; }
-  const D3D12Pipe::State &GetD3D12PipelineState() { return m_D3D12State; }
-  const GLPipe::State &GetGLPipelineState() { return m_GLState; }
-  const VKPipe::State &GetVulkanPipelineState() { return m_VulkanPipelineState; }
+  const D3D11Pipe::State *GetD3D11PipelineState() { return NULL; }
+  const D3D12Pipe::State *GetD3D12PipelineState() { return NULL; }
+  const GLPipe::State *GetGLPipelineState() { return NULL; }
+  const VKPipe::State *GetVulkanPipelineState() { return &m_VulkanPipelineState; }
   void FreeTargetResource(ResourceId id);
 
   ReplayStatus ReadLogInitialisation(RDCFile *rdc, bool storeStructuredBuffers);
@@ -251,7 +253,8 @@ public:
   void AliasPostVSBuffers(uint32_t eventId, uint32_t alias) { m_PostVSAlias[alias] = eventId; }
   void ClearPostVSCache();
 
-  MeshFormat GetPostVSBuffers(uint32_t eventId, uint32_t instID, MeshDataStage stage);
+  MeshFormat GetPostVSBuffers(uint32_t eventId, uint32_t instID, uint32_t viewID,
+                              MeshDataStage stage);
 
   void GetBufferData(ResourceId buff, uint64_t offset, uint64_t len, bytebuf &retData);
   void GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
@@ -327,9 +330,6 @@ private:
 
   void CreateTexImageView(VkImageAspectFlags aspectFlags, VkImage liveIm,
                           VulkanCreationInfo::Image &iminfo);
-
-  void FillCBufferVariables(rdcarray<ShaderConstant>, vector<ShaderVariable> &outvars,
-                            const bytebuf &data, size_t baseOffset);
 
   VulkanDebugManager *GetDebugManager();
   VulkanResourceManager *GetResourceManager();
@@ -578,9 +578,6 @@ private:
   std::map<ResourceId, size_t> m_ResourceIdx;
 
   VKPipe::State m_VulkanPipelineState;
-  D3D11Pipe::State m_D3D11State;
-  D3D12Pipe::State m_D3D12State;
-  GLPipe::State m_GLState;
 
   void FillTimersAMD(uint32_t *eventStartID, uint32_t *sampleIndex, vector<uint32_t> *eventIDs);
 

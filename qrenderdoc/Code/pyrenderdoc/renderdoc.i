@@ -192,6 +192,7 @@ TEMPLATE_ARRAY_DECLARE(rdcarray);
 %include "replay_enums.h"
 %include "shader_types.h"
 %include "vk_pipestate.h"
+%include "pipestate.h"
 
 %feature("docstring") "";
 
@@ -201,6 +202,29 @@ TEMPLATE_ARRAY_DECLARE(rdcarray);
   %rename("%s") append;
   %rename("%s") clear;
   %rename("%s") count;
+}
+
+%extend SDObject {
+  %feature("docstring") R"(Interprets the object as an integer and returns its value.
+Invalid if the object is not actually an integer.
+)";
+  PyObject *AsInt()
+  {
+    if($self->type.basetype == SDBasic::UnsignedInteger)
+      return ConvertToPy($self->data.basic.u);
+    else
+      return ConvertToPy($self->data.basic.i);
+  }
+  
+  %feature("docstring") R"(Interprets the object as a floating point number and returns its value.
+Invalid if the object is not actually a floating point number.
+)";
+  PyObject *AsFloat() { return ConvertToPy($self->data.basic.d); }
+  
+  %feature("docstring") R"(Interprets the object as a string and returns its value.
+Invalid if the object is not actually a string.
+)";
+  PyObject *AsString() { return ConvertToPy($self->data.str); }
 }
 
 // add python array members that aren't in slots
@@ -246,6 +270,10 @@ TEMPLATE_ARRAY_INSTANTIATE(rdcarray, ShaderEntryPoint)
 TEMPLATE_ARRAY_INSTANTIATE(rdcarray, Viewport)
 TEMPLATE_ARRAY_INSTANTIATE(rdcarray, Scissor)
 TEMPLATE_ARRAY_INSTANTIATE(rdcarray, ColorBlend)
+TEMPLATE_ARRAY_INSTANTIATE(rdcarray, BoundVBuffer)
+TEMPLATE_ARRAY_INSTANTIATE(rdcarray, VertexInputAttribute)
+TEMPLATE_ARRAY_INSTANTIATE(rdcarray, BoundResource)
+TEMPLATE_ARRAY_INSTANTIATE(rdcarray, BoundResourceArray)
 TEMPLATE_NAMESPACE_ARRAY_INSTANTIATE(rdcarray, VKPipe, Attachment)
 TEMPLATE_NAMESPACE_ARRAY_INSTANTIATE(rdcarray, VKPipe, BindingElement)
 TEMPLATE_NAMESPACE_ARRAY_INSTANTIATE(rdcarray, VKPipe, DescriptorBinding)

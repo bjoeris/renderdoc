@@ -116,10 +116,10 @@ public:
   FrameRecord GetFrameRecord();
 
   void SavePipelineState();
-  const D3D11Pipe::State &GetD3D11PipelineState() { return m_D3D11State; }
-  const D3D12Pipe::State &GetD3D12PipelineState() { return m_D3D12State; }
-  const GLPipe::State &GetGLPipelineState() { return m_CurPipelineState; }
-  const VKPipe::State &GetVulkanPipelineState() { return m_VKState; }
+  const D3D11Pipe::State *GetD3D11PipelineState() { return NULL; }
+  const D3D12Pipe::State *GetD3D12PipelineState() { return NULL; }
+  const GLPipe::State *GetGLPipelineState() { return &m_CurPipelineState; }
+  const VKPipe::State *GetVulkanPipelineState() { return NULL; }
   void FreeTargetResource(ResourceId id);
 
   ReplayStatus ReadLogInitialisation(RDCFile *rdc, bool storeStructuredBuffers);
@@ -162,7 +162,8 @@ public:
                     CompType typeHint, float minval, float maxval, bool channels[4],
                     vector<uint32_t> &histogram);
 
-  MeshFormat GetPostVSBuffers(uint32_t eventId, uint32_t instID, MeshDataStage stage);
+  MeshFormat GetPostVSBuffers(uint32_t eventId, uint32_t instID, uint32_t viewID,
+                              MeshDataStage stage);
 
   void GetBufferData(ResourceId buff, uint64_t offset, uint64_t len, bytebuf &ret);
   void GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
@@ -425,9 +426,6 @@ private:
   std::map<ResourceId, size_t> m_ResourceIdx;
 
   GLPipe::State m_CurPipelineState;
-  D3D11Pipe::State m_D3D11State;
-  D3D12Pipe::State m_D3D12State;
-  VKPipe::State m_VKState;
 
   // AMD counter instance
   AMDCounters *m_pAMDCounters = NULL;

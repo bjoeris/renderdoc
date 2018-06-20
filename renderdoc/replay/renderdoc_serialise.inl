@@ -109,7 +109,6 @@ void DoSerialise(SerialiserType &ser, CaptureOptions &el)
   SERIALISE_MEMBER(verifyMapWrites);
   SERIALISE_MEMBER(hookIntoChildren);
   SERIALISE_MEMBER(refAllResources);
-  SERIALISE_MEMBER(saveAllInitials);
   SERIALISE_MEMBER(captureAllCmdLists);
   SERIALISE_MEMBER(debugOutputMute);
 
@@ -492,9 +491,8 @@ void DoSerialise(SerialiserType &ser, DrawcallDescription &el)
   SERIALISE_MEMBER(copySource);
   SERIALISE_MEMBER(copyDestination);
 
-  SERIALISE_MEMBER(parent);
-  SERIALISE_MEMBER(previous);
-  SERIALISE_MEMBER(next);
+  if(ser.IsReading())
+    el.parent = el.previous = el.next = NULL;
 
   SERIALISE_MEMBER(outputs);
   SERIALISE_MEMBER(depthOut);
@@ -1338,12 +1336,15 @@ void DoSerialise(SerialiserType &ser, D3D12Pipe::DepthStencilState &el)
 {
   SERIALISE_MEMBER(depthEnable);
   SERIALISE_MEMBER(depthWrites);
+  SERIALISE_MEMBER(depthBoundsEnable);
   SERIALISE_MEMBER(depthFunction);
   SERIALISE_MEMBER(stencilEnable);
   SERIALISE_MEMBER(frontFace);
   SERIALISE_MEMBER(backFace);
+  SERIALISE_MEMBER(minDepthBounds);
+  SERIALISE_MEMBER(maxDepthBounds);
 
-  SIZE_CHECK(68);
+  SIZE_CHECK(76);
 }
 
 template <typename SerialiserType>
@@ -1371,7 +1372,7 @@ void DoSerialise(SerialiserType &ser, D3D12Pipe::OM &el)
   SERIALISE_MEMBER(multiSampleCount);
   SERIALISE_MEMBER(multiSampleQuality);
 
-  SIZE_CHECK(264);
+  SIZE_CHECK(272);
 }
 
 template <typename SerialiserType>
@@ -1414,7 +1415,7 @@ void DoSerialise(SerialiserType &ser, D3D12Pipe::State &el)
 
   SERIALISE_MEMBER(resourceStates);
 
-  SIZE_CHECK(1176);
+  SIZE_CHECK(1184);
 }
 
 #pragma endregion D3D12 pipeline state
@@ -1968,8 +1969,9 @@ void DoSerialise(SerialiserType &ser, VKPipe::RenderPass &el)
   SERIALISE_MEMBER(colorAttachments);
   SERIALISE_MEMBER(resolveAttachments);
   SERIALISE_MEMBER(depthstencilAttachment);
+  SERIALISE_MEMBER(multiviews);
 
-  SIZE_CHECK(72);
+  SIZE_CHECK(88);
 }
 
 template <typename SerialiserType>
@@ -2019,7 +2021,7 @@ void DoSerialise(SerialiserType &ser, VKPipe::CurrentPass &el)
   SERIALISE_MEMBER(framebuffer);
   SERIALISE_MEMBER(renderArea);
 
-  SIZE_CHECK(128);
+  SIZE_CHECK(144);
 }
 
 template <typename SerialiserType>
@@ -2049,6 +2051,8 @@ void DoSerialise(SerialiserType &ser, VKPipe::State &el)
   SERIALISE_MEMBER(compute);
   SERIALISE_MEMBER(graphics);
 
+  SERIALISE_MEMBER(pushconsts);
+
   SERIALISE_MEMBER(inputAssembly);
   SERIALISE_MEMBER(vertexInput);
 
@@ -2070,7 +2074,7 @@ void DoSerialise(SerialiserType &ser, VKPipe::State &el)
 
   SERIALISE_MEMBER(images);
 
-  SIZE_CHECK(1312);
+  SIZE_CHECK(1344);
 }
 
 #pragma endregion Vulkan pipeline state

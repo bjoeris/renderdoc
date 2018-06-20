@@ -191,10 +191,34 @@ bool WrappedOpenGL::Serialise_glDebugMessageInsert(SerialiserType &ser, GLenum s
   return true;
 }
 
+void WrappedOpenGL::DisableVRFrameMarkers()
+{
+  m_UseVRMarkers = false;
+}
+
+void WrappedOpenGL::HandleVRFrameMarkers(const GLchar *buf, GLsizei length)
+{
+  if(m_UseVRMarkers && strstr(buf, "vr-marker,frame_end,type,application") != NULL)
+  {
+    void *ctx = NULL, *wnd = NULL;
+    RenderDoc::Inst().GetActiveWindow(ctx, wnd);
+    SwapBuffers(wnd);
+
+    if(IsActiveCapturing(m_State))
+    {
+      m_AcceptedCtx.clear();
+      m_AcceptedCtx.insert(GetCtx().ctx);
+      RDCDEBUG("Only resource ID accepted is %llu", GetCtxData().m_ContextDataResourceID);
+    }
+  }
+}
+
 void WrappedOpenGL::glDebugMessageInsert(GLenum source, GLenum type, GLuint id, GLenum severity,
                                          GLsizei length, const GLchar *buf)
 {
   SERIALISE_TIME_CALL(m_Real.glDebugMessageInsert(source, type, id, severity, length, buf));
+
+  HandleVRFrameMarkers(buf, length);
 
   if(IsActiveCapturing(m_State) && type == eGL_DEBUG_TYPE_MARKER)
   {
@@ -203,7 +227,7 @@ void WrappedOpenGL::glDebugMessageInsert(GLenum source, GLenum type, GLuint id, 
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     Serialise_glDebugMessageInsert(ser, source, type, id, severity, length, buf);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
   }
 }
 
@@ -215,7 +239,7 @@ void WrappedOpenGL::glPushGroupMarkerEXT(GLsizei length, const GLchar *marker)
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     Serialise_glPushDebugGroup(ser, eGL_DEBUG_SOURCE_APPLICATION, 0, length, marker);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
   }
 }
 
@@ -227,7 +251,7 @@ void WrappedOpenGL::glPopGroupMarkerEXT()
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     Serialise_glPopDebugGroup(ser);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
   }
 }
 
@@ -270,7 +294,7 @@ void WrappedOpenGL::glInsertEventMarkerEXT(GLsizei length, const GLchar *marker)
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     Serialise_glInsertEventMarkerEXT(ser, length, marker);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
   }
 }
 
@@ -287,7 +311,7 @@ void WrappedOpenGL::glStringMarkerGREMEDY(GLsizei len, const void *string)
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     Serialise_glInsertEventMarkerEXT(ser, len, (const GLchar *)string);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
   }
 }
 
@@ -336,7 +360,7 @@ void WrappedOpenGL::glPushDebugGroup(GLenum source, GLuint id, GLsizei length, c
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     Serialise_glPushDebugGroup(ser, source, id, length, message);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
   }
 }
 
@@ -371,7 +395,7 @@ void WrappedOpenGL::glPopDebugGroup()
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
     Serialise_glPopDebugGroup(ser);
 
-    m_ContextRecord->AddChunk(scope.Get());
+    GetContextRecord()->AddChunk(scope.Get());
   }
 }
 

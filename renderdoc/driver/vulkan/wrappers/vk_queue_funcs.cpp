@@ -39,13 +39,20 @@ bool WrappedVulkan::Serialise_vkGetDeviceQueue(SerialiserType &ser, VkDevice dev
   if(IsReplayingAndReading())
   {
     VkQueue queue;
-    // MULTIQUEUE - re-map the queue family/index instead of using the supported family
-    ObjDisp(device)->GetDeviceQueue(Unwrap(device), m_SupportedQueueFamily, 0, &queue);
+
+    uint32_t remapFamily = m_QueueRemapping[queueFamilyIndex][queueIndex].family;
+    uint32_t remapIndex = m_QueueRemapping[queueFamilyIndex][queueIndex].index;
+
+    if(remapFamily != queueFamilyIndex || remapIndex != queueIndex)
+      RDCLOG("Remapped Queue %u/%u from capture to %u/%u on replay", queueFamilyIndex, queueIndex,
+             remapFamily, remapIndex);
+
+    ObjDisp(device)->GetDeviceQueue(Unwrap(device), remapFamily, remapIndex, &queue);
 
     GetResourceManager()->WrapResource(Unwrap(device), queue);
     GetResourceManager()->AddLiveResource(Queue, queue);
 
-    if(queueFamilyIndex == m_QueueFamilyIdx)
+    if(remapFamily == m_QueueFamilyIdx && m_Queue == VK_NULL_HANDLE)
     {
       m_Queue = queue;
 
@@ -53,6 +60,18 @@ bool WrappedVulkan::Serialise_vkGetDeviceQueue(SerialiserType &ser, VkDevice dev
       // manager on vkCreateDevice)
       SubmitCmds();
     }
+
+    if(remapFamily < m_ExternalQueues.size())
+    {
+      if(m_ExternalQueues[remapFamily].queue == VK_NULL_HANDLE)
+        m_ExternalQueues[remapFamily].queue = queue;
+    }
+    else
+    {
+      RDCERR("Unexpected queue family index %u", remapFamily);
+    }
+
+    m_CreationInfo.m_Queue[GetResID(queue)] = remapFamily;
 
     AddResource(Queue, ResourceType::Queue, "Queue");
     DerivedResource(device, Queue);
@@ -101,6 +120,8 @@ void WrappedVulkan::vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex,
         VkResourceRecord *record = GetResourceManager()->AddResourceRecord(*pQueue);
         RDCASSERT(record);
 
+        record->queueFamilyIndex = queueFamilyIndex;
+
         VkResourceRecord *instrecord = GetRecord(m_Instance);
 
         // treat queues as pool members of the instance (ie. freed when the instance dies)
@@ -114,6 +135,16 @@ void WrappedVulkan::vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex,
       }
 
       m_QueueFamilies[queueFamilyIndex][queueIndex] = *pQueue;
+
+      if(queueFamilyIndex < m_ExternalQueues.size())
+      {
+        if(m_ExternalQueues[queueFamilyIndex].queue == VK_NULL_HANDLE)
+          m_ExternalQueues[queueFamilyIndex].queue = *pQueue;
+      }
+      else
+      {
+        RDCERR("Unexpected queue family index %u", queueFamilyIndex);
+      }
 
       if(queueFamilyIndex == m_QueueFamilyIdx)
       {
@@ -142,6 +173,18 @@ bool WrappedVulkan::Serialise_vkQueueSubmit(SerialiserType &ser, VkQueue queue, 
 
   if(IsReplayingAndReading())
   {
+    // if there are multiple queue submissions in flight, wait for the previous queue to finish
+    // before executing this, as we don't have the sync information to properly sync.
+    if(m_PrevQueue != queue)
+    {
+      RDCDEBUG("Previous queue execution was on queue %llu, now executing %llu, syncing GPU",
+               GetResID(m_PrevQueue), GetResID(queue));
+      if(m_PrevQueue != VK_NULL_HANDLE)
+        ObjDisp(m_PrevQueue)->QueueWaitIdle(Unwrap(m_PrevQueue));
+
+      m_PrevQueue = queue;
+    }
+
     // if we ever waited on any semaphores, wait for idle here.
     bool doWait = false;
     for(uint32_t i = 0; i < submitCount; i++)
@@ -174,8 +217,21 @@ bool WrappedVulkan::Serialise_vkQueueSubmit(SerialiserType &ser, VkQueue queue, 
         // don't submit the fence, since we have nothing to wait on it being signalled, and we might
         // not have it correctly in the unsignalled state.
         VkSubmitInfo unwrapped = submitInfo;
-        unwrapped.pCommandBuffers =
-            UnwrapArray(unwrapped.pCommandBuffers, unwrapped.commandBufferCount);
+
+        size_t tempMemSize = unwrapped.commandBufferCount * sizeof(VkCommandBuffer) +
+                             GetNextPatchSize(unwrapped.pNext);
+
+        byte *tempMem = GetTempMemory(tempMemSize);
+
+        VkCommandBuffer *unwrappedCmds = (VkCommandBuffer *)tempMem;
+        unwrapped.pCommandBuffers = unwrappedCmds;
+        for(uint32_t i = 0; i < unwrapped.commandBufferCount; i++)
+          unwrappedCmds[i] = Unwrap(submitInfo.pCommandBuffers[i]);
+
+        tempMem += unwrapped.commandBufferCount * sizeof(VkCommandBuffer);
+
+        UnwrapNextChain(m_State, "VkSubmitInfo", tempMem, (VkGenericStruct *)&unwrapped);
+
         ObjDisp(queue)->QueueSubmit(Unwrap(queue), 1, &unwrapped, VK_NULL_HANDLE);
 
         AddEvent();
@@ -192,7 +248,8 @@ bool WrappedVulkan::Serialise_vkQueueSubmit(SerialiserType &ser, VkQueue queue, 
 
           BakedCmdBufferInfo &cmdBufInfo = m_BakedCmdBufferInfo[cmd];
 
-          GetResourceManager()->ApplyBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts);
+          GetResourceManager()->ApplyBarriers(m_CreationInfo.m_Queue[GetResID(queue)],
+                                              m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts);
 
           std::string name = StringFormat::Fmt("=> %s[%u]: vkBeginCommandBuffer(%s)",
                                                basename.c_str(), c, ToStr(cmd).c_str());
@@ -321,7 +378,8 @@ bool WrappedVulkan::Serialise_vkQueueSubmit(SerialiserType &ser, VkQueue queue, 
 #endif
               rerecordedCmds.push_back(Unwrap(cmd));
 
-              GetResourceManager()->ApplyBarriers(m_BakedCmdBufferInfo[rerecord].imgbarriers,
+              GetResourceManager()->ApplyBarriers(m_CreationInfo.m_Queue[GetResID(queue)],
+                                                  m_BakedCmdBufferInfo[rerecord].imgbarriers,
                                                   m_ImageLayouts);
             }
             else
@@ -448,56 +506,7 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
     tempmemSize += pSubmits[i].signalSemaphoreCount * sizeof(VkSemaphore);
     tempmemSize += pSubmits[i].waitSemaphoreCount * sizeof(VkSemaphore);
 
-    VkGenericStruct *next = (VkGenericStruct *)pSubmits[i].pNext;
-    while(next)
-    {
-      if(next->sType == VK_STRUCTURE_TYPE_MAX_ENUM)
-      {
-        RDCERR("Invalid extension structure");
-      }
-      else if(next->sType == VK_STRUCTURE_TYPE_WIN32_KEYED_MUTEX_ACQUIRE_RELEASE_INFO_NV ||
-              next->sType == VK_STRUCTURE_TYPE_WIN32_KEYED_MUTEX_ACQUIRE_RELEASE_INFO_KHR)
-      {
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-        // make sure the structures are still identical
-        RDCCOMPILE_ASSERT(sizeof(VkWin32KeyedMutexAcquireReleaseInfoNV) ==
-                              sizeof(VkWin32KeyedMutexAcquireReleaseInfoKHR),
-                          "Structs are different!");
-
-#define NV_DUMMY ((VkWin32KeyedMutexAcquireReleaseInfoNV *)NULL)
-#define KHR_DUMMY ((VkWin32KeyedMutexAcquireReleaseInfoKHR *)NULL)
-        RDCCOMPILE_ASSERT(&NV_DUMMY->acquireCount == &KHR_DUMMY->acquireCount,
-                          "Structs are different!");
-        RDCCOMPILE_ASSERT(&NV_DUMMY->releaseCount == &KHR_DUMMY->releaseCount,
-                          "Structs are different!");
-        RDCCOMPILE_ASSERT(&NV_DUMMY->pAcquireSyncs == &KHR_DUMMY->pAcquireSyncs,
-                          "Structs are different!");
-        RDCCOMPILE_ASSERT(&NV_DUMMY->pReleaseSyncs == &KHR_DUMMY->pReleaseSyncs,
-                          "Structs are different!");
-#undef NV_DUMMY
-#undef KHR_DUMMY
-
-        tempmemSize += sizeof(VkWin32KeyedMutexAcquireReleaseInfoKHR);
-
-        VkWin32KeyedMutexAcquireReleaseInfoKHR *info = (VkWin32KeyedMutexAcquireReleaseInfoKHR *)next;
-        tempmemSize += info->acquireCount * sizeof(VkDeviceMemory);
-        tempmemSize += info->releaseCount * sizeof(VkDeviceMemory);
-#else
-        RDCERR("Unexpected use of Win32 Keyed Mutex extension without support compiled in");
-#endif
-      }
-      else if(next->sType == VK_STRUCTURE_TYPE_D3D12_FENCE_SUBMIT_INFO_KHR)
-      {
-        // nothing to do - this is plain old data with nothing to unwrap so we can keep it in the
-        // pNext chain as-is
-      }
-      else
-      {
-        RDCERR("Unexpected extension structure %d", next->sType);
-      }
-
-      next = (VkGenericStruct *)next->pNext;
-    }
+    tempmemSize += GetNextPatchSize(pSubmits[i].pNext);
   }
 
   byte *memory = GetTempMemory(tempmemSize);
@@ -535,49 +544,7 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
     for(uint32_t o = 0; o < unwrappedSubmits[i].signalSemaphoreCount; o++)
       unwrappedSignalSems[o] = Unwrap(pSubmits[i].pSignalSemaphores[o]);
 
-    VkGenericStruct **nextptr = (VkGenericStruct **)&unwrappedSubmits[i].pNext;
-    while(*nextptr)
-    {
-      VkGenericStruct *next = *nextptr;
-
-      if(next->sType == VK_STRUCTURE_TYPE_WIN32_KEYED_MUTEX_ACQUIRE_RELEASE_INFO_NV ||
-         next->sType == VK_STRUCTURE_TYPE_WIN32_KEYED_MUTEX_ACQUIRE_RELEASE_INFO_KHR)
-      {
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-        // allocate local unwrapped struct
-        VkWin32KeyedMutexAcquireReleaseInfoKHR *unwrappedMutexInfoKHR =
-            (VkWin32KeyedMutexAcquireReleaseInfoKHR *)memory;
-        memory += sizeof(VkWin32KeyedMutexAcquireReleaseInfoKHR);
-
-        // copy over info from original struct
-        VkWin32KeyedMutexAcquireReleaseInfoKHR *wrappedMutexInfoKHR =
-            (VkWin32KeyedMutexAcquireReleaseInfoKHR *)next;
-        *unwrappedMutexInfoKHR = *wrappedMutexInfoKHR;
-
-        // allocate unwrapped arrays
-        VkDeviceMemory *unwrappedAcquires = (VkDeviceMemory *)memory;
-        memory += sizeof(VkDeviceMemory) * unwrappedMutexInfoKHR->acquireCount;
-        VkDeviceMemory *unwrappedReleases = (VkDeviceMemory *)memory;
-        memory += sizeof(VkDeviceMemory) * unwrappedMutexInfoKHR->releaseCount;
-
-        // unwrap the arrays
-        for(uint32_t mem = 0; mem < unwrappedMutexInfoKHR->acquireCount; mem++)
-          unwrappedAcquires[mem] = Unwrap(wrappedMutexInfoKHR->pAcquireSyncs[mem]);
-        for(uint32_t mem = 0; mem < unwrappedMutexInfoKHR->releaseCount; mem++)
-          unwrappedReleases[mem] = Unwrap(wrappedMutexInfoKHR->pReleaseSyncs[mem]);
-
-        unwrappedMutexInfoKHR->pAcquireSyncs = unwrappedAcquires;
-        unwrappedMutexInfoKHR->pReleaseSyncs = unwrappedReleases;
-
-        // insert this struct into the chain.
-        // nextptr is pointing to the address of the pNext, so we can overwrite it to point to our
-        // locally-allocated unwrapped struct
-        *nextptr = (VkGenericStruct *)unwrappedMutexInfoKHR;
-#endif
-      }
-
-      nextptr = (VkGenericStruct **)&next->pNext;
-    }
+    UnwrapNextChain(m_State, "VkSubmitInfo", memory, (VkGenericStruct *)&unwrappedSubmits[i]);
   }
 
   VkResult ret;
@@ -586,6 +553,8 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
 
   bool capframe = false;
   set<ResourceId> refdIDs;
+
+  VkResourceRecord *queueRecord = GetRecord(queue);
 
   for(uint32_t s = 0; s < submitCount; s++)
   {
@@ -597,7 +566,8 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
 
       {
         SCOPED_LOCK(m_ImageLayoutsLock);
-        GetResourceManager()->ApplyBarriers(record->bakedCommands->cmdInfo->imgbarriers,
+        GetResourceManager()->ApplyBarriers(queueRecord->queueFamilyIndex,
+                                            record->bakedCommands->cmdInfo->imgbarriers,
                                             m_ImageLayouts);
       }
 
@@ -611,15 +581,24 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
       // dirty.
       {
         SCOPED_LOCK(m_CapTransitionLock);
-        capframe = IsActiveCapturing(m_State);
+        if(IsActiveCapturing(m_State))
+        {
+          for(auto it = record->bakedCommands->cmdInfo->dirtied.begin();
+              it != record->bakedCommands->cmdInfo->dirtied.end(); ++it)
+            GetResourceManager()->MarkPendingDirty(*it);
+
+          capframe = true;
+        }
+        else
+        {
+          for(auto it = record->bakedCommands->cmdInfo->dirtied.begin();
+              it != record->bakedCommands->cmdInfo->dirtied.end(); ++it)
+            GetResourceManager()->MarkDirtyResource(*it);
+        }
       }
 
       if(capframe)
       {
-        for(auto it = record->bakedCommands->cmdInfo->dirtied.begin();
-            it != record->bakedCommands->cmdInfo->dirtied.end(); ++it)
-          GetResourceManager()->MarkPendingDirty(*it);
-
         // for each bound descriptor set, mark it referenced as well as all resources currently
         // bound to it
         for(auto it = record->bakedCommands->cmdInfo->boundDescSets.begin();
@@ -676,12 +655,6 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
         }
 
         record->bakedCommands->AddRef();
-      }
-      else
-      {
-        for(auto it = record->bakedCommands->cmdInfo->dirtied.begin();
-            it != record->bakedCommands->cmdInfo->dirtied.end(); ++it)
-          GetResourceManager()->MarkDirtyResource(*it);
       }
 
       record->cmdInfo->dirtied.clear();
@@ -911,6 +884,8 @@ VkResult WrappedVulkan::vkQueueBindSparse(VkQueue queue, uint32_t bindInfoCount,
 
   for(uint32_t i = 0; i < bindInfoCount; i++)
   {
+    tempmemSize += GetNextPatchSize(pBindInfo[i].pNext);
+
     // within each batch, need to allocate space for each resource bind
     tempmemSize += pBindInfo[i].bufferBindCount * sizeof(VkSparseBufferMemoryBindInfo);
     tempmemSize += pBindInfo[i].imageOpaqueBindCount * sizeof(VkSparseImageOpaqueMemoryBindInfo);
@@ -938,6 +913,8 @@ VkResult WrappedVulkan::vkQueueBindSparse(VkQueue queue, uint32_t bindInfoCount,
     // copy the original so we get all the params we don't need to change
     RDCASSERT(pBindInfo[i].sType == VK_STRUCTURE_TYPE_BIND_SPARSE_INFO && pBindInfo[i].pNext == NULL);
     unwrapped[i] = pBindInfo[i];
+
+    UnwrapNextChain(m_State, "VkBindSparseInfo", next, (VkGenericStruct *)&unwrapped[i]);
 
     // unwrap the signal semaphores into a new array
     VkSemaphore *signal = (VkSemaphore *)next;
@@ -1273,17 +1250,24 @@ bool WrappedVulkan::Serialise_vkGetDeviceQueue2(SerialiserType &ser, VkDevice de
   if(IsReplayingAndReading())
   {
     uint32_t queueFamilyIndex = QueueInfo.queueFamilyIndex;
+    uint32_t queueIndex = QueueInfo.queueIndex;
+
+    uint32_t remapFamily = m_QueueRemapping[queueFamilyIndex][queueIndex].family;
+    uint32_t remapIndex = m_QueueRemapping[queueFamilyIndex][queueIndex].index;
+
+    if(remapFamily != queueFamilyIndex || remapIndex != queueIndex)
+      RDCLOG("Remapped Queue %u/%u from capture to %u/%u on replay", queueFamilyIndex, queueIndex,
+             remapFamily, remapIndex);
 
     VkQueue queue;
-    // MULTIQUEUE - re-map the queue family/index instead of using the supported family
-    QueueInfo.queueFamilyIndex = m_SupportedQueueFamily;
-    QueueInfo.queueIndex = 0;
+    QueueInfo.queueFamilyIndex = remapFamily;
+    QueueInfo.queueIndex = remapIndex;
     ObjDisp(device)->GetDeviceQueue2(Unwrap(device), &QueueInfo, &queue);
 
     GetResourceManager()->WrapResource(Unwrap(device), queue);
     GetResourceManager()->AddLiveResource(Queue, queue);
 
-    if(queueFamilyIndex == m_QueueFamilyIdx)
+    if(remapFamily == m_QueueFamilyIdx && m_Queue == VK_NULL_HANDLE)
     {
       m_Queue = queue;
 
@@ -1291,6 +1275,18 @@ bool WrappedVulkan::Serialise_vkGetDeviceQueue2(SerialiserType &ser, VkDevice de
       // manager on vkCreateDevice)
       SubmitCmds();
     }
+
+    if(remapFamily < m_ExternalQueues.size())
+    {
+      if(m_ExternalQueues[remapFamily].queue == VK_NULL_HANDLE)
+        m_ExternalQueues[remapFamily].queue = queue;
+    }
+    else
+    {
+      RDCERR("Unexpected queue family index %u", remapFamily);
+    }
+
+    m_CreationInfo.m_Queue[GetResID(queue)] = remapFamily;
 
     AddResource(Queue, ResourceType::Queue, "Queue");
     DerivedResource(device, Queue);
@@ -1338,6 +1334,8 @@ void WrappedVulkan::vkGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2 
         VkResourceRecord *record = GetResourceManager()->AddResourceRecord(*pQueue);
         RDCASSERT(record);
 
+        record->queueFamilyIndex = pQueueInfo->queueFamilyIndex;
+
         VkResourceRecord *instrecord = GetRecord(m_Instance);
 
         // treat queues as pool members of the instance (ie. freed when the instance dies)
@@ -1351,6 +1349,16 @@ void WrappedVulkan::vkGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2 
       }
 
       m_QueueFamilies[pQueueInfo->queueFamilyIndex][pQueueInfo->queueIndex] = *pQueue;
+
+      if(pQueueInfo->queueFamilyIndex < m_ExternalQueues.size())
+      {
+        if(m_ExternalQueues[pQueueInfo->queueFamilyIndex].queue == VK_NULL_HANDLE)
+          m_ExternalQueues[pQueueInfo->queueFamilyIndex].queue = *pQueue;
+      }
+      else
+      {
+        RDCERR("Unexpected queue family index %u", pQueueInfo->queueFamilyIndex);
+      }
 
       if(pQueueInfo->queueFamilyIndex == m_QueueFamilyIdx)
       {

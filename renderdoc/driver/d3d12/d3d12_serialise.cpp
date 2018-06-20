@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 #include "driver/dxgi/dxgi_common.h"
+#include "d3d12_command_list.h"
 #include "d3d12_common.h"
 #include "d3d12_resources.h"
 
@@ -216,67 +217,161 @@ void DoSerialise(SerialiserType &ser, D3D12Descriptor &el)
   D3D12DescriptorType type = el.GetType();
   ser.Serialise("type", type);
 
-  ID3D12DescriptorHeap *heap = (ID3D12DescriptorHeap *)el.samp.heap;
+  ID3D12DescriptorHeap *heap = (ID3D12DescriptorHeap *)el.data.samp.heap;
 
   ser.Serialise("heap", heap);
-  ser.Serialise("index", el.samp.idx);
+  ser.Serialise("index", el.data.samp.idx);
 
   if(ser.IsReading())
   {
-    el.samp.heap = (WrappedID3D12DescriptorHeap *)heap;
+    el.data.samp.heap = (WrappedID3D12DescriptorHeap *)heap;
 
     // for sampler types, this will be overwritten when serialising the sampler descriptor
-    el.nonsamp.type = type;
+    el.data.nonsamp.type = type;
   }
+
+  // we serialise via a pointer. This means if the resource isn't present it becomes NULL and we set
+  // the ResourceId to 0 on replay, and otherwise we get the live ID as we want. As a benefit, it's
+  // also invisibly backwards compatible
+  D3D12ResourceManager *rm = (D3D12ResourceManager *)ser.GetUserData();
+
+  ID3D12Resource *resource = NULL;
+  ID3D12Resource *counterResource = NULL;
 
   switch(type)
   {
     case D3D12DescriptorType::Sampler:
     {
-      ser.Serialise("Descriptor", el.samp.desc);
+      ser.Serialise("Descriptor", el.data.samp.desc);
       RDCASSERTEQUAL(el.GetType(), D3D12DescriptorType::Sampler);
       break;
     }
     case D3D12DescriptorType::CBV:
     {
-      ser.Serialise("Descriptor", el.nonsamp.cbv);
+      ser.Serialise("Descriptor", el.data.nonsamp.cbv);
       break;
     }
     case D3D12DescriptorType::SRV:
     {
-      ser.Serialise("Resource", el.nonsamp.resource);
-      ser.Serialise("Descriptor", el.nonsamp.srv);
+      if(ser.IsWriting() && rm && rm->HasCurrentResource(el.data.nonsamp.resource))
+        resource = rm->GetCurrentAs<ID3D12Resource>(el.data.nonsamp.resource);
+
+      ser.Serialise("Resource", resource);
+
+      if(ser.IsReading())
+        el.data.nonsamp.resource = GetResID(resource);
+
+      // special case because of squeezed descriptor
+      D3D12_SHADER_RESOURCE_VIEW_DESC desc;
+      if(ser.IsWriting())
+        desc = el.data.nonsamp.srv.AsDesc();
+      ser.Serialise("Descriptor", desc);
+      if(ser.IsReading())
+        el.data.nonsamp.srv.Init(desc);
       break;
     }
     case D3D12DescriptorType::RTV:
     {
-      ser.Serialise("Resource", el.nonsamp.resource);
-      ser.Serialise("Descriptor", el.nonsamp.rtv);
+      if(ser.IsWriting() && rm && rm->HasCurrentResource(el.data.nonsamp.resource))
+        resource = rm->GetCurrentAs<ID3D12Resource>(el.data.nonsamp.resource);
+
+      ser.Serialise("Resource", resource);
+
+      if(ser.IsReading())
+        el.data.nonsamp.resource = GetResID(resource);
+
+      ser.Serialise("Descriptor", el.data.nonsamp.rtv);
       break;
     }
     case D3D12DescriptorType::DSV:
     {
-      ser.Serialise("Resource", el.nonsamp.resource);
-      ser.Serialise("Descriptor", el.nonsamp.dsv);
+      if(ser.IsWriting() && rm && rm->HasCurrentResource(el.data.nonsamp.resource))
+        resource = rm->GetCurrentAs<ID3D12Resource>(el.data.nonsamp.resource);
+
+      ser.Serialise("Resource", resource);
+
+      if(ser.IsReading())
+        el.data.nonsamp.resource = GetResID(resource);
+
+      ser.Serialise("Descriptor", el.data.nonsamp.dsv);
       break;
     }
     case D3D12DescriptorType::UAV:
     {
-      ser.Serialise("Resource", el.nonsamp.resource);
-      ser.Serialise("CounterResource", el.nonsamp.uav.counterResource);
+      if(ser.IsWriting())
+      {
+        if(rm && rm->HasCurrentResource(el.data.nonsamp.resource))
+          resource = rm->GetCurrentAs<ID3D12Resource>(el.data.nonsamp.resource);
+        if(rm && rm->HasCurrentResource(el.data.nonsamp.counterResource))
+          counterResource = rm->GetCurrentAs<ID3D12Resource>(el.data.nonsamp.counterResource);
+      }
 
-      // special case because of extra resource and squeezed descriptor
-      D3D12_UNORDERED_ACCESS_VIEW_DESC desc = el.nonsamp.uav.desc.AsDesc();
+      ser.Serialise("Resource", resource);
+      ser.Serialise("CounterResource", counterResource);
+
+      if(ser.IsReading())
+      {
+        el.data.nonsamp.resource = GetResID(resource);
+        el.data.nonsamp.counterResource = GetResID(counterResource);
+      }
+
+      // special case because of squeezed descriptor
+      D3D12_UNORDERED_ACCESS_VIEW_DESC desc;
+      if(ser.IsWriting())
+        desc = el.data.nonsamp.uav.AsDesc();
       ser.Serialise("Descriptor", desc);
-      el.nonsamp.uav.desc.Init(desc);
+      if(ser.IsReading())
+        el.data.nonsamp.uav.Init(desc);
       break;
     }
     case D3D12DescriptorType::Undefined:
     {
-      el.nonsamp.type = type;
+      el.data.nonsamp.type = type;
       break;
     }
   }
+}
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC &el)
+{
+  SERIALISE_MEMBER(pRootSignature);
+  SERIALISE_MEMBER(VS);
+  SERIALISE_MEMBER(PS);
+  SERIALISE_MEMBER(DS);
+  SERIALISE_MEMBER(HS);
+  SERIALISE_MEMBER(GS);
+  SERIALISE_MEMBER(StreamOutput);
+  SERIALISE_MEMBER(BlendState);
+  SERIALISE_MEMBER(SampleMask);
+  SERIALISE_MEMBER(RasterizerState);
+  SERIALISE_MEMBER(DepthStencilState);
+  SERIALISE_MEMBER(InputLayout);
+  SERIALISE_MEMBER(IBStripCutValue);
+  SERIALISE_MEMBER(PrimitiveTopologyType);
+  SERIALISE_MEMBER(RTVFormats);
+  SERIALISE_MEMBER(DSVFormat);
+  SERIALISE_MEMBER(SampleDesc);
+  SERIALISE_MEMBER(NodeMask);
+  SERIALISE_MEMBER(CachedPSO);
+  SERIALISE_MEMBER(Flags);
+  SERIALISE_MEMBER(ViewInstancing);
+  SERIALISE_MEMBER(CS);
+}
+
+template <>
+void Deserialise(const D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC &el)
+{
+  delete[] el.ViewInstancing.pViewInstanceLocations;
+  delete[] el.StreamOutput.pSODeclaration;
+  delete[] el.StreamOutput.pBufferStrides;
+  delete[] el.InputLayout.pInputElementDescs;
+  FreeAlignedBuffer((byte *)(el.VS.pShaderBytecode));
+  FreeAlignedBuffer((byte *)(el.PS.pShaderBytecode));
+  FreeAlignedBuffer((byte *)(el.DS.pShaderBytecode));
+  FreeAlignedBuffer((byte *)(el.HS.pShaderBytecode));
+  FreeAlignedBuffer((byte *)(el.GS.pShaderBytecode));
+  FreeAlignedBuffer((byte *)(el.CS.pShaderBytecode));
 }
 
 template <class SerialiserType>
@@ -1097,12 +1192,77 @@ void DoSerialise(SerialiserType &ser, D3D12_SAMPLER_DESC &el)
   SERIALISE_MEMBER(MaxLOD);
 }
 
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, D3D12_RT_FORMAT_ARRAY &el)
+{
+  SERIALISE_MEMBER(RTFormats);
+  SERIALISE_MEMBER(NumRenderTargets);
+}
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, D3D12_DEPTH_STENCIL_DESC1 &el)
+{
+  SERIALISE_MEMBER(DepthEnable);
+  SERIALISE_MEMBER(DepthWriteMask);
+  SERIALISE_MEMBER(DepthFunc);
+  SERIALISE_MEMBER(StencilEnable);
+  SERIALISE_MEMBER(StencilReadMask);
+  SERIALISE_MEMBER(StencilWriteMask);
+  SERIALISE_MEMBER(FrontFace);
+  SERIALISE_MEMBER(BackFace);
+  SERIALISE_MEMBER(DepthBoundsTestEnable);
+}
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, D3D12_VIEW_INSTANCE_LOCATION &el)
+{
+  SERIALISE_MEMBER(ViewportArrayIndex);
+  SERIALISE_MEMBER(RenderTargetArrayIndex);
+}
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, D3D12_VIEW_INSTANCING_DESC &el)
+{
+  SERIALISE_MEMBER(ViewInstanceCount);
+  SERIALISE_MEMBER_ARRAY(pViewInstanceLocations, ViewInstanceCount);
+  SERIALISE_MEMBER(Flags);
+}
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, D3D12_SAMPLE_POSITION &el)
+{
+  SERIALISE_MEMBER(X);
+  SERIALISE_MEMBER(Y);
+}
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, D3D12_RANGE_UINT64 &el)
+{
+  SERIALISE_MEMBER(Begin);
+  SERIALISE_MEMBER(End);
+}
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, D3D12_SUBRESOURCE_RANGE_UINT64 &el)
+{
+  SERIALISE_MEMBER(Subresource);
+  SERIALISE_MEMBER(Range);
+}
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, D3D12_WRITEBUFFERIMMEDIATE_PARAMETER &el)
+{
+  SERIALISE_MEMBER(Dest);
+  SERIALISE_MEMBER(Value);
+}
+
 INSTANTIATE_SERIALISE_TYPE(PortableHandle);
 INSTANTIATE_SERIALISE_TYPE(D3D12_CPU_DESCRIPTOR_HANDLE);
 INSTANTIATE_SERIALISE_TYPE(D3D12_GPU_DESCRIPTOR_HANDLE);
 INSTANTIATE_SERIALISE_TYPE(DynamicDescriptorCopy);
 INSTANTIATE_SERIALISE_TYPE(D3D12BufferLocation);
 INSTANTIATE_SERIALISE_TYPE(D3D12Descriptor);
+INSTANTIATE_SERIALISE_TYPE(D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC);
 
 INSTANTIATE_SERIALISE_TYPE(D3D12_RESOURCE_DESC);
 INSTANTIATE_SERIALISE_TYPE(D3D12_COMMAND_QUEUE_DESC);
@@ -1135,3 +1295,10 @@ INSTANTIATE_SERIALISE_TYPE(D3D12_RANGE);
 INSTANTIATE_SERIALISE_TYPE(D3D12_RECT);
 INSTANTIATE_SERIALISE_TYPE(D3D12_BOX);
 INSTANTIATE_SERIALISE_TYPE(D3D12_VIEWPORT);
+INSTANTIATE_SERIALISE_TYPE(D3D12_PIPELINE_STATE_STREAM_DESC);
+INSTANTIATE_SERIALISE_TYPE(D3D12_RT_FORMAT_ARRAY);
+INSTANTIATE_SERIALISE_TYPE(D3D12_DEPTH_STENCIL_DESC1);
+INSTANTIATE_SERIALISE_TYPE(D3D12_VIEW_INSTANCING_DESC);
+INSTANTIATE_SERIALISE_TYPE(D3D12_SAMPLE_POSITION);
+INSTANTIATE_SERIALISE_TYPE(D3D12_SUBRESOURCE_RANGE_UINT64);
+INSTANTIATE_SERIALISE_TYPE(D3D12_WRITEBUFFERIMMEDIATE_PARAMETER);

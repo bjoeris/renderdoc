@@ -34,8 +34,6 @@ size_t GetCompressedByteSize(GLsizei w, GLsizei h, GLsizei d, GLenum internalfor
 size_t GetByteSize(GLsizei w, GLsizei h, GLsizei d, GLenum format, GLenum type);
 GLenum GetBaseFormat(GLenum internalFormat);
 GLenum GetDataType(GLenum internalFormat);
-GLenum GetSizedFormat(const GLHookSet &gl, GLenum target, GLenum internalFormat,
-                      GLenum type = eGL_NONE);
 void GetFramebufferMipAndLayer(const GLHookSet &gl, GLenum framebuffer, GLenum attachment,
                                GLint *mip, GLint *layer);
 void GetTextureSwizzle(const GLHookSet &gl, GLuint tex, GLenum target, GLenum *swizzleRGBA);
@@ -238,24 +236,6 @@ struct GLResourceRecord : public ResourceRecord
     int64_t persistentMaps;    // counter indicating how many coherent maps are 'live'
   } Map;
 
-  template <typename ChunkFilter>
-  void FilterChunks(const ChunkFilter &filter)
-  {
-    LockChunks();
-    std::vector<std::map<int32_t, Chunk *>::iterator> deletions;
-    for(auto it = m_Chunks.begin(); it != m_Chunks.end(); ++it)
-    {
-      if(filter(it->second))
-        deletions.push_back(it);
-    }
-    for(size_t i = 0; i < deletions.size(); i++)
-    {
-      SAFE_DELETE(deletions[i]->second);
-      m_Chunks.erase(deletions[i]);
-    }
-    UnlockChunks();
-  }
-
   void VerifyDataType(GLenum target)
   {
 #if ENABLED(RDOC_DEVEL)
@@ -320,4 +300,12 @@ struct GLResourceRecord : public ResourceRecord
 private:
   byte *ShadowPtr[2];
   size_t ShadowSize;
+};
+
+struct GLContextTLSData
+{
+  GLContextTLSData() {}
+  GLContextTLSData(ContextPair p, GLResourceRecord *r) : ctxPair(p), ctxRecord(r) {}
+  ContextPair ctxPair;
+  GLResourceRecord *ctxRecord;
 };

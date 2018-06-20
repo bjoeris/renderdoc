@@ -177,7 +177,7 @@ int GetCurrentPID(const std::string &deviceID, const std::string &packageName)
 }
 
 ExecuteResult StartAndroidPackageForCapture(const char *host, const char *package,
-                                            const CaptureOptions &opts)
+                                            const char *intentArgs, const CaptureOptions &opts)
 {
   int index = 0;
   std::string deviceID;
@@ -200,9 +200,10 @@ ExecuteResult StartAndroidPackageForCapture(const char *host, const char *packag
   adbExecCommand(deviceID, "shell am force-stop " + packageName);
   // enable the vulkan layer (will only be used by vulkan programs)
   adbExecCommand(deviceID, "shell setprop debug.vulkan.layers " RENDERDOC_VULKAN_LAYER_NAME);
+  // if in VR mode, enable frame delimiter markers
+  adbExecCommand(deviceID, "shell setprop debug.vr.profiler 1");
   // create the data directory we will use for storing, in case the application doesn't
   adbExecCommand(deviceID, "shell mkdir -p /sdcard/Android/data/" + packageName);
-
   // set our property with the capture options encoded, to be picked up by the library on the device
   adbExecCommand(deviceID, StringFormat::Fmt("shell setprop debug.rdoc.RENDERDOC_CAPTUREOPTS %s",
                                              opts.EncodeAsString().c_str()));
@@ -244,8 +245,9 @@ ExecuteResult StartAndroidPackageForCapture(const char *host, const char *packag
     RDCLOG("Setting up to launch the application as a debugger to inject.");
 
     // start the activity in this package with debugging enabled and force-stop after starting
-    adbExecCommand(deviceID, StringFormat::Fmt("shell am start -S -D %s/%s", packageName.c_str(),
-                                               activityName.c_str()));
+    adbExecCommand(deviceID,
+                   StringFormat::Fmt("shell am start -S -D -n %s/%s %s", packageName.c_str(),
+                                     activityName.c_str(), intentArgs));
 
     // adb shell ps | grep $PACKAGE | awk '{print $2}')
     pid = GetCurrentPID(deviceID, packageName);
@@ -255,8 +257,8 @@ ExecuteResult StartAndroidPackageForCapture(const char *host, const char *packag
     RDCLOG("Not doing any injection - assuming APK is pre-loaded with RenderDoc capture library.");
 
     // start the activity in this package with debugging enabled and force-stop after starting
-    adbExecCommand(deviceID, StringFormat::Fmt("shell am start %s/%s", packageName.c_str(),
-                                               activityName.c_str()));
+    adbExecCommand(deviceID, StringFormat::Fmt("shell am start -n %s/%s %s", packageName.c_str(),
+                                               activityName.c_str(), intentArgs));
 
     // don't connect JDWP
     jdwpPort = 0;

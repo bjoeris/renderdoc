@@ -243,7 +243,7 @@ __attribute__((visibility("default"))) void vrapi_SubmitFrame(ovrMobile *ovr,
   if(m_GLDriver)
   {
     SCOPED_LOCK(glLock);
-
+    m_GLDriver->DisableVRFrameMarkers();
     m_GLDriver->SwapBuffers(ovr);
   }
 

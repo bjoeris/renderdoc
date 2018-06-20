@@ -573,6 +573,13 @@ struct RenderPass
 If there is no depth-stencil attachment, this index is ``-1``.
 )");
   int32_t depthstencilAttachment = -1;
+
+  DOCUMENT(R"(If multiview is enabled, contains a list of view indices to be broadcast to during
+rendering.
+
+If the list is empty, multiview is disabled and rendering is as normal.
+)");
+  rdcarray<uint32_t> multiviews;
 };
 
 DOCUMENT("Describes a single attachment in a framebuffer object.");
@@ -729,10 +736,19 @@ struct ImageData
 DOCUMENT("The full current Vulkan pipeline state.");
 struct State
 {
+#if !defined(RENDERDOC_EXPORTS)
+  // disallow creation/copy of this object externally
+  State() = delete;
+  State(const State &) = delete;
+#endif
+
   DOCUMENT("A :class:`VKPipeline` with the currently bound compute pipeline, if any.");
   Pipeline compute;
   DOCUMENT("A :class:`VKPipeline` with the currently bound graphics pipeline, if any.");
   Pipeline graphics;
+
+  DOCUMENT("A ``bytes`` containing the raw push constant data.");
+  bytebuf pushconsts;
 
   DOCUMENT("A :class:`VKInputAssembly` describing the input assembly stage.");
   InputAssembly inputAssembly;

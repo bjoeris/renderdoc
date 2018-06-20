@@ -41,7 +41,7 @@ vector<GPUCounter> D3D11Replay::EnumerateCounters()
   ret.push_back(GPUCounter::GSPrimitives);
   ret.push_back(GPUCounter::RasterizerInvocations);
   ret.push_back(GPUCounter::RasterizedPrimitives);
-  ret.push_back(GPUCounter::SamplesWritten);
+  ret.push_back(GPUCounter::SamplesPassed);
   ret.push_back(GPUCounter::VSInvocations);
   ret.push_back(GPUCounter::HSInvocations);
   ret.push_back(GPUCounter::DSInvocations);
@@ -140,8 +140,8 @@ CounterDescription D3D11Replay::DescribeCounter(GPUCounter counterID)
       desc.resultType = CompType::UInt;
       desc.unit = CounterUnit::Absolute;
       break;
-    case GPUCounter::SamplesWritten:
-      desc.name = "Samples Written";
+    case GPUCounter::SamplesPassed:
+      desc.name = "Samples Passed";
       desc.description = "Number of samples that passed depth/stencil test.";
       desc.resultByteWidth = 8;
       desc.resultType = CompType::UInt;
@@ -385,8 +385,14 @@ void D3D11Replay::FillTimersNV(uint32_t &eventStartID, uint32_t &sampleIndex,
 
 vector<CounterResult> D3D11Replay::FetchCountersAMD(const vector<GPUCounter> &counters)
 {
-  vector<CounterResult> ret;
+  ID3D11Device *d3dDevice = m_pDevice->GetReal();
 
+  if(!m_pAMDCounters->BeginMeasurementMode(AMDCounters::ApiType::Dx11, (void *)d3dDevice))
+  {
+    return vector<CounterResult>();
+  }
+
+  uint32_t sessionID = m_pAMDCounters->CreateSession();
   m_pAMDCounters->DisableAllCounters();
 
   // enable counters it needs
@@ -398,7 +404,7 @@ vector<CounterResult> D3D11Replay::FetchCountersAMD(const vector<GPUCounter> &co
     m_pAMDCounters->EnableCounter(counters[i]);
   }
 
-  uint32_t sessionID = m_pAMDCounters->BeginSession();
+  m_pAMDCounters->BeginSession(sessionID);
 
   uint32_t passCount = m_pAMDCounters->GetPassCount();
 
@@ -409,7 +415,7 @@ vector<CounterResult> D3D11Replay::FetchCountersAMD(const vector<GPUCounter> &co
   for(uint32_t p = 0; p < passCount; p++)
   {
     m_pAMDCounters->BeginPass();
-
+    m_pAMDCounters->BeginCommandList();
     uint32_t eventStartID = 0;
 
     sampleIndex = 0;
@@ -417,13 +423,18 @@ vector<CounterResult> D3D11Replay::FetchCountersAMD(const vector<GPUCounter> &co
     eventIDs.clear();
 
     FillTimersAMD(eventStartID, sampleIndex, eventIDs, m_pImmediateContext->GetRootDraw());
-
+    m_pAMDCounters->EndCommandList();
     m_pAMDCounters->EndPass();
   }
 
-  m_pAMDCounters->EndSesssion();
+  m_pAMDCounters->EndSesssion(sessionID);
 
-  return m_pAMDCounters->GetCounterData(sessionID, sampleIndex, eventIDs, counters);
+  vector<CounterResult> ret =
+      m_pAMDCounters->GetCounterData(sessionID, sampleIndex, eventIDs, counters);
+
+  m_pAMDCounters->EndMeasurementMode();
+
+  return ret;
 }
 
 vector<CounterResult> D3D11Replay::FetchCountersNV(const vector<GPUCounter> &counters)
@@ -638,9 +649,9 @@ vector<CounterResult> D3D11Replay::FetchCounters(const vector<GPUCounter> &count
                 ret.push_back(CounterResult(ctx.timers[i].eventId, GPUCounter::CSInvocations,
                                             pipelineStats.CSInvocations));
                 break;
-              case GPUCounter::SamplesWritten:
+              case GPUCounter::SamplesPassed:
                 ret.push_back(
-                    CounterResult(ctx.timers[i].eventId, GPUCounter::SamplesWritten, occlusion));
+                    CounterResult(ctx.timers[i].eventId, GPUCounter::SamplesPassed, occlusion));
                 break;
             }
           }
@@ -666,7 +677,7 @@ vector<CounterResult> D3D11Replay::FetchCounters(const vector<GPUCounter> &count
               case GPUCounter::GSInvocations:
               case GPUCounter::PSInvocations:
               case GPUCounter::CSInvocations:
-              case GPUCounter::SamplesWritten:
+              case GPUCounter::SamplesPassed:
                 ret.push_back(
                     CounterResult(ctx.timers[i].eventId, d3dCounters[c], 0xFFFFFFFFFFFFFFFF));
                 break;

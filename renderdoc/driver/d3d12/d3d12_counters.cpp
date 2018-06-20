@@ -40,7 +40,7 @@ vector<GPUCounter> D3D12Replay::EnumerateCounters()
   ret.push_back(GPUCounter::GSPrimitives);
   ret.push_back(GPUCounter::RasterizerInvocations);
   ret.push_back(GPUCounter::RasterizedPrimitives);
-  ret.push_back(GPUCounter::SamplesWritten);
+  ret.push_back(GPUCounter::SamplesPassed);
   ret.push_back(GPUCounter::VSInvocations);
   ret.push_back(GPUCounter::HSInvocations);
   ret.push_back(GPUCounter::DSInvocations);
@@ -125,8 +125,8 @@ CounterDescription D3D12Replay::DescribeCounter(GPUCounter counterID)
       desc.resultType = CompType::UInt;
       desc.unit = CounterUnit::Absolute;
       break;
-    case GPUCounter::SamplesWritten:
-      desc.name = "Samples Written";
+    case GPUCounter::SamplesPassed:
+      desc.name = "Samples Passed";
       desc.description = "Number of samples that passed depth/stencil test.";
       desc.resultByteWidth = 8;
       desc.resultType = CompType::UInt;
@@ -202,53 +202,53 @@ struct D3D12AMDDrawCallback : public D3D12DrawcallCallback
     m_pDevice->GetQueue()->GetCommandData()->m_DrawcallCallback = NULL;
   }
 
-  void PreDraw(uint32_t eid, ID3D12GraphicsCommandList *cmd) override
+  void PreDraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override
   {
     m_pEventIds->push_back(eid);
 
-    WrappedID3D12GraphicsCommandList *pWrappedCmdList = (WrappedID3D12GraphicsCommandList *)cmd;
+    WrappedID3D12GraphicsCommandList2 *pWrappedCmdList = (WrappedID3D12GraphicsCommandList2 *)cmd;
 
     if(m_begunCommandLists.find(pWrappedCmdList->GetReal()) == m_begunCommandLists.end())
     {
       m_begunCommandLists.insert(pWrappedCmdList->GetReal());
 
-      m_pReplay->GetAMDCounters()->BeginSampleList(pWrappedCmdList->GetReal());
+      m_pReplay->GetAMDCounters()->BeginCommandList(pWrappedCmdList->GetReal());
     }
 
-    m_pReplay->GetAMDCounters()->BeginSampleInSampleList(*m_pSampleId, pWrappedCmdList->GetReal());
+    m_pReplay->GetAMDCounters()->BeginSample(*m_pSampleId, pWrappedCmdList->GetReal());
 
     ++*m_pSampleId;
   }
 
-  bool PostDraw(uint32_t eid, ID3D12GraphicsCommandList *cmd) override
+  bool PostDraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override
   {
-    WrappedID3D12GraphicsCommandList *pWrappedCmdList = (WrappedID3D12GraphicsCommandList *)cmd;
+    WrappedID3D12GraphicsCommandList2 *pWrappedCmdList = (WrappedID3D12GraphicsCommandList2 *)cmd;
 
-    m_pReplay->GetAMDCounters()->EndSampleInSampleList(pWrappedCmdList->GetReal());
+    m_pReplay->GetAMDCounters()->EndSample(pWrappedCmdList->GetReal());
     return false;
   }
 
-  void PreCloseCommandList(ID3D12GraphicsCommandList *cmd) override
+  void PreCloseCommandList(ID3D12GraphicsCommandList2 *cmd) override
   {
-    WrappedID3D12GraphicsCommandList *pWrappedCmdList = (WrappedID3D12GraphicsCommandList *)cmd;
+    WrappedID3D12GraphicsCommandList2 *pWrappedCmdList = (WrappedID3D12GraphicsCommandList2 *)cmd;
 
     auto iter = m_begunCommandLists.find(pWrappedCmdList->GetReal());
 
     if(iter != m_begunCommandLists.end())
     {
-      m_pReplay->GetAMDCounters()->EndSampleList(*iter);
+      m_pReplay->GetAMDCounters()->EndCommandList(*iter);
       m_begunCommandLists.erase(iter);
     }
   }
 
-  void PostRedraw(uint32_t eid, ID3D12GraphicsCommandList *cmd) override {}
+  void PostRedraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override {}
   // we don't need to distinguish, call the Draw functions
-  void PreDispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) override { PreDraw(eid, cmd); }
-  bool PostDispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) override
+  void PreDispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override { PreDraw(eid, cmd); }
+  bool PostDispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override
   {
     return PostDraw(eid, cmd);
   }
-  void PostRedispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) override
+  void PostRedispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override
   {
     PostRedraw(eid, cmd);
   }
@@ -284,6 +284,14 @@ void D3D12Replay::FillTimersAMD(uint32_t *eventStartID, uint32_t *sampleIndex,
 
 vector<CounterResult> D3D12Replay::FetchCountersAMD(const vector<GPUCounter> &counters)
 {
+  ID3D12Device *d3dDevice = m_pDevice->GetReal();
+
+  if(!m_pAMDCounters->BeginMeasurementMode(AMDCounters::ApiType::Dx12, (void *)d3dDevice))
+  {
+    return vector<CounterResult>();
+  }
+
+  uint32_t sessionID = m_pAMDCounters->CreateSession();
   m_pAMDCounters->DisableAllCounters();
 
   // enable counters it needs
@@ -295,7 +303,7 @@ vector<CounterResult> D3D12Replay::FetchCountersAMD(const vector<GPUCounter> &co
     m_pAMDCounters->EnableCounter(counters[i]);
   }
 
-  uint32_t sessionID = m_pAMDCounters->BeginSession();
+  m_pAMDCounters->BeginSession(sessionID);
 
   uint32_t passCount = m_pAMDCounters->GetPassCount();
 
@@ -318,7 +326,7 @@ vector<CounterResult> D3D12Replay::FetchCountersAMD(const vector<GPUCounter> &co
     m_pAMDCounters->EndPass();
   }
 
-  m_pAMDCounters->EndSesssion();
+  m_pAMDCounters->EndSesssion(sessionID);
 
   vector<CounterResult> ret =
       m_pAMDCounters->GetCounterData(sessionID, sampleIndex, eventIDs, counters);
@@ -350,6 +358,8 @@ vector<CounterResult> D3D12Replay::FetchCountersAMD(const vector<GPUCounter> &co
 
   SAFE_DELETE(m_pAMDDrawCallback);
 
+  m_pAMDCounters->EndMeasurementMode();
+
   return ret;
 }
 
@@ -368,7 +378,7 @@ struct D3D12GPUTimerCallback : public D3D12DrawcallCallback
     m_pDevice->GetQueue()->GetCommandData()->m_DrawcallCallback = this;
   }
   ~D3D12GPUTimerCallback() { m_pDevice->GetQueue()->GetCommandData()->m_DrawcallCallback = NULL; }
-  void PreDraw(uint32_t eid, ID3D12GraphicsCommandList *cmd) override
+  void PreDraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override
   {
     if(cmd->GetType() == D3D12_COMMAND_LIST_TYPE_DIRECT)
     {
@@ -378,7 +388,7 @@ struct D3D12GPUTimerCallback : public D3D12DrawcallCallback
     cmd->EndQuery(m_TimerQueryHeap, D3D12_QUERY_TYPE_TIMESTAMP, m_NumTimestampQueries * 2 + 0);
   }
 
-  bool PostDraw(uint32_t eid, ID3D12GraphicsCommandList *cmd) override
+  bool PostDraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override
   {
     cmd->EndQuery(m_TimerQueryHeap, D3D12_QUERY_TYPE_TIMESTAMP, m_NumTimestampQueries * 2 + 1);
     m_NumTimestampQueries++;
@@ -395,18 +405,18 @@ struct D3D12GPUTimerCallback : public D3D12DrawcallCallback
     return false;
   }
 
-  void PostRedraw(uint32_t eid, ID3D12GraphicsCommandList *cmd) override {}
+  void PostRedraw(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override {}
   // we don't need to distinguish, call the Draw functions
-  void PreDispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) override { PreDraw(eid, cmd); }
-  bool PostDispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) override
+  void PreDispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override { PreDraw(eid, cmd); }
+  bool PostDispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override
   {
     return PostDraw(eid, cmd);
   }
-  void PostRedispatch(uint32_t eid, ID3D12GraphicsCommandList *cmd) override
+  void PostRedispatch(uint32_t eid, ID3D12GraphicsCommandList2 *cmd) override
   {
     PostRedraw(eid, cmd);
   }
-  void PreCloseCommandList(ID3D12GraphicsCommandList *cmd) override{};
+  void PreCloseCommandList(ID3D12GraphicsCommandList2 *cmd) override{};
   void AliasEvent(uint32_t primary, uint32_t alias) override
   {
     m_AliasEvents.push_back(std::make_pair(primary, alias));
@@ -638,7 +648,7 @@ vector<CounterResult> D3D12Replay::FetchCounters(const vector<GPUCounter> &count
         case GPUCounter::GSPrimitives: result.value.u64 = pipeStats.GSPrimitives; break;
         case GPUCounter::RasterizerInvocations: result.value.u64 = pipeStats.CInvocations; break;
         case GPUCounter::RasterizedPrimitives: result.value.u64 = pipeStats.CPrimitives; break;
-        case GPUCounter::SamplesWritten: result.value.u64 = occl; break;
+        case GPUCounter::SamplesPassed: result.value.u64 = occl; break;
         case GPUCounter::VSInvocations: result.value.u64 = pipeStats.VSInvocations; break;
         case GPUCounter::HSInvocations: result.value.u64 = pipeStats.HSInvocations; break;
         case GPUCounter::DSInvocations: result.value.u64 = pipeStats.DSInvocations; break;

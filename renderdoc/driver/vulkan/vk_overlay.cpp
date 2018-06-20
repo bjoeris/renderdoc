@@ -333,7 +333,7 @@ void VulkanDebugManager::PatchLineStripIndexBuffer(const DrawcallDescription *dr
   uint16_t *idx16 = NULL;
   uint32_t *idx32 = NULL;
 
-  if(draw->flags & DrawFlags::UseIBuffer)
+  if(draw->flags & DrawFlags::Indexed)
   {
     GetBufferData(rs.ibuffer.buf,
                   rs.ibuffer.offs + uint64_t(draw->indexOffset) * draw->indexByteWidth,
@@ -513,25 +513,28 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeHint, Debu
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        0,
-        0,    // MULTIDEVICE - need to actually pick the right queue family here maybe?
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_QUEUE_FAMILY_IGNORED,
         Unwrap(m_Overlay.Image),
-        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
+    };
 
     m_pDriver->m_ImageLayouts[GetResID(m_Overlay.Image)].subresourceStates[0].newLayout =
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     DoPipelineBarrier(cmd, 1, &barrier);
 
-    VkAttachmentDescription colDesc = {0,
-                                       imInfo.format,
-                                       imInfo.samples,
-                                       VK_ATTACHMENT_LOAD_OP_LOAD,
-                                       VK_ATTACHMENT_STORE_OP_STORE,
-                                       VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                                       VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentDescription colDesc = {
+        0,
+        imInfo.format,
+        imInfo.samples,
+        VK_ATTACHMENT_LOAD_OP_LOAD,
+        VK_ATTACHMENT_STORE_OP_STORE,
+        VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
 
     VkAttachmentReference colRef = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
 
@@ -1697,10 +1700,11 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeHint, Debu
           VK_ACCESS_TRANSFER_WRITE_BIT,
           VK_IMAGE_LAYOUT_UNDEFINED,
           VK_IMAGE_LAYOUT_GENERAL,
-          0,
-          0,    // MULTIDEVICE - need to actually pick the right queue family here maybe?
+          VK_QUEUE_FAMILY_IGNORED,
+          VK_QUEUE_FAMILY_IGNORED,
           Unwrap(quadImg),
-          {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 4}};
+          {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 4},
+      };
 
       // clear all to black
       DoPipelineBarrier(cmd, 1, &quadImBarrier);
@@ -2091,9 +2095,9 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeHint, Debu
 
         for(uint32_t inst = 0; draw && inst < RDCMAX(1U, draw->numInstances); inst++)
         {
-          MeshFormat fmt = GetPostVSBuffers(events[i], inst, MeshDataStage::GSOut);
+          MeshFormat fmt = GetPostVSBuffers(events[i], inst, 0, MeshDataStage::GSOut);
           if(fmt.vertexResourceId == ResourceId())
-            fmt = GetPostVSBuffers(events[i], inst, MeshDataStage::VSOut);
+            fmt = GetPostVSBuffers(events[i], inst, 0, MeshDataStage::VSOut);
 
           if(fmt.vertexResourceId != ResourceId())
           {

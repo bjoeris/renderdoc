@@ -27,6 +27,7 @@
 #include <utility>
 #include "android/android.h"
 #include "api/replay/renderdoc_replay.h"
+#include "api/replay/version.h"
 #include "core/core.h"
 #include "os/os_specific.h"
 #include "replay/replay_controller.h"
@@ -35,7 +36,8 @@
 #include "strings/string_utils.h"
 #include "replay_proxy.h"
 
-static const uint32_t RemoteServerProtocolVersion = 3;
+static const uint32_t RemoteServerProtocolVersion =
+    uint32_t(RENDERDOC_VERSION_MAJOR * 1000) | RENDERDOC_VERSION_MINOR;
 
 enum RemoteServerPacket
 {
@@ -1255,7 +1257,8 @@ public:
           ok = Ping();
       });
 
-      ExecuteResult ret = Android::StartAndroidPackageForCapture(host, app.c_str(), opts);
+      ExecuteResult ret =
+          Android::StartAndroidPackageForCapture(host, app.c_str(), cmdline.c_str(), opts);
 
       Atomic::Inc32(&done);
 

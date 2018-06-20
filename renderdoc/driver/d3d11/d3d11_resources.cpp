@@ -56,6 +56,7 @@ WRAPPED_POOL_INST(WrappedID3D11Predicate);
 WRAPPED_POOL_INST(WrappedID3D11ClassInstance);
 WRAPPED_POOL_INST(WrappedID3D11ClassLinkage);
 WRAPPED_POOL_INST(WrappedID3DDeviceContextState);
+WRAPPED_POOL_INST(WrappedID3D11Fence);
 
 map<ResourceId, WrappedID3D11Texture1D::TextureEntry>
     WrappedTexture<ID3D11Texture1D, D3D11_TEXTURE1D_DESC, ID3D11Texture1D>::m_TextureList;
@@ -464,6 +465,45 @@ ID3D11Resource *UnwrapDXResource(void *dxObject)
   {
     WrappedID3D11Texture3D1 *w = (WrappedID3D11Texture3D1 *)(ID3D11Texture3D1 *)dxObject;
     return w->GetReal();
+  }
+
+  return NULL;
+}
+
+IDXGIResource *UnwrapDXGIResource(void *dxObject)
+{
+  ID3D11Resource *dx = NULL;
+
+  if(WrappedID3D11Buffer::IsAlloc(dxObject))
+  {
+    WrappedID3D11Buffer *w = (WrappedID3D11Buffer *)dxObject;
+    dx = w->GetReal();
+  }
+  else if(WrappedID3D11Texture1D::IsAlloc(dxObject))
+  {
+    WrappedID3D11Texture1D *w = (WrappedID3D11Texture1D *)dxObject;
+    dx = w->GetReal();
+  }
+  else if(WrappedID3D11Texture2D1::IsAlloc(dxObject))
+  {
+    WrappedID3D11Texture2D1 *w = (WrappedID3D11Texture2D1 *)dxObject;
+    dx = w->GetReal();
+  }
+  else if(WrappedID3D11Texture3D1::IsAlloc(dxObject))
+  {
+    WrappedID3D11Texture3D1 *w = (WrappedID3D11Texture3D1 *)dxObject;
+    dx = w->GetReal();
+  }
+
+  if(dx)
+  {
+    IDXGIResource *ret = NULL;
+    dx->QueryInterface(__uuidof(IDXGIResource), (void **)&ret);
+    if(ret)
+    {
+      ret->Release();
+      return ret;
+    }
   }
 
   return NULL;

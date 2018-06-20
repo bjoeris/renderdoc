@@ -151,7 +151,10 @@ struct ResourceRecord
     }
 
     if(!dataWritten)
-      recordlist.insert(m_Chunks.begin(), m_Chunks.end());
+    {
+      for(auto it = m_Chunks.begin(); it != m_Chunks.end(); ++it)
+        recordlist[it->first] = it->second;
+    }
   }
 
   void AddRef() { Atomic::Inc32(&RefCount); }
@@ -175,10 +178,10 @@ struct ResourceRecord
 
   void AddChunk(Chunk *chunk, int32_t ID = 0)
   {
-    LockChunks();
     if(ID == 0)
       ID = GetID();
-    m_Chunks[ID] = chunk;
+    LockChunks();
+    m_Chunks.push_back(std::make_pair(ID, chunk));
     UnlockChunks();
   }
 
@@ -232,16 +235,16 @@ struct ResourceRecord
   Chunk *GetLastChunk() const
   {
     RDCASSERT(HasChunks());
-    return m_Chunks.rbegin()->second;
+    return m_Chunks.back().second;
   }
 
   int32_t GetLastChunkID() const
   {
     RDCASSERT(HasChunks());
-    return m_Chunks.rbegin()->first;
+    return m_Chunks.back().first;
   }
 
-  void PopChunk() { m_Chunks.erase(m_Chunks.rbegin()->first); }
+  void PopChunk() { m_Chunks.pop_back(); }
   byte *GetDataPtr() { return DataPtr + DataOffset; }
   bool HasDataPtr() { return DataPtr != NULL; }
   void SetDataOffset(uint64_t offs) { DataOffset = offs; }
@@ -278,7 +281,7 @@ protected:
     return Atomic::Inc32(&globalIDCounter);
   }
 
-  std::map<int32_t, Chunk *> m_Chunks;
+  std::vector<std::pair<int32_t, Chunk *>> m_Chunks;
   Threading::CriticalSection *m_ChunkLock;
 
   map<ResourceId, FrameRefType> m_FrameRefs;
@@ -373,10 +376,6 @@ public:
   // mark resource referenced somewhere in the main frame-affecting calls.
   // That means this resource should be included in the final serialise out
   inline void MarkResourceFrameReferenced(ResourceId id, FrameRefType refType);
-
-  // check if this resource was read before being written to - can be used to detect if
-  // initial states are necessary
-  bool ReadBeforeWrite(ResourceId id);
 
   ///////////////////////////////////////////
   // Replay-side methods
@@ -530,16 +529,6 @@ void ResourceManager<Configuration>::MarkResourceFrameReferenced(ResourceId id, 
     if(record)
       record->AddRef();
   }
-}
-
-template <typename Configuration>
-bool ResourceManager<Configuration>::ReadBeforeWrite(ResourceId id)
-{
-  if(m_FrameReferencedResources.find(id) != m_FrameReferencedResources.end())
-    return m_FrameReferencedResources[id] == eFrameRef_ReadBeforeWrite ||
-           m_FrameReferencedResources[id] == eFrameRef_ReadOnly;
-
-  return false;
 }
 
 template <typename Configuration>
@@ -1319,6 +1308,9 @@ typename Configuration::WrappedResourceType ResourceManager<Configuration>::GetC
     ResourceId id)
 {
   SCOPED_LOCK(m_Lock);
+
+  if(id == ResourceId())
+    return (WrappedResourceType)RecordType::NullResource;
 
   if(m_Replacements.find(id) != m_Replacements.end())
     return GetCurrentResource(m_Replacements[id]);

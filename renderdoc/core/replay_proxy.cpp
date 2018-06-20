@@ -381,6 +381,13 @@ FrameRecord ReplayProxy::Proxied_GetFrameRecord(ParamSerialiser &paramser, Retur
 
   SERIALISE_RETURN(ret);
 
+  if(paramser.IsWriting())
+  {
+    // re-configure the drawcall pointers, since they will be invalid
+    DrawcallDescription *previous = NULL;
+    SetupDrawcallPointers(m_Drawcalls, ret.drawcallList, NULL, previous);
+  }
+
   return ret;
 }
 
@@ -722,9 +729,9 @@ void ReplayProxy::InitPostVSBuffers(const std::vector<uint32_t> &events)
 }
 
 template <typename ParamSerialiser, typename ReturnSerialiser>
-MeshFormat ReplayProxy::Proxied_GetPostVSBuffers(ParamSerialiser &paramser,
-                                                 ReturnSerialiser &retser, uint32_t eventId,
-                                                 uint32_t instID, MeshDataStage stage)
+MeshFormat ReplayProxy::Proxied_GetPostVSBuffers(ParamSerialiser &paramser, ReturnSerialiser &retser,
+                                                 uint32_t eventId, uint32_t instID, uint32_t viewID,
+                                                 MeshDataStage stage)
 {
   const ReplayProxyPacket packet = eReplayProxy_GetPostVS;
   MeshFormat ret = {};
@@ -733,21 +740,23 @@ MeshFormat ReplayProxy::Proxied_GetPostVSBuffers(ParamSerialiser &paramser,
     BEGIN_PARAMS();
     SERIALISE_ELEMENT(eventId);
     SERIALISE_ELEMENT(instID);
+    SERIALISE_ELEMENT(viewID);
     SERIALISE_ELEMENT(stage);
     END_PARAMS();
   }
 
   if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetPostVSBuffers(eventId, instID, stage);
+    ret = m_Remote->GetPostVSBuffers(eventId, instID, viewID, stage);
 
   SERIALISE_RETURN(ret);
 
   return ret;
 }
 
-MeshFormat ReplayProxy::GetPostVSBuffers(uint32_t eventId, uint32_t instID, MeshDataStage stage)
+MeshFormat ReplayProxy::GetPostVSBuffers(uint32_t eventId, uint32_t instID, uint32_t viewID,
+                                         MeshDataStage stage)
 {
-  PROXY_FUNCTION(GetPostVSBuffers, eventId, instID, stage);
+  PROXY_FUNCTION(GetPostVSBuffers, eventId, instID, viewID, stage);
 }
 
 template <typename ParamSerialiser, typename ReturnSerialiser>
@@ -1189,13 +1198,13 @@ void ReplayProxy::Proxied_SavePipelineState(ParamSerialiser &paramser, ReturnSer
     m_Remote->SavePipelineState();
 
     if(m_APIProps.pipelineType == GraphicsAPI::D3D11)
-      m_D3D11PipelineState = m_Remote->GetD3D11PipelineState();
+      m_D3D11PipelineState = *m_Remote->GetD3D11PipelineState();
     else if(m_APIProps.pipelineType == GraphicsAPI::D3D12)
-      m_D3D12PipelineState = m_Remote->GetD3D12PipelineState();
+      m_D3D12PipelineState = *m_Remote->GetD3D12PipelineState();
     else if(m_APIProps.pipelineType == GraphicsAPI::OpenGL)
-      m_GLPipelineState = m_Remote->GetGLPipelineState();
+      m_GLPipelineState = *m_Remote->GetGLPipelineState();
     else if(m_APIProps.pipelineType == GraphicsAPI::Vulkan)
-      m_VulkanPipelineState = m_Remote->GetVulkanPipelineState();
+      m_VulkanPipelineState = *m_Remote->GetVulkanPipelineState();
   }
 
   {
@@ -2051,7 +2060,7 @@ bool ReplayProxy::Tick(int type)
       InitPostVSBuffers(dummy);
       break;
     }
-    case eReplayProxy_GetPostVS: GetPostVSBuffers(0, 0, MeshDataStage::Unknown); break;
+    case eReplayProxy_GetPostVS: GetPostVSBuffers(0, 0, 0, MeshDataStage::Unknown); break;
     case eReplayProxy_BuildTargetShader:
       BuildTargetShader("", "", ShaderCompileFlags(), ShaderStage::Vertex, NULL, NULL);
       break;

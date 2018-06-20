@@ -112,10 +112,10 @@ public:
   virtual vector<EventUsage> GetUsage(ResourceId id) = 0;
 
   virtual void SavePipelineState() = 0;
-  virtual const D3D11Pipe::State &GetD3D11PipelineState() = 0;
-  virtual const D3D12Pipe::State &GetD3D12PipelineState() = 0;
-  virtual const GLPipe::State &GetGLPipelineState() = 0;
-  virtual const VKPipe::State &GetVulkanPipelineState() = 0;
+  virtual const D3D11Pipe::State *GetD3D11PipelineState() = 0;
+  virtual const D3D12Pipe::State *GetD3D12PipelineState() = 0;
+  virtual const GLPipe::State *GetGLPipelineState() = 0;
+  virtual const VKPipe::State *GetVulkanPipelineState() = 0;
 
   virtual FrameRecord GetFrameRecord() = 0;
 
@@ -130,7 +130,8 @@ public:
 
   virtual ResourceId GetLiveID(ResourceId id) = 0;
 
-  virtual MeshFormat GetPostVSBuffers(uint32_t eventId, uint32_t instID, MeshDataStage stage) = 0;
+  virtual MeshFormat GetPostVSBuffers(uint32_t eventId, uint32_t instID, uint32_t viewID,
+                                      MeshDataStage stage) = 0;
 
   virtual void GetBufferData(ResourceId buff, uint64_t offset, uint64_t len, bytebuf &retData) = 0;
   virtual void GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
@@ -223,7 +224,7 @@ public:
 };
 
 // utility functions useful in any driver implementation
-DrawcallDescription *SetupDrawcallPointers(std::vector<DrawcallDescription *> *drawcallTable,
+DrawcallDescription *SetupDrawcallPointers(std::vector<DrawcallDescription *> &drawcallTable,
                                            rdcarray<DrawcallDescription> &draws,
                                            DrawcallDescription *parent,
                                            DrawcallDescription *&previous);

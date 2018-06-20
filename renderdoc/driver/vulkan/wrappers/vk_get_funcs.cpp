@@ -87,17 +87,16 @@ void WrappedVulkan::vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevic
 void WrappedVulkan::vkGetPhysicalDeviceQueueFamilyProperties(
     VkPhysicalDevice physicalDevice, uint32_t *pCount, VkQueueFamilyProperties *pQueueFamilyProperties)
 {
-  // pretend to only have one queue, the one with graphics capability
-  if(pCount)
-    *pCount = 1;
+  // report the actual physical device properties - this will be remapped on replay if necessary
+  ObjDisp(physicalDevice)
+      ->GetPhysicalDeviceQueueFamilyProperties(Unwrap(physicalDevice), pCount,
+                                               pQueueFamilyProperties);
 
-  if(pQueueFamilyProperties)
+  // remove any protected bits that might be set
+  if(pCount && pQueueFamilyProperties)
   {
-    // find the matching physical device
-    for(size_t i = 0; i < m_PhysicalDevices.size(); i++)
-      if(m_PhysicalDevices[i] == physicalDevice)
-        *pQueueFamilyProperties = m_SupportedQueueFamilies[i].second;
-    return;
+    for(uint32_t i = 0; i < *pCount; i++)
+      pQueueFamilyProperties[i].queueFlags &= ~VK_QUEUE_PROTECTED_BIT;
   }
 }
 
@@ -438,6 +437,17 @@ void WrappedVulkan::vkGetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice
     RDCWARN("Forcibly disabling support for YCbCr Conversion");
     ycbcr->samplerYcbcrConversion = VK_FALSE;
   }
+
+  // if the user is requesting protected memory, make sure it's reported as NOT supported
+  VkPhysicalDeviceProtectedMemoryFeatures *protectedMem =
+      (VkPhysicalDeviceProtectedMemoryFeatures *)FindNextStruct(
+          pFeatures, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES);
+
+  if(protectedMem)
+  {
+    RDCWARN("Forcibly disabling support for protected memory");
+    protectedMem->protectedMemory = VK_FALSE;
+  }
 }
 
 void WrappedVulkan::vkGetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
@@ -512,10 +522,10 @@ VkResult WrappedVulkan::vkEnumeratePhysicalDeviceGroups(
   // we ignore the 'real' physical device groups, and report one group per physical device. We use
   // our internal enumerate function to make sure we handle wrapping the objects.
   uint32_t numPhys = 0;
-  vkEnumeratePhysicalDevices(Unwrap(instance), &numPhys, NULL);
+  vkEnumeratePhysicalDevices(instance, &numPhys, NULL);
 
   VkPhysicalDevice *phys = new VkPhysicalDevice[numPhys];
-  vkEnumeratePhysicalDevices(Unwrap(instance), &numPhys, phys);
+  vkEnumeratePhysicalDevices(instance, &numPhys, phys);
 
   uint32_t outputSpace = pPhysicalDeviceGroupCount ? *pPhysicalDeviceGroupCount : 0;
 

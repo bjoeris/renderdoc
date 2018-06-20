@@ -364,7 +364,7 @@ void GLReplay::InitPostVSBuffers(uint32_t eventId)
 
   GLuint idxBuf = 0;
 
-  if(!(drawcall->flags & DrawFlags::UseIBuffer))
+  if(!(drawcall->flags & DrawFlags::Indexed))
   {
     uint64_t outputSize = uint64_t(drawcall->numIndices) * stride;
 
@@ -727,7 +727,7 @@ void GLReplay::InitPostVSBuffers(uint32_t eventId)
   m_PostVSData[eventId].vsout.nearPlane = nearp;
   m_PostVSData[eventId].vsout.farPlane = farp;
 
-  m_PostVSData[eventId].vsout.useIndices = bool(drawcall->flags & DrawFlags::UseIBuffer);
+  m_PostVSData[eventId].vsout.useIndices = bool(drawcall->flags & DrawFlags::Indexed);
   m_PostVSData[eventId].vsout.numVerts = drawcall->numIndices;
 
   m_PostVSData[eventId].vsout.instStride = 0;
@@ -752,7 +752,7 @@ void GLReplay::InitPostVSBuffers(uint32_t eventId)
 
   GLuint lastFeedbackProg = 0;
 
-  if(tesShad || gsShad)
+  if(tesRefl || gsRefl)
   {
     ShaderReflection *lastRefl = gsRefl;
 
@@ -1098,7 +1098,7 @@ void GLReplay::InitPostVSBuffers(uint32_t eventId)
                             DebugData.feedbackQueries[inst - 1]);
             gl.glBeginTransformFeedback(lastOutTopo);
 
-            if(!(drawcall->flags & DrawFlags::UseIBuffer))
+            if(!(drawcall->flags & DrawFlags::Indexed))
             {
               if(HasExt[ARB_base_instance])
               {
@@ -1139,7 +1139,7 @@ void GLReplay::InitPostVSBuffers(uint32_t eventId)
           gl.glBeginQuery(eGL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, DebugData.feedbackQueries[0]);
           gl.glBeginTransformFeedback(lastOutTopo);
 
-          if(!(drawcall->flags & DrawFlags::UseIBuffer))
+          if(!(drawcall->flags & DrawFlags::Indexed))
           {
             if(HasExt[ARB_base_instance])
             {
@@ -1180,7 +1180,7 @@ void GLReplay::InitPostVSBuffers(uint32_t eventId)
         gl.glBeginQuery(eGL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, DebugData.feedbackQueries[0]);
         gl.glBeginTransformFeedback(lastOutTopo);
 
-        if(!(drawcall->flags & DrawFlags::UseIBuffer))
+        if(!(drawcall->flags & DrawFlags::Indexed))
         {
           gl.glDrawArrays(drawtopo, drawcall->vertexOffset, drawcall->numIndices);
         }
@@ -1420,10 +1420,14 @@ void GLReplay::InitPostVSBuffers(const vector<uint32_t> &passEvents)
   }
 }
 
-MeshFormat GLReplay::GetPostVSBuffers(uint32_t eventId, uint32_t instID, MeshDataStage stage)
+MeshFormat GLReplay::GetPostVSBuffers(uint32_t eventId, uint32_t instID, uint32_t viewID,
+                                      MeshDataStage stage)
 {
   GLPostVSData postvs;
   RDCEraseEl(postvs);
+
+  // no multiview support
+  (void)viewID;
 
   ContextPair ctx = {m_ReplayCtx.ctx, m_pDriver->ShareCtx(m_ReplayCtx.ctx)};
 

@@ -77,6 +77,7 @@ void WrappedOpenGL::BuildGLExtensions()
   m_GLExtensions.push_back("GL_ARB_geometry_shader4");
   m_GLExtensions.push_back("GL_ARB_get_program_binary");
   m_GLExtensions.push_back("GL_ARB_get_texture_sub_image");
+  m_GLExtensions.push_back("GL_ARB_gl_spirv");
   m_GLExtensions.push_back("GL_ARB_gpu_shader_fp64");
   m_GLExtensions.push_back("GL_ARB_gpu_shader5");
   m_GLExtensions.push_back("GL_ARB_half_float_pixel");
@@ -94,10 +95,12 @@ void WrappedOpenGL::BuildGLExtensions()
   m_GLExtensions.push_back("GL_ARB_multitexture");
   m_GLExtensions.push_back("GL_ARB_occlusion_query");
   m_GLExtensions.push_back("GL_ARB_occlusion_query2");
+  m_GLExtensions.push_back("GL_ARB_parallel_shader_compile");
   m_GLExtensions.push_back("GL_ARB_pixel_buffer_object");
   m_GLExtensions.push_back("GL_ARB_pipeline_statistics_query");
   m_GLExtensions.push_back("GL_ARB_point_parameters");
   m_GLExtensions.push_back("GL_ARB_point_sprite");
+  m_GLExtensions.push_back("GL_ARB_polygon_offset_clamp");
   m_GLExtensions.push_back("GL_ARB_post_depth_coverage");
   m_GLExtensions.push_back("GL_ARB_program_interface_query");
   m_GLExtensions.push_back("GL_ARB_provoking_vertex");
@@ -133,6 +136,7 @@ void WrappedOpenGL::BuildGLExtensions()
   m_GLExtensions.push_back("GL_ARB_shading_language_packing");
   m_GLExtensions.push_back("GL_ARB_shadow");
   m_GLExtensions.push_back("GL_ARB_shadow_ambient");
+  m_GLExtensions.push_back("GL_ARB_spirv_extensions");
   m_GLExtensions.push_back("GL_ARB_stencil_texturing");
   m_GLExtensions.push_back("GL_ARB_sync");
   m_GLExtensions.push_back("GL_ARB_tessellation_shader");
@@ -146,6 +150,7 @@ void WrappedOpenGL::BuildGLExtensions()
   m_GLExtensions.push_back("GL_ARB_texture_compression_rgtc");
   m_GLExtensions.push_back("GL_ARB_texture_cube_map");
   m_GLExtensions.push_back("GL_ARB_texture_cube_map_array");
+  m_GLExtensions.push_back("GL_ARB_texture_filter_anisotropic");
   m_GLExtensions.push_back("GL_ARB_texture_float");
   m_GLExtensions.push_back("GL_ARB_texture_gather");
   m_GLExtensions.push_back("GL_ARB_texture_mirror_clamp_to_edge");
@@ -240,6 +245,7 @@ void WrappedOpenGL::BuildGLExtensions()
   m_GLExtensions.push_back("GL_KHR_context_flush_control");
   m_GLExtensions.push_back("GL_KHR_debug");
   m_GLExtensions.push_back("GL_KHR_no_error");
+  m_GLExtensions.push_back("GL_KHR_parallel_shader_compile");
   m_GLExtensions.push_back("GL_KHR_robustness");
   m_GLExtensions.push_back("GL_KHR_robust_buffer_access_behavior");
 
@@ -272,7 +278,6 @@ void WrappedOpenGL::BuildGLExtensions()
                                            support if it's supported on replaying driver'?
   * GL_ARB_ES3_2_compatibility
   * GL_ARB_gpu_shader_int64
-  * GL_ARB_parallel_shader_compile
   * GL_ARB_sample_locations
   * GL_ARB_texture_filter_minmax
 
@@ -513,6 +518,8 @@ WrappedOpenGL::WrappedOpenGL(const GLHookSet &funcs, GLPlatform &platform)
 
   m_AppControlledCapture = false;
 
+  m_UseVRMarkers = true;
+
   m_RealDebugFunc = NULL;
   m_RealDebugFuncParam = NULL;
   m_SuppressDebugMessages = false;
@@ -589,7 +596,7 @@ WrappedOpenGL::WrappedOpenGL(const GLHookSet &funcs, GLPlatform &platform)
   m_CurChunkOffset = 0;
   m_AddedDrawcall = false;
 
-  m_CurCtxPairTLS = Threading::AllocateTLSSlot();
+  m_CurCtxDataTLS = Threading::AllocateTLSSlot();
 }
 
 void WrappedOpenGL::Initialise(GLInitParams &params, uint64_t sectionVersion)
@@ -751,13 +758,23 @@ WrappedOpenGL::~WrappedOpenGL()
   GetResourceManager()->ClearReferencedResources();
 
   GetResourceManager()->ReleaseCurrentResource(m_DeviceResourceID);
-  GetResourceManager()->ReleaseCurrentResource(m_ContextResourceID);
+
+  for(auto it = m_ContextData.begin(); it != m_ContextData.end(); ++it)
+  {
+    if(it->second.m_ContextDataRecord)
+    {
+      RDCASSERT(it->second.m_ContextDataRecord->GetRefCount() == 1);
+      it->second.m_ContextDataRecord->Delete(GetResourceManager());
+      GetResourceManager()->ReleaseCurrentResource(it->second.m_ContextDataResourceID);
+    }
+  }
 
   if(m_ContextRecord)
   {
     RDCASSERT(m_ContextRecord->GetRefCount() == 1);
     m_ContextRecord->Delete(GetResourceManager());
   }
+  GetResourceManager()->ReleaseCurrentResource(m_ContextResourceID);
 
   if(m_DeviceRecord)
   {
@@ -775,10 +792,25 @@ WrappedOpenGL::~WrappedOpenGL()
 
 ContextPair &WrappedOpenGL::GetCtx()
 {
-  ContextPair *ret = (ContextPair *)Threading::GetTLSValue(m_CurCtxPairTLS);
+  GLContextTLSData *ret = (GLContextTLSData *)Threading::GetTLSValue(m_CurCtxDataTLS);
   if(ret)
-    return *ret;
-  return m_EmptyPair;
+    return ret->ctxPair;
+  return m_EmptyTLSData.ctxPair;
+}
+
+GLResourceRecord *WrappedOpenGL::GetContextRecord()
+{
+  GLContextTLSData *ret = (GLContextTLSData *)Threading::GetTLSValue(m_CurCtxDataTLS);
+  if(ret && ret->ctxRecord)
+  {
+    return ret->ctxRecord;
+  }
+  else
+  {
+    ContextData &dat = GetCtxData();
+    dat.CreateResourceRecord(this, GetCtx().ctx);
+    return dat.m_ContextDataRecord;
+  }
 }
 
 WrappedOpenGL::ContextData &WrappedOpenGL::GetCtxData()
@@ -838,6 +870,14 @@ void WrappedOpenGL::DeleteContext(void *contextHandle)
   if(ctxdata.m_ClientMemoryIBO)
     glDeleteBuffers(1, &ctxdata.m_ClientMemoryIBO);
 
+  if(ctxdata.m_ContextDataRecord)
+  {
+    RDCASSERT(ctxdata.m_ContextDataRecord->GetRefCount() == 1);
+    ctxdata.m_ContextDataRecord->Delete(GetResourceManager());
+    GetResourceManager()->ReleaseCurrentResource(ctxdata.m_ContextDataResourceID);
+    ctxdata.m_ContextDataRecord = NULL;
+  }
+
   for(auto it = m_LastContexts.begin(); it != m_LastContexts.end(); ++it)
   {
     if(it->ctx == contextHandle)
@@ -875,6 +915,21 @@ void WrappedOpenGL::ContextData::AssociateWindow(WrappedOpenGL *gl, void *wndHan
     RenderDoc::Inst().AddFrameCapturer(ctx, wndHandle, gl);
 
   windows[wndHandle] = Timing::GetUnixTimestamp();
+}
+
+void WrappedOpenGL::ContextData::CreateResourceRecord(WrappedOpenGL *gl, void *suppliedCtx)
+{
+  if(m_ContextDataResourceID == ResourceId() ||
+     !gl->GetResourceManager()->HasResourceRecord(m_ContextDataResourceID))
+  {
+    m_ContextDataResourceID = gl->GetResourceManager()->RegisterResource(
+        GLResource(suppliedCtx, eResSpecial, eSpecialResContext));
+
+    m_ContextDataRecord = gl->GetResourceManager()->AddResourceRecord(m_ContextDataResourceID);
+    m_ContextDataRecord->DataInSerialiser = false;
+    m_ContextDataRecord->Length = 0;
+    m_ContextDataRecord->SpecialResource = true;
+  }
 }
 
 void WrappedOpenGL::CreateContext(GLWindowingData winData, void *shareContext,
@@ -950,23 +1005,6 @@ void WrappedOpenGL::ActivateContext(GLWindowingData winData)
       m_LastContexts.erase(m_LastContexts.begin());
   }
 
-  // update thread-local context pair
-  {
-    ContextPair *ctx = (ContextPair *)Threading::GetTLSValue(m_CurCtxPairTLS);
-
-    if(ctx)
-    {
-      *ctx = {winData.ctx, ShareCtx(winData.ctx)};
-    }
-    else
-    {
-      ctx = new ContextPair({winData.ctx, ShareCtx(winData.ctx)});
-      m_CtxPairs.push_back(ctx);
-
-      Threading::SetTLSValue(m_CurCtxPairTLS, ctx);
-    }
-  }
-
   // TODO: support multiple GL contexts more explicitly
   Keyboard::AddInputWindow((void *)winData.wnd);
 
@@ -1004,7 +1042,7 @@ void WrappedOpenGL::ActivateContext(GLWindowingData winData)
       USE_SCRATCH_SERIALISER();
       SCOPED_SERIALISE_CHUNK(GLChunk::MakeContextCurrent);
       Serialise_BeginCaptureFrame(ser);
-      m_ContextRecord->AddChunk(scope.Get());
+      GetContextRecord()->AddChunk(scope.Get());
     }
 
     // also if there are any queued releases, process them now
@@ -1031,6 +1069,27 @@ void WrappedOpenGL::ActivateContext(GLWindowingData winData)
     }
 
     ContextData &ctxdata = m_ContextData[winData.ctx];
+
+    ctxdata.CreateResourceRecord(this, winData.ctx);
+
+    // update thread-local context pair
+    {
+      GLContextTLSData *tlsData = (GLContextTLSData *)Threading::GetTLSValue(m_CurCtxDataTLS);
+
+      if(tlsData)
+      {
+        tlsData->ctxPair = {winData.ctx, ShareCtx(winData.ctx)};
+        tlsData->ctxRecord = ctxdata.m_ContextDataRecord;
+      }
+      else
+      {
+        tlsData = new GLContextTLSData(ContextPair({winData.ctx, ShareCtx(winData.ctx)}),
+                                       ctxdata.m_ContextDataRecord);
+        m_CtxDataVector.push_back(tlsData);
+
+        Threading::SetTLSValue(m_CurCtxDataTLS, tlsData);
+      }
+    }
 
     if(!ctxdata.built)
     {
@@ -1123,6 +1182,9 @@ void WrappedOpenGL::ActivateContext(GLWindowingData winData)
         GLuint prevArrayBuffer = 0;
         glGetIntegerv(eGL_ARRAY_BUFFER_BINDING, (GLint *)&prevArrayBuffer);
 
+        GLuint prevElementArrayBuffer = 0;
+        glGetIntegerv(eGL_ELEMENT_ARRAY_BUFFER_BINDING, (GLint *)&prevElementArrayBuffer);
+
         // Initialize VBOs used in case we copy from client memory.
         gl_CurChunk = GLChunk::glGenBuffers;
         glGenBuffers(ARRAY_COUNT(ctxdata.m_ClientMemoryVBOs), ctxdata.m_ClientMemoryVBOs);
@@ -1134,13 +1196,33 @@ void WrappedOpenGL::ActivateContext(GLWindowingData winData)
 
           gl_CurChunk = GLChunk::glBufferData;
           glBufferData(eGL_ARRAY_BUFFER, 64, NULL, eGL_DYNAMIC_DRAW);
+
+          if(HasExt[KHR_debug])
+          {
+            gl_CurChunk = GLChunk::glObjectLabel;
+            glObjectLabel(eGL_BUFFER, ctxdata.m_ClientMemoryVBOs[i], -1,
+                          StringFormat::Fmt("Client-memory pointer data (VB %zu)", i).c_str());
+          }
+        }
+
+        gl_CurChunk = GLChunk::glGenBuffers;
+        glGenBuffers(1, &ctxdata.m_ClientMemoryIBO);
+
+        glBindBuffer(eGL_ELEMENT_ARRAY_BUFFER, ctxdata.m_ClientMemoryIBO);
+        glBufferData(eGL_ELEMENT_ARRAY_BUFFER, 64, NULL, eGL_DYNAMIC_DRAW);
+
+        if(HasExt[KHR_debug])
+        {
+          gl_CurChunk = GLChunk::glObjectLabel;
+          glObjectLabel(eGL_BUFFER, ctxdata.m_ClientMemoryIBO, -1,
+                        "Client-memory pointer data (IB)");
         }
 
         gl_CurChunk = GLChunk::glBindBuffer;
         glBindBuffer(eGL_ARRAY_BUFFER, prevArrayBuffer);
 
-        gl_CurChunk = GLChunk::glGenBuffers;
-        glGenBuffers(1, &ctxdata.m_ClientMemoryIBO);
+        gl_CurChunk = GLChunk::glBindBuffer;
+        glBindBuffer(eGL_ELEMENT_ARRAY_BUFFER, prevElementArrayBuffer);
       }
 
       if(IsCaptureMode(m_State))
@@ -1848,14 +1930,24 @@ bool WrappedOpenGL::EndFrameCapture(void *dev, void *wnd)
       }
 
       {
-        RDCDEBUG("Getting Resource Record");
-
-        GLResourceRecord *record = m_ResourceManager->GetResourceRecord(m_ContextResourceID);
-
         RDCDEBUG("Accumulating context resource list");
 
         map<int32_t, Chunk *> recordlist;
-        record->Insert(recordlist);
+        m_ContextRecord->Insert(recordlist);
+
+        for(auto it = m_ContextData.begin(); it != m_ContextData.end(); ++it)
+        {
+          if(m_AcceptedCtx.empty() || m_AcceptedCtx.find(it->first) != m_AcceptedCtx.end())
+          {
+            GLResourceRecord *record = it->second.m_ContextDataRecord;
+            if(record)
+            {
+              RDCDEBUG("Getting Resource Record for context ID %llu with %zu chunks",
+                       it->second.m_ContextDataResourceID, record->NumChunks());
+              record->Insert(recordlist);
+            }
+          }
+        }
 
         RDCDEBUG("Flushing %u records to file serialiser", (uint32_t)recordlist.size());
 
@@ -2158,6 +2250,14 @@ bool WrappedOpenGL::Serialise_ContextInit(SerialiserType &ser)
   if(IsReplayingAndReading())
   {
     GetResourceManager()->ReplaceResource(FBO0_ID, m_FBO0_ID);
+
+    AddResource(FBO0_ID, ResourceType::SwapchainImage, "");
+    GetReplay()->GetResourceDesc(FBO0_ID).SetCustomName("Window FBO");
+
+    // this is a hack, but we only support a single 'default' framebuffer so we set these
+    // replacements up as derived resources
+    GetReplay()->GetResourceDesc(m_FBO0_ID).derivedResources.push_back(FBO0_ID);
+    GetReplay()->GetResourceDesc(FBO0_ID).parentResources.push_back(m_FBO0_ID);
   }
 
   return true;
@@ -2172,22 +2272,35 @@ void WrappedOpenGL::ContextEndFrame()
   m_ContextRecord->AddChunk(scope.Get());
 }
 
+void WrappedOpenGL::CleanupResourceRecord(GLResourceRecord *record, bool freeParents)
+{
+  if(record)
+  {
+    record->LockChunks();
+    while(record->HasChunks())
+    {
+      Chunk *chunk = record->GetLastChunk();
+
+      SAFE_DELETE(chunk);
+      record->PopChunk();
+    }
+    record->UnlockChunks();
+    if(freeParents)
+      record->FreeParents(GetResourceManager());
+  }
+}
+
 void WrappedOpenGL::CleanupCapture()
 {
   m_SuccessfulCapture = true;
   m_FailureReason = CaptureSucceeded;
 
-  m_ContextRecord->LockChunks();
-  while(m_ContextRecord->HasChunks())
+  CleanupResourceRecord(m_ContextRecord, true);
+
+  for(auto it = m_ContextData.begin(); it != m_ContextData.end(); ++it)
   {
-    Chunk *chunk = m_ContextRecord->GetLastChunk();
-
-    SAFE_DELETE(chunk);
-    m_ContextRecord->PopChunk();
+    CleanupResourceRecord(it->second.m_ContextDataRecord, true);
   }
-  m_ContextRecord->UnlockChunks();
-
-  m_ContextRecord->FreeParents(GetResourceManager());
 
   for(auto it = m_MissingTracks.begin(); it != m_MissingTracks.end(); ++it)
   {
@@ -2257,20 +2370,17 @@ void WrappedOpenGL::AttemptCapture()
   m_DebugMessages.clear();
 
   {
-    RDCDEBUG("GL Context %llu Attempting capture", GetContextResourceID());
+    RDCDEBUG("GL Context %llu Attempting capture", m_ContextResourceID);
 
     m_SuccessfulCapture = true;
     m_FailureReason = CaptureSucceeded;
 
-    m_ContextRecord->LockChunks();
-    while(m_ContextRecord->HasChunks())
-    {
-      Chunk *chunk = m_ContextRecord->GetLastChunk();
+    CleanupResourceRecord(m_ContextRecord, false);
 
-      SAFE_DELETE(chunk);
-      m_ContextRecord->PopChunk();
+    for(auto it = m_ContextData.begin(); it != m_ContextData.end(); ++it)
+    {
+      CleanupResourceRecord(it->second.m_ContextDataRecord, false);
     }
-    m_ContextRecord->UnlockChunks();
   }
 }
 
@@ -2723,7 +2833,6 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
   {
     case GLChunk::DeviceInitialisation:
     {
-      // legacy behaviour where we had a single global VAO 0. Ignore
       ResourceId vao;
       SERIALISE_ELEMENT(vao).Hidden();
       SERIALISE_ELEMENT(m_FBO0_ID).Named("FBO 0 ID");
@@ -2732,6 +2841,19 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
 
       if(IsReplayingAndReading())
       {
+        // legacy behaviour where we had a single global VAO 0. Create a corresponding VAO so that
+        // it can be bound and have initial contents applied to it
+        if(vao != ResourceId())
+        {
+          glGenVertexArrays(1, &m_Fake_VAO0);
+          glBindVertexArray(m_Fake_VAO0);
+          GetResourceManager()->AddLiveResource(vao, VertexArrayRes(GetCtx(), m_Fake_VAO0));
+          AddResource(vao, ResourceType::StateObject, "Vertex Array");
+          GetReplay()->GetResourceDesc(vao).SetCustomName("Default VAO");
+
+          GetReplay()->GetResourceDesc(vao).initialisationChunks.push_back(m_InitChunkIndex);
+        }
+
         GetResourceManager()->AddLiveResource(m_FBO0_ID, FramebufferRes(GetCtx(), m_FakeBB_FBO));
 
         AddResource(m_FBO0_ID, ResourceType::SwapchainImage, "");
@@ -3103,9 +3225,11 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glMultiDrawElementsIndirect:
       return Serialise_glMultiDrawElementsIndirect(ser, eGL_NONE, eGL_NONE, 0, 0, 0);
     case GLChunk::glMultiDrawArraysIndirectCountARB:
-      return Serialise_glMultiDrawArraysIndirectCountARB(ser, eGL_NONE, 0, 0, 0, 0);
+    case GLChunk::glMultiDrawArraysIndirectCount:
+      return Serialise_glMultiDrawArraysIndirectCount(ser, eGL_NONE, 0, 0, 0, 0);
     case GLChunk::glMultiDrawElementsIndirectCountARB:
-      return Serialise_glMultiDrawElementsIndirectCountARB(ser, eGL_NONE, eGL_NONE, 0, 0, 0, 0);
+    case GLChunk::glMultiDrawElementsIndirectCount:
+      return Serialise_glMultiDrawElementsIndirectCount(ser, eGL_NONE, eGL_NONE, 0, 0, 0, 0);
     case GLChunk::glClearBufferfv:
     case GLChunk::glClearNamedFramebufferfv:
       return Serialise_glClearNamedFramebufferfv(ser, 0, eGL_NONE, 0, 0);
@@ -3417,7 +3541,8 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glScissorArrayv: return Serialise_glScissorArrayv(ser, 0, 0, 0);
     case GLChunk::glPolygonMode: return Serialise_glPolygonMode(ser, eGL_NONE, eGL_NONE);
     case GLChunk::glPolygonOffset: return Serialise_glPolygonOffset(ser, 0, 0);
-    case GLChunk::glPolygonOffsetClampEXT: return Serialise_glPolygonOffsetClampEXT(ser, 0, 0, 0);
+    case GLChunk::glPolygonOffsetClampEXT:
+    case GLChunk::glPolygonOffsetClamp: return Serialise_glPolygonOffsetClamp(ser, 0, 0, 0);
     case GLChunk::glPrimitiveBoundingBoxEXT:
     case GLChunk::glPrimitiveBoundingBoxOES:
     case GLChunk::glPrimitiveBoundingBox:
@@ -3802,6 +3927,12 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
       // Just in case it gets exported and imported, completely ignore it.
       return true;
 
+    case GLChunk::glShaderBinary: return Serialise_glShaderBinary(ser, 0, NULL, eGL_NONE, NULL, 0);
+
+    case GLChunk::glSpecializeShaderARB:
+    case GLChunk::glSpecializeShader:
+      return Serialise_glSpecializeShader(ser, 0, NULL, 0, NULL, NULL);
+
     // these functions are not currently serialised - they do nothing on replay and are not
     // serialised for information (it would be harmless and perhaps useful for the user to see
     // where and how they're called).
@@ -4083,7 +4214,6 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glActiveShaderProgram:
     case GLChunk::glActiveShaderProgramEXT:
     case GLChunk::glProgramBinary:
-    case GLChunk::glShaderBinary:
     case GLChunk::glReleaseShaderCompiler:
     case GLChunk::glFrameTerminatorGREMEDY:
     case GLChunk::glDiscardFramebufferEXT:
@@ -4117,6 +4247,8 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::wglDXUnregisterObjectNV:
     case GLChunk::wglDXObjectAccessNV:
     case GLChunk::wglDXUnlockObjectsNV:
+    case GLChunk::glMaxShaderCompilerThreadsARB:
+    case GLChunk::glMaxShaderCompilerThreadsKHR:
     case GLChunk::Max:
       RDCERR("Unexpected chunk, or missing case for processing! Skipping...");
       ser.SkipCurrentChunk();
@@ -4265,7 +4397,7 @@ ReplayStatus WrappedOpenGL::ContextReplayLog(CaptureState readType, uint32_t sta
     GetFrameRecord().frameInfo.debugMessages = GetDebugMessages();
 
     DrawcallDescription *previous = NULL;
-    SetupDrawcallPointers(&m_Drawcalls, GetFrameRecord().drawcallList, NULL, previous);
+    SetupDrawcallPointers(m_Drawcalls, GetFrameRecord().drawcallList, NULL, previous);
 
     // it's easier to remove duplicate usages here than check it as we go.
     // this means if textures are bound in multiple places in the same draw
@@ -4347,7 +4479,7 @@ void WrappedOpenGL::AddUsage(const DrawcallDescription &d)
   //////////////////////////////
   // Input
 
-  if(d.flags & DrawFlags::UseIBuffer)
+  if(d.flags & DrawFlags::Indexed)
   {
     GLuint ibuffer = 0;
     gl.glGetIntegerv(eGL_ELEMENT_ARRAY_BUFFER_BINDING, (GLint *)&ibuffer);

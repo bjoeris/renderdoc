@@ -71,6 +71,30 @@
  *
  */
 
+void WrappedVulkan::RemapQueueFamilyIndices(uint32_t &srcQueueFamily, uint32_t &dstQueueFamily)
+{
+  if(srcQueueFamily == VK_QUEUE_FAMILY_EXTERNAL || dstQueueFamily == VK_QUEUE_FAMILY_EXTERNAL)
+  {
+    // we should ignore this family transition since we're not synchronising with an
+    // external access.
+    srcQueueFamily = dstQueueFamily = VK_QUEUE_FAMILY_IGNORED;
+  }
+  else
+  {
+    if(srcQueueFamily != VK_QUEUE_FAMILY_IGNORED)
+    {
+      RDCASSERT(srcQueueFamily < ARRAY_COUNT(m_QueueRemapping), srcQueueFamily);
+      srcQueueFamily = m_QueueRemapping[srcQueueFamily][0].family;
+    }
+
+    if(dstQueueFamily != VK_QUEUE_FAMILY_IGNORED)
+    {
+      RDCASSERT(dstQueueFamily < ARRAY_COUNT(m_QueueRemapping), dstQueueFamily);
+      dstQueueFamily = m_QueueRemapping[dstQueueFamily][0].family;
+    }
+  }
+}
+
 template <typename SerialiserType>
 bool WrappedVulkan::Serialise_vkCreateFence(SerialiserType &ser, VkDevice device,
                                             const VkFenceCreateInfo *pCreateInfo,
@@ -87,7 +111,13 @@ bool WrappedVulkan::Serialise_vkCreateFence(SerialiserType &ser, VkDevice device
   {
     VkFence fence = VK_NULL_HANDLE;
 
-    VkResult ret = ObjDisp(device)->CreateFence(Unwrap(device), &CreateInfo, NULL, &fence);
+    VkFenceCreateInfo patched = CreateInfo;
+
+    byte *tempMem = GetTempMemory(GetNextPatchSize(patched.pNext));
+
+    UnwrapNextChain(m_State, "VkFenceCreateInfo", tempMem, (VkGenericStruct *)&patched);
+
+    VkResult ret = ObjDisp(device)->CreateFence(Unwrap(device), &patched, NULL, &fence);
 
     if(ret != VK_SUCCESS)
     {
@@ -110,9 +140,14 @@ bool WrappedVulkan::Serialise_vkCreateFence(SerialiserType &ser, VkDevice device
 VkResult WrappedVulkan::vkCreateFence(VkDevice device, const VkFenceCreateInfo *pCreateInfo,
                                       const VkAllocationCallbacks *pAllocator, VkFence *pFence)
 {
+  VkFenceCreateInfo info = *pCreateInfo;
+
+  byte *tempMem = GetTempMemory(GetNextPatchSize(info.pNext));
+
+  UnwrapNextChain(m_State, "VkFenceCreateInfo", tempMem, (VkGenericStruct *)&info);
+
   VkResult ret;
-  SERIALISE_TIME_CALL(
-      ret = ObjDisp(device)->CreateFence(Unwrap(device), pCreateInfo, pAllocator, pFence));
+  SERIALISE_TIME_CALL(ret = ObjDisp(device)->CreateFence(Unwrap(device), &info, pAllocator, pFence));
 
   if(ret == VK_SUCCESS)
   {
@@ -484,7 +519,13 @@ bool WrappedVulkan::Serialise_vkCreateSemaphore(SerialiserType &ser, VkDevice de
   {
     VkSemaphore sem = VK_NULL_HANDLE;
 
-    VkResult ret = ObjDisp(device)->CreateSemaphore(Unwrap(device), &CreateInfo, NULL, &sem);
+    VkSemaphoreCreateInfo patched = CreateInfo;
+
+    byte *tempMem = GetTempMemory(GetNextPatchSize(patched.pNext));
+
+    UnwrapNextChain(m_State, "VkSemaphoreCreateInfo", tempMem, (VkGenericStruct *)&patched);
+
+    VkResult ret = ObjDisp(device)->CreateSemaphore(Unwrap(device), &patched, NULL, &sem);
 
     if(ret != VK_SUCCESS)
     {
@@ -528,9 +569,15 @@ VkResult WrappedVulkan::vkCreateSemaphore(VkDevice device, const VkSemaphoreCrea
                                           const VkAllocationCallbacks *pAllocator,
                                           VkSemaphore *pSemaphore)
 {
+  VkSemaphoreCreateInfo info = *pCreateInfo;
+
+  byte *tempMem = GetTempMemory(GetNextPatchSize(info.pNext));
+
+  UnwrapNextChain(m_State, "VkSemaphoreCreateInfo", tempMem, (VkGenericStruct *)&info);
+
   VkResult ret;
   SERIALISE_TIME_CALL(
-      ret = ObjDisp(device)->CreateSemaphore(Unwrap(device), pCreateInfo, pAllocator, pSemaphore));
+      ret = ObjDisp(device)->CreateSemaphore(Unwrap(device), &info, pAllocator, pSemaphore));
 
   if(ret == VK_SUCCESS)
   {
@@ -717,6 +764,9 @@ bool WrappedVulkan::Serialise_vkCmdWaitEvents(
       {
         bufBarriers.push_back(pBufferMemoryBarriers[i]);
         bufBarriers.back().buffer = Unwrap(bufBarriers.back().buffer);
+
+        RemapQueueFamilyIndices(bufBarriers.back().srcQueueFamilyIndex,
+                                bufBarriers.back().dstQueueFamilyIndex);
       }
     }
 
@@ -729,8 +779,8 @@ bool WrappedVulkan::Serialise_vkCmdWaitEvents(
         ReplacePresentableImageLayout(imgBarriers.back().oldLayout);
         ReplacePresentableImageLayout(imgBarriers.back().newLayout);
 
-        ReplaceExternalQueueFamily(imgBarriers.back().srcQueueFamilyIndex,
-                                   imgBarriers.back().dstQueueFamilyIndex);
+        RemapQueueFamilyIndices(imgBarriers.back().srcQueueFamilyIndex,
+                                imgBarriers.back().dstQueueFamilyIndex);
       }
     }
 

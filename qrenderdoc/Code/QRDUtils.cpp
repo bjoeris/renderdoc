@@ -627,13 +627,13 @@ void CombineUsageEvents(ICaptureContext &ctx, const rdcarray<EventUsage> &usage,
       // last event was where we were - otherwise it's a new
       // distinct set of drawcalls and should have a separate
       // entry in the context menu
-      const DrawcallDescription *prev = ctx.GetDrawcall(draw->previous);
+      const DrawcallDescription *prev = draw->previous;
 
       while(prev != NULL && prev->eventId > end)
       {
         if(!(prev->flags & (DrawFlags::Dispatch | DrawFlags::Drawcall | DrawFlags::CmdList)))
         {
-          prev = ctx.GetDrawcall(prev->previous);
+          prev = prev->previous;
         }
         else
         {
@@ -814,6 +814,9 @@ void GUIInvoke::init()
 
 void GUIInvoke::call(QObject *obj, const std::function<void()> &f)
 {
+  if(!obj)
+    qCritical() << "GUIInvoke::call called with NULL object";
+
   if(onUIThread())
   {
     if(obj)
@@ -826,6 +829,9 @@ void GUIInvoke::call(QObject *obj, const std::function<void()> &f)
 
 void GUIInvoke::defer(QObject *obj, const std::function<void()> &f)
 {
+  if(!obj)
+    qCritical() << "GUIInvoke::defer called with NULL object";
+
   GUIInvoke *invoke = new GUIInvoke(obj, f);
   invoke->moveToThread(qApp->thread());
   invoke->metaObject()->method(methodIndex).invoke(invoke, Qt::QueuedConnection);
@@ -833,6 +839,9 @@ void GUIInvoke::defer(QObject *obj, const std::function<void()> &f)
 
 void GUIInvoke::blockcall(QObject *obj, const std::function<void()> &f)
 {
+  if(!obj)
+    qCritical() << "GUIInvoke::blockcall called with NULL object";
+
   if(onUIThread())
   {
     if(obj)
@@ -849,6 +858,8 @@ bool GUIInvoke::onUIThread()
 {
   return qApp->thread() == QThread::currentThread();
 }
+
+QString RDDialog::DefaultBrowsePath;
 
 const QMessageBox::StandardButtons RDDialog::YesNoCancel =
     QMessageBox::StandardButtons(QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
@@ -907,8 +918,16 @@ QMessageBox::StandardButton RDDialog::messageBox(QMessageBox::Icon icon, QWidget
 {
   QMessageBox::StandardButton ret = defaultButton;
 
+  QObject *parentObj = parent;
+
+  if(parentObj == NULL)
+  {
+    // for 'global' message boxes with no parents, just use the app as the parent pointer
+    parentObj = qApp;
+  }
+
   // if we're already on the right thread, this boils down to a function call
-  GUIInvoke::blockcall(parent, [&]() {
+  GUIInvoke::blockcall(parentObj, [&]() {
     QMessageBox mb(icon, title, text, buttons, parent);
     mb.setDefaultButton(defaultButton);
     show(&mb);
@@ -961,7 +980,11 @@ QString RDDialog::getOpenFileName(QWidget *parent, const QString &caption, const
                                   const QString &filter, QString *selectedFilter,
                                   QFileDialog::Options options)
 {
-  QFileDialog fd(parent, caption, dir, filter);
+  QString d = dir;
+  if(d.isEmpty())
+    d = DefaultBrowsePath;
+
+  QFileDialog fd(parent, caption, d, filter);
   fd.setFileMode(QFileDialog::ExistingFile);
   fd.setAcceptMode(QFileDialog::AcceptOpen);
   fd.setOptions(options);
@@ -974,7 +997,10 @@ QString RDDialog::getOpenFileName(QWidget *parent, const QString &caption, const
 
     QStringList files = fd.selectedFiles();
     if(!files.isEmpty())
+    {
+      DefaultBrowsePath = QFileInfo(files[0]).dir().absolutePath();
       return files[0];
+    }
   }
 
   return QString();
@@ -983,6 +1009,10 @@ QString RDDialog::getOpenFileName(QWidget *parent, const QString &caption, const
 QString RDDialog::getExecutableFileName(QWidget *parent, const QString &caption, const QString &dir,
                                         QFileDialog::Options options)
 {
+  QString d = dir;
+  if(d.isEmpty())
+    d = DefaultBrowsePath;
+
   QString filter;
 
 #if defined(Q_OS_WIN32)
@@ -990,7 +1020,7 @@ QString RDDialog::getExecutableFileName(QWidget *parent, const QString &caption,
   filter = QApplication::translate("RDDialog", "Executables (*.exe);;All Files (*)");
 #endif
 
-  QFileDialog fd(parent, caption, dir, filter);
+  QFileDialog fd(parent, caption, d, filter);
   fd.setOptions(options);
   fd.setAcceptMode(QFileDialog::AcceptOpen);
   fd.setFileMode(QFileDialog::ExistingFile);
@@ -1005,7 +1035,10 @@ QString RDDialog::getExecutableFileName(QWidget *parent, const QString &caption,
   {
     QStringList files = fd.selectedFiles();
     if(!files.isEmpty())
+    {
+      DefaultBrowsePath = QFileInfo(files[0]).dir().absolutePath();
       return files[0];
+    }
   }
 
   return QString();
@@ -1028,7 +1061,11 @@ QString RDDialog::getSaveFileName(QWidget *parent, const QString &caption, const
                                   const QString &filter, QString *selectedFilter,
                                   QFileDialog::Options options)
 {
-  QFileDialog fd(parent, caption, dir, filter);
+  QString d = dir;
+  if(d.isEmpty())
+    d = DefaultBrowsePath;
+
+  QFileDialog fd(parent, caption, d, filter);
   fd.setAcceptMode(QFileDialog::AcceptSave);
   fd.setOptions(options);
   const QStringList &defaultSuffixes = getDefaultSuffixesFromFilter(filter);
@@ -1047,7 +1084,10 @@ QString RDDialog::getSaveFileName(QWidget *parent, const QString &caption, const
 
     QStringList files = fd.selectedFiles();
     if(!files.isEmpty())
+    {
+      DefaultBrowsePath = QFileInfo(files[0]).dir().absolutePath();
       return files[0];
+    }
   }
 
   return QString();

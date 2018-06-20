@@ -160,7 +160,7 @@ D3D12ResourceType IdentifyTypeByPtr(ID3D12Object *ptr)
 
   ALL_D3D12_TYPES;
 
-  if(WrappedID3D12GraphicsCommandList::IsAlloc(ptr))
+  if(WrappedID3D12GraphicsCommandList2::IsAlloc(ptr))
     return Resource_GraphicsCommandList;
   if(WrappedID3D12CommandQueue::IsAlloc(ptr))
     return Resource_CommandQueue;
@@ -201,8 +201,8 @@ ID3D12Object *Unwrap(ID3D12Object *ptr)
 
   ALL_D3D12_TYPES;
 
-  if(WrappedID3D12GraphicsCommandList::IsAlloc(ptr))
-    return (ID3D12Object *)(((WrappedID3D12GraphicsCommandList *)ptr)->GetReal());
+  if(WrappedID3D12GraphicsCommandList2::IsAlloc(ptr))
+    return (ID3D12Object *)(((WrappedID3D12GraphicsCommandList2 *)ptr)->GetReal());
   if(WrappedID3D12CommandQueue::IsAlloc(ptr))
     return (ID3D12Object *)(((WrappedID3D12CommandQueue *)ptr)->GetReal());
 
@@ -221,8 +221,8 @@ ResourceId GetResID(ID3D12Object *ptr)
 
   if(res == NULL)
   {
-    if(WrappedID3D12GraphicsCommandList::IsAlloc(ptr))
-      return ((WrappedID3D12GraphicsCommandList *)ptr)->GetResourceID();
+    if(WrappedID3D12GraphicsCommandList2::IsAlloc(ptr))
+      return ((WrappedID3D12GraphicsCommandList2 *)ptr)->GetResourceID();
     if(WrappedID3D12CommandQueue::IsAlloc(ptr))
       return ((WrappedID3D12CommandQueue *)ptr)->GetResourceID();
 
@@ -244,8 +244,8 @@ D3D12ResourceRecord *GetRecord(ID3D12Object *ptr)
 
   if(res == NULL)
   {
-    if(WrappedID3D12GraphicsCommandList::IsAlloc(ptr))
-      return ((WrappedID3D12GraphicsCommandList *)ptr)->GetResourceRecord();
+    if(WrappedID3D12GraphicsCommandList2::IsAlloc(ptr))
+      return ((WrappedID3D12GraphicsCommandList2 *)ptr)->GetResourceRecord();
     if(WrappedID3D12CommandQueue::IsAlloc(ptr))
       return ((WrappedID3D12CommandQueue *)ptr)->GetResourceRecord();
 
@@ -446,7 +446,7 @@ HRESULT STDMETHODCALLTYPE WrappedID3D12Resource::WriteToSubresource(UINT DstSubr
 void WrappedID3D12Resource::RefBuffers(D3D12ResourceManager *rm)
 {
   // only buffers go into m_Addresses
-  SCOPED_LOCK(m_Addresses.addressLock);
+  SCOPED_READLOCK(m_Addresses.addressLock);
   for(size_t i = 0; i < m_Addresses.addresses.size(); i++)
     rm->MarkResourceFrameReferenced(m_Addresses.addresses[i].id, eFrameRef_Read);
 }
@@ -468,16 +468,7 @@ WrappedID3D12DescriptorHeap::WrappedID3D12DescriptorHeap(ID3D12DescriptorHeap *r
 
   RDCEraseMem(descriptors, sizeof(D3D12Descriptor) * numDescriptors);
   for(UINT i = 0; i < numDescriptors; i++)
-  {
-    // only need to set this once, it's aliased between samp and nonsamp
-    descriptors[i].samp.heap = this;
-    descriptors[i].samp.idx = i;
-
-    // initially descriptors are undefined. This way we just fill them with
-    // some null SRV descriptor so it's safe to copy around etc but is no
-    // less undefined for the application to use
-    descriptors[i].nonsamp.type = D3D12DescriptorType::Undefined;
-  }
+    descriptors[i].Setup(this, i);
 }
 
 WrappedID3D12DescriptorHeap::~WrappedID3D12DescriptorHeap()
