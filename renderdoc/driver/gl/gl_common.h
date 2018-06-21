@@ -284,6 +284,42 @@ struct GLMarkerRegion
   static const GLHookSet *gl;
 };
 
+// TODO ideally we'd support the full state vector, and only fetch&restore state we actually change
+// - i.e. change state through here, and track dirty bits.
+struct GLPushPopState
+{
+  bool enableBits[8];
+  GLenum ClipOrigin, ClipDepth;
+  GLenum EquationRGB, EquationAlpha;
+  GLenum SourceRGB, SourceAlpha;
+  GLenum DestinationRGB, DestinationAlpha;
+  GLenum PolygonMode;
+  GLfloat Viewportf[4];
+  GLint Viewport[4];
+  GLenum ActiveTexture;
+  GLuint tex0;
+  GLuint arraybuf;
+  GLuint ubo[3];
+  GLuint prog;
+  GLuint pipe;
+  GLuint VAO;
+  GLuint drawFBO;
+
+  GLboolean ColorMask[3];
+
+  // if the current context wasn't created with CreateContextAttribs we do an immediate mode render,
+  // so fewer states are pushed/popped.
+  // Note we don't assume a 1.0 context since that would be painful to handle. Instead we just skip
+  // bits of state we're not going to mess with. In some cases this might cause problems e.g. we
+  // don't use indexed enable states for blend and scissor test because we're assuming there's no
+  // separate blending.
+  //
+  // In the end, this is just a best-effort to keep going without crashing. Old GL versions aren't
+  // supported.
+  void Push(const GLHookSet &gl, bool modern);
+  void Pop(const GLHookSet &gl, bool modern);
+};
+
 size_t GLTypeSize(GLenum type);
 
 size_t BufferIdx(GLenum buf);
@@ -398,6 +434,8 @@ extern bool IsGLES;
 // 99 means the extension never became core, so you can easily just do a check of CoreVersion >= NN
 // and they will always fail.
 #define EXTENSION_CHECKS()                                       \
+  EXT_TO_CHECK(30, 30, EXT_transform_feedback)                   \
+  EXT_TO_CHECK(30, 30, EXT_draw_buffers2)                        \
   EXT_TO_CHECK(31, 99, ARB_texture_buffer_object)                \
   EXT_TO_CHECK(33, 30, ARB_explicit_attrib_location)             \
   EXT_TO_CHECK(33, 30, ARB_sampler_objects)                      \
@@ -457,7 +495,9 @@ extern bool IsGLES;
   EXT_TO_CHECK(99, 99, NV_read_depth)                            \
   EXT_TO_CHECK(99, 99, NV_read_stencil)                          \
   EXT_TO_CHECK(99, 99, NV_read_depth_stencil)                    \
-  EXT_TO_CHECK(99, 99, EXT_disjoint_timer_query)
+  EXT_TO_CHECK(99, 99, EXT_disjoint_timer_query)                 \
+  EXT_TO_CHECK(99, 99, EXT_multisampled_render_to_texture)       \
+  EXT_TO_CHECK(99, 99, OVR_multiview)
 
 // GL extensions equivalents
 // Either promoted extensions from EXT to ARB, or

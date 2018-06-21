@@ -77,6 +77,18 @@ void DoSerialise(SerialiserType &ser, FramebufferAttachmentData &el)
   SERIALISE_MEMBER(layered);
   SERIALISE_MEMBER(layer);
   SERIALISE_MEMBER(level);
+  if(ser.VersionAtLeast(0x1B))
+  {
+    SERIALISE_MEMBER(numVirtualSamples);
+    SERIALISE_MEMBER(numViews);
+    SERIALISE_MEMBER(startView);
+  }
+  else if(ser.IsReading())
+  {
+    el.numVirtualSamples = 1;
+    el.numViews = 1;
+    el.startView = 0;
+  }
   SERIALISE_MEMBER(obj);
 }
 
@@ -200,6 +212,20 @@ void GLResourceManager::ContextPrepare_InitialState(GLResource res)
         if(layered == 0)
           gl.glGetNamedFramebufferAttachmentParameterivEXT(
               res.name, attachment, eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER, &a.layer);
+
+        if(HasExt[EXT_multisampled_render_to_texture])
+          gl.glGetNamedFramebufferAttachmentParameterivEXT(
+              res.name, attachment, eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_SAMPLES_EXT,
+              &a.numVirtualSamples);
+
+        if(HasExt[OVR_multiview])
+        {
+          gl.glGetNamedFramebufferAttachmentParameterivEXT(
+              res.name, attachment, eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR, &a.numViews);
+          gl.glGetNamedFramebufferAttachmentParameterivEXT(
+              res.name, attachment, eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR,
+              &a.startView);
+        }
       }
 
       a.layered = (layered != 0);
@@ -491,6 +517,10 @@ void GLResourceManager::CreateTextureImage(GLuint tex, GLenum internalFormat, GL
   else
   {
     gl.glTextureParameteriEXT(tex, textype, eGL_TEXTURE_MAX_LEVEL, mips - 1);
+    gl.glTextureParameteriEXT(tex, textype, eGL_TEXTURE_MIN_FILTER, eGL_NEAREST);
+    gl.glTextureParameteriEXT(tex, textype, eGL_TEXTURE_MAG_FILTER, eGL_NEAREST);
+    gl.glTextureParameteriEXT(tex, textype, eGL_TEXTURE_WRAP_S, eGL_CLAMP_TO_EDGE);
+    gl.glTextureParameteriEXT(tex, textype, eGL_TEXTURE_WRAP_T, eGL_CLAMP_TO_EDGE);
 
     bool isCompressed = IsCompressedFormat(internalFormat);
 
@@ -1049,7 +1079,8 @@ bool GLResourceManager::Serialise_InitialState(SerialiserType &ser, ResourceId r
       {
         gl.glGenBuffers(1, &res.name);
         gl.glBindBuffer(eGL_COPY_WRITE_BUFFER, res.name);
-        gl.glNamedBufferDataEXT(res.name, (GLsizeiptr)BufferContentsSize, NULL, eGL_STATIC_DRAW);
+        gl.glNamedBufferDataEXT(res.name, (GLsizeiptr)RDCMAX(BufferContentsSize, 4U), NULL,
+                                eGL_STATIC_DRAW);
         BufferContents = (byte *)gl.glMapNamedBufferEXT(res.name, eGL_WRITE_ONLY);
 
         SetInitialContents(
@@ -1999,7 +2030,30 @@ void GLResourceManager::Apply_InitialState(GLResource live, GLInitialContents in
                     details.curType == eGL_TEXTURE_1D_ARRAY ||
                     details.curType == eGL_TEXTURE_2D_ARRAY)
             {
-              gl.glFramebufferTextureLayer(eGL_DRAW_FRAMEBUFFER, attachment, obj, a.level, a.layer);
+              if(a.numViews > 1)
+              {
+                if(a.numVirtualSamples > 1)
+                {
+                  gl.glFramebufferTextureMultisampleMultiviewOVR(eGL_DRAW_FRAMEBUFFER, attachment,
+                                                                 obj, a.level, a.numVirtualSamples,
+                                                                 a.startView, a.numViews);
+                }
+                else
+                {
+                  gl.glFramebufferTextureMultiviewOVR(eGL_DRAW_FRAMEBUFFER, attachment, obj,
+                                                      a.level, a.startView, a.numViews);
+                }
+              }
+              else
+              {
+                gl.glFramebufferTextureLayer(eGL_DRAW_FRAMEBUFFER, attachment, obj, a.level, a.layer);
+              }
+            }
+            else if(a.numVirtualSamples > 1)
+            {
+              gl.glFramebufferTexture2DMultisampleEXT(eGL_DRAW_FRAMEBUFFER, attachment,
+                                                      details.curType, obj, a.level,
+                                                      a.numVirtualSamples);
             }
             else
             {
