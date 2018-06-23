@@ -730,7 +730,7 @@ void UnwrapNextChain(CaptureState state, const char *structName, byte *&tempMem,
     }
     else
     {
-      RDCERR("unrecognised struct %d in %s pNext chain", nextInput->sType, structName);
+      RDCWARN("unrecognised struct %d in %s pNext chain", nextInput->sType, structName);
       // can't patch this struct, have to just copy it and hope it's the last in the chain
       nextChainTail->pNext = nextInput;
     }
