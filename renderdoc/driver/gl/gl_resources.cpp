@@ -24,7 +24,7 @@
  ******************************************************************************/
 
 #include "gl_resources.h"
-#include "gl_hookset.h"
+#include "gl_dispatch_table.h"
 #include "gl_manager.h"
 
 template <>
@@ -307,7 +307,7 @@ size_t GetByteSize(GLsizei w, GLsizei h, GLsizei d, GLenum format, GLenum type)
     default: RDCERR("Unhandled Byte Size type %s!", ToStr(type).c_str()); break;
   }
 
-  switch((int)format)
+  switch(format)
   {
     case eGL_RED:
     case eGL_RED_INTEGER:
@@ -317,6 +317,7 @@ size_t GetByteSize(GLsizei w, GLsizei h, GLsizei d, GLenum format, GLenum type)
     case eGL_BLUE_INTEGER:
     case eGL_LUMINANCE:
     case eGL_ALPHA:
+    case eGL_ALPHA_INTEGER:
     case eGL_DEPTH_COMPONENT:
     case eGL_STENCIL_INDEX:
     case eGL_STENCIL: return w * h * d * elemSize;
@@ -332,7 +333,7 @@ size_t GetByteSize(GLsizei w, GLsizei h, GLsizei d, GLenum format, GLenum type)
     case eGL_RGBA_INTEGER:
     case eGL_BGRA:
     case eGL_BGRA_INTEGER: return w * h * d * elemSize * 4;
-    default: RDCERR("Unhandled Byte Size format %s!", ToStr(type).c_str()); break;
+    default: RDCERR("Unhandled Byte Size format %s!", ToStr(format).c_str()); break;
   }
 
   RDCERR("Unhandled Byte Size case!");
@@ -355,7 +356,7 @@ GLenum GetBaseFormat(GLenum internalFormat)
     case eGL_ALPHA8_EXT: return eGL_ALPHA;
     case eGL_LUMINANCE: return eGL_LUMINANCE;
     case eGL_LUMINANCE_ALPHA: return eGL_LUMINANCE_ALPHA;
-    case eGL_INTENSITY: return eGL_INTENSITY;
+    case eGL_INTENSITY_EXT: return eGL_INTENSITY_EXT;
     case eGL_R8I:
     case eGL_R16I:
     case eGL_R32I:
@@ -387,6 +388,7 @@ GLenum GetBaseFormat(GLenum internalFormat)
     case eGL_RGB12:
     case eGL_RGB16:
     case eGL_RGB16_SNORM:
+    case eGL_SRGB:
     case eGL_SRGB8:
     case eGL_RGB16F:
     case eGL_RGB32F:
@@ -409,6 +411,7 @@ GLenum GetBaseFormat(GLenum internalFormat)
     case eGL_RGBA12:
     case eGL_RGBA16:
     case eGL_RGBA16_SNORM:
+    case eGL_SRGB_ALPHA:
     case eGL_SRGB8_ALPHA8:
     case eGL_RGBA16F:
     case eGL_RGBA32F:
@@ -460,6 +463,8 @@ GLenum GetDataType(GLenum internalFormat)
     case eGL_BGRA8_EXT:
     case eGL_SRGB8_ALPHA8:
     case eGL_SRGB8:
+    case eGL_SRGB_ALPHA:
+    case eGL_SRGB:
     case eGL_RED:
     case eGL_RG:
     case eGL_RGB:
@@ -493,6 +498,7 @@ GLenum GetDataType(GLenum internalFormat)
     case eGL_RG32UI:
     case eGL_R32UI:
     case eGL_RGB32UI:
+    case eGL_DEPTH_COMPONENT:
     case eGL_DEPTH_COMPONENT24:
     case eGL_DEPTH_COMPONENT32: return eGL_UNSIGNED_INT;
     case eGL_RGBA32I:
@@ -520,13 +526,15 @@ GLenum GetDataType(GLenum internalFormat)
     case eGL_RGB10: return eGL_UNSIGNED_INT_10_10_10_2;
     case eGL_RGB9_E5: return eGL_UNSIGNED_INT_5_9_9_9_REV;
     case eGL_DEPTH24_STENCIL8: return eGL_UNSIGNED_INT_24_8;
+    case eGL_DEPTH_STENCIL:
     case eGL_DEPTH32F_STENCIL8: return eGL_FLOAT_32_UNSIGNED_INT_24_8_REV;
+    case eGL_STENCIL_INDEX:
     case eGL_STENCIL_INDEX8: return eGL_UNSIGNED_BYTE;
     case eGL_ALPHA:
     case eGL_ALPHA8_EXT:
     case eGL_LUMINANCE_ALPHA:
     case eGL_LUMINANCE:
-    case eGL_INTENSITY: return eGL_UNSIGNED_BYTE;
+    case eGL_INTENSITY_EXT: return eGL_UNSIGNED_BYTE;
     default: break;
   }
 
@@ -535,20 +543,20 @@ GLenum GetDataType(GLenum internalFormat)
   return eGL_NONE;
 }
 
-int GetNumMips(const GLHookSet &gl, GLenum target, GLuint tex, GLuint w, GLuint h, GLuint d)
+int GetNumMips(GLenum target, GLuint tex, GLuint w, GLuint h, GLuint d)
 {
   int mips = 1;
 
   GLint immut = 0;
-  gl.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_IMMUTABLE_FORMAT, &immut);
+  GL.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_IMMUTABLE_FORMAT, &immut);
 
   if(immut)
-    gl.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_IMMUTABLE_LEVELS, (GLint *)&mips);
+    GL.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_IMMUTABLE_LEVELS, (GLint *)&mips);
   else
     mips = CalcNumMips(w, h, d);
 
   GLint maxLevel = 1000;
-  gl.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_MAX_LEVEL, &maxLevel);
+  GL.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_MAX_LEVEL, &maxLevel);
   mips = RDCMIN(mips, maxLevel + 1);
 
   if(immut == 0)
@@ -561,7 +569,7 @@ int GetNumMips(const GLHookSet &gl, GLenum target, GLuint tex, GLuint w, GLuint 
     for(int i = 0; i < mips; i++)
     {
       GLint width = 0;
-      gl.glGetTextureLevelParameterivEXT(tex, target, i, eGL_TEXTURE_WIDTH, &width);
+      GL.glGetTextureLevelParameterivEXT(tex, target, i, eGL_TEXTURE_WIDTH, &width);
       if(width == 0)
       {
         mips = i;
@@ -573,19 +581,18 @@ int GetNumMips(const GLHookSet &gl, GLenum target, GLuint tex, GLuint w, GLuint 
   return RDCMAX(1, mips);
 }
 
-void GetFramebufferMipAndLayer(const GLHookSet &gl, GLenum framebuffer, GLenum attachment,
-                               GLint *mip, GLint *layer)
+void GetFramebufferMipAndLayer(GLenum framebuffer, GLenum attachment, GLint *mip, GLint *layer)
 {
-  gl.glGetFramebufferAttachmentParameteriv(framebuffer, attachment,
+  GL.glGetFramebufferAttachmentParameteriv(framebuffer, attachment,
                                            eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL, mip);
 
   GLenum face = eGL_NONE;
-  gl.glGetFramebufferAttachmentParameteriv(
+  GL.glGetFramebufferAttachmentParameteriv(
       framebuffer, attachment, eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE, (GLint *)&face);
 
   if(face == 0)
   {
-    gl.glGetFramebufferAttachmentParameteriv(framebuffer, attachment,
+    GL.glGetFramebufferAttachmentParameteriv(framebuffer, attachment,
                                              eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER, layer);
   }
   else
@@ -597,128 +604,263 @@ void GetFramebufferMipAndLayer(const GLHookSet &gl, GLenum framebuffer, GLenum a
 // GL_TEXTURE_SWIZZLE_RGBA is not supported on GLES, so for consistency we use r/g/b/a component
 // swizzles for both GL and GLES.
 // The same applies to SetTextureSwizzle function.
-void GetTextureSwizzle(const GLHookSet &gl, GLuint tex, GLenum target, GLenum *swizzleRGBA)
+void GetTextureSwizzle(GLuint tex, GLenum target, GLenum *swizzleRGBA)
 {
-  gl.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_R, (GLint *)&swizzleRGBA[0]);
-  gl.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_G, (GLint *)&swizzleRGBA[1]);
-  gl.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_B, (GLint *)&swizzleRGBA[2]);
-  gl.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_A, (GLint *)&swizzleRGBA[3]);
+  GL.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_R, (GLint *)&swizzleRGBA[0]);
+  GL.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_G, (GLint *)&swizzleRGBA[1]);
+  GL.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_B, (GLint *)&swizzleRGBA[2]);
+  GL.glGetTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_A, (GLint *)&swizzleRGBA[3]);
 }
 
-void SetTextureSwizzle(const GLHookSet &gl, GLuint tex, GLenum target, const GLenum *swizzleRGBA)
+void SetTextureSwizzle(GLuint tex, GLenum target, const GLenum *swizzleRGBA)
 {
-  gl.glTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_R, (GLint *)&swizzleRGBA[0]);
-  gl.glTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_G, (GLint *)&swizzleRGBA[1]);
-  gl.glTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_B, (GLint *)&swizzleRGBA[2]);
-  gl.glTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_A, (GLint *)&swizzleRGBA[3]);
+  GL.glTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_R, (GLint *)&swizzleRGBA[0]);
+  GL.glTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_G, (GLint *)&swizzleRGBA[1]);
+  GL.glTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_B, (GLint *)&swizzleRGBA[2]);
+  GL.glTextureParameterivEXT(tex, target, eGL_TEXTURE_SWIZZLE_A, (GLint *)&swizzleRGBA[3]);
 }
 
-bool EmulateLuminanceFormat(const GLHookSet &gl, GLuint tex, GLenum target, GLenum &internalFormat,
-                            GLenum &dataFormat)
+bool EmulateLuminanceFormat(GLuint tex, GLenum target, GLenum &internalFormat, GLenum &dataFormat)
 {
   GLenum swizzle[] = {eGL_RED, eGL_GREEN, eGL_BLUE, eGL_ALPHA};
 
-  bool dataFormatLum = (dataFormat == eGL_LUMINANCE || dataFormat == eGL_LUMINANCE_ALPHA ||
-                        dataFormat == eGL_ALPHA || dataFormat == eGL_INTENSITY);
-
-  switch((int)internalFormat)
+  // set swizzles
+  switch(internalFormat)
   {
-    case eGL_INTENSITY:
+    case eGL_INTENSITY32F_ARB:
+    case eGL_INTENSITY16F_ARB:
+    case eGL_INTENSITY_EXT:
     case eGL_INTENSITY8_EXT:
-      internalFormat = eGL_R8;
-      if(dataFormatLum)
-        dataFormat = eGL_RED;
-      swizzle[0] = swizzle[1] = swizzle[2] = swizzle[3] =
-          eGL_RED;    // intensity replicates across all 4 of RGBA
-      break;
     case eGL_INTENSITY16_EXT:
-      internalFormat = eGL_R16;
-      if(dataFormatLum)
-        dataFormat = eGL_RED;
-      swizzle[0] = swizzle[1] = swizzle[2] = swizzle[3] =
-          eGL_RED;    // intensity replicates across all 4 of RGBA
+    case eGL_INTENSITY32UI_EXT:
+    case eGL_INTENSITY16UI_EXT:
+    case eGL_INTENSITY8UI_EXT:
+    case eGL_INTENSITY32I_EXT:
+    case eGL_INTENSITY16I_EXT:
+    case eGL_INTENSITY8I_EXT:
+    case eGL_INTENSITY_SNORM:
+    case eGL_INTENSITY8_SNORM:
+    case eGL_INTENSITY16_SNORM:
+      // intensity replicates across all 4 of RGBA
+      swizzle[0] = swizzle[1] = swizzle[2] = swizzle[3] = eGL_RED;
       break;
     case eGL_ALPHA:
+    case eGL_ALPHA_INTEGER:
+    case eGL_ALPHA32F_ARB:
+    case eGL_ALPHA16F_ARB:
     case eGL_ALPHA8_EXT:
-      internalFormat = eGL_R8;
-      if(dataFormatLum)
-        dataFormat = eGL_RED;
-      swizzle[0] = swizzle[1] = swizzle[2] = eGL_NONE;
-      swizzle[3] = eGL_RED;    // single component alpha channel
+    case eGL_ALPHA16_EXT:
+    case eGL_ALPHA32UI_EXT:
+    case eGL_ALPHA16UI_EXT:
+    case eGL_ALPHA8UI_EXT:
+    case eGL_ALPHA32I_EXT:
+    case eGL_ALPHA16I_EXT:
+    case eGL_ALPHA8I_EXT:
+    case eGL_ALPHA_SNORM:
+    case eGL_ALPHA8_SNORM:
+    case eGL_ALPHA16_SNORM:
+      // single component alpha channel
+      swizzle[0] = swizzle[1] = swizzle[2] = eGL_ZERO;
+      swizzle[3] = eGL_RED;
       break;
     case eGL_LUMINANCE:
-    case eGL_LUMINANCE8_EXT:
-      internalFormat = eGL_R8;
-      if(dataFormatLum)
-        dataFormat = eGL_RED;
-      swizzle[0] = swizzle[1] = swizzle[2] = eGL_RED;
-      swizzle[3] = (GLenum)1;    // alpha explicitly set to 1 in luminance formats
-      break;
-    case eGL_SLUMINANCE8_EXT:
-      internalFormat = eGL_SRGB8;
-      if(dataFormatLum)
-        dataFormat = eGL_RED;
-      swizzle[0] = swizzle[1] = swizzle[2] = eGL_RED;
-      swizzle[3] = (GLenum)1;    // alpha explicitly set to 1 in luminance formats
-      break;
-    case eGL_LUMINANCE16_EXT:
-      internalFormat = eGL_R16;
-      if(dataFormatLum)
-        dataFormat = eGL_RED;
-      swizzle[0] = swizzle[1] = swizzle[2] = eGL_RED;
-      swizzle[3] = (GLenum)1;    // alpha explicitly set to 1 in luminance formats
-      break;
     case eGL_LUMINANCE32F_ARB:
-      internalFormat = eGL_R32F;
-      if(dataFormatLum)
-        dataFormat = eGL_RED;
-      swizzle[0] = swizzle[1] = swizzle[2] = eGL_RED;
-      swizzle[3] = (GLenum)1;    // alpha explicitly set to 1 in luminance formats
-      break;
-    case eGL_LUMINANCE32I_EXT:
-      internalFormat = eGL_R32I;
-      if(dataFormatLum)
-        dataFormat = eGL_RED;
-      swizzle[0] = swizzle[1] = swizzle[2] = eGL_RED;
-      swizzle[3] = (GLenum)1;    // alpha explicitly set to 1 in luminance formats
-      break;
+    case eGL_LUMINANCE16F_ARB:
+    case eGL_LUMINANCE8_EXT:
+    case eGL_LUMINANCE16_EXT:
     case eGL_LUMINANCE32UI_EXT:
-      internalFormat = eGL_R32UI;
-      if(dataFormatLum)
-        dataFormat = eGL_RED;
+    case eGL_LUMINANCE16UI_EXT:
+    case eGL_LUMINANCE8UI_EXT:
+    case eGL_LUMINANCE32I_EXT:
+    case eGL_LUMINANCE16I_EXT:
+    case eGL_LUMINANCE8I_EXT:
+    case eGL_LUMINANCE_INTEGER_EXT:
+    case eGL_LUMINANCE_SNORM:
+    case eGL_LUMINANCE8_SNORM:
+    case eGL_LUMINANCE16_SNORM:
+    case eGL_SLUMINANCE:
+    case eGL_SLUMINANCE8:
+      // luminance replicates over RGB
       swizzle[0] = swizzle[1] = swizzle[2] = eGL_RED;
-      swizzle[3] = (GLenum)1;    // alpha explicitly set to 1 in luminance formats
+      // alpha explicitly set to 1 in luminance formats
+      swizzle[3] = eGL_ONE;
       break;
     case eGL_LUMINANCE_ALPHA:
+    case eGL_LUMINANCE_ALPHA32F_ARB:
+    case eGL_LUMINANCE_ALPHA16F_ARB:
     case eGL_LUMINANCE8_ALPHA8_EXT:
-      internalFormat = eGL_RG8;
-      if(dataFormatLum)
-        dataFormat = eGL_RG;
-      swizzle[0] = swizzle[1] = swizzle[2] = eGL_RED;
-      swizzle[3] = eGL_GREEN;
-      break;
-    case eGL_SLUMINANCE8_ALPHA8_EXT:
-      internalFormat = eGL_SRGB8_ALPHA8;
-      if(dataFormatLum)
-        dataFormat = eGL_RG;
-      swizzle[0] = swizzle[1] = swizzle[2] = eGL_RED;
-      swizzle[3] = eGL_GREEN;
-      break;
     case eGL_LUMINANCE16_ALPHA16_EXT:
-      internalFormat = eGL_RG16;
-      if(dataFormatLum)
-        dataFormat = eGL_RG;
+    case eGL_LUMINANCE_ALPHA32UI_EXT:
+    case eGL_LUMINANCE_ALPHA16UI_EXT:
+    case eGL_LUMINANCE_ALPHA8UI_EXT:
+    case eGL_LUMINANCE_ALPHA32I_EXT:
+    case eGL_LUMINANCE_ALPHA16I_EXT:
+    case eGL_LUMINANCE_ALPHA8I_EXT:
+    case eGL_LUMINANCE_ALPHA_INTEGER_EXT:
+    case eGL_LUMINANCE_ALPHA_SNORM:
+    case eGL_LUMINANCE8_ALPHA8_SNORM:
+    case eGL_LUMINANCE16_ALPHA16_SNORM:
+    case eGL_SLUMINANCE_ALPHA:
+    case eGL_SLUMINANCE8_ALPHA8:
+      // luminance over RGB
       swizzle[0] = swizzle[1] = swizzle[2] = eGL_RED;
+      // alpha in alpha
       swizzle[3] = eGL_GREEN;
       break;
     default: return false;
+  }
+
+  // patch the data format
+  if(dataFormat == eGL_LUMINANCE || dataFormat == eGL_LUMINANCE_INTEGER_EXT ||
+     dataFormat == eGL_LUMINANCE_ALPHA || dataFormat == eGL_LUMINANCE_ALPHA_INTEGER_EXT ||
+     dataFormat == eGL_ALPHA || dataFormat == eGL_ALPHA_INTEGER || dataFormat == eGL_INTENSITY_EXT)
+  {
+    switch(internalFormat)
+    {
+      case eGL_INTENSITY_EXT:
+      case eGL_INTENSITY8_EXT:
+      case eGL_INTENSITY16_EXT:
+      case eGL_INTENSITY16F_ARB:
+      case eGL_INTENSITY32F_ARB:
+      case eGL_INTENSITY_SNORM:
+      case eGL_INTENSITY8_SNORM:
+      case eGL_INTENSITY16_SNORM:
+      case eGL_ALPHA:
+      case eGL_ALPHA8_EXT:
+      case eGL_ALPHA16_EXT:
+      case eGL_ALPHA16F_ARB:
+      case eGL_ALPHA32F_ARB:
+      case eGL_ALPHA_SNORM:
+      case eGL_ALPHA8_SNORM:
+      case eGL_ALPHA16_SNORM:
+      case eGL_LUMINANCE:
+      case eGL_LUMINANCE8_EXT:
+      case eGL_LUMINANCE16_EXT:
+      case eGL_LUMINANCE16F_ARB:
+      case eGL_LUMINANCE32F_ARB:
+      case eGL_LUMINANCE_SNORM:
+      case eGL_LUMINANCE8_SNORM:
+      case eGL_LUMINANCE16_SNORM:
+      case eGL_SLUMINANCE:
+      case eGL_SLUMINANCE8: dataFormat = eGL_RED; break;
+      case eGL_INTENSITY8I_EXT:
+      case eGL_INTENSITY16I_EXT:
+      case eGL_INTENSITY32I_EXT:
+      case eGL_INTENSITY8UI_EXT:
+      case eGL_INTENSITY16UI_EXT:
+      case eGL_INTENSITY32UI_EXT:
+      case eGL_ALPHA_INTEGER:
+      case eGL_ALPHA8I_EXT:
+      case eGL_ALPHA16I_EXT:
+      case eGL_ALPHA32I_EXT:
+      case eGL_ALPHA8UI_EXT:
+      case eGL_ALPHA16UI_EXT:
+      case eGL_ALPHA32UI_EXT:
+      case eGL_LUMINANCE_INTEGER_EXT:
+      case eGL_LUMINANCE8I_EXT:
+      case eGL_LUMINANCE16I_EXT:
+      case eGL_LUMINANCE32I_EXT:
+      case eGL_LUMINANCE8UI_EXT:
+      case eGL_LUMINANCE16UI_EXT:
+      case eGL_LUMINANCE32UI_EXT: dataFormat = eGL_RED_INTEGER; break;
+      case eGL_LUMINANCE_ALPHA:
+      case eGL_LUMINANCE8_ALPHA8_EXT:
+      case eGL_LUMINANCE16_ALPHA16_EXT:
+      case eGL_LUMINANCE_ALPHA16F_ARB:
+      case eGL_LUMINANCE_ALPHA32F_ARB:
+      case eGL_LUMINANCE_ALPHA_SNORM:
+      case eGL_LUMINANCE8_ALPHA8_SNORM:
+      case eGL_LUMINANCE16_ALPHA16_SNORM:
+      case eGL_SLUMINANCE_ALPHA:
+      case eGL_SLUMINANCE8_ALPHA8: dataFormat = eGL_RG; break;
+      case eGL_LUMINANCE_ALPHA_INTEGER_EXT:
+      case eGL_LUMINANCE_ALPHA8I_EXT:
+      case eGL_LUMINANCE_ALPHA16I_EXT:
+      case eGL_LUMINANCE_ALPHA32I_EXT:
+      case eGL_LUMINANCE_ALPHA8UI_EXT:
+      case eGL_LUMINANCE_ALPHA16UI_EXT:
+      case eGL_LUMINANCE_ALPHA32UI_EXT: dataFormat = eGL_RG_INTEGER; break;
+      default:
+        RDCERR("Problem in EnumerateLuminanceFormat - all switches should have same cases");
+        break;
+    }
+  }
+
+  switch(internalFormat)
+  {
+    case eGL_INTENSITY_EXT:
+    case eGL_ALPHA:
+    case eGL_INTENSITY8_EXT:
+    case eGL_ALPHA8_EXT:
+    case eGL_LUMINANCE:
+    case eGL_LUMINANCE8_EXT: internalFormat = eGL_R8; break;
+    case eGL_INTENSITY16_EXT:
+    case eGL_ALPHA16_EXT:
+    case eGL_LUMINANCE16_EXT: internalFormat = eGL_R16; break;
+    case eGL_INTENSITY16F_ARB:
+    case eGL_ALPHA16F_ARB:
+    case eGL_LUMINANCE16F_ARB: internalFormat = eGL_R16F; break;
+    case eGL_INTENSITY32F_ARB:
+    case eGL_ALPHA32F_ARB:
+    case eGL_LUMINANCE32F_ARB: internalFormat = eGL_R32F; break;
+    case eGL_INTENSITY_SNORM:
+    case eGL_INTENSITY8_SNORM:
+    case eGL_ALPHA_SNORM:
+    case eGL_ALPHA8_SNORM:
+    case eGL_LUMINANCE_SNORM:
+    case eGL_LUMINANCE8_SNORM: internalFormat = eGL_R8_SNORM; break;
+    case eGL_INTENSITY16_SNORM:
+    case eGL_ALPHA16_SNORM:
+    case eGL_LUMINANCE16_SNORM: internalFormat = eGL_R16_SNORM; break;
+    case eGL_INTENSITY8I_EXT:
+    case eGL_ALPHA_INTEGER:
+    case eGL_ALPHA8I_EXT:
+    case eGL_LUMINANCE_INTEGER_EXT:
+    case eGL_LUMINANCE8I_EXT: internalFormat = eGL_R8I; break;
+    case eGL_INTENSITY16I_EXT:
+    case eGL_ALPHA16I_EXT:
+    case eGL_LUMINANCE16I_EXT: internalFormat = eGL_R16I; break;
+    case eGL_INTENSITY32I_EXT:
+    case eGL_ALPHA32I_EXT:
+    case eGL_LUMINANCE32I_EXT: internalFormat = eGL_R32I; break;
+    case eGL_INTENSITY8UI_EXT:
+    case eGL_ALPHA8UI_EXT:
+    case eGL_LUMINANCE8UI_EXT: internalFormat = eGL_R8UI; break;
+    case eGL_INTENSITY16UI_EXT:
+    case eGL_ALPHA16UI_EXT:
+    case eGL_LUMINANCE16UI_EXT: internalFormat = eGL_R16UI; break;
+    case eGL_INTENSITY32UI_EXT:
+    case eGL_ALPHA32UI_EXT:
+    case eGL_LUMINANCE32UI_EXT: internalFormat = eGL_R32UI; break;
+    case eGL_LUMINANCE_ALPHA:
+    case eGL_LUMINANCE8_ALPHA8_EXT: internalFormat = eGL_RG8; break;
+    case eGL_LUMINANCE16_ALPHA16_EXT: internalFormat = eGL_RG16; break;
+    case eGL_LUMINANCE_ALPHA16F_ARB: internalFormat = eGL_RG16F; break;
+    case eGL_LUMINANCE_ALPHA32F_ARB: internalFormat = eGL_RG32F; break;
+    case eGL_LUMINANCE_ALPHA_SNORM:
+    case eGL_LUMINANCE8_ALPHA8_SNORM: internalFormat = eGL_RG8_SNORM; break;
+    case eGL_LUMINANCE16_ALPHA16_SNORM: internalFormat = eGL_RG16_SNORM; break;
+    case eGL_LUMINANCE_ALPHA_INTEGER_EXT:
+    case eGL_LUMINANCE_ALPHA8I_EXT: internalFormat = eGL_RG8I; break;
+    case eGL_LUMINANCE_ALPHA16I_EXT: internalFormat = eGL_RG16I; break;
+    case eGL_LUMINANCE_ALPHA32I_EXT: internalFormat = eGL_RG32I; break;
+    case eGL_LUMINANCE_ALPHA8UI_EXT: internalFormat = eGL_RG8UI; break;
+    case eGL_LUMINANCE_ALPHA16UI_EXT: internalFormat = eGL_RG16UI; break;
+    case eGL_LUMINANCE_ALPHA32UI_EXT: internalFormat = eGL_RG32UI; break;
+    case eGL_SLUMINANCE:
+    case eGL_SLUMINANCE8: internalFormat = eGL_SRGB8; break;
+    case eGL_SLUMINANCE_ALPHA:
+    case eGL_SLUMINANCE8_ALPHA8: internalFormat = eGL_SRGB8_ALPHA8; break;
+    default:
+      RDCERR("Problem in EnumerateLuminanceFormat - all switches should have same cases");
+      break;
   }
 
   if(tex)
   {
     if(HasExt[ARB_texture_swizzle] || HasExt[EXT_texture_swizzle])
     {
-      SetTextureSwizzle(gl, tex, target, swizzle);
+      SetTextureSwizzle(tex, target, swizzle);
     }
     else
     {
@@ -866,6 +1008,8 @@ bool IsSRGBFormat(GLenum internalFormat)
   {
     case eGL_SRGB8:
     case eGL_SRGB8_ALPHA8:
+    case eGL_SRGB:
+    case eGL_SRGB_ALPHA:
     case eGL_SLUMINANCE8:
     case eGL_SLUMINANCE8_ALPHA8:
     case eGL_COMPRESSED_SRGB_S3TC_DXT1_EXT:

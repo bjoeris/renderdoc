@@ -39,13 +39,23 @@ void GenerateGLSLShader(std::vector<std::string> &sources, ShaderType type,
   }
   else
   {
-    sources[0] = StringFormat::Fmt("#version %d core\n", version);
+    if(version == 110)
+      sources[0] = "#version 110";    // no core suffix
+    else
+      sources[0] = StringFormat::Fmt("#version %d core\n", version);
   }
 
   if(uniforms)
+  {
     sources[1] = GetEmbeddedResource(glsl_debuguniforms_h);
+  }
   else
-    sources[1] = "";
+  {
+    if(type == eShaderGLSLES)
+      sources[1] = "precision highp float; precision highp int;";
+    else
+      sources[1] = "";
+  }
 
   if(shader.find("#include \"texsample.h\"") != string::npos)
   {

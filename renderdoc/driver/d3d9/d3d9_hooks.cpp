@@ -29,8 +29,6 @@
 #include "driver/dx/official/d3d9.h"
 #include "d3d9_device.h"
 
-#define DLL_NAME "d3d9.dll"
-
 typedef int(WINAPI *PFN_BEGIN_EVENT)(DWORD, WCHAR *);
 typedef int(WINAPI *PFN_END_EVENT)();
 typedef int(WINAPI *PFN_SET_MARKER_EVENT)(DWORD, WCHAR *);
@@ -42,49 +40,31 @@ typedef IDirect3D9 *(WINAPI *PFN_D3D9_CREATE)(UINT);
 class D3D9Hook : LibraryHook
 {
 public:
-  D3D9Hook()
+  void RegisterHooks()
   {
-    LibraryHooks::GetInstance().RegisterHook(DLL_NAME, this);
-    m_HasHooks = false;
-    m_EnabledHooks = true;
+    RDCLOG("Registering D3D9 hooks");
+
+    LibraryHooks::RegisterLibraryHook("d3d9.dll", NULL);
+
+    PERF_BeginEvent.Register("d3d9.dll", "D3DPERF_BeginEvent", PERF_BeginEvent_hook);
+    PERF_EndEvent.Register("d3d9.dll", "D3DPERF_EndEvent", PERF_EndEvent_hook);
+    PERF_SetMarker.Register("d3d9.dll", "D3DPERF_SetMarker", PERF_SetMarker_hook);
+    PERF_SetOptions.Register("d3d9.dll", "D3DPERF_SetOptions", PERF_SetOptions_hook);
+    PERF_GetStatus.Register("d3d9.dll", "D3DPERF_GetStatus", PERF_GetStatus_hook);
+
+    Create9.Register("d3d9.dll", "Direct3DCreate9", Create9_hook);
   }
 
-  bool CreateHooks(const char *libName)
-  {
-    bool success = true;
-
-    success &= PERF_BeginEvent.Initialize("D3DPERF_BeginEvent", DLL_NAME, PERF_BeginEvent_hook);
-    success &= PERF_EndEvent.Initialize("D3DPERF_EndEvent", DLL_NAME, PERF_EndEvent_hook);
-    success &= PERF_SetMarker.Initialize("D3DPERF_SetMarker", DLL_NAME, PERF_SetMarker_hook);
-    success &= PERF_SetOptions.Initialize("D3DPERF_SetOptions", DLL_NAME, PERF_SetOptions_hook);
-    success &= PERF_GetStatus.Initialize("D3DPERF_GetStatus", DLL_NAME, PERF_GetStatus_hook);
-
-    success &= Create9.Initialize("Direct3DCreate9", DLL_NAME, Create9_hook);
-
-    if(!success)
-      return false;
-
-    m_HasHooks = true;
-    m_EnabledHooks = true;
-
-    return true;
-  }
-
-  void EnableHooks(const char *libName, bool enable) { m_EnabledHooks = enable; }
-  void OptionsUpdated(const char *libName) {}
 private:
   static D3D9Hook d3d9hooks;
 
-  bool m_HasHooks;
-  bool m_EnabledHooks;
-
   // D3DPERF api
-  Hook<PFN_BEGIN_EVENT> PERF_BeginEvent;
-  Hook<PFN_END_EVENT> PERF_EndEvent;
-  Hook<PFN_SET_MARKER_EVENT> PERF_SetMarker;
-  Hook<PFN_SET_OPTIONS> PERF_SetOptions;
-  Hook<PFN_GET_OPTIONS> PERF_GetStatus;
-  Hook<PFN_D3D9_CREATE> Create9;
+  HookedFunction<PFN_BEGIN_EVENT> PERF_BeginEvent;
+  HookedFunction<PFN_END_EVENT> PERF_EndEvent;
+  HookedFunction<PFN_SET_MARKER_EVENT> PERF_SetMarker;
+  HookedFunction<PFN_SET_OPTIONS> PERF_SetOptions;
+  HookedFunction<PFN_GET_OPTIONS> PERF_GetStatus;
+  HookedFunction<PFN_D3D9_CREATE> Create9;
 
   static int WINAPI PERF_BeginEvent_hook(DWORD col, WCHAR *wszName)
   {
@@ -114,26 +94,10 @@ private:
   static void WINAPI PERF_SetOptions_hook(DWORD dwOptions)
   {
     if(dwOptions & 1)
-    {
-      RDCDEBUG("Application requested not to be hooked.");
-      LibraryHooks::GetInstance().EnableHooks(false);
-    }
-    else
-    {
-      LibraryHooks::GetInstance().EnableHooks(true);
-    }
+      RDCLOG("Application requested not to be hooked via D3DPERF_SetOptions: no longer supported.");
   }
 
-  static DWORD WINAPI PERF_GetStatus_hook()
-  {
-    if(d3d9hooks.m_HasHooks && d3d9hooks.m_EnabledHooks)
-    {
-      return 1;
-    }
-
-    return 0;
-  }
-
+  static DWORD WINAPI PERF_GetStatus_hook() { return 1; }
   static IDirect3D9 *WINAPI Create9_hook(UINT SDKVersion)
   {
     RDCLOG("App creating d3d9 %x", SDKVersion);

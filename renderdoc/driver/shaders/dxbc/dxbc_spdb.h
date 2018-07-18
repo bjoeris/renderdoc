@@ -205,17 +205,6 @@ struct FileChecksum
   uint8_t hashData[1];
 };
 
-struct LineColumnInfo
-{
-  int32_t fileIndex = -1;
-  uint32_t funcIndex = 0;
-  uint32_t lineStart = 0, lineEnd = 0;
-  uint32_t colStart = 0, colEnd = 0;
-  bool statement = true;
-
-  std::vector<std::string> stack;
-};
-
 struct InstructionLocation
 {
   bool statement = true;
@@ -249,21 +238,46 @@ struct PDBStream
   vector<uint32_t> pageIndices;
 };
 
+struct LocalRange
+{
+  uint32_t startRange;
+  uint32_t endRange;
+
+  bool operator==(const LocalRange &o) const
+  {
+    return startRange == o.startRange && endRange == o.endRange;
+  }
+};
+
+struct LocalMapping
+{
+  bool operator<(const LocalMapping &o) const { return range.startRange < o.range.startRange; }
+  LocalRange range;
+  uint32_t regFirstComp;
+  uint32_t varFirstComp;
+  uint32_t numComps;
+  std::vector<LocalRange> gaps;
+
+  LocalVariableMapping var;
+};
+
 class SPDBChunk : public DXBCDebugChunk
 {
 public:
-  SPDBChunk(void *data);
+  SPDBChunk(DXBCFile *dxbc, void *data);
+  SPDBChunk(const SPDBChunk &) = delete;
+  SPDBChunk &operator=(const SPDBChunk &o) = delete;
 
   std::string GetCompilerSig() const { return m_CompilerSig; }
   std::string GetEntryFunction() const { return m_Entry; }
   std::string GetShaderProfile() const { return m_Profile; }
   uint32_t GetShaderCompileFlags() const { return m_ShaderFlags; }
-  void GetFileLine(size_t instruction, uintptr_t offset, int32_t &fileIdx, int32_t &lineNum) const;
+  void GetLineInfo(size_t instruction, uintptr_t offset, LineColumnInfo &lineInfo) const;
+
+  bool HasLocals() const;
+  void GetLocals(size_t instruction, uintptr_t offset, rdcarray<LocalVariableMapping> &locals) const;
 
 private:
-  SPDBChunk(const SPDBChunk &);
-  SPDBChunk &operator=(const SPDBChunk &o);
-
   bool m_HasDebugInfo;
 
   std::string m_CompilerSig;
@@ -272,6 +286,8 @@ private:
   std::string m_Profile;
 
   uint32_t m_ShaderFlags;
+
+  std::vector<LocalMapping> m_Locals;
 
   std::map<uint32_t, Function> m_Functions;
   std::map<uint32_t, LineColumnInfo> m_Lines;

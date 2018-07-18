@@ -231,18 +231,13 @@ public:
   bool IsRenderOutput(ResourceId id);
 
   void FileChanged() {}
-  // called before any context is created, to init any counters
-  static void PreContextInitCounters();
-  // called after any context is destroyed, to do corresponding shutdown of counters
-  static void PostContextShutdownCounters();
-
   void SetReplayData(GLWindowingData data);
 
   bool IsReplayContext(void *ctx) { return m_ReplayCtx.ctx == NULL || ctx == m_ReplayCtx.ctx; }
 private:
-  void FillCBufferValue(WrappedOpenGL &gl, GLuint prog, bool bufferBacked, uint32_t offs,
-                        uint32_t matStride, const bytebuf &data, ShaderVariable &outVar);
-  void FillCBufferVariables(WrappedOpenGL &gl, GLuint prog, bool bufferBacked, std::string prefix,
+  void FillCBufferValue(GLuint prog, bool bufferBacked, uint32_t offs, uint32_t matStride,
+                        const bytebuf &data, ShaderVariable &outVar);
+  void FillCBufferVariables(GLuint prog, bool bufferBacked, std::string prefix,
                             const rdcarray<ShaderConstant> &variables,
                             std::vector<ShaderVariable> &outvars, const bytebuf &data);
 
@@ -386,11 +381,6 @@ private:
 
   void CheckGLSLVersion(const char *sl, int &glslVersion);
 
-  // called after the context is created, to init any counters
-  void PostContextInitCounters();
-  // called before the context is destroyed, to shutdown any counters
-  void PreContextShutdownCounters();
-
   void FillTimers(GLCounterContext &ctx, const DrawcallDescription &drawnode,
                   const vector<GPUCounter> &counters);
 
@@ -435,6 +425,3 @@ private:
 
   vector<CounterResult> FetchCountersAMD(const vector<GPUCounter> &counters);
 };
-
-const GLHookSet &GetRealGLFunctions();
-GLPlatform &GetGLPlatform();

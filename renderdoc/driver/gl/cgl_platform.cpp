@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2018 Baldur Karlsson
+ * Copyright (c) 2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,30 +22,40 @@
  * THE SOFTWARE.
  ******************************************************************************/
 
-#pragma once
+#include "driver/gl/gl_common.h"
 
-typedef void (*dlopenCallback)(void *realLib);
-
-void PosixHookInit();
-
-// if this name is dlopen'd, the real library will be passed
-// to the callback and librenderdoc.so will be returned to user code
-void PosixHookLibrary(const char *name, dlopenCallback cb);
-
-void PosixHookFunction(const char *name, void *hook);
-
-void *PosixGetFunction(void *handle, const char *name);
-
-void PosixHookApply();
-
-// this is needed on android, when we are PLT hooking to ensure hooks are applied as soon as
-// possible.
-void PosixHookReapply();
-
-struct PosixScopedSuppressHooking
+class CGLPlatform : public GLPlatform
 {
-  PosixScopedSuppressHooking();
-  ~PosixScopedSuppressHooking();
-};
+  bool MakeContextCurrent(GLWindowingData data) { return false; }
+  GLWindowingData CloneTemporaryContext(GLWindowingData share)
+  {
+    GLWindowingData ret;
+    return ret;
+  }
 
-bool PosixHookDetect(const char *identifier);
+  void DeleteClonedContext(GLWindowingData context) {}
+  void DeleteReplayContext(GLWindowingData context) {}
+  void SwapBuffers(GLWindowingData context) {}
+  void GetOutputWindowDimensions(GLWindowingData context, int32_t &w, int32_t &h) { w = h = 0; }
+  bool IsOutputWindowVisible(GLWindowingData context) { return false; }
+  GLWindowingData MakeOutputWindow(WindowingData window, bool depth, GLWindowingData share_context)
+  {
+    GLWindowingData ret = {};
+    return ret;
+  }
+
+  void *GetReplayFunction(const char *funcname) { return NULL; }
+  bool CanCreateGLESContext() { return false; }
+  bool PopulateForReplay() { return false; }
+  ReplayStatus InitialiseAPI(GLWindowingData &replayContext, RDCDriver api)
+  {
+    return ReplayStatus::APIUnsupported;
+  }
+
+  void DrawQuads(float width, float height, const std::vector<Vec4f> &vertices) {}
+} cglPlatform;
+
+GLPlatform &GetGLPlatform()
+{
+  return cglPlatform;
+}

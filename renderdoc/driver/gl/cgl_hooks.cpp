@@ -1,7 +1,7 @@
 /******************************************************************************
  * The MIT License (MIT)
  *
- * Copyright (c) 2016-2018 Baldur Karlsson
+ * Copyright (c) 2018 Baldur Karlsson
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,13 +22,12 @@
  * THE SOFTWARE.
  ******************************************************************************/
 
-#include "gl_replay.h"
-#include "serialise/rdcfile.h"
-#include "gl_driver.h"
-#include "gl_resources.h"
+#include "hooks/hooks.h"
 
-ReplayStatus GL_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
+class OpenGLHook : LibraryHook
 {
-  RDCUNIMPLEMENTED("GL_CreateReplayDevice");
-  return ReplayStatus::APIHardwareUnsupported;
-}
+public:
+  OpenGLHook() {}
+  ~OpenGLHook() {}
+  void RegisterHooks() {}
+};

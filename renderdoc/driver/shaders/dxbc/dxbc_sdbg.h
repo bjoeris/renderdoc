@@ -260,7 +260,10 @@ public:
   string GetEntryFunction() const { return m_Entry; }
   string GetShaderProfile() const { return m_Profile; }
   uint32_t GetShaderCompileFlags() const { return m_ShaderFlags; }
-  void GetFileLine(size_t instruction, uintptr_t offset, int32_t &fileIdx, int32_t &lineNum) const;
+  void GetLineInfo(size_t instruction, uintptr_t offset, LineColumnInfo &lineInfo) const;
+
+  bool HasLocals() const;
+  void GetLocals(size_t instruction, uintptr_t offset, rdcarray<LocalVariableMapping> &locals) const;
 
 private:
   SDBGChunk();

@@ -53,6 +53,7 @@ enum class VariableCategory
   IndexTemporaries,
   Temporaries,
   Outputs,
+  ByString,
 };
 
 class ShaderViewer : public QFrame, public IShaderViewer, public ICaptureViewer
@@ -99,6 +100,8 @@ public:
 
   virtual void ShowErrors(const rdcstr &errors) override;
 
+  virtual void AddWatch(const rdcstr &variable) override;
+
   // ICaptureViewer
   void OnCaptureLoaded() override;
   void OnCaptureClosed() override;
@@ -111,13 +114,15 @@ private slots:
   void on_refresh_clicked();
   void on_intView_clicked();
   void on_floatView_clicked();
+  void on_debugToggle_clicked();
 
   void on_watch_itemChanged(QTableWidgetItem *item);
 
   // manual slots
   void readonly_keyPressed(QKeyEvent *event);
   void editable_keyPressed(QKeyEvent *event);
-  void disassembly_contextMenu(const QPoint &pos);
+  void debug_contextMenu(const QPoint &pos);
+  void variables_contextMenu(const QPoint &pos);
   void disassembly_buttonReleased(QMouseEvent *event);
   void disassemble_typeChanged(int index);
   void watch_keyPress(QKeyEvent *event);
@@ -157,12 +162,18 @@ private:
   void getRegisterFromWord(const QString &text, VariableCategory &varCat, int &varIdx, int &arrayIdx);
 
   void updateWindowTitle();
+  void gotoSourceDebugging();
+  void gotoDisassemblyDebugging();
 
   void showVariableTooltip(VariableCategory varCat, int varIdx, int arrayIdx);
+  void showVariableTooltip(QString name);
   void updateVariableTooltip();
   void hideVariableTooltip();
 
+  bool isSourceDebugging();
+
   VariableCategory m_TooltipVarCat = VariableCategory::Temporaries;
+  QString m_TooltipName;
   int m_TooltipVarIdx = -1;
   int m_TooltipArrayIdx = -1;
   QPoint m_TooltipPos;
@@ -181,6 +192,12 @@ private:
   ScintillaEdit *m_Errors = NULL;
   ScintillaEdit *m_FindResults = NULL;
   QList<ScintillaEdit *> m_Scintillas;
+
+  // a map per file, from line number to instruction index
+  QVector<QMap<int32_t, size_t>> m_Line2Inst;
+
+  ScintillaEdit *m_CurInstructionScintilla = NULL;
+  QList<ScintillaEdit *> m_FileScintillas;
 
   FindReplace *m_FindReplace;
 
@@ -211,6 +228,9 @@ private:
   static const int BREAKPOINT_MARKER = 2;
   static const int FINISHED_MARKER = 4;
 
+  static const int CURRENT_INDICATOR = 20;
+  static const int FINISHED_INDICATOR = 21;
+
   static const int INDICATOR_FINDRESULT = 0;
   static const int INDICATOR_REGHIGHLIGHT = 1;
 
@@ -231,6 +251,8 @@ private:
 
   void updateDebugging();
 
+  const ShaderVariable *GetRegisterVariable(const RegisterRange &r);
+
   void ensureLineScrolled(ScintillaEdit *s, int i);
 
   void find(bool down);
@@ -240,4 +262,6 @@ private:
   QString stringRep(const ShaderVariable &var, bool useType);
   RDTreeWidgetItem *makeResourceRegister(const Bindpoint &bind, uint32_t idx,
                                          const BoundResource &ro, const ShaderResource &resources);
+  void combineStructures(RDTreeWidgetItem *root);
+  RDTreeWidgetItem *findLocal(RDTreeWidgetItem *root, QString name);
 };

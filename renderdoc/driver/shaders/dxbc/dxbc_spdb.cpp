@@ -42,7 +42,7 @@ namespace DXBC
 {
 static const uint32_t FOURCC_SPDB = MAKE_FOURCC('S', 'P', 'D', 'B');
 
-SPDBChunk::SPDBChunk(void *chunk)
+SPDBChunk::SPDBChunk(DXBCFile *dxbc, void *chunk)
 {
   m_HasDebugInfo = false;
 
@@ -173,6 +173,419 @@ SPDBChunk::SPDBChunk(void *chunk)
 
       Files.push_back(make_pair(filename, (char *)fileContents.Data()));
     }
+  }
+
+  struct TypeMember
+  {
+    std::string name;
+    uint16_t byteOffset;
+    uint32_t typeIndex;
+  };
+
+  struct TypeDesc
+  {
+    std::string name;
+    VarType baseType;
+    uint32_t byteSize;
+    uint16_t vecSize;
+    uint16_t matArrayStride;
+    LEAF_ENUM_e leafType;
+    std::vector<TypeMember> members;
+  };
+
+  std::map<uint32_t, TypeDesc> typeInfo;
+
+  // prepopulate with basic types
+  typeInfo[T_INT4] = {"int32_t", VarType::Int, 4, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_INT2] = {"int16_t", VarType::Int, 2, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_INT1] = {"int8_t", VarType::Int, 1, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_LONG] = {"int32_t", VarType::Int, 4, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_SHORT] = {"int16_t", VarType::Int, 2, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_CHAR] = {"char", VarType::Int, 1, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_BOOL32FF] = {"bool", VarType::UInt, 4, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_UINT4] = {"uint32_t", VarType::UInt, 4, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_UINT2] = {"uint16_t", VarType::UInt, 2, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_UINT1] = {"uint8_t", VarType::UInt, 1, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_ULONG] = {"uint32_t", VarType::UInt, 4, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_USHORT] = {"uint16_t", VarType::UInt, 2, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_UCHAR] = {"unsigned char", VarType::UInt, 1, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_REAL16] = {"half", VarType::Float, 2, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_REAL32] = {"float", VarType::Float, 4, 1, 0, LF_NUMERIC, {}};
+  // modern HLSL fake half
+  typeInfo[T_REAL32PP] = {"half", VarType::Float, 4, 1, 0, LF_NUMERIC, {}};
+  typeInfo[T_REAL64] = {"double", VarType::Double, 8, 1, 0, LF_NUMERIC, {}};
+
+  if(streams.size() >= 3)
+  {
+    SPDBLOG("Got types stream");
+
+    PDBStream &s = streams[2];
+    PageMapping fileContents(pages, header->PageSize, &s.pageIndices[0],
+                             (uint32_t)s.pageIndices.size());
+
+    byte *bytes = (byte *)fileContents.Data();
+    byte *end = bytes + s.byteLength;
+
+    TPIHeader *tpi = (TPIHeader *)bytes;
+
+    // skip header
+    bytes += tpi->headerSize;
+
+    RDCASSERT(bytes + tpi->dataSize == end);
+
+// this isn't needed, but this is the hash stream
+#if 0
+    PageMapping hashContents;
+
+    if(tpi->hash.streamNumber < streams.size())
+    {
+      PDBStream &hashstrm = streams[tpi->hash.streamNumber];
+      hashContents = PageMapping(pages, header->PageSize, &hashstrm.pageIndices[0],
+                                 (uint32_t)hashstrm.pageIndices.size());
+    }
+#endif
+
+    uint32_t id = tpi->typeMin;
+
+    while(bytes < end)
+    {
+      uint16_t *leafheader = (uint16_t *)bytes;
+
+      uint16_t length = leafheader[0];
+      LEAF_ENUM_e type = (LEAF_ENUM_e)leafheader[1];
+
+      byte *leaf = (byte *)&leafheader[1];
+
+      bytes += 2 + length;
+
+      switch(type)
+      {
+        case LF_VECTOR:
+        {
+          lfVector *vector = (lfVector *)leaf;
+          // documentation isn't clear, but seems like byte size is always a uint16_t
+          uint16_t *bytelength = (uint16_t *)vector->data;
+          char *name = (char *)(bytelength + 1);
+          SPDBLOG("Type %x is '%s': a vector of %x with %u elements over %u bytes", id, name,
+                  vector->elemtype, vector->count, *bytelength);
+
+          typeInfo[id] = {
+              name,        typeInfo[vector->elemtype].baseType,
+              *bytelength, (uint16_t)vector->count,
+              0,           type,
+              {},
+          };
+
+          break;
+        }
+        case LF_MATRIX:
+        {
+          lfMatrix *matrix = (lfMatrix *)leaf;
+          // documentation isn't clear, but seems like byte size is always a uint16_t
+          uint16_t *bytelength = (uint16_t *)matrix->data;
+          char *name = (char *)(bytelength + 1);
+          SPDBLOG(
+              "Type %x is '%s': a matrix of %x with %u rows, %u columns over %u bytes with %u "
+              "byte %s major stride",
+              id, name, matrix->elemtype, matrix->rows, matrix->cols, *bytelength,
+              matrix->majorStride, matrix->matattr.row_major ? "row" : "column");
+
+          typeInfo[id] = {
+              name,
+              typeInfo[matrix->elemtype].baseType,
+              *bytelength,
+              uint16_t(matrix->rows),
+              uint16_t(*bytelength / matrix->cols),
+              type,
+              {},
+          };
+
+          break;
+        }
+        case LF_HLSL:
+        {
+          lfHLSL *hlsl = (lfHLSL *)leaf;
+          // documentation mentions "numeric properties followed by byte size" but we don't need
+          // that
+
+          const char *hlslTypeName = "";
+          switch((CV_builtin_e)hlsl->kind)
+          {
+            case CV_BI_HLSL_INTERFACE_POINTER: hlslTypeName = "INTERFACE_POINTER"; break;
+            case CV_BI_HLSL_TEXTURE1D: hlslTypeName = "TEXTURE1D"; break;
+            case CV_BI_HLSL_TEXTURE1D_ARRAY: hlslTypeName = "TEXTURE1D_ARRAY"; break;
+            case CV_BI_HLSL_TEXTURE2D: hlslTypeName = "TEXTURE2D"; break;
+            case CV_BI_HLSL_TEXTURE2D_ARRAY: hlslTypeName = "TEXTURE2D_ARRAY"; break;
+            case CV_BI_HLSL_TEXTURE3D: hlslTypeName = "TEXTURE3D"; break;
+            case CV_BI_HLSL_TEXTURECUBE: hlslTypeName = "TEXTURECUBE"; break;
+            case CV_BI_HLSL_TEXTURECUBE_ARRAY: hlslTypeName = "TEXTURECUBE_ARRAY"; break;
+            case CV_BI_HLSL_TEXTURE2DMS: hlslTypeName = "TEXTURE2DMS"; break;
+            case CV_BI_HLSL_TEXTURE2DMS_ARRAY: hlslTypeName = "TEXTURE2DMS_ARRAY"; break;
+            case CV_BI_HLSL_SAMPLER: hlslTypeName = "SAMPLER"; break;
+            case CV_BI_HLSL_SAMPLERCOMPARISON: hlslTypeName = "SAMPLERCOMPARISON"; break;
+            case CV_BI_HLSL_BUFFER: hlslTypeName = "BUFFER"; break;
+            case CV_BI_HLSL_POINTSTREAM: hlslTypeName = "POINTSTREAM"; break;
+            case CV_BI_HLSL_LINESTREAM: hlslTypeName = "LINESTREAM"; break;
+            case CV_BI_HLSL_TRIANGLESTREAM: hlslTypeName = "TRIANGLESTREAM"; break;
+            case CV_BI_HLSL_INPUTPATCH: hlslTypeName = "INPUTPATCH"; break;
+            case CV_BI_HLSL_OUTPUTPATCH: hlslTypeName = "OUTPUTPATCH"; break;
+            case CV_BI_HLSL_RWTEXTURE1D: hlslTypeName = "RWTEXTURE1D"; break;
+            case CV_BI_HLSL_RWTEXTURE1D_ARRAY: hlslTypeName = "RWTEXTURE1D_ARRAY"; break;
+            case CV_BI_HLSL_RWTEXTURE2D: hlslTypeName = "RWTEXTURE2D"; break;
+            case CV_BI_HLSL_RWTEXTURE2D_ARRAY: hlslTypeName = "RWTEXTURE2D_ARRAY"; break;
+            case CV_BI_HLSL_RWTEXTURE3D: hlslTypeName = "RWTEXTURE3D"; break;
+            case CV_BI_HLSL_RWBUFFER: hlslTypeName = "RWBUFFER"; break;
+            case CV_BI_HLSL_BYTEADDRESS_BUFFER: hlslTypeName = "BYTEADDRESS_BUFFER"; break;
+            case CV_BI_HLSL_RWBYTEADDRESS_BUFFER: hlslTypeName = "RWBYTEADDRESS_BUFFER"; break;
+            case CV_BI_HLSL_STRUCTURED_BUFFER: hlslTypeName = "STRUCTURED_BUFFER"; break;
+            case CV_BI_HLSL_RWSTRUCTURED_BUFFER: hlslTypeName = "RWSTRUCTURED_BUFFER"; break;
+            case CV_BI_HLSL_APPEND_STRUCTURED_BUFFER:
+              hlslTypeName = "APPEND_STRUCTURED_BUFFER";
+              break;
+            case CV_BI_HLSL_CONSUME_STRUCTURED_BUFFER:
+              hlslTypeName = "CONSUME_STRUCTURED_BUFFER";
+              break;
+            case CV_BI_HLSL_MIN8FLOAT: hlslTypeName = "MIN8FLOAT"; break;
+            case CV_BI_HLSL_MIN10FLOAT: hlslTypeName = "MIN10FLOAT"; break;
+            case CV_BI_HLSL_MIN16FLOAT: hlslTypeName = "MIN16FLOAT"; break;
+            case CV_BI_HLSL_MIN12INT: hlslTypeName = "MIN12INT"; break;
+            case CV_BI_HLSL_MIN16INT: hlslTypeName = "MIN16INT"; break;
+            case CV_BI_HLSL_MIN16UINT: hlslTypeName = "MIN16UINT"; break;
+            default: hlslTypeName = "Unknown type";
+          }
+
+          SPDBLOG("Type %x is an hlsl %s[%u] (subtype %x)", id, hlslTypeName, hlsl->numprops,
+                  hlsl->subtype);
+          break;
+        }
+        case LF_MODIFIER_EX:
+        {
+          lfModifierEx *modifier = (lfModifierEx *)leaf;
+          SPDBLOG("Type %x is %x modified with:", id, modifier->type);
+
+          typeInfo[id] = typeInfo[modifier->type];
+          typeInfo[id].name = "modif " + typeInfo[id].name;
+
+          uint16_t *mods = (uint16_t *)modifier->mods;
+          for(unsigned short i = 0; i < modifier->count; i++)
+          {
+            CV_modifier_e mod = (CV_modifier_e)mods[i];
+
+            const char *modName = "";
+            switch(mod)
+            {
+              case CV_MOD_CONST: modName = "CONST"; break;
+              case CV_MOD_VOLATILE: modName = "VOLATILE"; break;
+              case CV_MOD_UNALIGNED: modName = "UNALIGNED"; break;
+              case CV_MOD_HLSL_UNIFORM: modName = "HLSL_UNIFORM"; break;
+              case CV_MOD_HLSL_LINE: modName = "HLSL_LINE"; break;
+              case CV_MOD_HLSL_TRIANGLE: modName = "HLSL_TRIANGLE"; break;
+              case CV_MOD_HLSL_LINEADJ: modName = "HLSL_LINEADJ"; break;
+              case CV_MOD_HLSL_TRIANGLEADJ: modName = "HLSL_TRIANGLEADJ"; break;
+              case CV_MOD_HLSL_LINEAR: modName = "HLSL_LINEAR"; break;
+              case CV_MOD_HLSL_CENTROID: modName = "HLSL_CENTROID"; break;
+              case CV_MOD_HLSL_CONSTINTERP: modName = "HLSL_CONSTINTERP"; break;
+              case CV_MOD_HLSL_NOPERSPECTIVE: modName = "HLSL_NOPERSPECTIVE"; break;
+              case CV_MOD_HLSL_SAMPLE: modName = "HLSL_SAMPLE"; break;
+              case CV_MOD_HLSL_CENTER: modName = "HLSL_CENTER"; break;
+              case CV_MOD_HLSL_SNORM: modName = "HLSL_SNORM"; break;
+              case CV_MOD_HLSL_UNORM: modName = "HLSL_UNORM"; break;
+              case CV_MOD_HLSL_PRECISE: modName = "HLSL_PRECISE"; break;
+              case CV_MOD_HLSL_UAV_GLOBALLY_COHERENT: modName = "HLSL_UAV_GLOBALLY_COHERENT"; break;
+              default: modName = "Unknown modification";
+            }
+
+            SPDBLOG("  + %s", modName);
+          }
+          break;
+        }
+        case LF_FIELDLIST:
+        {
+          lfFieldList *fieldList = (lfFieldList *)leaf;
+          SPDBLOG("Type %x is a field list containing:", id);
+
+          uint32_t idx = 0;
+
+          std::vector<TypeMember> &members = typeInfo[id].members;
+
+          byte *iter = (byte *)fieldList->data;
+          while(iter < bytes)
+          {
+            if(*iter >= LF_PAD0)
+            {
+              iter += (*iter) - LF_PAD0;
+              continue;
+            }
+
+            LEAF_ENUM_e memberType = LEAF_ENUM_e(*(uint16_t *)iter);
+
+            switch(memberType)
+            {
+              case LF_MEMBER:
+              {
+                lfMember *member = (lfMember *)iter;
+
+                uint16_t *byteoffset = (uint16_t *)member->offset;
+                char *name = (char *)(byteoffset + 1);
+
+                char *access = "???";
+
+                if(member->attr.access == 1)
+                  access = "private";
+                else if(member->attr.access == 2)
+                  access = "protected";
+                else if(member->attr.access == 3)
+                  access = "public";
+
+                SPDBLOG("  [%u]: %x %s (%s) (at offset %u bytes)", idx, member->index, name, access,
+                        *byteoffset);
+
+                members.push_back({name, *byteoffset, member->index});
+
+                idx++;
+
+                iter = (byte *)(name + strlen(name) + 1);
+                break;
+              }
+              case LF_ONEMETHOD:
+              {
+                lfOneMethod *method = (lfOneMethod *)iter;
+
+                iter = (byte *)method->vbaseoff;
+
+                // MTintro = 0x04, MTpureintro = 0x06
+                if(method->attr.mprop == 0x04 || method->attr.mprop == 0x06)
+                {
+                  iter += 4;
+                }
+
+                char *name = (char *)iter;
+                iter += strlen(name) + 1;
+
+                char *access = "???";
+
+                if(method->attr.access == 1)
+                  access = "private";
+                else if(method->attr.access == 2)
+                  access = "protected";
+                else if(method->attr.access == 3)
+                  access = "public";
+
+                SPDBLOG("  [%u]: Method %s (%s) (at offset %u bytes)", idx, name, access);
+
+                idx++;
+                break;
+              }
+              case LF_BCLASS:
+              case LF_BINTERFACE:
+              {
+                lfBClass *binterface = (lfBClass *)iter;
+
+                char *access = "???";
+
+                if(binterface->attr.access == 1)
+                  access = "private";
+                else if(binterface->attr.access == 2)
+                  access = "protected";
+                else if(binterface->attr.access == 3)
+                  access = "public";
+
+                SPDBLOG("  [%u]: %x Base Class/Interface (%s)", idx, binterface->index, access);
+
+                iter = (byte *)binterface->offset + 2;
+
+                idx++;
+                break;
+              }
+              default:
+              {
+                RDCERR("Unexpected member type %x", memberType);
+                // skip the remaining data as we don't know how to safely advance - no length fields
+                // to use
+                iter = bytes;
+                break;
+              }
+            }
+          }
+          break;
+        }
+        case LF_ARGLIST:
+        {
+          lfArgList *argList = (lfArgList *)leaf;
+          SPDBLOG("Type %x is a field list containing:", id);
+
+          for(unsigned long i = 0; i < argList->count; i++)
+            SPDBLOG("  %x", argList->arg[i]);
+          break;
+        }
+        case LF_INTERFACE:
+        case LF_CLASS:
+        case LF_STRUCTURE:
+        {
+          lfStructure *structure = (lfStructure *)leaf;
+          // documentation isn't clear, but seems like byte size is always a uint16_t
+          uint16_t *bytelength = (uint16_t *)structure->data;
+          char *name = (char *)(bytelength + 1);
+
+          const char *structType = "struct";
+          if(type == LF_INTERFACE)
+            structType = "interface";
+          else if(type == LF_CLASS)
+            structType = "class";
+
+          typeInfo[id] = {
+              name, VarType::Float, *bytelength, 1, 0, type, typeInfo[structure->field].members,
+          };
+
+          SPDBLOG(
+              "Type %x is '%s': a %s with %u fields %x derived from %x and vshape %x over %u "
+              "bytes",
+              id, name, structType, structure->count, structure->field, structure->derived,
+              structure->vshape, *bytelength);
+          break;
+        }
+        case LF_PROCEDURE:
+        {
+          lfProc *procedure = (lfProc *)leaf;
+          SPDBLOG("Type %x is a procedure returning %x with %u args: %x", id, procedure->rvtype,
+                  procedure->parmcount, procedure->arglist);
+          break;
+        }
+        case LF_MFUNCTION:
+        {
+          lfMFunc *mfunction = (lfMFunc *)leaf;
+          SPDBLOG("Type %x is a member function of class %x returning %x with %u args: %x", id,
+                  mfunction->classtype, mfunction->rvtype, mfunction->parmcount, mfunction->arglist);
+          break;
+        }
+        case LF_STRIDED_ARRAY:
+        {
+          lfStridedArray *stridedArray = (lfStridedArray *)leaf;
+          // documentation isn't clear, but seems like byte size is always a uint16_t
+          uint16_t *bytelength = (uint16_t *)stridedArray->data;
+
+          typeInfo[id] = {
+              "",
+              typeInfo[stridedArray->elemtype].baseType,
+              *bytelength,
+              1,
+              uint16_t(stridedArray->stride),
+              type,
+              {},
+          };
+
+          break;
+        }
+        default:
+        {
+          RDCWARN("Encountered unknown type leaf %x", type);
+          break;
+        }
+      }
+      id++;
+    }
+
+    RDCASSERT(id == tpi->typeMax);
   }
 
   if(streams.size() >= 5)
@@ -556,7 +969,23 @@ SPDBChunk::SPDBChunk(void *chunk)
               codeOffset += parameter;
               apply = true;
               break;
-            case CodeViewInfo::BA_OP_ChangeCodeLength: codeLength = parameter; break;
+            case CodeViewInfo::BA_OP_ChangeCodeLength:
+            {
+              // this applies to the previous/last instruction.
+              if(!inlinee.locations.empty() &&
+                 inlinee.locations.back().offsetEnd == inlinee.locations.back().offsetStart &&
+                 inlinee.locations.back().statement == statement)
+              {
+                inlinee.locations.back().offsetEnd += parameter;
+              }
+              else
+              {
+                RDCERR("No valid previous instruction to apply codeLength to");
+              }
+
+              codeOffset += parameter;
+              break;
+            }
             case CodeViewInfo::BA_OP_ChangeFile:
               RDCERR("Unsupported change of file within inline site!");
               break;
@@ -569,8 +998,6 @@ SPDBChunk::SPDBChunk(void *chunk)
             case CodeViewInfo::BA_OP_ChangeRangeKind:
             {
               statement = (parameter == 1);
-              // unclear where this should be reset
-              codeLength = 0;
               break;
             }
             case CodeViewInfo::BA_OP_ChangeColumnStart: currentColStart = parameter; break;
@@ -583,11 +1010,8 @@ SPDBChunk::SPDBChunk(void *chunk)
             {
               uint32_t CodeDelta = parameter & 0xf;
               uint32_t sourceDelta = parameter >> 4;
-              // not sure if this is a bug in the HLSL compiler or what, but the sourceDelta seems
-              // to come out double what it should be - so add an extra shift
-              sourceDelta >>= 1;
               codeOffset += CodeDelta;
-              currentLine += sourceDelta;
+              currentLine += CodeViewInfo::DecodeSignedInt32(sourceDelta);
               apply = true;
               break;
             }
@@ -613,9 +1037,13 @@ SPDBChunk::SPDBChunk(void *chunk)
             loc.lineStart = currentLine;
             loc.lineEnd = currentLine + currentLineLength;
 
+            // the behaviour seems to be that if codeLength is ephemeral, not sticky like the rest
+            codeLength = 0;
+
             // if we have a previous location with implicit length, fix it up now
             if(!inlinee.locations.empty() &&
-               inlinee.locations.back().offsetEnd == inlinee.locations.back().offsetStart)
+               inlinee.locations.back().offsetEnd == inlinee.locations.back().offsetStart &&
+               inlinee.locations.back().statement == loc.statement)
             {
               inlinee.locations.back().offsetEnd = loc.offsetStart;
             }
@@ -623,8 +1051,9 @@ SPDBChunk::SPDBChunk(void *chunk)
             inlinee.locations.push_back(loc);
 
             SPDBLOG("inline annotation of %s, from %x (length %x), from %u:%u to %u:%u",
-                    statement ? "statement" : "expression", codeOffsetBase + codeOffset, codeLength,
-                    currentLine, currentColStart, currentLine + currentLineLength, currentColEnd);
+                    statement ? "statement" : "expression", loc.offsetStart,
+                    loc.offsetEnd - loc.offsetStart, currentLine, currentColStart,
+                    currentLine + currentLineLength, currentColEnd);
           }
         }
 
@@ -668,28 +1097,61 @@ SPDBChunk::SPDBChunk(void *chunk)
       {
         DEFRANGESYMHLSL *defrange = (DEFRANGESYMHLSL *)sym;
 
+        LocalMapping mapping;
+        RegisterRange &range = mapping.var.registers[0];
+
+        bool indexable = false;
         const char *regtype = "";
         const char *regprefix = "?";
-        switch((CV_HLSLREG_e)defrange->regType)
+
+        // CV_HLSLREG_e == OperandType
+
+        switch((OperandType)defrange->regType)
         {
-          case CV_HLSLREG_TEMP:
+          case TYPE_TEMP:
+            range.type = RegisterType::Temporary;
             regtype = "temp";
             regprefix = "r";
             break;
-          case CV_HLSLREG_INPUT:
+          case TYPE_INPUT:
+          case TYPE_INPUT_PRIMITIVEID:
+          case TYPE_INPUT_FORK_INSTANCE_ID:
+          case TYPE_INPUT_JOIN_INSTANCE_ID:
+          case TYPE_INPUT_CONTROL_POINT:
+          case TYPE_INPUT_PATCH_CONSTANT:
+          case TYPE_INPUT_DOMAIN_POINT:
+          case TYPE_INPUT_THREAD_ID:
+          case TYPE_INPUT_THREAD_GROUP_ID:
+          case TYPE_INPUT_THREAD_ID_IN_GROUP:
+          case TYPE_INPUT_COVERAGE_MASK:
+          case TYPE_INPUT_THREAD_ID_IN_GROUP_FLATTENED:
+          case TYPE_INPUT_GS_INSTANCE_ID:
+            range.type = RegisterType::Input;
             regtype = "input";
             regprefix = "v";
             break;
-          case CV_HLSLREG_OUTPUT:
+          case TYPE_OUTPUT:
+          case TYPE_OUTPUT_DEPTH:
+          case TYPE_OUTPUT_DEPTH_LESS_EQUAL:
+          case TYPE_OUTPUT_DEPTH_GREATER_EQUAL:
+          case TYPE_OUTPUT_STENCIL_REF:
+          case TYPE_OUTPUT_COVERAGE_MASK:
+            range.type = RegisterType::Output;
             regtype = "output";
             regprefix = "o";
             break;
-          case CV_HLSLREG_INDEXABLE_TEMP:
+          case TYPE_INDEXABLE_TEMP:
+            range.type = RegisterType::IndexedTemporary;
             regtype = "indexable";
             regprefix = "x";
+            indexable = true;
             break;
           default: break;
         }
+
+        // this is a virtual register, not stored
+        if((OperandType)defrange->regType == TYPE_STREAM)
+          continue;
 
         const char *space = "";
         switch((CV_HLSLMemorySpace_e)defrange->memorySpace)
@@ -705,13 +1167,98 @@ SPDBChunk::SPDBChunk(void *chunk)
                 defrange->offsetParent, defrange->offsetParent + defrange->sizeInParent, regtype,
                 space, defrange->regIndices, defrange->spilledUdtMember ? "spilled" : "");
 
+        if(defrange->regIndices > 1)
+        {
+          RDCWARN("More than one register index in mapping");
+          // this is used for geometry shader inputs for example
+        }
+
         uint32_t regoffset = *CV_DEFRANGESYMHLSL_OFFSET_CONST_PTR(defrange);
 
         char regcomps[] = "xyzw";
 
-        uint32_t regindex = regoffset / 16;
-        uint32_t regfirstcomp = (regoffset % 16) / 4;
-        uint32_t regnumcomps = defrange->sizeInParent / 4;
+        uint32_t regindex = indexable ? regoffset : regoffset / 16;
+        uint32_t regfirstcomp = indexable ? 0 : (regoffset % 16) / 4;
+        uint32_t regnumcomps = indexable ? 4 : defrange->sizeInParent / 4;
+
+        bool builtinoutput = false;
+        mapping.var.builtin = ShaderBuiltin::Undefined;
+        switch((OperandType)defrange->regType)
+        {
+          case TYPE_OUTPUT_DEPTH:
+            builtinoutput = true;
+            mapping.var.builtin = ShaderBuiltin::DepthOutput;
+            break;
+          case TYPE_OUTPUT_DEPTH_LESS_EQUAL:
+            builtinoutput = true;
+            mapping.var.builtin = ShaderBuiltin::DepthOutputLessEqual;
+            break;
+          case TYPE_OUTPUT_DEPTH_GREATER_EQUAL:
+            builtinoutput = true;
+            mapping.var.builtin = ShaderBuiltin::DepthOutputGreaterEqual;
+            break;
+          case TYPE_OUTPUT_STENCIL_REF:
+            builtinoutput = true;
+            mapping.var.builtin = ShaderBuiltin::StencilReference;
+            break;
+          case TYPE_OUTPUT_COVERAGE_MASK:
+            builtinoutput = true;
+            mapping.var.builtin = ShaderBuiltin::MSAACoverage;
+            break;
+          case TYPE_INPUT_PRIMITIVEID: mapping.var.builtin = ShaderBuiltin::PrimitiveIndex; break;
+          case TYPE_INPUT_COVERAGE_MASK: mapping.var.builtin = ShaderBuiltin::MSAACoverage; break;
+          case TYPE_INPUT_THREAD_ID:
+            mapping.var.builtin = ShaderBuiltin::DispatchThreadIndex;
+            break;
+          case TYPE_INPUT_THREAD_GROUP_ID: mapping.var.builtin = ShaderBuiltin::GroupIndex; break;
+          case TYPE_INPUT_THREAD_ID_IN_GROUP:
+            mapping.var.builtin = ShaderBuiltin::GroupThreadIndex;
+            break;
+          case TYPE_INPUT_THREAD_ID_IN_GROUP_FLATTENED:
+            mapping.var.builtin = ShaderBuiltin::GroupFlatIndex;
+            break;
+          case TYPE_INPUT_GS_INSTANCE_ID:
+            mapping.var.builtin = ShaderBuiltin::GSInstanceIndex;
+            break;
+          default: break;
+        }
+
+        if(mapping.var.builtin != ShaderBuiltin::Undefined)
+        {
+          bool found = false;
+
+          if(builtinoutput)
+          {
+            for(size_t i = 0; i < dxbc->m_OutputSig.size(); i++)
+            {
+              if(dxbc->m_OutputSig[i].systemValue == mapping.var.builtin)
+              {
+                regindex = (uint32_t)i;
+                regfirstcomp = 0;
+                found = true;
+                break;
+              }
+            }
+          }
+          else
+          {
+            for(size_t i = 0; i < dxbc->m_InputSig.size(); i++)
+            {
+              if(dxbc->m_InputSig[i].systemValue == mapping.var.builtin)
+              {
+                regindex = (uint32_t)i;
+                regfirstcomp = 0;
+                found = true;
+                break;
+              }
+            }
+          }
+
+          // if not found in the signatures, then it's a fixed-function input like threadid - it
+          // will be matched by builtin
+          if(!found)
+            regindex = ~0U;
+        }
 
         char *regswizzle = regcomps;
         regswizzle += regfirstcomp;
@@ -719,8 +1266,101 @@ SPDBChunk::SPDBChunk(void *chunk)
 
         SPDBLOG("Stored in %s%u.%s", regprefix, regindex, regswizzle);
 
+        mapping.var.localName = localName;
+
+        uint32_t varOffset = defrange->offsetParent;
+        uint32_t varLen = defrange->sizeInParent;
+
+        const TypeDesc *vartype = &typeInfo[localType];
+
+        RDCASSERT(varOffset + varLen <= vartype->byteSize);
+
+        // step through struct members
+        while(!vartype->members.empty())
+        {
+          bool found = false;
+
+          // find the child member this register corresponds to. We don't handle overlaps between
+          // members
+          for(const TypeMember &mem : vartype->members)
+          {
+            TypeDesc &childType = typeInfo[mem.typeIndex];
+
+            uint32_t memberOffset = mem.byteOffset;
+            uint32_t memberLen = childType.byteSize;
+
+            // if this member is before our variable, continue
+            if(memberOffset + memberLen <= varOffset)
+              continue;
+
+            // if this member is after our variable, continue (though if members are sorted, this
+            // means we won't find a candidate member)
+            if(varOffset + varLen <= memberOffset)
+              continue;
+
+            if(memberOffset > varOffset || memberOffset + memberLen < varOffset + varLen)
+            {
+              RDCERR("member %s of %s doesn't fully enclose variable [%u,%u] vs [%u,%u]",
+                     mem.name.c_str(), vartype->name.c_str(), memberOffset,
+                     memberOffset + memberLen, varOffset, varOffset + varLen);
+            }
+
+            mapping.var.localName = std::string(mapping.var.localName) + "." + mem.name;
+
+            // subtract off the offset of this member so we're now relative to it - since it might
+            // be a struct itself and we need to recurse.
+            varOffset -= memberOffset;
+
+            vartype = &childType;
+
+            found = true;
+
+            break;
+          }
+
+          if(!found)
+          {
+            RDCERR("No member of %s corresponds to variable range [%u,%u]", vartype->name.c_str(),
+                   varOffset, varOffset + varLen);
+            mapping.var.localName = std::string(mapping.var.localName) + ".__unknown__";
+            break;
+          }
+        }
+
+        mapping.var.type = vartype->baseType;
+        mapping.var.rows = 1;
+        mapping.var.columns = vartype->vecSize;
+
+        // if it's an array or matrix, figure out the index
+        if(vartype->matArrayStride)
+        {
+          uint32_t idx = varOffset / vartype->matArrayStride;
+
+          mapping.var.localName = StringFormat::Fmt("%s[%u]", mapping.var.localName.c_str(), idx);
+          mapping.var.rows = RDCMAX(
+              1U, (vartype->byteSize + (vartype->matArrayStride - 1)) / vartype->matArrayStride);
+
+          varOffset -= vartype->matArrayStride * idx;
+        }
+
+        if(vartype->leafType != LF_MATRIX)
+        {
+          mapping.var.elements = mapping.var.rows;
+          mapping.var.rows = 1;
+        }
+
+        RDCASSERT(mapping.var.rows <= 4 && mapping.var.columns <= 4);
+
+        range.index = uint16_t(regindex & 0xffff);
+        mapping.regFirstComp = regfirstcomp;
+        mapping.varFirstComp = (varOffset % 16) / 4;
+        mapping.numComps = regnumcomps;
+
         SPDBLOG("Valid from %x to %x", defrange->range.offStart,
                 defrange->range.offStart + defrange->range.cbRange);
+
+        mapping.range.startRange = defrange->range.offStart;
+        mapping.range.endRange = defrange->range.offStart + defrange->range.cbRange;
 
         const CV_LVAR_ADDR_GAP *gaps = CV_DEFRANGESYMHLSL_GAPS_CONST_PTR(defrange);
         size_t gapcount = CV_DEFRANGESYMHLSL_GAPS_COUNT(defrange);
@@ -730,7 +1370,14 @@ SPDBChunk::SPDBChunk(void *chunk)
         {
           SPDBLOG("  Gap %zu: %x -> %x", i, defrange->range.offStart + gaps[i].gapStartOffset,
                   defrange->range.offStart + gaps[i].gapStartOffset + gaps[i].cbRange);
+
+          LocalRange r = {defrange->range.offStart + gaps[i].gapStartOffset,
+                          defrange->range.offStart + gaps[i].gapStartOffset + gaps[i].cbRange};
+
+          mapping.gaps.push_back(r);
         }
+
+        m_Locals.push_back(mapping);
       }
       else if(type == S_INLINESITE_END)
       {
@@ -875,7 +1522,6 @@ SPDBChunk::SPDBChunk(void *chunk)
             lineCol.fileIndex = fileIdx;
             lineCol.lineStart = line.linenumStart;
             lineCol.lineEnd = line.linenumStart + line.deltaLineEnd;
-            lineCol.statement = line.fStatement;
 
             if(hasColumns)
             {
@@ -931,7 +1577,7 @@ SPDBChunk::SPDBChunk(void *chunk)
   }
 
   for(auto it = m_Lines.begin(); it != m_Lines.end(); ++it)
-    it->second.stack.push_back(m_Functions[0].name);
+    it->second.callstack.push_back(m_Functions[0].name);
 
   SPDBLOG("Applying %zu inline sites", inlines.size());
 
@@ -961,29 +1607,28 @@ SPDBChunk::SPDBChunk(void *chunk)
     {
       InstructionLocation &loc = inlines[i].locations[j];
 
-      // don't apply expressions
-      if(!loc.statement)
-        continue;
-
       int nPatched = 0;
 
-      for(auto it = m_Lines.begin(); it != m_Lines.end(); ++it)
+      auto it = m_Lines.lower_bound(loc.offsetStart);
+
+      for(; it != m_Lines.end() && it->first <= loc.offsetEnd; ++it)
       {
-        if(it->first >= loc.offsetStart && it->first < loc.offsetEnd)
+        if((it->first >= loc.offsetStart && it->first < loc.offsetEnd) ||
+           (it->first == loc.offsetStart && it->first == loc.offsetEnd))
         {
-          SPDBLOG("Patching %x between [%x,%x) from (%d %u:%u -> %u:%u) into (%d %u:%u -> %u:%u)",
+          SPDBLOG("Patching %x between [%x,%x] from (%d %u:%u -> %u:%u) into (%d %u:%u -> %u:%u)",
                   it->first, loc.offsetStart, loc.offsetEnd, it->second.fileIndex,
                   it->second.lineStart, it->second.colStart, it->second.lineEnd, it->second.colEnd,
                   fileIdx, loc.lineStart + inlines[i].baseLineNum, loc.colStart,
                   loc.lineEnd + inlines[i].baseLineNum, loc.colEnd);
 
           it->second.fileIndex = fileIdx;
-          it->second.funcIndex = inlines[i].id;
           it->second.lineStart = loc.lineStart + inlines[i].baseLineNum;
           it->second.lineEnd = loc.lineEnd + inlines[i].baseLineNum;
           it->second.colStart = loc.colStart;
           it->second.colEnd = loc.colEnd;
-          it->second.stack.push_back(m_Functions[inlines[i].id].name);
+          if(loc.statement)
+            it->second.callstack.push_back(m_Functions[inlines[i].id].name);
           nPatched++;
         }
       }
@@ -1041,22 +1686,101 @@ SPDBChunk::SPDBChunk(void *chunk)
     it->second.fileIndex = remapping[filenames[it->second.fileIndex]];
   }
 
+  std::sort(m_Locals.begin(), m_Locals.end());
+
   m_HasDebugInfo = true;
 }
 
-void SPDBChunk::GetFileLine(size_t instruction, uintptr_t offset, int32_t &fileIdx,
-                            int32_t &lineNum) const
+void SPDBChunk::GetLineInfo(size_t instruction, uintptr_t offset, LineColumnInfo &lineInfo) const
 {
-  for(auto it = m_Lines.begin(); it != m_Lines.end(); ++it)
+  auto it = m_Lines.lower_bound((uint32_t)offset);
+
+  if(it != m_Lines.end() && (uintptr_t)it->first <= offset)
+    lineInfo = it->second;
+}
+
+bool SPDBChunk::HasLocals() const
+{
+  return true;
+}
+
+void SPDBChunk::GetLocals(size_t instruction, uintptr_t offset,
+                          rdcarray<LocalVariableMapping> &locals) const
+{
+  locals.clear();
+
+  for(auto it = m_Locals.begin(); it != m_Locals.end(); ++it)
   {
-    if((uintptr_t)it->first <= offset)
+    if(it->range.startRange > offset)
+      break;
+
+    if(it->range.endRange <= offset)
+      continue;
+
+    bool ingap = false;
+
+    for(auto gapit = it->gaps.begin(); gapit != it->gaps.end(); gapit++)
     {
-      fileIdx = it->second.fileIndex;
-      lineNum = it->second.lineStart - 1;    // 0-indexed
+      if(gapit->startRange >= offset && gapit->endRange < offset)
+      {
+        ingap = true;
+        break;
+      }
     }
-    else
+
+    if(ingap)
+      continue;
+
+    bool added = false;
+
+    // we apply each matching local over the top. Where there is an overlap (e.g. two variables with
+    // the same name) we take the last mapping as authoratitive. This is a good solution for the
+    // case where one function with a parameter/variable name calls an inner function with the same
+    // parameter name and there's shadowing. The later mapping will be for the inner function so we
+    // use it in preference.
+
+    // check if we already have a mapping for this variable
+    for(LocalVariableMapping &a : locals)
     {
-      return;
+      const LocalVariableMapping &b = it->var;
+
+      if(a.localName == b.localName)
+      {
+        RegisterRange range = b.registers[0];
+
+        for(uint32_t i = 0; i < it->numComps; i++)
+        {
+          a.registers[it->varFirstComp + i].type = b.registers[0].type;
+          a.registers[it->varFirstComp + i].index = b.registers[0].index;
+          a.registers[it->varFirstComp + i].component = uint16_t(it->regFirstComp + i);
+        }
+
+        a.regCount = RDCMAX(a.regCount, it->varFirstComp + it->numComps);
+
+        // we've processed this, no need to add a new entry
+        added = true;
+        break;
+      }
+    }
+
+    if(!added)
+    {
+      locals.push_back(it->var);
+      LocalVariableMapping &a = locals.back();
+
+      // the register range is stored in [0] but we don't want to actually push that, so make it
+      // undefined and grab it locally
+      RegisterRange range;
+      std::swap(a.registers[0], range);
+
+      for(uint32_t i = 0; i < it->numComps; i++)
+      {
+        a.registers[it->varFirstComp + i].type = range.type;
+        a.registers[it->varFirstComp + i].index = range.index;
+        a.registers[it->varFirstComp + i].component = uint16_t(it->regFirstComp + i);
+      }
+
+      a.regCount = RDCMAX(it->var.columns, it->varFirstComp + it->numComps);
     }
   }
 }

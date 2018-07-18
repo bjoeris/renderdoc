@@ -26,48 +26,29 @@
 #include "hooks.h"
 #include "common/common.h"
 
-LibraryHooks &LibraryHooks::GetInstance()
+static std::vector<LibraryHook *> &LibList()
 {
-  static LibraryHooks instance;
-  return instance;
+  static std::vector<LibraryHook *> libs;
+  return libs;
 }
 
-void LibraryHooks::RegisterHook(const char *libName, LibraryHook *hook)
+LibraryHook::LibraryHook()
 {
-  m_Hooks[libName] = hook;
+  LibList().push_back(this);
 }
 
-void LibraryHooks::CreateHooks()
+void LibraryHooks::RegisterHooks()
 {
-  HOOKS_BEGIN();
-  for(auto it = m_Hooks.begin(); it != m_Hooks.end(); ++it)
-  {
-    RDCDEBUG("Hooking %s", it->first);
+  BeginHookRegistration();
 
-    if(!it->second->CreateHooks(it->first))
-      RDCWARN("Couldn't hook into %s", it->first);
-  }
-  HOOKS_END();
-}
+  for(LibraryHook *lib : LibList())
+    lib->RegisterHooks();
 
-void LibraryHooks::RemoveHooks()
-{
-  if(m_HooksRemoved)
-    return;
-  m_HooksRemoved = true;
-  HOOKS_REMOVE();
-}
-
-void LibraryHooks::EnableHooks(bool enable)
-{
-  RDCDEBUG("%s hooks!", enable ? "Enabling" : "Disabling");
-
-  for(auto it = m_Hooks.begin(); it != m_Hooks.end(); ++it)
-    it->second->EnableHooks(it->first, enable);
+  EndHookRegistration();
 }
 
 void LibraryHooks::OptionsUpdated()
 {
-  for(auto it = m_Hooks.begin(); it != m_Hooks.end(); ++it)
-    it->second->OptionsUpdated(it->first);
+  for(LibraryHook *lib : LibList())
+    lib->OptionsUpdated();
 }

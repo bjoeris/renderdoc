@@ -198,9 +198,6 @@
     <ClInclude Include="data\hlsl\debugcbuffers.h">
       <Filter>Resources\hlsl</Filter>
     </ClInclude>
-    <ClInclude Include="os\win32\win32_hook.h">
-      <Filter>OS\Win32</Filter>
-    </ClInclude>
     <ClInclude Include="api\replay\basic_types.h">
       <Filter>API\Replay</Filter>
     </ClInclude>
@@ -269,9 +266,6 @@
     </ClInclude>
     <ClInclude Include="os\win32\win32_specific.h">
       <Filter>OS\Win32</Filter>
-    </ClInclude>
-    <ClInclude Include="os\posix\posix_hook.h">
-      <Filter>OS\Posix</Filter>
     </ClInclude>
     <ClInclude Include="os\posix\posix_specific.h">
       <Filter>OS\Posix</Filter>
@@ -841,12 +835,6 @@
     <None Include="data\glsl\texdisplay.frag">
       <Filter>Resources\glsl</Filter>
     </None>
-    <None Include="data\glsl\text.frag">
-      <Filter>Resources\glsl</Filter>
-    </None>
-    <None Include="data\glsl\text.vert">
-      <Filter>Resources\glsl</Filter>
-    </None>
     <None Include="data\glsl\trisize.geom">
       <Filter>Resources\glsl</Filter>
     </None>
@@ -867,6 +855,18 @@
     </None>
     <None Include="api\replay\pipestate.inl">
       <Filter>Replay</Filter>
+    </None>
+    <None Include="data\glsl\vktext.frag">
+      <Filter>Resources\glsl</Filter>
+    </None>
+    <None Include="data\glsl\vktext.vert">
+      <Filter>Resources\glsl</Filter>
+    </None>
+    <None Include="data\glsl\gltext.frag">
+      <Filter>Resources\glsl</Filter>
+    </None>
+    <None Include="data\glsl\gltext.vert">
+      <Filter>Resources\glsl</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

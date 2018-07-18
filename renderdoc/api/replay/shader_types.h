@@ -226,6 +226,158 @@ struct ShaderVariable
 
 DECLARE_REFLECTION_STRUCT(ShaderVariable);
 
+DOCUMENT(
+    "A particular component of a variable register that a high-level variable component maps to");
+struct RegisterRange
+{
+  DOCUMENT("");
+  bool operator==(const RegisterRange &o) const
+  {
+    return type == o.type && index == o.index && component == o.component;
+  }
+  bool operator<(const RegisterRange &o) const
+  {
+    if(!(type == o.type))
+      return type < o.type;
+    if(!(index == o.index))
+      return index < o.index;
+    if(!(component == o.component))
+      return component < o.component;
+    return false;
+  }
+
+  DOCUMENT("The :class:`RegisterType` of the register being mapped to.");
+  RegisterType type = RegisterType::Undefined;
+
+  DOCUMENT("The index of the register within its type.");
+  uint16_t index = 0xFFFF;
+
+  DOCUMENT("The component of the register.");
+  uint16_t component = 0;
+};
+
+DECLARE_REFLECTION_STRUCT(RegisterRange);
+
+DOCUMENT(R"(Maps the contents of a high-level local variable to one or more shader variables in a
+:class:`ShaderDebugState`, with type information.
+
+A single high-level variable may be represented by multiple mappings but only along regular
+boundaries, typically whole vectors. For example an array may have each element in a different
+mapping, or a matrix may have a mapping per row. The properties such as :data:`rows` and
+:data:`elements` reflect the *parent* object.
+
+Since locals don't always map directly this can change over time.
+)");
+struct LocalVariableMapping
+{
+  DOCUMENT("");
+  bool operator==(const LocalVariableMapping &o) const
+  {
+    return localName == o.localName && type == o.type && builtin == o.builtin && rows == o.rows &&
+           columns == o.columns && elements == o.elements && registers == o.registers;
+  }
+  bool operator<(const LocalVariableMapping &o) const
+  {
+    if(!(localName == o.localName))
+      return localName < o.localName;
+    if(!(type == o.type))
+      return type < o.type;
+    if(!(builtin == o.builtin))
+      return builtin < o.builtin;
+    if(!(rows == o.rows))
+      return rows < o.rows;
+    if(!(columns == o.columns))
+      return columns < o.columns;
+    if(!(elements == o.elements))
+      return elements < o.elements;
+    if(!(registers == o.registers))
+      return registers < o.registers;
+    return false;
+  }
+  DOCUMENT("The name and member of this local variable that's being mapped from.");
+  rdcstr localName;
+
+  DOCUMENT("The variable type of the local being mapped from, if the register is untyped.");
+  VarType type = VarType::Unknown;
+
+  DOCUMENT("The shader builtin this variable corresponds to.");
+  ShaderBuiltin builtin = ShaderBuiltin::Undefined;
+
+  DOCUMENT("The number of rows in this variable - 1 for vectors, >1 for matrices.");
+  uint32_t rows;
+
+  DOCUMENT("The number of columns in this variable.");
+  uint32_t columns;
+
+  DOCUMENT("The number of array elements in this variable.");
+  uint32_t elements;
+
+  DOCUMENT("The number of valid entries in :data:`registers`.");
+  uint32_t regCount;
+
+  DOCUMENT(R"(The registers that the components of this variable map to. Multiple ranges could refer
+to the same register if a contiguous range is mapped to - the mapping is component-by-component to
+greatly simplify algorithms at the expense of a small amount of storage space.
+)");
+  RegisterRange registers[16];
+};
+DECLARE_REFLECTION_STRUCT(LocalVariableMapping);
+
+DOCUMENT("Details the current region of code that an instruction maps to");
+struct LineColumnInfo
+{
+  DOCUMENT("");
+  bool operator==(const LineColumnInfo &o) const
+  {
+    return fileIndex == o.fileIndex && lineStart == o.lineStart && lineEnd == o.lineEnd &&
+           colStart == o.colStart && colEnd == o.colEnd && callstack == o.callstack;
+  }
+  bool operator<(const LineColumnInfo &o) const
+  {
+    if(!(fileIndex == o.fileIndex))
+      return fileIndex < o.fileIndex;
+    if(!(lineStart == o.lineStart))
+      return lineStart < o.lineStart;
+    if(!(lineEnd == o.lineEnd))
+      return lineEnd < o.lineEnd;
+    if(!(colStart == o.colStart))
+      return colStart < o.colStart;
+    if(!(colEnd == o.colEnd))
+      return colEnd < o.colEnd;
+    if(!(callstack == o.callstack))
+      return callstack < o.callstack;
+    return false;
+  }
+
+  DOCUMENT("The current file, as an index into the list of files for this shader.");
+  int32_t fileIndex = -1;
+
+  DOCUMENT("The line-number (starting from 1) of the start of the current section of code.");
+  uint32_t lineStart = 0;
+
+  DOCUMENT("The line-number (starting from 1) of the end of the current section of code.");
+  uint32_t lineEnd = 0;
+
+  DOCUMENT(R"(The column number (starting from 1) of the start of the code on the line specified by
+:data:`lineStart`. If set to 0, no column information is available and the whole lines should be
+treated as covering the code.
+)");
+  uint32_t colStart = 0;
+
+  DOCUMENT(R"(The column number (starting from 1) of the end of the code on the line specified by
+:data:`lineEnd`. If set to 0, no column information is available and the whole lines should be
+treated as covering the code.
+)");
+  uint32_t colEnd = 0;
+
+  DOCUMENT(R"(A ``list`` of ``str`` with each function call in the current callstack at this line.
+
+The oldest/outer function is first in the list, the newest/inner function is last.
+)");
+  rdcarray<rdcstr> callstack;
+};
+DECLARE_REFLECTION_STRUCT(LineColumnInfo);
+
 DOCUMENT(R"(This stores the current state of shader debugging at one particular step in the shader,
 with all mutable variable contents.
 )");
@@ -235,7 +387,7 @@ struct ShaderDebugState
   bool operator==(const ShaderDebugState &o) const
   {
     return registers == o.registers && outputs == o.outputs && indexableTemps == o.indexableTemps &&
-           nextInstruction == o.nextInstruction && flags == o.flags;
+           locals == o.locals && nextInstruction == o.nextInstruction && flags == o.flags;
   }
   bool operator<(const ShaderDebugState &o) const
   {
@@ -245,23 +397,33 @@ struct ShaderDebugState
       return outputs < o.outputs;
     if(!(indexableTemps == o.indexableTemps))
       return indexableTemps < o.indexableTemps;
+    if(!(locals == o.locals))
+      return locals < o.locals;
     if(!(nextInstruction == o.nextInstruction))
       return nextInstruction < o.nextInstruction;
     if(!(flags == o.flags))
       return flags < o.flags;
     return false;
   }
-  DOCUMENT("The temporary variables for this shader as a list of :class:`ShaderValue`.");
+  DOCUMENT("The temporary variables for this shader as a list of :class:`ShaderVariable`.");
   rdcarray<ShaderVariable> registers;
-  DOCUMENT("The output variables for this shader as a list of :class:`ShaderValue`.");
+  DOCUMENT("The output variables for this shader as a list of :class:`ShaderVariable`.");
   rdcarray<ShaderVariable> outputs;
 
-  DOCUMENT(
-      "Indexable temporary variables for this shader as a list of :class:`ShaderValue` lists.");
+  DOCUMENT("Indexable temporary variables for this shader as a list of :class:`ShaderVariable`.");
   rdcarray<ShaderVariable> indexableTemps;
 
+  DOCUMENT(R"(An optional list of :class:`ShaderVariableRef` indicating which high-level locals map
+to which registers, and their type
+)");
+  rdcarray<LocalVariableMapping> locals;
+
+  DOCUMENT("A list of registers that were modified.");
+  rdcarray<RegisterRange> modified;
+
   DOCUMENT(R"(The next instruction to be executed after this state. The initial state before any
-shader execution happened will have ``nextInstruction == 0``.)");
+shader execution happened will have ``nextInstruction == 0``.
+)");
   uint32_t nextInstruction;
 
   DOCUMENT("A set of :class:`ShaderEvents` flags that indicate what events happened on this step.");
@@ -289,6 +451,14 @@ Each entry in this list corresponds to a constant block with the same index in t
 instruction was executed
 )");
   rdcarray<ShaderDebugState> states;
+
+  DOCUMENT("A flag indicating whether this trace has locals information");
+  bool hasLocals = false;
+
+  DOCUMENT(R"(A ``list`` of :class:`LineColumnInfo` detailing which source lines each instruction
+corresponds to
+)");
+  rdcarray<LineColumnInfo> lineInfo;
 };
 
 DECLARE_REFLECTION_STRUCT(ShaderDebugTrace);

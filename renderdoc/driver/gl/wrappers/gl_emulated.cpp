@@ -27,13 +27,15 @@
 // present elsewhere and using them unconditionally.
 
 #include "driver/gl/gl_common.h"
-#include "driver/gl/gl_hookset.h"
+#include "driver/gl/gl_dispatch_table.h"
+#include "driver/gl/gl_driver.h"
 #include "driver/gl/gl_resources.h"
+#include "driver/shaders/spirv/spirv_common.h"
 
 namespace glEmulate
 {
-const GLHookSet *hookset = NULL;
 PFNGLGETINTERNALFORMATIVPROC glGetInternalformativ_real = NULL;
+WrappedOpenGL *driver = NULL;
 
 typedef GLenum (*BindingLookupFunc)(GLenum target);
 
@@ -46,7 +48,7 @@ struct PushPop
     other = bindFunc;
     vao = NULL;
     t = target;
-    hookset->glGetIntegerv(bindingLookup(target), (GLint *)&o);
+    GL.glGetIntegerv(bindingLookup(target), (GLint *)&o);
   }
 
   PushPop(GLenum target, PFNGLBINDTEXTUREPROC bindFunc, GLenum binding)
@@ -54,7 +56,7 @@ struct PushPop
     other = bindFunc;
     vao = NULL;
     t = target;
-    hookset->glGetIntegerv(binding, (GLint *)&o);
+    GL.glGetIntegerv(binding, (GLint *)&o);
   }
 
   PushPop(PFNGLBINDVERTEXARRAYPROC bindFunc)
@@ -62,7 +64,7 @@ struct PushPop
     vao = bindFunc;
     other = NULL;
     t = eGL_NONE;
-    hookset->glGetIntegerv(eGL_VERTEX_ARRAY_BINDING, (GLint *)&o);
+    GL.glGetIntegerv(eGL_VERTEX_ARRAY_BINDING, (GLint *)&o);
   }
 
   ~PushPop()
@@ -97,72 +99,71 @@ GLenum TexBindTarget(GLenum target)
   return target;
 }
 
-#define PushPopTexture(target, obj)                                                    \
-  GLenum bindtarget = TexBindTarget(target);                                           \
-  PushPop CONCAT(prev, __LINE__)(bindtarget, hookset->glBindTexture, &TextureBinding); \
-  hookset->glBindTexture(bindtarget, obj);
+#define PushPopTexture(target, obj)                                              \
+  GLenum bindtarget = TexBindTarget(target);                                     \
+  PushPop CONCAT(prev, __LINE__)(bindtarget, GL.glBindTexture, &TextureBinding); \
+  GL.glBindTexture(bindtarget, obj);
 
-#define PushPopBuffer(target, obj)                                               \
-  PushPop CONCAT(prev, __LINE__)(target, hookset->glBindBuffer, &BufferBinding); \
-  hookset->glBindBuffer(target, obj);
+#define PushPopBuffer(target, obj)                                         \
+  PushPop CONCAT(prev, __LINE__)(target, GL.glBindBuffer, &BufferBinding); \
+  GL.glBindBuffer(target, obj);
 
-#define PushPopXFB(obj)                                                                    \
-  PushPop CONCAT(prev, __LINE__)(eGL_TRANSFORM_FEEDBACK, hookset->glBindTransformFeedback, \
-                                 eGL_TRANSFORM_FEEDBACK_BINDING);                          \
-  hookset->glBindTransformFeedback(eGL_TRANSFORM_FEEDBACK, obj);
+#define PushPopXFB(obj)                                                              \
+  PushPop CONCAT(prev, __LINE__)(eGL_TRANSFORM_FEEDBACK, GL.glBindTransformFeedback, \
+                                 eGL_TRANSFORM_FEEDBACK_BINDING);                    \
+  GL.glBindTransformFeedback(eGL_TRANSFORM_FEEDBACK, obj);
 
-#define PushPopFramebuffer(target, obj)                                                    \
-  PushPop CONCAT(prev, __LINE__)(target, hookset->glBindFramebuffer, &FramebufferBinding); \
-  hookset->glBindFramebuffer(target, obj);
+#define PushPopFramebuffer(target, obj)                                              \
+  PushPop CONCAT(prev, __LINE__)(target, GL.glBindFramebuffer, &FramebufferBinding); \
+  GL.glBindFramebuffer(target, obj);
 
-#define PushPopRenderbuffer(obj)                                                \
-  PushPop CONCAT(prev, __LINE__)(eGL_RENDERBUFFER, hookset->glBindRenderbuffer, \
-                                 eGL_RENDERBUFFER_BINDING);                     \
-  hookset->glBindRenderbuffer(eGL_RENDERBUFFER, obj);
+#define PushPopRenderbuffer(obj)                                                                     \
+  PushPop CONCAT(prev, __LINE__)(eGL_RENDERBUFFER, GL.glBindRenderbuffer, eGL_RENDERBUFFER_BINDING); \
+  GL.glBindRenderbuffer(eGL_RENDERBUFFER, obj);
 
-#define PushPopVertexArray(obj)                               \
-  PushPop CONCAT(prev, __LINE__)(hookset->glBindVertexArray); \
-  hookset->glBindVertexArray(obj);
+#define PushPopVertexArray(obj)                         \
+  PushPop CONCAT(prev, __LINE__)(GL.glBindVertexArray); \
+  GL.glBindVertexArray(obj);
 
 void APIENTRY _glTransformFeedbackBufferBase(GLuint xfb, GLuint index, GLuint buffer)
 {
   PushPopXFB(xfb);
-  hookset->glBindBufferBase(eGL_TRANSFORM_FEEDBACK_BUFFER, index, buffer);
+  GL.glBindBufferBase(eGL_TRANSFORM_FEEDBACK_BUFFER, index, buffer);
 }
 
 void APIENTRY _glTransformFeedbackBufferRange(GLuint xfb, GLuint index, GLuint buffer,
                                               GLintptr offset, GLsizeiptr size)
 {
   PushPopXFB(xfb);
-  hookset->glBindBufferRange(eGL_TRANSFORM_FEEDBACK_BUFFER, index, buffer, offset, size);
+  GL.glBindBufferRange(eGL_TRANSFORM_FEEDBACK_BUFFER, index, buffer, offset, size);
 }
 
 void APIENTRY _glClearNamedFramebufferiv(GLuint framebuffer, GLenum buffer, GLint drawbuffer,
                                          const GLint *value)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glClearBufferiv(buffer, drawbuffer, value);
+  GL.glClearBufferiv(buffer, drawbuffer, value);
 }
 
 void APIENTRY _glClearNamedFramebufferuiv(GLuint framebuffer, GLenum buffer, GLint drawbuffer,
                                           const GLuint *value)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glClearBufferuiv(buffer, drawbuffer, value);
+  GL.glClearBufferuiv(buffer, drawbuffer, value);
 }
 
 void APIENTRY _glClearNamedFramebufferfv(GLuint framebuffer, GLenum buffer, GLint drawbuffer,
                                          const GLfloat *value)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glClearBufferfv(buffer, drawbuffer, value);
+  GL.glClearBufferfv(buffer, drawbuffer, value);
 }
 
 void APIENTRY _glClearNamedFramebufferfi(GLuint framebuffer, GLenum buffer, int drawbuffer,
                                          const GLfloat depth, GLint stencil)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glClearBufferfi(buffer, drawbuffer, depth, stencil);
+  GL.glClearBufferfi(buffer, drawbuffer, depth, stencil);
 }
 
 void APIENTRY _glBlitNamedFramebuffer(GLuint readFramebuffer, GLuint drawFramebuffer, GLint srcX0,
@@ -171,13 +172,13 @@ void APIENTRY _glBlitNamedFramebuffer(GLuint readFramebuffer, GLuint drawFramebu
 {
   PushPopFramebuffer(eGL_READ_FRAMEBUFFER, readFramebuffer);
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, drawFramebuffer);
-  hookset->glBlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);
+  GL.glBlitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);
 }
 
 void APIENTRY _glVertexArrayElementBuffer(GLuint vaobj, GLuint buffer)
 {
   PushPopVertexArray(vaobj);
-  hookset->glBindBuffer(eGL_ELEMENT_ARRAY_BUFFER, buffer);
+  GL.glBindBuffer(eGL_ELEMENT_ARRAY_BUFFER, buffer);
 }
 
 void APIENTRY _glVertexArrayVertexBuffers(GLuint vaobj, GLuint first, GLsizei count,
@@ -185,55 +186,12 @@ void APIENTRY _glVertexArrayVertexBuffers(GLuint vaobj, GLuint first, GLsizei co
                                           const GLsizei *strides)
 {
   PushPopVertexArray(vaobj);
-  hookset->glBindVertexBuffers(first, count, buffers, offsets, strides);
+  GL.glBindVertexBuffers(first, count, buffers, offsets, strides);
 }
 
 void APIENTRY _glClearDepthf(GLfloat d)
 {
-  hookset->glClearDepth(d);
-}
-
-void EmulateUnsupportedFunctions(GLHookSet *hooks)
-{
-  hookset = hooks;
-
-#define EMULATE_UNSUPPORTED(func) \
-  if(!hooks->func)                \
-    hooks->func = &CONCAT(_, func);
-
-  EMULATE_UNSUPPORTED(glTransformFeedbackBufferBase)
-  EMULATE_UNSUPPORTED(glTransformFeedbackBufferRange)
-  EMULATE_UNSUPPORTED(glClearNamedFramebufferiv)
-  EMULATE_UNSUPPORTED(glClearNamedFramebufferuiv)
-  EMULATE_UNSUPPORTED(glClearNamedFramebufferfv)
-  EMULATE_UNSUPPORTED(glClearNamedFramebufferfi)
-  EMULATE_UNSUPPORTED(glBlitNamedFramebuffer)
-  EMULATE_UNSUPPORTED(glVertexArrayElementBuffer);
-  EMULATE_UNSUPPORTED(glVertexArrayVertexBuffers)
-
-  // internally glClearDepthf is used instead of glClearDepth (because OpenGL ES does support the
-  // non-f version), however glClearDepthf is not available before OpenGL 4.1
-  EMULATE_UNSUPPORTED(glClearDepthf)
-
-  // workaround for nvidia bug, which complains that GL_DEPTH_STENCIL is an invalid draw buffer.
-  // also some issues with 32-bit implementation of this entry point.
-  //
-  // NOTE: Vendor Checks aren't initialised by this point, so we have to do this unconditionally
-  // We include it just for searching: VendorCheck[VendorCheck_NV_ClearNamedFramebufferfiBugs]
-  //
-  // Update 2018-Jan - this might be the problem with the registry having the wrong signature for
-  // glClearNamedFramebufferfi - if the arguments were mismatched it would explain both invalid
-  // argument errors and ABI problems. For now though (and since as mentioned above it's cheap to
-  // emulate) we leave it on. See issue #842
-  hooks->glClearNamedFramebufferfi = &_glClearNamedFramebufferfi;
-
-  // workaround for AMD bug or weird behaviour. glVertexArrayElementBuffer doesn't update the
-  // GL_ELEMENT_ARRAY_BUFFER_BINDING global query, when binding the VAO subsequently *will*.
-  // I'm not sure if that's correct (weird) behaviour or buggy, but we can work around it just
-  // by avoiding use of the DSA function and always doing our emulated version.
-  //
-  // VendorCheck[VendorCheck_AMD_vertex_array_elem_buffer_query]
-  hooks->glVertexArrayElementBuffer = &_glVertexArrayElementBuffer;
+  GL.glClearDepth(d);
 }
 
 #pragma region EXT_direct_state_access
@@ -244,87 +202,85 @@ void APIENTRY _glGetNamedFramebufferAttachmentParameterivEXT(GLuint framebuffer,
                                                              GLenum pname, GLint *params)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glGetFramebufferAttachmentParameteriv(eGL_DRAW_FRAMEBUFFER, attachment, pname, params);
+  GL.glGetFramebufferAttachmentParameteriv(eGL_DRAW_FRAMEBUFFER, attachment, pname, params);
 }
 
 GLenum APIENTRY _glCheckNamedFramebufferStatusEXT(GLuint framebuffer, GLenum target)
 {
   PushPopFramebuffer(target, framebuffer);
-  return hookset->glCheckFramebufferStatus(target);
+  return GL.glCheckFramebufferStatus(target);
 }
 
 void APIENTRY _glGetNamedFramebufferParameterivEXT(GLuint framebuffer, GLenum pname, GLint *params)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glGetFramebufferParameteriv(eGL_DRAW_FRAMEBUFFER, pname, params);
+  GL.glGetFramebufferParameteriv(eGL_DRAW_FRAMEBUFFER, pname, params);
 }
 
 void APIENTRY _glNamedFramebufferTexture1DEXT(GLuint framebuffer, GLenum attachment,
                                               GLenum textarget, GLuint texture, GLint level)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glFramebufferTexture1D(eGL_DRAW_FRAMEBUFFER, attachment, textarget, texture, level);
+  GL.glFramebufferTexture1D(eGL_DRAW_FRAMEBUFFER, attachment, textarget, texture, level);
 }
 
 void APIENTRY _glNamedFramebufferTexture2DEXT(GLuint framebuffer, GLenum attachment,
                                               GLenum textarget, GLuint texture, GLint level)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glFramebufferTexture2D(eGL_DRAW_FRAMEBUFFER, attachment, textarget, texture, level);
+  GL.glFramebufferTexture2D(eGL_DRAW_FRAMEBUFFER, attachment, textarget, texture, level);
 }
 
 void APIENTRY _glNamedFramebufferTexture3DEXT(GLuint framebuffer, GLenum attachment, GLenum textarget,
                                               GLuint texture, GLint level, GLint zoffset)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glFramebufferTexture3D(eGL_DRAW_FRAMEBUFFER, attachment, textarget, texture, level,
-                                  zoffset);
+  GL.glFramebufferTexture3D(eGL_DRAW_FRAMEBUFFER, attachment, textarget, texture, level, zoffset);
 }
 
 void APIENTRY _glNamedFramebufferTextureEXT(GLuint framebuffer, GLenum attachment, GLuint texture,
                                             GLint level)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glFramebufferTexture(eGL_DRAW_FRAMEBUFFER, attachment, texture, level);
+  GL.glFramebufferTexture(eGL_DRAW_FRAMEBUFFER, attachment, texture, level);
 }
 
 void APIENTRY _glNamedFramebufferTextureLayerEXT(GLuint framebuffer, GLenum attachment,
                                                  GLuint texture, GLint level, GLint layer)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glFramebufferTextureLayer(eGL_DRAW_FRAMEBUFFER, attachment, texture, level, layer);
+  GL.glFramebufferTextureLayer(eGL_DRAW_FRAMEBUFFER, attachment, texture, level, layer);
 }
 
 void APIENTRY _glNamedFramebufferParameteriEXT(GLuint framebuffer, GLenum pname, GLint param)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glFramebufferParameteri(eGL_DRAW_FRAMEBUFFER, pname, param);
+  GL.glFramebufferParameteri(eGL_DRAW_FRAMEBUFFER, pname, param);
 }
 
 void APIENTRY _glFramebufferDrawBufferEXT(GLuint framebuffer, GLenum mode)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glDrawBuffer(mode);
+  GL.glDrawBuffer(mode);
 }
 
 void APIENTRY _glFramebufferDrawBuffersEXT(GLuint framebuffer, GLsizei n, const GLenum *bufs)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glDrawBuffers(n, bufs);
+  GL.glDrawBuffers(n, bufs);
 }
 
 void APIENTRY _glFramebufferReadBufferEXT(GLuint framebuffer, GLenum mode)
 {
   PushPopFramebuffer(eGL_READ_FRAMEBUFFER, framebuffer);
-  hookset->glReadBuffer(mode);
+  GL.glReadBuffer(mode);
 }
 
 void APIENTRY _glNamedFramebufferRenderbufferEXT(GLuint framebuffer, GLenum attachment,
                                                  GLenum renderbuffertarget, GLuint renderbuffer)
 {
   PushPopFramebuffer(eGL_DRAW_FRAMEBUFFER, framebuffer);
-  hookset->glFramebufferRenderbuffer(eGL_DRAW_FRAMEBUFFER, attachment, renderbuffertarget,
-                                     renderbuffer);
+  GL.glFramebufferRenderbuffer(eGL_DRAW_FRAMEBUFFER, attachment, renderbuffertarget, renderbuffer);
 }
 
 #pragma endregion
@@ -335,7 +291,7 @@ void APIENTRY _glNamedRenderbufferStorageEXT(GLuint renderbuffer, GLenum interna
                                              GLsizei width, GLsizei height)
 {
   PushPopRenderbuffer(renderbuffer);
-  hookset->glRenderbufferStorage(eGL_RENDERBUFFER, internalformat, width, height);
+  GL.glRenderbufferStorage(eGL_RENDERBUFFER, internalformat, width, height);
 }
 
 void APIENTRY _glNamedRenderbufferStorageMultisampleEXT(GLuint renderbuffer, GLsizei samples,
@@ -343,13 +299,13 @@ void APIENTRY _glNamedRenderbufferStorageMultisampleEXT(GLuint renderbuffer, GLs
                                                         GLsizei height)
 {
   PushPopRenderbuffer(renderbuffer);
-  hookset->glRenderbufferStorageMultisample(eGL_RENDERBUFFER, samples, internalformat, width, height);
+  GL.glRenderbufferStorageMultisample(eGL_RENDERBUFFER, samples, internalformat, width, height);
 }
 
 void APIENTRY _glGetNamedRenderbufferParameterivEXT(GLuint renderbuffer, GLenum pname, GLint *params)
 {
   PushPopRenderbuffer(renderbuffer);
-  hookset->glGetRenderbufferParameteriv(eGL_RENDERBUFFER, pname, params);
+  GL.glGetRenderbufferParameteriv(eGL_RENDERBUFFER, pname, params);
 }
 
 #pragma endregion
@@ -359,19 +315,19 @@ void APIENTRY _glGetNamedRenderbufferParameterivEXT(GLuint renderbuffer, GLenum 
 void APIENTRY _glGetNamedBufferParameterivEXT(GLuint buffer, GLenum pname, GLint *params)
 {
   PushPopBuffer(eGL_COPY_READ_BUFFER, buffer);
-  hookset->glGetBufferParameteriv(eGL_COPY_READ_BUFFER, pname, params);
+  GL.glGetBufferParameteriv(eGL_COPY_READ_BUFFER, pname, params);
 }
 
 void APIENTRY _glGetBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, void *data)
 {
-  void *bufData = hookset->glMapBufferRange(target, offset, size, eGL_MAP_READ_BIT);
+  void *bufData = GL.glMapBufferRange(target, offset, size, eGL_MAP_READ_BIT);
   if(!bufData)
   {
     RDCERR("glMapBufferRange failed to map buffer.");
     return;
   }
   memcpy(data, bufData, (size_t)size);
-  hookset->glUnmapBuffer(target);
+  GL.glUnmapBuffer(target);
 }
 
 void APIENTRY _glGetNamedBufferSubDataEXT(GLuint buffer, GLintptr offset, GLsizeiptr size, void *data)
@@ -384,7 +340,7 @@ void *APIENTRY _glMapNamedBufferEXT(GLuint buffer, GLenum access)
 {
   PushPopBuffer(eGL_COPY_READ_BUFFER, buffer);
   GLint size;
-  hookset->glGetBufferParameteriv(eGL_COPY_READ_BUFFER, eGL_BUFFER_SIZE, &size);
+  GL.glGetBufferParameteriv(eGL_COPY_READ_BUFFER, eGL_BUFFER_SIZE, &size);
 
   GLbitfield accessBits = eGL_MAP_READ_BIT | eGL_MAP_WRITE_BIT;
 
@@ -393,33 +349,33 @@ void *APIENTRY _glMapNamedBufferEXT(GLuint buffer, GLenum access)
   else if(access == eGL_WRITE_ONLY)
     accessBits = eGL_MAP_WRITE_BIT;
 
-  return hookset->glMapBufferRange(eGL_COPY_READ_BUFFER, 0, size, accessBits);
+  return GL.glMapBufferRange(eGL_COPY_READ_BUFFER, 0, size, accessBits);
 }
 
 void *APIENTRY _glMapNamedBufferRangeEXT(GLuint buffer, GLintptr offset, GLsizeiptr length,
                                          GLbitfield access)
 {
   PushPopBuffer(eGL_COPY_READ_BUFFER, buffer);
-  return hookset->glMapBufferRange(eGL_COPY_READ_BUFFER, offset, length, access);
+  return GL.glMapBufferRange(eGL_COPY_READ_BUFFER, offset, length, access);
 }
 
 void APIENTRY _glFlushMappedNamedBufferRangeEXT(GLuint buffer, GLintptr offset, GLsizeiptr length)
 {
   PushPopBuffer(eGL_COPY_READ_BUFFER, buffer);
-  hookset->glFlushMappedBufferRange(eGL_COPY_READ_BUFFER, offset, length);
+  GL.glFlushMappedBufferRange(eGL_COPY_READ_BUFFER, offset, length);
 }
 
 GLboolean APIENTRY _glUnmapNamedBufferEXT(GLuint buffer)
 {
   PushPopBuffer(eGL_COPY_READ_BUFFER, buffer);
-  return hookset->glUnmapBuffer(eGL_COPY_READ_BUFFER);
+  return GL.glUnmapBuffer(eGL_COPY_READ_BUFFER);
 }
 
 void APIENTRY _glClearNamedBufferDataEXT(GLuint buffer, GLenum internalformat, GLenum format,
                                          GLenum type, const void *data)
 {
   PushPopBuffer(eGL_COPY_READ_BUFFER, buffer);
-  hookset->glClearBufferData(eGL_COPY_READ_BUFFER, internalformat, format, type, data);
+  GL.glClearBufferData(eGL_COPY_READ_BUFFER, internalformat, format, type, data);
 }
 
 void APIENTRY _glClearNamedBufferSubDataEXT(GLuint buffer, GLenum internalformat, GLsizeiptr offset,
@@ -427,28 +383,27 @@ void APIENTRY _glClearNamedBufferSubDataEXT(GLuint buffer, GLenum internalformat
                                             const void *data)
 {
   PushPopBuffer(eGL_COPY_READ_BUFFER, buffer);
-  hookset->glClearBufferSubData(eGL_COPY_READ_BUFFER, internalformat, offset, size, format, type,
-                                data);
+  GL.glClearBufferSubData(eGL_COPY_READ_BUFFER, internalformat, offset, size, format, type, data);
 }
 
 void APIENTRY _glNamedBufferDataEXT(GLuint buffer, GLsizeiptr size, const void *data, GLenum usage)
 {
   PushPopBuffer(eGL_COPY_READ_BUFFER, buffer);
-  hookset->glBufferData(eGL_COPY_READ_BUFFER, size, data, usage);
+  GL.glBufferData(eGL_COPY_READ_BUFFER, size, data, usage);
 }
 
 void APIENTRY _glNamedBufferStorageEXT(GLuint buffer, GLsizeiptr size, const void *data,
                                        GLbitfield flags)
 {
   PushPopBuffer(eGL_COPY_READ_BUFFER, buffer);
-  hookset->glBufferStorage(eGL_COPY_READ_BUFFER, size, data, flags);
+  GL.glBufferStorage(eGL_COPY_READ_BUFFER, size, data, flags);
 }
 
 void APIENTRY _glNamedBufferSubDataEXT(GLuint buffer, GLintptr offset, GLsizeiptr size,
                                        const void *data)
 {
   PushPopBuffer(eGL_COPY_READ_BUFFER, buffer);
-  hookset->glBufferSubData(eGL_COPY_READ_BUFFER, offset, size, data);
+  GL.glBufferSubData(eGL_COPY_READ_BUFFER, offset, size, data);
 }
 
 void APIENTRY _glNamedCopyBufferSubDataEXT(GLuint readBuffer, GLuint writeBuffer,
@@ -456,8 +411,7 @@ void APIENTRY _glNamedCopyBufferSubDataEXT(GLuint readBuffer, GLuint writeBuffer
 {
   PushPopBuffer(eGL_COPY_READ_BUFFER, readBuffer);
   PushPopBuffer(eGL_COPY_WRITE_BUFFER, writeBuffer);
-  hookset->glCopyBufferSubData(eGL_COPY_READ_BUFFER, eGL_COPY_WRITE_BUFFER, readOffset, writeOffset,
-                               size);
+  GL.glCopyBufferSubData(eGL_COPY_READ_BUFFER, eGL_COPY_WRITE_BUFFER, readOffset, writeOffset, size);
 }
 
 #pragma endregion
@@ -469,7 +423,7 @@ void APIENTRY _glCompressedTextureImage1DEXT(GLuint texture, GLenum target, GLin
                                              GLsizei imageSize, const void *bits)
 {
   PushPopTexture(target, texture);
-  hookset->glCompressedTexImage1D(target, level, internalformat, width, border, imageSize, bits);
+  GL.glCompressedTexImage1D(target, level, internalformat, width, border, imageSize, bits);
 }
 
 void APIENTRY _glCompressedTextureImage2DEXT(GLuint texture, GLenum target, GLint level,
@@ -477,8 +431,7 @@ void APIENTRY _glCompressedTextureImage2DEXT(GLuint texture, GLenum target, GLin
                                              GLint border, GLsizei imageSize, const void *bits)
 {
   PushPopTexture(target, texture);
-  hookset->glCompressedTexImage2D(target, level, internalformat, width, height, border, imageSize,
-                                  bits);
+  GL.glCompressedTexImage2D(target, level, internalformat, width, height, border, imageSize, bits);
 }
 
 void APIENTRY _glCompressedTextureImage3DEXT(GLuint texture, GLenum target, GLint level,
@@ -487,8 +440,8 @@ void APIENTRY _glCompressedTextureImage3DEXT(GLuint texture, GLenum target, GLin
                                              const void *bits)
 {
   PushPopTexture(target, texture);
-  hookset->glCompressedTexImage3D(target, level, internalformat, width, height, depth, border,
-                                  imageSize, bits);
+  GL.glCompressedTexImage3D(target, level, internalformat, width, height, depth, border, imageSize,
+                            bits);
 }
 
 void APIENTRY _glCompressedTextureSubImage1DEXT(GLuint texture, GLenum target, GLint level,
@@ -496,7 +449,7 @@ void APIENTRY _glCompressedTextureSubImage1DEXT(GLuint texture, GLenum target, G
                                                 GLsizei imageSize, const void *bits)
 {
   PushPopTexture(target, texture);
-  hookset->glCompressedTexSubImage1D(target, level, xoffset, width, format, imageSize, bits);
+  GL.glCompressedTexSubImage1D(target, level, xoffset, width, format, imageSize, bits);
 }
 
 void APIENTRY _glCompressedTextureSubImage2DEXT(GLuint texture, GLenum target, GLint level,
@@ -505,8 +458,8 @@ void APIENTRY _glCompressedTextureSubImage2DEXT(GLuint texture, GLenum target, G
                                                 const void *bits)
 {
   PushPopTexture(target, texture);
-  hookset->glCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format,
-                                     imageSize, bits);
+  GL.glCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, imageSize,
+                               bits);
 }
 
 void APIENTRY _glCompressedTextureSubImage3DEXT(GLuint texture, GLenum target, GLint level,
@@ -515,60 +468,60 @@ void APIENTRY _glCompressedTextureSubImage3DEXT(GLuint texture, GLenum target, G
                                                 GLenum format, GLsizei imageSize, const void *bits)
 {
   PushPopTexture(target, texture);
-  hookset->glCompressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth,
-                                     format, imageSize, bits);
+  GL.glCompressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth,
+                               format, imageSize, bits);
 }
 
 void APIENTRY _glGetCompressedTextureImageEXT(GLuint texture, GLenum target, GLint lod, void *img)
 {
   PushPopTexture(target, texture);
-  hookset->glGetCompressedTexImage(target, lod, img);
+  GL.glGetCompressedTexImage(target, lod, img);
 }
 
 void APIENTRY _glGetTextureImageEXT(GLuint texture, GLenum target, GLint level, GLenum format,
                                     GLenum type, void *pixels)
 {
   PushPopTexture(target, texture);
-  hookset->glGetTexImage(target, level, format, type, pixels);
+  GL.glGetTexImage(target, level, format, type, pixels);
 }
 
 void APIENTRY _glGetTextureParameterfvEXT(GLuint texture, GLenum target, GLenum pname, GLfloat *params)
 {
   PushPopTexture(target, texture);
-  hookset->glGetTexParameterfv(target, pname, params);
+  GL.glGetTexParameterfv(target, pname, params);
 }
 
 void APIENTRY _glGetTextureParameterivEXT(GLuint texture, GLenum target, GLenum pname, GLint *params)
 {
   PushPopTexture(target, texture);
-  hookset->glGetTexParameteriv(target, pname, params);
+  GL.glGetTexParameteriv(target, pname, params);
 }
 
 void APIENTRY _glGetTextureParameterIivEXT(GLuint texture, GLenum target, GLenum pname, GLint *params)
 {
   PushPopTexture(target, texture);
-  hookset->glGetTexParameterIiv(target, pname, params);
+  GL.glGetTexParameterIiv(target, pname, params);
 }
 
 void APIENTRY _glGetTextureParameterIuivEXT(GLuint texture, GLenum target, GLenum pname,
                                             GLuint *params)
 {
   PushPopTexture(target, texture);
-  hookset->glGetTexParameterIuiv(target, pname, params);
+  GL.glGetTexParameterIuiv(target, pname, params);
 }
 
 void APIENTRY _glGetTextureLevelParameterfvEXT(GLuint texture, GLenum target, GLint level,
                                                GLenum pname, GLfloat *params)
 {
   PushPopTexture(target, texture);
-  hookset->glGetTexLevelParameterfv(target, level, pname, params);
+  GL.glGetTexLevelParameterfv(target, level, pname, params);
 }
 
 void APIENTRY _glGetTextureLevelParameterivEXT(GLuint texture, GLenum target, GLint level,
                                                GLenum pname, GLint *params)
 {
   PushPopTexture(target, texture);
-  hookset->glGetTexLevelParameteriv(target, level, pname, params);
+  GL.glGetTexLevelParameteriv(target, level, pname, params);
 }
 
 void APIENTRY _glTextureImage1DEXT(GLuint texture, GLenum target, GLint level, GLint internalformat,
@@ -576,7 +529,7 @@ void APIENTRY _glTextureImage1DEXT(GLuint texture, GLenum target, GLint level, G
                                    const void *pixels)
 {
   PushPopTexture(target, texture);
-  hookset->glTexImage1D(target, level, internalformat, width, border, format, type, pixels);
+  GL.glTexImage1D(target, level, internalformat, width, border, format, type, pixels);
 }
 
 void APIENTRY _glTextureImage2DEXT(GLuint texture, GLenum target, GLint level, GLint internalformat,
@@ -584,7 +537,7 @@ void APIENTRY _glTextureImage2DEXT(GLuint texture, GLenum target, GLint level, G
                                    GLenum type, const void *pixels)
 {
   PushPopTexture(target, texture);
-  hookset->glTexImage2D(target, level, internalformat, width, height, border, format, type, pixels);
+  GL.glTexImage2D(target, level, internalformat, width, height, border, format, type, pixels);
 }
 
 void APIENTRY _glTextureImage3DEXT(GLuint texture, GLenum target, GLint level, GLint internalformat,
@@ -592,8 +545,7 @@ void APIENTRY _glTextureImage3DEXT(GLuint texture, GLenum target, GLint level, G
                                    GLenum format, GLenum type, const void *pixels)
 {
   PushPopTexture(target, texture);
-  hookset->glTexImage3D(target, level, internalformat, width, height, depth, border, format, type,
-                        pixels);
+  GL.glTexImage3D(target, level, internalformat, width, height, depth, border, format, type, pixels);
 }
 
 // these two functions are a big hack. Internally we want to be using DSA functions for everything
@@ -609,15 +561,14 @@ void APIENTRY _glTextureStorage2DMultisampleEXT(GLuint texture, GLenum target, G
   PushPopTexture(target, texture);
   if(((IsGLES && GLCoreVersion >= 31) ||
       (!IsGLES && HasExt[ARB_texture_storage] && HasExt[ARB_texture_storage_multisample])) &&
-     hookset->glTexStorage2DMultisample)
+     GL.glTexStorage2DMultisample)
   {
-    hookset->glTexStorage2DMultisample(target, samples, internalformat, width, height,
-                                       fixedsamplelocations);
+    GL.glTexStorage2DMultisample(target, samples, internalformat, width, height,
+                                 fixedsamplelocations);
   }
   else
   {
-    hookset->glTexImage2DMultisample(target, samples, internalformat, width, height,
-                                     fixedsamplelocations);
+    GL.glTexImage2DMultisample(target, samples, internalformat, width, height, fixedsamplelocations);
   }
 }
 
@@ -628,63 +579,63 @@ void APIENTRY _glTextureStorage3DMultisampleEXT(GLuint texture, GLenum target, G
   PushPopTexture(target, texture);
   if(((IsGLES && HasExt[OES_texture_storage_multisample_2d_array]) ||
       (!IsGLES && HasExt[ARB_texture_storage] && HasExt[ARB_texture_storage_multisample])) &&
-     hookset->glTexStorage3DMultisample)
+     GL.glTexStorage3DMultisample)
   {
-    hookset->glTexStorage3DMultisample(target, samples, internalformat, width, height, depth,
-                                       fixedsamplelocations);
+    GL.glTexStorage3DMultisample(target, samples, internalformat, width, height, depth,
+                                 fixedsamplelocations);
   }
   else
   {
-    hookset->glTexImage3DMultisample(target, samples, internalformat, width, height, depth,
-                                     fixedsamplelocations);
+    GL.glTexImage3DMultisample(target, samples, internalformat, width, height, depth,
+                               fixedsamplelocations);
   }
 }
 
 void APIENTRY _glTextureParameterfEXT(GLuint texture, GLenum target, GLenum pname, GLfloat param)
 {
   PushPopTexture(target, texture);
-  hookset->glTexParameterf(target, pname, param);
+  GL.glTexParameterf(target, pname, param);
 }
 
 void APIENTRY _glTextureParameterfvEXT(GLuint texture, GLenum target, GLenum pname,
                                        const GLfloat *params)
 {
   PushPopTexture(target, texture);
-  hookset->glTexParameterfv(target, pname, params);
+  GL.glTexParameterfv(target, pname, params);
 }
 
 void APIENTRY _glTextureParameteriEXT(GLuint texture, GLenum target, GLenum pname, GLint param)
 {
   PushPopTexture(target, texture);
-  hookset->glTexParameteri(target, pname, param);
+  GL.glTexParameteri(target, pname, param);
 }
 
 void APIENTRY _glTextureParameterivEXT(GLuint texture, GLenum target, GLenum pname,
                                        const GLint *params)
 {
   PushPopTexture(target, texture);
-  hookset->glTexParameteriv(target, pname, params);
+  GL.glTexParameteriv(target, pname, params);
 }
 
 void APIENTRY _glTextureParameterIivEXT(GLuint texture, GLenum target, GLenum pname,
                                         const GLint *params)
 {
   PushPopTexture(target, texture);
-  hookset->glTexParameterIiv(target, pname, params);
+  GL.glTexParameterIiv(target, pname, params);
 }
 
 void APIENTRY _glTextureParameterIuivEXT(GLuint texture, GLenum target, GLenum pname,
                                          const GLuint *params)
 {
   PushPopTexture(target, texture);
-  hookset->glTexParameterIuiv(target, pname, params);
+  GL.glTexParameterIuiv(target, pname, params);
 }
 
 void APIENTRY _glTextureSubImage1DEXT(GLuint texture, GLenum target, GLint level, GLint xoffset,
                                       GLsizei width, GLenum format, GLenum type, const void *pixels)
 {
   PushPopTexture(target, texture);
-  hookset->glTexSubImage1D(target, level, xoffset, width, format, type, pixels);
+  GL.glTexSubImage1D(target, level, xoffset, width, format, type, pixels);
 }
 
 void APIENTRY _glTextureSubImage2DEXT(GLuint texture, GLenum target, GLint level, GLint xoffset,
@@ -692,7 +643,7 @@ void APIENTRY _glTextureSubImage2DEXT(GLuint texture, GLenum target, GLint level
                                       GLenum type, const void *pixels)
 {
   PushPopTexture(target, texture);
-  hookset->glTexSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
+  GL.glTexSubImage2D(target, level, xoffset, yoffset, width, height, format, type, pixels);
 }
 
 void APIENTRY _glTextureSubImage3DEXT(GLuint texture, GLenum target, GLint level, GLint xoffset,
@@ -700,22 +651,22 @@ void APIENTRY _glTextureSubImage3DEXT(GLuint texture, GLenum target, GLint level
                                       GLsizei depth, GLenum format, GLenum type, const void *pixels)
 {
   PushPopTexture(target, texture);
-  hookset->glTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format,
-                           type, pixels);
+  GL.glTexSubImage3D(target, level, xoffset, yoffset, zoffset, width, height, depth, format, type,
+                     pixels);
 }
 
 void APIENTRY _glTextureStorage1DEXT(GLuint texture, GLenum target, GLsizei levels,
                                      GLenum internalformat, GLsizei width)
 {
   PushPopTexture(target, texture);
-  hookset->glTexStorage1D(target, levels, internalformat, width);
+  GL.glTexStorage1D(target, levels, internalformat, width);
 }
 
 void APIENTRY _glTextureStorage2DEXT(GLuint texture, GLenum target, GLsizei levels,
                                      GLenum internalformat, GLsizei width, GLsizei height)
 {
   PushPopTexture(target, texture);
-  hookset->glTexStorage2D(target, levels, internalformat, width, height);
+  GL.glTexStorage2D(target, levels, internalformat, width, height);
 }
 
 void APIENTRY _glTextureStorage3DEXT(GLuint texture, GLenum target, GLsizei levels,
@@ -723,7 +674,7 @@ void APIENTRY _glTextureStorage3DEXT(GLuint texture, GLenum target, GLsizei leve
                                      GLsizei depth)
 {
   PushPopTexture(target, texture);
-  hookset->glTexStorage3D(target, levels, internalformat, width, height, depth);
+  GL.glTexStorage3D(target, levels, internalformat, width, height, depth);
 }
 
 void APIENTRY _glCopyTextureImage1DEXT(GLuint texture, GLenum target, GLint level,
@@ -731,7 +682,7 @@ void APIENTRY _glCopyTextureImage1DEXT(GLuint texture, GLenum target, GLint leve
                                        GLint border)
 {
   PushPopTexture(target, texture);
-  hookset->glCopyTexImage1D(target, level, internalformat, x, y, width, border);
+  GL.glCopyTexImage1D(target, level, internalformat, x, y, width, border);
 }
 
 void APIENTRY _glCopyTextureImage2DEXT(GLuint texture, GLenum target, GLint level,
@@ -739,14 +690,14 @@ void APIENTRY _glCopyTextureImage2DEXT(GLuint texture, GLenum target, GLint leve
                                        GLsizei height, GLint border)
 {
   PushPopTexture(target, texture);
-  hookset->glCopyTexImage2D(target, level, internalformat, x, y, width, height, border);
+  GL.glCopyTexImage2D(target, level, internalformat, x, y, width, height, border);
 }
 
 void APIENTRY _glCopyTextureSubImage1DEXT(GLuint texture, GLenum target, GLint level, GLint xoffset,
                                           GLint x, GLint y, GLsizei width)
 {
   PushPopTexture(target, texture);
-  hookset->glCopyTexSubImage1D(target, level, xoffset, x, y, width);
+  GL.glCopyTexSubImage1D(target, level, xoffset, x, y, width);
 }
 
 void APIENTRY _glCopyTextureSubImage2DEXT(GLuint texture, GLenum target, GLint level, GLint xoffset,
@@ -754,7 +705,7 @@ void APIENTRY _glCopyTextureSubImage2DEXT(GLuint texture, GLenum target, GLint l
                                           GLsizei height)
 {
   PushPopTexture(target, texture);
-  hookset->glCopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height);
+  GL.glCopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height);
 }
 
 void APIENTRY _glCopyTextureSubImage3DEXT(GLuint texture, GLenum target, GLint level, GLint xoffset,
@@ -762,26 +713,26 @@ void APIENTRY _glCopyTextureSubImage3DEXT(GLuint texture, GLenum target, GLint l
                                           GLsizei width, GLsizei height)
 {
   PushPopTexture(target, texture);
-  hookset->glCopyTexSubImage3D(target, level, xoffset, yoffset, zoffset, x, y, width, height);
+  GL.glCopyTexSubImage3D(target, level, xoffset, yoffset, zoffset, x, y, width, height);
 }
 
 void APIENTRY _glGenerateTextureMipmapEXT(GLuint texture, GLenum target)
 {
   PushPopTexture(target, texture);
-  hookset->glGenerateMipmap(target);
+  GL.glGenerateMipmap(target);
 }
 
 void APIENTRY _glTextureBufferEXT(GLuint texture, GLenum target, GLenum internalformat, GLuint buffer)
 {
   PushPopTexture(target, texture);
-  hookset->glTexBuffer(target, internalformat, buffer);
+  GL.glTexBuffer(target, internalformat, buffer);
 }
 
 void APIENTRY _glTextureBufferRangeEXT(GLuint texture, GLenum target, GLenum internalformat,
                                        GLuint buffer, GLintptr offset, GLsizeiptr size)
 {
   PushPopTexture(target, texture);
-  hookset->glTexBufferRange(target, internalformat, buffer, offset, size);
+  GL.glTexBufferRange(target, internalformat, buffer, offset, size);
 }
 
 #pragma endregion
@@ -791,13 +742,13 @@ void APIENTRY _glTextureBufferRangeEXT(GLuint texture, GLenum target, GLenum int
 void APIENTRY _glGetVertexArrayIntegervEXT(GLuint vaobj, GLenum pname, GLint *param)
 {
   PushPopVertexArray(vaobj);
-  hookset->glGetIntegerv(pname, param);
+  GL.glGetIntegerv(pname, param);
 }
 
 void APIENTRY _glGetVertexArrayIntegeri_vEXT(GLuint vaobj, GLuint index, GLenum pname, GLint *param)
 {
   PushPopVertexArray(vaobj);
-  hookset->glGetIntegeri_v(pname, index, param);
+  GL.glGetIntegeri_v(pname, index, param);
 }
 
 void APIENTRY _glVertexArrayVertexAttribOffsetEXT(GLuint vaobj, GLuint buffer, GLuint index,
@@ -806,7 +757,7 @@ void APIENTRY _glVertexArrayVertexAttribOffsetEXT(GLuint vaobj, GLuint buffer, G
 {
   PushPopVertexArray(vaobj);
   PushPopBuffer(eGL_ARRAY_BUFFER, buffer);
-  hookset->glVertexAttribPointer(index, size, type, normalized, stride, (const void *)offset);
+  GL.glVertexAttribPointer(index, size, type, normalized, stride, (const void *)offset);
 }
 
 void APIENTRY _glVertexArrayVertexAttribIOffsetEXT(GLuint vaobj, GLuint buffer, GLuint index,
@@ -815,7 +766,7 @@ void APIENTRY _glVertexArrayVertexAttribIOffsetEXT(GLuint vaobj, GLuint buffer, 
 {
   PushPopVertexArray(vaobj);
   PushPopBuffer(eGL_ARRAY_BUFFER, buffer);
-  hookset->glVertexAttribIPointer(index, size, type, stride, (const void *)offset);
+  GL.glVertexAttribIPointer(index, size, type, stride, (const void *)offset);
 }
 
 void APIENTRY _glVertexArrayVertexAttribLOffsetEXT(GLuint vaobj, GLuint buffer, GLuint index,
@@ -828,26 +779,26 @@ void APIENTRY _glVertexArrayVertexAttribLOffsetEXT(GLuint vaobj, GLuint buffer, 
   // However we only use this internally if the capture used an equivalent function which would
   // rely on that extension anyway. ie. when we promote it to EXT_dsa form, we were already
   // assuming that the additional extension was available.
-  hookset->glVertexAttribLPointer(index, size, type, stride, (const void *)offset);
+  GL.glVertexAttribLPointer(index, size, type, stride, (const void *)offset);
 }
 
 void APIENTRY _glEnableVertexArrayAttribEXT(GLuint vaobj, GLuint index)
 {
   PushPopVertexArray(vaobj);
-  hookset->glEnableVertexAttribArray(index);
+  GL.glEnableVertexAttribArray(index);
 }
 
 void APIENTRY _glDisableVertexArrayAttribEXT(GLuint vaobj, GLuint index)
 {
   PushPopVertexArray(vaobj);
-  hookset->glDisableVertexAttribArray(index);
+  GL.glDisableVertexAttribArray(index);
 }
 
 void APIENTRY _glVertexArrayBindVertexBufferEXT(GLuint vaobj, GLuint bindingindex, GLuint buffer,
                                                 GLintptr offset, GLsizei stride)
 {
   PushPopVertexArray(vaobj);
-  hookset->glBindVertexBuffer(bindingindex, buffer, offset, stride);
+  GL.glBindVertexBuffer(bindingindex, buffer, offset, stride);
 }
 
 void APIENTRY _glVertexArrayVertexAttribFormatEXT(GLuint vaobj, GLuint attribindex, GLint size,
@@ -855,40 +806,40 @@ void APIENTRY _glVertexArrayVertexAttribFormatEXT(GLuint vaobj, GLuint attribind
                                                   GLuint relativeoffset)
 {
   PushPopVertexArray(vaobj);
-  hookset->glVertexAttribFormat(attribindex, size, type, normalized, relativeoffset);
+  GL.glVertexAttribFormat(attribindex, size, type, normalized, relativeoffset);
 }
 
 void APIENTRY _glVertexArrayVertexAttribIFormatEXT(GLuint vaobj, GLuint attribindex, GLint size,
                                                    GLenum type, GLuint relativeoffset)
 {
   PushPopVertexArray(vaobj);
-  hookset->glVertexAttribIFormat(attribindex, size, type, relativeoffset);
+  GL.glVertexAttribIFormat(attribindex, size, type, relativeoffset);
 }
 
 void APIENTRY _glVertexArrayVertexAttribLFormatEXT(GLuint vaobj, GLuint attribindex, GLint size,
                                                    GLenum type, GLuint relativeoffset)
 {
   PushPopVertexArray(vaobj);
-  hookset->glVertexAttribLFormat(attribindex, size, type, relativeoffset);
+  GL.glVertexAttribLFormat(attribindex, size, type, relativeoffset);
 }
 
 void APIENTRY _glVertexArrayVertexAttribBindingEXT(GLuint vaobj, GLuint attribindex,
                                                    GLuint bindingindex)
 {
   PushPopVertexArray(vaobj);
-  hookset->glVertexAttribBinding(attribindex, bindingindex);
+  GL.glVertexAttribBinding(attribindex, bindingindex);
 }
 
 void APIENTRY _glVertexArrayVertexBindingDivisorEXT(GLuint vaobj, GLuint bindingindex, GLuint divisor)
 {
   PushPopVertexArray(vaobj);
-  hookset->glVertexBindingDivisor(bindingindex, divisor);
+  GL.glVertexBindingDivisor(bindingindex, divisor);
 }
 
 void APIENTRY _glVertexArrayVertexAttribDivisorEXT(GLuint vaobj, GLuint index, GLuint divisor)
 {
   PushPopVertexArray(vaobj);
-  hookset->glVertexAttribDivisor(index, divisor);
+  GL.glVertexAttribDivisor(index, divisor);
 }
 
 #pragma endregion
@@ -1118,7 +1069,7 @@ void APIENTRY _glCopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLev
   GLuint &readFBO = fbos[0];
   GLuint &drawFBO = fbos[1];
 
-  hookset->glGenFramebuffers(2, fbos);
+  GL.glGenFramebuffers(2, fbos);
 
   RDCASSERTEQUAL(srcTarget, dstTarget);
 
@@ -1147,8 +1098,7 @@ void APIENTRY _glCopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLev
         levelQueryType = eGL_TEXTURE_CUBE_MAP_POSITIVE_X;
 
       GLenum fmt = eGL_NONE;
-      hookset->glGetTexLevelParameteriv(levelQueryType, 0, eGL_TEXTURE_INTERNAL_FORMAT,
-                                        (GLint *)&fmt);
+      GL.glGetTexLevelParameteriv(levelQueryType, 0, eGL_TEXTURE_INTERNAL_FORMAT, (GLint *)&fmt);
 
       if(IsCompressedFormat(fmt))
       {
@@ -1186,27 +1136,26 @@ void APIENTRY _glCopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLev
           }
           else
           {
-            hookset->glGetCompressedTextureImageEXT(srcName, targets[trg], srcLevel, buf);
+            GL.glGetCompressedTextureImageEXT(srcName, targets[trg], srcLevel, buf);
           }
 
           // write to GPU
           if(srcTarget == eGL_TEXTURE_1D || srcTarget == eGL_TEXTURE_1D_ARRAY)
-            hookset->glCompressedTextureSubImage1DEXT(dstName, targets[trg], dstLevel, 0, srcWidth,
-                                                      fmt, (GLsizei)size, buf);
+            GL.glCompressedTextureSubImage1DEXT(dstName, targets[trg], dstLevel, 0, srcWidth, fmt,
+                                                (GLsizei)size, buf);
           else if(srcTarget == eGL_TEXTURE_3D)
-            hookset->glCompressedTextureSubImage3DEXT(dstName, targets[trg], dstLevel, 0, 0, 0,
-                                                      srcWidth, srcHeight, srcDepth, fmt,
-                                                      (GLsizei)size, buf);
+            GL.glCompressedTextureSubImage3DEXT(dstName, targets[trg], dstLevel, 0, 0, 0, srcWidth,
+                                                srcHeight, srcDepth, fmt, (GLsizei)size, buf);
           else
-            hookset->glCompressedTextureSubImage2DEXT(dstName, targets[trg], dstLevel, 0, 0,
-                                                      srcWidth, srcHeight, fmt, (GLsizei)size, buf);
+            GL.glCompressedTextureSubImage2DEXT(dstName, targets[trg], dstLevel, 0, 0, srcWidth,
+                                                srcHeight, fmt, (GLsizei)size, buf);
         }
 
         delete[] buf;
       }
       else
       {
-        ResourceFormat format = MakeResourceFormat(*hookset, srcTarget, fmt);
+        ResourceFormat format = MakeResourceFormat(srcTarget, fmt);
 
         GLenum baseFormat = GetBaseFormat(fmt);
 
@@ -1234,15 +1183,13 @@ void APIENTRY _glCopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLev
           // target.
           if(srcTarget == eGL_TEXTURE_2D || srcTarget == eGL_TEXTURE_2D_MULTISAMPLE)
           {
-            hookset->glFramebufferTexture2D(eGL_READ_FRAMEBUFFER, attach, srcTarget, srcName,
-                                            srcLevel);
-            hookset->glFramebufferTexture2D(eGL_DRAW_FRAMEBUFFER, attach, dstTarget, dstName,
-                                            dstLevel);
+            GL.glFramebufferTexture2D(eGL_READ_FRAMEBUFFER, attach, srcTarget, srcName, srcLevel);
+            GL.glFramebufferTexture2D(eGL_DRAW_FRAMEBUFFER, attach, dstTarget, dstName, dstLevel);
           }
           else
           {
-            hookset->glFramebufferTexture(eGL_READ_FRAMEBUFFER, attach, srcName, srcLevel);
-            hookset->glFramebufferTexture(eGL_DRAW_FRAMEBUFFER, attach, dstName, dstLevel);
+            GL.glFramebufferTexture(eGL_READ_FRAMEBUFFER, attach, srcName, srcLevel);
+            GL.glFramebufferTexture(eGL_DRAW_FRAMEBUFFER, attach, dstName, dstLevel);
           }
         }
       }
@@ -1254,8 +1201,18 @@ void APIENTRY _glCopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLev
     }
     else if(!layered)
     {
-      hookset->glBlitFramebuffer(srcX, srcY, srcX + srcWidth, srcY + srcHeight, dstX, dstY,
-                                 dstX + srcWidth, dstY + srcHeight, mask, eGL_NEAREST);
+      GLenum status = GL.glCheckFramebufferStatus(eGL_DRAW_FRAMEBUFFER);
+
+      if(status != eGL_FRAMEBUFFER_COMPLETE)
+        RDCERR("glCopyImageSubData emulation draw FBO is %s", ToStr(status).c_str());
+
+      status = GL.glCheckFramebufferStatus(eGL_READ_FRAMEBUFFER);
+
+      if(status != eGL_FRAMEBUFFER_COMPLETE)
+        RDCERR("glCopyImageSubData emulation read FBO is %s", ToStr(status).c_str());
+
+      SafeBlitFramebuffer(srcX, srcY, srcX + srcWidth, srcY + srcHeight, dstX, dstY,
+                          dstX + srcWidth, dstY + srcHeight, mask, eGL_NEAREST);
     }
     else if(srcTarget == eGL_TEXTURE_CUBE_MAP)
     {
@@ -1269,31 +1226,55 @@ void APIENTRY _glCopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLev
 
       for(GLsizei slice = 0; slice < srcDepth; slice++)
       {
-        hookset->glFramebufferTexture2D(eGL_READ_FRAMEBUFFER, attach, textargets[srcZ + slice],
-                                        srcName, srcLevel);
-        hookset->glFramebufferTexture2D(eGL_DRAW_FRAMEBUFFER, attach, textargets[dstZ + slice],
-                                        dstName, dstLevel);
+        GL.glFramebufferTexture2D(eGL_READ_FRAMEBUFFER, attach, textargets[srcZ + slice], srcName,
+                                  srcLevel);
+        GL.glFramebufferTexture2D(eGL_DRAW_FRAMEBUFFER, attach, textargets[dstZ + slice], dstName,
+                                  dstLevel);
 
-        hookset->glBlitFramebuffer(srcX, srcY, srcX + srcWidth, srcY + srcHeight, dstX, dstY,
-                                   dstX + srcWidth, dstY + srcHeight, mask, eGL_NEAREST);
+        if(slice == 0)
+        {
+          GLenum status = GL.glCheckFramebufferStatus(eGL_DRAW_FRAMEBUFFER);
+
+          if(status != eGL_FRAMEBUFFER_COMPLETE)
+            RDCERR("glCopyImageSubData emulation draw FBO is %s for slice 0", ToStr(status).c_str());
+
+          status = GL.glCheckFramebufferStatus(eGL_READ_FRAMEBUFFER);
+
+          if(status != eGL_FRAMEBUFFER_COMPLETE)
+            RDCERR("glCopyImageSubData emulation read FBO is %s for slice 0", ToStr(status).c_str());
+        }
+
+        SafeBlitFramebuffer(srcX, srcY, srcX + srcWidth, srcY + srcHeight, dstX, dstY,
+                            dstX + srcWidth, dstY + srcHeight, mask, eGL_NEAREST);
       }
     }
     else
     {
       for(GLsizei slice = 0; slice < srcDepth; slice++)
       {
-        hookset->glFramebufferTextureLayer(eGL_READ_FRAMEBUFFER, attach, srcName, srcLevel,
-                                           srcZ + slice);
-        hookset->glFramebufferTextureLayer(eGL_DRAW_FRAMEBUFFER, attach, dstName, dstLevel,
-                                           dstZ + slice);
+        GL.glFramebufferTextureLayer(eGL_READ_FRAMEBUFFER, attach, srcName, srcLevel, srcZ + slice);
+        GL.glFramebufferTextureLayer(eGL_DRAW_FRAMEBUFFER, attach, dstName, dstLevel, dstZ + slice);
 
-        hookset->glBlitFramebuffer(srcX, srcY, srcX + srcWidth, srcY + srcHeight, dstX, dstY,
-                                   dstX + srcWidth, dstY + srcHeight, mask, eGL_NEAREST);
+        if(slice == 0)
+        {
+          GLenum status = GL.glCheckFramebufferStatus(eGL_DRAW_FRAMEBUFFER);
+
+          if(status != eGL_FRAMEBUFFER_COMPLETE)
+            RDCERR("glCopyImageSubData emulation draw FBO is %s for slice 0", ToStr(status).c_str());
+
+          status = GL.glCheckFramebufferStatus(eGL_READ_FRAMEBUFFER);
+
+          if(status != eGL_FRAMEBUFFER_COMPLETE)
+            RDCERR("glCopyImageSubData emulation read FBO is %s for slice 0", ToStr(status).c_str());
+        }
+
+        SafeBlitFramebuffer(srcX, srcY, srcX + srcWidth, srcY + srcHeight, dstX, dstY,
+                            dstX + srcWidth, dstY + srcHeight, mask, eGL_NEAREST);
       }
     }
   }
 
-  hookset->glDeleteFramebuffers(2, fbos);
+  GL.glDeleteFramebuffers(2, fbos);
 }
 
 #pragma endregion
@@ -1303,8 +1284,8 @@ void APIENTRY _glCopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLev
 void APIENTRY _glClearBufferSubData(GLenum target, GLenum internalformat, GLintptr offset,
                                     GLsizeiptr size, GLenum format, GLenum type, const void *data)
 {
-  byte *dst = (byte *)hookset->glMapBufferRange(target, offset, size,
-                                                GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT);
+  byte *dst = (byte *)GL.glMapBufferRange(target, offset, size,
+                                          GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_RANGE_BIT);
 
   if(data == NULL)
   {
@@ -1360,7 +1341,7 @@ void APIENTRY _glClearBufferSubData(GLenum target, GLenum internalformat, GLintp
       default: break;
     }
 
-    ResourceFormat fmt = MakeResourceFormat(*hookset, eGL_TEXTURE_2D, internalformat);
+    ResourceFormat fmt = MakeResourceFormat(eGL_TEXTURE_2D, internalformat);
 
     // ensure we don't need any conversion
     if(compByteWidth != fmt.compByteWidth)
@@ -1390,14 +1371,14 @@ void APIENTRY _glClearBufferSubData(GLenum target, GLenum internalformat, GLintp
       memcpy(dst + i, data, stride);
   }
 
-  hookset->glUnmapBuffer(target);
+  GL.glUnmapBuffer(target);
 }
 
 void APIENTRY _glClearBufferData(GLenum target, GLenum internalformat, GLenum format, GLenum type,
                                  const void *data)
 {
   GLint size = 0;
-  hookset->glGetBufferParameteriv(target, eGL_BUFFER_SIZE, &size);
+  GL.glGetBufferParameteriv(target, eGL_BUFFER_SIZE, &size);
 
   _glClearBufferSubData(target, internalformat, 0, (GLsizeiptr)size, format, type, data);
 }
@@ -1405,6 +1386,241 @@ void APIENTRY _glClearBufferData(GLenum target, GLenum internalformat, GLenum fo
 #pragma endregion
 
 #pragma region GLES Compatibility
+
+static ReflectionInterface ConvertInterface(GLenum programInterface)
+{
+  ReflectionInterface ret = ReflectionInterface::Uniform;
+
+  switch(programInterface)
+  {
+    case eGL_PROGRAM_INPUT: ret = ReflectionInterface::Input; break;
+    case eGL_PROGRAM_OUTPUT: ret = ReflectionInterface::Output; break;
+    case eGL_UNIFORM: ret = ReflectionInterface::Uniform; break;
+    case eGL_UNIFORM_BLOCK: ret = ReflectionInterface::UniformBlock; break;
+    case eGL_SHADER_STORAGE_BLOCK: ret = ReflectionInterface::ShaderStorageBlock; break;
+    case eGL_ATOMIC_COUNTER_BUFFER: ret = ReflectionInterface::AtomicCounterBuffer; break;
+    default:
+      RDCERR("Unexpected program interface being queried: %s", ToStr(programInterface).c_str());
+      break;
+  }
+
+  return ret;
+}
+
+static ReflectionProperty ConvertProperty(GLenum prop)
+{
+  ReflectionProperty ret = ReflectionProperty::ActiveResources;
+
+  switch(prop)
+  {
+    case eGL_ACTIVE_RESOURCES: ret = ReflectionProperty::ActiveResources; break;
+    case eGL_BUFFER_BINDING: ret = ReflectionProperty::BufferBinding; break;
+    case eGL_TOP_LEVEL_ARRAY_STRIDE: ret = ReflectionProperty::TopLevelArrayStride; break;
+    case eGL_BLOCK_INDEX: ret = ReflectionProperty::BlockIndex; break;
+    case eGL_ARRAY_SIZE: ret = ReflectionProperty::ArraySize; break;
+    case eGL_IS_ROW_MAJOR: ret = ReflectionProperty::IsRowMajor; break;
+    case eGL_NUM_ACTIVE_VARIABLES: ret = ReflectionProperty::NumActiveVariables; break;
+    case eGL_BUFFER_DATA_SIZE: ret = ReflectionProperty::BufferDataSize; break;
+    case eGL_NAME_LENGTH: ret = ReflectionProperty::NameLength; break;
+    case eGL_TYPE: ret = ReflectionProperty::Type; break;
+    case eGL_LOCATION_COMPONENT: ret = ReflectionProperty::LocationComponent; break;
+    case eGL_REFERENCED_BY_VERTEX_SHADER: ret = ReflectionProperty::ReferencedByVertexShader; break;
+    case eGL_REFERENCED_BY_TESS_CONTROL_SHADER:
+      ret = ReflectionProperty::ReferencedByTessControlShader;
+      break;
+    case eGL_REFERENCED_BY_TESS_EVALUATION_SHADER:
+      ret = ReflectionProperty::ReferencedByTessEvaluationShader;
+      break;
+    case eGL_REFERENCED_BY_GEOMETRY_SHADER:
+      ret = ReflectionProperty::ReferencedByGeometryShader;
+      break;
+    case eGL_REFERENCED_BY_FRAGMENT_SHADER:
+      ret = ReflectionProperty::ReferencedByFragmentShader;
+      break;
+    case eGL_REFERENCED_BY_COMPUTE_SHADER:
+      ret = ReflectionProperty::ReferencedByComputeShader;
+      break;
+    case eGL_ATOMIC_COUNTER_BUFFER_INDEX: ret = ReflectionProperty::AtomicCounterBufferIndex; break;
+    case eGL_OFFSET: ret = ReflectionProperty::Offset; break;
+    case eGL_MATRIX_STRIDE: ret = ReflectionProperty::MatrixStride; break;
+    case eGL_ARRAY_STRIDE: ret = ReflectionProperty::ArrayStride; break;
+    case eGL_LOCATION: ret = ReflectionProperty::Location; break;
+    default: RDCERR("Unexpected program property being queried: %s", ToStr(prop).c_str()); break;
+  }
+
+  return ret;
+}
+
+void APIENTRY _glGetProgramInterfaceiv(GLuint program, GLenum programInterface, GLenum pname,
+                                       GLint *params)
+{
+  if(driver == NULL)
+  {
+    RDCERR("No driver available, can't emulate glGetProgramInterfaceiv");
+    *params = 0;
+    return;
+  }
+
+  ResourceId id = driver->GetResourceManager()->GetID(ProgramRes(driver->GetCtx(), program));
+
+  WrappedOpenGL::ProgramData &details = driver->m_Programs[id];
+
+  if(!details.glslangProgram)
+  {
+    *params = 0;
+    return;
+  }
+
+  glslangGetProgramInterfaceiv(details.glslangProgram, ConvertInterface(programInterface),
+                               ConvertProperty(pname), params);
+}
+
+void APIENTRY _glGetProgramResourceiv(GLuint program, GLenum programInterface, GLuint index,
+                                      GLsizei propCount, const GLenum *props, GLsizei bufSize,
+                                      GLsizei *length, GLint *params)
+{
+  if(driver == NULL)
+  {
+    RDCERR("No driver available, can't emulate glGetProgramResourceiv");
+    if(length)
+      *length = 0;
+    if(params)
+      memset(params, 0, sizeof(GLint) * bufSize);
+    return;
+  }
+
+  ResourceId id = driver->GetResourceManager()->GetID(ProgramRes(driver->GetCtx(), program));
+
+  WrappedOpenGL::ProgramData &details = driver->m_Programs[id];
+
+  if(!details.glslangProgram)
+  {
+    if(length)
+      *length = 0;
+    if(params)
+      memset(params, 0, sizeof(GLint) * bufSize);
+    return;
+  }
+
+  std::vector<ReflectionProperty> properties(propCount);
+
+  for(GLsizei i = 0; i < propCount; i++)
+    properties[i] = ConvertProperty(props[i]);
+
+  glslangGetProgramResourceiv(details.glslangProgram, ConvertInterface(programInterface), index,
+                              properties, bufSize, length, params);
+
+  // fetch locations by hand from the driver
+  for(GLsizei i = 0; i < propCount; i++)
+  {
+    if(props[i] == eGL_LOCATION)
+    {
+      if(params[i] >= 0)
+      {
+        const char *name = glslangGetProgramResourceName(details.glslangProgram,
+                                                         ConvertInterface(programInterface), index);
+
+        if(programInterface == eGL_UNIFORM)
+          params[i] = GL.glGetUniformLocation(program, name);
+        else if(programInterface == eGL_PROGRAM_INPUT)
+          params[i] = GL.glGetAttribLocation(program, name);
+        else
+          params[i] = index;
+      }
+    }
+  }
+}
+
+void APIENTRY _glGetProgramResourceName(GLuint program, GLenum programInterface, GLuint index,
+                                        GLsizei bufSize, GLsizei *length, GLchar *name)
+{
+  if(driver == NULL)
+  {
+    RDCERR("No driver available, can't emulate glGetProgramResourceName");
+    if(length)
+      *length = 0;
+    if(name && bufSize)
+      memset(name, 0, bufSize);
+    return;
+  }
+
+  ResourceId id = driver->GetResourceManager()->GetID(ProgramRes(driver->GetCtx(), program));
+
+  WrappedOpenGL::ProgramData &details = driver->m_Programs[id];
+
+  if(!details.glslangProgram)
+  {
+    if(length)
+      *length = 0;
+    if(name && bufSize)
+      memset(name, 0, bufSize);
+    return;
+  }
+
+  const char *fetchedName = glslangGetProgramResourceName(
+      details.glslangProgram, ConvertInterface(programInterface), index);
+
+  if(fetchedName)
+  {
+    size_t nameLen = strlen(fetchedName);
+    if(length)
+      *length = (int32_t)nameLen;
+
+    memcpy(name, fetchedName, RDCMIN((size_t)bufSize, nameLen));
+    name[bufSize - 1] = 0;
+    if(nameLen < (size_t)bufSize)
+      name[nameLen] = 0;
+  }
+  else
+  {
+    if(length)
+      *length = 0;
+    if(name && bufSize)
+      memset(name, 0, bufSize);
+  }
+}
+
+void APIENTRY _glGetTexLevelParameteriv(GLenum target, GLint level, GLenum pname, GLint *params)
+{
+  if(driver == NULL)
+  {
+    RDCERR("No driver available, can't emulate glGetTexLevelParameteriv");
+    return;
+  }
+
+  GLint boundTexture = 0;
+  GL.glGetIntegerv(TextureBinding(target), (GLint *)&boundTexture);
+
+  ResourceId id = driver->GetResourceManager()->GetID(TextureRes(driver->GetCtx(), boundTexture));
+
+  WrappedOpenGL::TextureData &details = driver->m_Textures[id];
+
+  bool hasmip = (details.mipsValid & (1 << level)) != 0;
+
+  if(details.mipsValid == 0)
+    RDCWARN("No mips valid! Uninitialised texture?");
+
+  switch(pname)
+  {
+    case eGL_TEXTURE_WIDTH: *params = hasmip ? RDCMAX(1, details.width >> level) : 0; return;
+    case eGL_TEXTURE_HEIGHT: *params = hasmip ? RDCMAX(1, details.height >> level) : 0; return;
+    case eGL_TEXTURE_DEPTH: *params = hasmip ? RDCMAX(1, details.depth >> level) : 0; return;
+    case eGL_TEXTURE_INTERNAL_FORMAT: *params = details.internalFormat; return;
+    default:
+      // since this is internal emulation, we only handle the parameters we expect to need
+      break;
+  }
+
+  RDCERR("Unhandled parameter %s", ToStr(pname).c_str());
+}
+
+void APIENTRY _glGetTexLevelParameterfv(GLenum target, GLint level, GLenum pname, GLfloat *params)
+{
+  // just call and upcast
+  GLint param = 0;
+  _glGetTexLevelParameteriv(target, level, pname, &param);
+  *params = (GLfloat)param;
+}
 
 void APIENTRY _glGetTexImage(GLenum target, GLint level, GLenum format, GLenum type, void *pixels)
 {
@@ -1433,12 +1649,12 @@ void APIENTRY _glGetTexImage(GLenum target, GLint level, GLenum format, GLenum t
   }
 
   GLint width = 0, height = 0, depth = 0;
-  hookset->glGetTexLevelParameteriv(target, level, eGL_TEXTURE_WIDTH, &width);
-  hookset->glGetTexLevelParameteriv(target, level, eGL_TEXTURE_HEIGHT, &height);
-  hookset->glGetTexLevelParameteriv(target, level, eGL_TEXTURE_DEPTH, &depth);
+  GL.glGetTexLevelParameteriv(target, level, eGL_TEXTURE_WIDTH, &width);
+  GL.glGetTexLevelParameteriv(target, level, eGL_TEXTURE_HEIGHT, &height);
+  GL.glGetTexLevelParameteriv(target, level, eGL_TEXTURE_DEPTH, &depth);
 
   GLint boundTexture = 0;
-  hookset->glGetIntegerv(TextureBinding(target), (GLint *)&boundTexture);
+  GL.glGetIntegerv(TextureBinding(target), (GLint *)&boundTexture);
 
   GLenum attachment = eGL_COLOR_ATTACHMENT0;
   if(format == eGL_DEPTH_COMPONENT)
@@ -1464,7 +1680,7 @@ void APIENTRY _glGetTexImage(GLenum target, GLint level, GLenum format, GLenum t
   GLuint deltex = 0;
 
   GLuint fbo = 0;
-  hookset->glGenFramebuffers(1, &fbo);
+  GL.glGenFramebuffers(1, &fbo);
 
   PushPopFramebuffer(eGL_FRAMEBUFFER, fbo);
 
@@ -1477,40 +1693,40 @@ void APIENTRY _glGetTexImage(GLenum target, GLint level, GLenum format, GLenum t
     GLint maxLevel = 0;
 
     // sample from only the right level of the source texture
-    hookset->glGetTexParameteriv(target, eGL_TEXTURE_BASE_LEVEL, &baseLevel);
-    hookset->glGetTexParameteriv(target, eGL_TEXTURE_MAX_LEVEL, &maxLevel);
-    hookset->glTexParameteri(target, eGL_TEXTURE_BASE_LEVEL, level);
-    hookset->glTexParameteri(target, eGL_TEXTURE_MAX_LEVEL, level);
+    GL.glGetTexParameteriv(target, eGL_TEXTURE_BASE_LEVEL, &baseLevel);
+    GL.glGetTexParameteriv(target, eGL_TEXTURE_MAX_LEVEL, &maxLevel);
+    GL.glTexParameteri(target, eGL_TEXTURE_BASE_LEVEL, level);
+    GL.glTexParameteri(target, eGL_TEXTURE_MAX_LEVEL, level);
 
     // only support 2D textures for now
     RDCASSERT(target == eGL_TEXTURE_2D, target);
-    hookset->glGenTextures(1, &readtex);
-    hookset->glBindTexture(target, readtex);
+    GL.glGenTextures(1, &readtex);
+    GL.glBindTexture(target, readtex);
 
     // allocate the R8 texture
-    hookset->glTexParameteri(target, eGL_TEXTURE_MAX_LEVEL, 0);
-    hookset->glTexImage2D(target, 0, eGL_R8, width, height, 0, eGL_RED, eGL_UNSIGNED_BYTE, NULL);
+    GL.glTexParameteri(target, eGL_TEXTURE_MAX_LEVEL, 0);
+    GL.glTexImage2D(target, 0, eGL_R8, width, height, 0, eGL_RED, eGL_UNSIGNED_BYTE, NULL);
 
     // render to it
-    hookset->glFramebufferTexture2D(eGL_FRAMEBUFFER, eGL_COLOR_ATTACHMENT0, target, readtex, 0);
+    GL.glFramebufferTexture2D(eGL_FRAMEBUFFER, eGL_COLOR_ATTACHMENT0, target, readtex, 0);
 
     // push rendering state
     GLPushPopState textState;
 
-    textState.Push(*hookset, true);
+    textState.Push(true);
 
     // render a blit triangle to move alpha in the source to red in the dest
-    hookset->glDisable(eGL_BLEND);
-    hookset->glDisable(eGL_DEPTH_TEST);
-    hookset->glDisable(eGL_STENCIL_TEST);
-    hookset->glDisable(eGL_CULL_FACE);
-    hookset->glDisable(eGL_SCISSOR_TEST);
-    hookset->glViewport(0, 0, width, height);
+    GL.glDisable(eGL_BLEND);
+    GL.glDisable(eGL_DEPTH_TEST);
+    GL.glDisable(eGL_STENCIL_TEST);
+    GL.glDisable(eGL_CULL_FACE);
+    GL.glDisable(eGL_SCISSOR_TEST);
+    GL.glViewport(0, 0, width, height);
 
-    hookset->glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    GL.glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
-    hookset->glActiveTexture(eGL_TEXTURE0);
-    hookset->glBindTexture(eGL_TEXTURE_2D, boundTexture);
+    GL.glActiveTexture(eGL_TEXTURE0);
+    GL.glBindTexture(eGL_TEXTURE_2D, boundTexture);
 
     GLuint prog;
 
@@ -1525,48 +1741,48 @@ void APIENTRY _glGetTexImage(GLenum target, GLint level, GLenum format, GLenum t
           "uniform sampler2D srcTex;\n"
           "void main() { gl_FragColor = texture2D(srcTex, vec2(gl_FragCoord.xy)/res).aaaa; }";
 
-      GLuint vert = hookset->glCreateShader(eGL_VERTEX_SHADER);
-      GLuint frag = hookset->glCreateShader(eGL_FRAGMENT_SHADER);
+      GLuint vert = GL.glCreateShader(eGL_VERTEX_SHADER);
+      GLuint frag = GL.glCreateShader(eGL_FRAGMENT_SHADER);
 
-      hookset->glShaderSource(vert, 1, &vs, NULL);
-      hookset->glShaderSource(frag, 1, &fs, NULL);
+      GL.glShaderSource(vert, 1, &vs, NULL);
+      GL.glShaderSource(frag, 1, &fs, NULL);
 
-      hookset->glCompileShader(vert);
-      hookset->glCompileShader(frag);
+      GL.glCompileShader(vert);
+      GL.glCompileShader(frag);
 
       char buffer[1024] = {0};
       GLint status = 0;
 
-      hookset->glGetShaderiv(vert, eGL_COMPILE_STATUS, &status);
+      GL.glGetShaderiv(vert, eGL_COMPILE_STATUS, &status);
       if(status == 0)
       {
-        hookset->glGetShaderInfoLog(vert, 1024, NULL, buffer);
+        GL.glGetShaderInfoLog(vert, 1024, NULL, buffer);
         RDCERR("Shader error: %s", buffer);
       }
 
-      hookset->glGetShaderiv(frag, eGL_COMPILE_STATUS, &status);
+      GL.glGetShaderiv(frag, eGL_COMPILE_STATUS, &status);
       if(status == 0)
       {
-        hookset->glGetShaderInfoLog(frag, 1024, NULL, buffer);
+        GL.glGetShaderInfoLog(frag, 1024, NULL, buffer);
         RDCERR("Shader error: %s", buffer);
       }
 
-      prog = hookset->glCreateProgram();
+      prog = GL.glCreateProgram();
 
-      hookset->glAttachShader(prog, vert);
-      hookset->glAttachShader(prog, frag);
+      GL.glAttachShader(prog, vert);
+      GL.glAttachShader(prog, frag);
 
-      hookset->glLinkProgram(prog);
+      GL.glLinkProgram(prog);
 
-      hookset->glGetProgramiv(prog, eGL_LINK_STATUS, &status);
+      GL.glGetProgramiv(prog, eGL_LINK_STATUS, &status);
       if(status == 0)
       {
-        hookset->glGetProgramInfoLog(prog, 1024, NULL, buffer);
+        GL.glGetProgramInfoLog(prog, 1024, NULL, buffer);
         RDCERR("Link error: %s", buffer);
       }
 
-      hookset->glDeleteShader(vert);
-      hookset->glDeleteShader(frag);
+      GL.glDeleteShader(vert);
+      GL.glDeleteShader(frag);
     }
 
     // fullscreen triangle
@@ -1577,45 +1793,45 @@ void APIENTRY _glGetTexImage(GLenum target, GLint level, GLenum format, GLenum t
     };
 
     GLuint vb = 0;
-    hookset->glGenBuffers(1, &vb);
-    hookset->glBindBuffer(eGL_ARRAY_BUFFER, vb);
-    hookset->glBufferData(eGL_ARRAY_BUFFER, sizeof(verts), verts, eGL_STATIC_DRAW);
+    GL.glGenBuffers(1, &vb);
+    GL.glBindBuffer(eGL_ARRAY_BUFFER, vb);
+    GL.glBufferData(eGL_ARRAY_BUFFER, sizeof(verts), verts, eGL_STATIC_DRAW);
 
     GLuint vao;
-    hookset->glGenVertexArrays(1, &vao);
+    GL.glGenVertexArrays(1, &vao);
 
-    hookset->glBindVertexArray(vao);
+    GL.glBindVertexArray(vao);
 
-    GLint loc = hookset->glGetAttribLocation(prog, "pos");
-    hookset->glVertexAttribPointer((GLuint)loc, 2, eGL_FLOAT, GL_FALSE, sizeof(float) * 2, 0);
-    hookset->glEnableVertexAttribArray((GLuint)loc);
+    GLint loc = GL.glGetAttribLocation(prog, "pos");
+    GL.glVertexAttribPointer((GLuint)loc, 2, eGL_FLOAT, GL_FALSE, sizeof(float) * 2, 0);
+    GL.glEnableVertexAttribArray((GLuint)loc);
 
-    hookset->glUseProgram(prog);
+    GL.glUseProgram(prog);
 
-    loc = hookset->glGetUniformLocation(prog, "srcTex");
-    hookset->glUniform1i(loc, 0);
-    loc = hookset->glGetUniformLocation(prog, "res");
-    hookset->glUniform2f(loc, float(width), float(height));
+    loc = GL.glGetUniformLocation(prog, "srcTex");
+    GL.glUniform1i(loc, 0);
+    loc = GL.glGetUniformLocation(prog, "res");
+    GL.glUniform2f(loc, float(width), float(height));
 
-    hookset->glDrawArrays(eGL_TRIANGLES, 0, 3);
+    GL.glDrawArrays(eGL_TRIANGLES, 0, 3);
 
-    hookset->glDeleteVertexArrays(1, &vao);
-    hookset->glDeleteBuffers(1, &vb);
-    hookset->glDeleteProgram(prog);
+    GL.glDeleteVertexArrays(1, &vao);
+    GL.glDeleteBuffers(1, &vb);
+    GL.glDeleteProgram(prog);
 
     // pop rendering state
-    textState.Pop(*hookset, true);
+    textState.Pop(true);
 
     // delete this texture once we're done, at the end of the function
     deltex = readtex;
 
     // restore base/max level as we changed them to sample from the right level above
-    hookset->glBindTexture(target, boundTexture);
-    hookset->glTexParameteri(target, eGL_TEXTURE_BASE_LEVEL, baseLevel);
-    hookset->glTexParameteri(target, eGL_TEXTURE_MAX_LEVEL, maxLevel);
+    GL.glBindTexture(target, boundTexture);
+    GL.glTexParameteri(target, eGL_TEXTURE_BASE_LEVEL, baseLevel);
+    GL.glTexParameteri(target, eGL_TEXTURE_MAX_LEVEL, maxLevel);
 
     // read from the blitted texture from level 0, as red
-    hookset->glBindTexture(target, readtex);
+    GL.glBindTexture(target, readtex);
     level = 0;
     format = eGL_RED;
 
@@ -1630,7 +1846,7 @@ void APIENTRY _glGetTexImage(GLenum target, GLint level, GLenum format, GLenum t
       case eGL_TEXTURE_2D_ARRAY:
       case eGL_TEXTURE_CUBE_MAP_ARRAY:
       case eGL_TEXTURE_2D_MULTISAMPLE_ARRAY:
-        hookset->glFramebufferTextureLayer(eGL_FRAMEBUFFER, attachment, readtex, level, d);
+        GL.glFramebufferTextureLayer(eGL_FRAMEBUFFER, attachment, readtex, level, d);
         break;
 
       case eGL_TEXTURE_CUBE_MAP:
@@ -1643,18 +1859,87 @@ void APIENTRY _glGetTexImage(GLenum target, GLint level, GLenum format, GLenum t
       case eGL_TEXTURE_2D:
       case eGL_TEXTURE_2D_MULTISAMPLE:
       default:
-        hookset->glFramebufferTexture2D(eGL_FRAMEBUFFER, attachment, target, readtex, level);
+        GL.glFramebufferTexture2D(eGL_FRAMEBUFFER, attachment, target, readtex, level);
         break;
     }
 
-    GLenum status = hookset->glCheckFramebufferStatus(eGL_FRAMEBUFFER);
+    GLenum status = GL.glCheckFramebufferStatus(eGL_FRAMEBUFFER);
 
     if(status != eGL_FRAMEBUFFER_COMPLETE)
       RDCERR("glReadPixels emulation FBO is %s", ToStr(status).c_str());
 
     byte *dst = (byte *)pixels + d * sliceSize;
     GLenum readFormat = fixBGRA ? eGL_RGBA : format;
-    hookset->glReadPixels(0, 0, width, height, readFormat, type, (void *)dst);
+
+    GLenum implFormat = eGL_NONE, implType = eGL_NONE;
+
+    GL.glGetIntegerv(eGL_IMPLEMENTATION_COLOR_READ_FORMAT, (GLint *)&implFormat);
+    GL.glGetIntegerv(eGL_IMPLEMENTATION_COLOR_READ_TYPE, (GLint *)&implType);
+
+    // spec says this must be supported
+    bool validReadback = (readFormat == eGL_RGBA && type == eGL_UNSIGNED_BYTE);
+
+    // the implementation is allowed to support one other format/type pair, it can vary by texture.
+    // Normally this will be the 'natural' readback format/type pair that we are trying
+    validReadback |= (readFormat == implFormat && type == implType);
+
+    if(validReadback)
+    {
+      GL.glReadPixels(0, 0, width, height, readFormat, type, (void *)dst);
+    }
+    else
+    {
+      // unfortunately the readback is not supported directly, we'll need to fudge it.
+      RDCDEBUG("Reading as %s/%s but impl supported pair is %s/%s", ToStr(readFormat).c_str(),
+               ToStr(type).c_str(), ToStr(implFormat).c_str(), ToStr(implType).c_str());
+
+      if(readFormat == implFormat && (type == eGL_HALF_FLOAT_OES || type == eGL_HALF_FLOAT) &&
+         (implType == eGL_HALF_FLOAT_OES || implType == eGL_HALF_FLOAT))
+      {
+        // if the format itself is supported and we just have a mismatch between eGL_HALF_FLOAT_OES
+        // and eGL_HALF_FLOAT (different enum values), we can just use the implementation's pair
+        // as-is.
+
+        GL.glReadPixels(0, 0, width, height, readFormat, implType, (void *)dst);
+      }
+      else if(readFormat == eGL_RGB && implFormat == eGL_RGBA && type == implType)
+      {
+        // if the only difference is that the implementation wants to read RGBA for an RGB format
+        // (could be understandable if the native storage is RGBA anyway for RGB textures) then we
+        // can readback into a temporary buffer and strip the alpha.
+
+        size_t size = GetByteSize(width, height, 1, implFormat, type);
+        byte *readback = new byte[size];
+        GL.glReadPixels(0, 0, width, height, implFormat, implType, readback);
+
+        // how big is a component (1/2/4 bytes)
+        size_t compSize = GetByteSize(1, 1, 1, eGL_RED, type);
+
+        byte *src = readback;
+
+        // for each pixel
+        for(GLint i = 0; i < width * height; i++)
+        {
+          // copy RGB
+          memcpy(dst, src, compSize * 3);
+
+          // advance dst by RGB
+          dst += compSize * 3;
+
+          // advance src by RGBA
+          src += compSize * 4;
+        }
+
+        delete[] readback;
+
+        fixBGRA = false;
+      }
+      else
+      {
+        RDCERR("Unhandled readback failure");
+        memset(dst, 0, sliceSize);
+      }
+    }
 
     if(fixBGRA)
     {
@@ -1667,18 +1952,18 @@ void APIENTRY _glGetTexImage(GLenum target, GLint level, GLenum format, GLenum t
 
   if(deltex)
   {
-    hookset->glDeleteTextures(1, &deltex);
-    hookset->glBindTexture(target, boundTexture);
+    GL.glDeleteTextures(1, &deltex);
+    GL.glBindTexture(target, boundTexture);
   }
 
-  hookset->glDeleteFramebuffers(1, &fbo);
+  GL.glDeleteFramebuffers(1, &fbo);
 }
 
 void APIENTRY _glDrawElementsBaseVertex(GLenum mode, GLsizei count, GLenum type,
                                         const void *indices, GLint basevertex)
 {
   if(basevertex == 0)
-    hookset->glDrawElements(mode, count, type, indices);
+    GL.glDrawElements(mode, count, type, indices);
   else
     RDCERR("glDrawElementsBaseVertex is not supported! No draw will be called!");
 }
@@ -1688,7 +1973,7 @@ void APIENTRY _glDrawElementsInstancedBaseVertex(GLenum mode, GLsizei count, GLe
                                                  GLint basevertex)
 {
   if(basevertex == 0)
-    hookset->glDrawElementsInstanced(mode, count, type, indices, instancecount);
+    GL.glDrawElementsInstanced(mode, count, type, indices, instancecount);
   else
     RDCERR("glDrawElementsInstancedBaseVertex is not supported! No draw will be called!");
 }
@@ -1697,18 +1982,59 @@ void APIENTRY _glDrawRangeElementsBaseVertex(GLenum mode, GLuint start, GLuint e
                                              GLenum type, const void *indices, GLint basevertex)
 {
   if(basevertex == 0)
-    hookset->glDrawRangeElements(mode, start, end, count, type, indices);
+    GL.glDrawRangeElements(mode, start, end, count, type, indices);
   else
     RDCERR("glDrawRangeElementsBaseVertex is not supported! No draw will be called!");
 }
 
 #pragma endregion
 
-void EmulateRequiredExtensions(GLHookSet *hooks)
-{
-#define EMULATE_FUNC(func) hooks->func = &CONCAT(_, func);
+};    // namespace glEmulate
 
-  hookset = hooks;
+void GLDispatchTable::EmulateUnsupportedFunctions()
+{
+#define EMULATE_UNSUPPORTED(func) \
+  if(!this->func)                 \
+    this->func = &CONCAT(glEmulate::_, func);
+
+  EMULATE_UNSUPPORTED(glTransformFeedbackBufferBase)
+  EMULATE_UNSUPPORTED(glTransformFeedbackBufferRange)
+  EMULATE_UNSUPPORTED(glClearNamedFramebufferiv)
+  EMULATE_UNSUPPORTED(glClearNamedFramebufferuiv)
+  EMULATE_UNSUPPORTED(glClearNamedFramebufferfv)
+  EMULATE_UNSUPPORTED(glClearNamedFramebufferfi)
+  EMULATE_UNSUPPORTED(glBlitNamedFramebuffer)
+  EMULATE_UNSUPPORTED(glVertexArrayElementBuffer);
+  EMULATE_UNSUPPORTED(glVertexArrayVertexBuffers)
+
+  // internally glClearDepthf is used instead of glClearDepth (because OpenGL ES does support the
+  // non-f version), however glClearDepthf is not available before OpenGL 4.1
+  EMULATE_UNSUPPORTED(glClearDepthf)
+
+  // workaround for nvidia bug, which complains that GL_DEPTH_STENCIL is an invalid draw buffer.
+  // also some issues with 32-bit implementation of this entry point.
+  //
+  // NOTE: Vendor Checks aren't initialised by this point, so we have to do this unconditionally
+  // We include it just for searching: VendorCheck[VendorCheck_NV_ClearNamedFramebufferfiBugs]
+  //
+  // Update 2018-Jan - this might be the problem with the registry having the wrong signature for
+  // glClearNamedFramebufferfi - if the arguments were mismatched it would explain both invalid
+  // argument errors and ABI problems. For now though (and since as mentioned above it's cheap to
+  // emulate) we leave it on. See issue #842
+  this->glClearNamedFramebufferfi = &glEmulate::_glClearNamedFramebufferfi;
+
+  // workaround for AMD bug or weird behaviour. glVertexArrayElementBuffer doesn't update the
+  // GL_ELEMENT_ARRAY_BUFFER_BINDING global query, when binding the VAO subsequently *will*.
+  // I'm not sure if that's correct (weird) behaviour or buggy, but we can work around it just
+  // by avoiding use of the DSA function and always doing our emulated version.
+  //
+  // VendorCheck[VendorCheck_AMD_vertex_array_elem_buffer_query]
+  this->glVertexArrayElementBuffer = &glEmulate::_glVertexArrayElementBuffer;
+}
+
+void GLDispatchTable::EmulateRequiredExtensions()
+{
+#define EMULATE_FUNC(func) this->func = &CONCAT(glEmulate::_, func);
 
   // this one is more complex as we need to implement the copy ourselves by creating FBOs and doing
   // a blit. Obviously this is going to be slower, but if we're emulating the extension then
@@ -1733,8 +2059,9 @@ void EmulateRequiredExtensions(GLHookSet *hooks)
     RDCLOG("Emulating ARB_internalformat_query2");
     // GLES supports glGetInternalformativ from core 3.0 but it only accepts GL_NUM_SAMPLE_COUNTS
     // and GL_SAMPLES params
-    if(!glGetInternalformativ_real && hooks->glGetInternalformativ != _glGetInternalformativ)
-      glGetInternalformativ_real = hooks->glGetInternalformativ;
+    if(!glEmulate::glGetInternalformativ_real &&
+       this->glGetInternalformativ != glEmulate::_glGetInternalformativ)
+      glEmulate::glGetInternalformativ_real = this->glGetInternalformativ;
     EMULATE_FUNC(glGetInternalformativ);
   }
 
@@ -1743,6 +2070,16 @@ void EmulateRequiredExtensions(GLHookSet *hooks)
   {
     EMULATE_FUNC(glGetBufferSubData);
     EMULATE_FUNC(glGetTexImage);
+
+    if(GLCoreVersion < 31)
+    {
+      EMULATE_FUNC(glGetTexLevelParameteriv);
+      EMULATE_FUNC(glGetTexLevelParameterfv);
+
+      EMULATE_FUNC(glGetProgramInterfaceiv);
+      EMULATE_FUNC(glGetProgramResourceiv);
+      EMULATE_FUNC(glGetProgramResourceName);
+    }
 
     if(GLCoreVersion < 32)
     {
@@ -1855,4 +2192,7 @@ void EmulateRequiredExtensions(GLHookSet *hooks)
   }
 }
 
-};    // namespace glEmulate
+void GLDispatchTable::DriverForEmulation(WrappedOpenGL *driver)
+{
+  glEmulate::driver = driver;
+}

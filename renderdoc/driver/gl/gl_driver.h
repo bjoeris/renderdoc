@@ -32,7 +32,7 @@
 #include "driver/shaders/spirv/spirv_common.h"
 #include "replay/replay_driver.h"
 #include "gl_common.h"
-#include "gl_hookset.h"
+#include "gl_dispatch_table.h"
 #include "gl_manager.h"
 #include "gl_renderstate.h"
 #include "gl_replay.h"
@@ -51,9 +51,10 @@ struct GLInitParams
   uint32_t multiSamples;
   uint32_t width;
   uint32_t height;
+  bool isYFlipped;
 
   // check if a frame capture section version is supported
-  static const uint64_t CurrentVersion = 0x1B;
+  static const uint64_t CurrentVersion = 0x1D;
   static bool IsSupportedVersion(uint64_t ver);
 };
 
@@ -75,11 +76,10 @@ struct Replacement
 class WrappedOpenGL : public IFrameCapturer
 {
 private:
-  const GLHookSet &m_Real;
-  GLPlatform &m_Platform;
-
   friend class GLReplay;
   friend class GLResourceManager;
+
+  GLPlatform &m_Platform;
 
   vector<DebugMessage> m_DebugMessages;
   template <typename SerialiserType>
@@ -117,7 +117,7 @@ private:
 
   bool m_MarkedActive = false;
 
-  bool m_UseVRMarkers;
+  bool m_UsesVRMarkers;
 
   GLReplay m_Replay;
   RDCDriver m_DriverType;
@@ -236,7 +236,7 @@ private:
 
   list<DrawcallDescription *> m_DrawcallStack;
 
-  map<ResourceId, vector<EventUsage> > m_ResourceUses;
+  map<ResourceId, vector<EventUsage>> m_ResourceUses;
 
   bool m_FetchCounters;
 
@@ -253,119 +253,7 @@ private:
 
   map<ResourceId, BufferData> m_Buffers;
 
-  struct TextureData
-  {
-    TextureData()
-        : curType(eGL_NONE),
-          dimension(0),
-          emulated(false),
-          view(false),
-          width(0),
-          height(0),
-          depth(0),
-          samples(0),
-          creationFlags(TextureCategory::NoFlags),
-          internalFormat(eGL_NONE),
-          renderbufferReadTex(0)
-    {
-      renderbufferFBOs[0] = renderbufferFBOs[1] = 0;
-    }
-    GLResource resource;
-    GLenum curType;
-    GLint dimension;
-    bool emulated, view;
-    GLint width, height, depth, samples;
-    TextureCategory creationFlags;
-    GLenum internalFormat;
-
-    // since renderbuffers cannot be read from, we have to create a texture of identical
-    // size/format,
-    // and define FBOs for blitting to it - the renderbuffer is attached to the first FBO and the
-    // texture is
-    // bound to the second.
-    GLuint renderbufferReadTex;
-    GLuint renderbufferFBOs[2];
-
-    // since compressed textures cannot be read back on GLES we have to store them during the
-    // uploading
-    // level -> data
-    map<int, vector<byte> > compressedData;
-
-    void GetCompressedImageDataGLES(int mip, GLenum target, size_t size, byte *buf);
-  };
-
-  map<ResourceId, TextureData> m_Textures;
-
-  struct ShaderData
-  {
-    ShaderData() : type(eGL_NONE), prog(0), version(0) {}
-    GLenum type;
-    vector<string> sources;
-    vector<string> includepaths;
-    SPVModule spirv;
-    std::string disassembly;
-    ShaderReflection reflection;
-    GLuint prog;
-    int version;
-
-    // used for if the application actually uploaded SPIR-V
-    std::vector<uint32_t> spirvWords;
-
-    // the parameters passed to glSpecializeShader
-    std::string entryPoint;
-    std::vector<uint32_t> specIDs;
-    std::vector<uint32_t> specValues;
-
-    // pre-calculated bindpoint mapping for SPIR-V shaders. NOT valid for normal GLSL shaders
-    ShaderBindpointMapping mapping;
-
-    void ProcessCompilation(WrappedOpenGL &gl, ResourceId id, GLuint realShader);
-    void ProcessSPIRVCompilation(WrappedOpenGL &gl, ResourceId id, GLuint realShader,
-                                 const GLchar *pEntryPoint, GLuint numSpecializationConstants,
-                                 const GLuint *pConstantIndex, const GLuint *pConstantValue);
-  };
-
-  struct ProgramData
-  {
-    ProgramData() : linked(false) { RDCEraseEl(stageShaders); }
-    vector<ResourceId> shaders;
-
-    map<GLint, GLint> locationTranslate;
-
-    // this flag indicates the program was created with glCreateShaderProgram and cannot be relinked
-    // again (because that function implicitly detaches and destroys the shader). However we only
-    // need to relink when restoring things like frag data or attrib bindings which must be relinked
-    // to apply - and since the application *also* could not have relinked them, they must be
-    // unchanged since creation. So in this case, we can skip the relink since it was impossible for
-    // the application to modify anything.
-    bool shaderProgramUnlinkable = false;
-    bool linked;
-    ResourceId stageShaders[6];
-  };
-
-  struct PipelineData
-  {
-    PipelineData()
-    {
-      RDCEraseEl(stagePrograms);
-      RDCEraseEl(stageShaders);
-    }
-
-    struct ProgramUse
-    {
-      ProgramUse(ResourceId id_, GLbitfield use_) : id(id_), use(use_) {}
-      ResourceId id;
-      GLbitfield use;
-    };
-
-    ResourceId stagePrograms[6];
-    ResourceId stageShaders[6];
-  };
-
-  map<ResourceId, ShaderData> m_Shaders;
-  map<ResourceId, ProgramData> m_Programs;
-  map<ResourceId, PipelineData> m_Pipelines;
-  vector<pair<ResourceId, Replacement> > m_DependentReplacements;
+  vector<pair<ResourceId, Replacement>> m_DependentReplacements;
 
   GLuint m_FakeBB_FBO;
   GLuint m_FakeBB_Color;
@@ -373,6 +261,10 @@ private:
   ResourceId m_FBO0_ID;
 
   GLuint m_Fake_VAO0;
+
+  GLuint m_IndirectBuffer = 0;
+  GLsizeiptr m_IndirectBufferSize = 0;
+  void BindIndirectBuffer(GLsizeiptr bufLength);
 
   uint32_t m_InitChunkIndex = 0;
 
@@ -417,7 +309,7 @@ private:
       attribsCreate = false;
       version = 0;
       isCore = false;
-      Program = GeneralUBO = StringUBO = GlyphUBO = 0;
+      Program = ArrayBuffer = 0;
       GlyphTexture = DummyVAO = 0;
       CharSize = CharAspect = 0.0f;
       RDCEraseEl(m_TextureRecord);
@@ -453,11 +345,11 @@ private:
     // time we associate a window, it broadcasts to all other
     // contexts to let them know to remove it
     void UnassociateWindow(void *wndHandle);
-    void AssociateWindow(WrappedOpenGL *gl, void *wndHandle);
+    void AssociateWindow(WrappedOpenGL *driver, void *wndHandle);
 
-    void CreateDebugData(const GLHookSet &gl);
+    void CreateDebugData();
 
-    void CreateResourceRecord(WrappedOpenGL *gl, void *suppliedCtx);
+    void CreateResourceRecord(WrappedOpenGL *driver, void *suppliedCtx);
 
     bool Legacy()
     {
@@ -465,7 +357,7 @@ private:
     }
     bool Modern() { return !Legacy(); }
     GLuint Program;
-    GLuint GeneralUBO, StringUBO, GlyphUBO;
+    GLuint ArrayBuffer;
     GLuint GlyphTexture;
     GLuint DummyVAO;
 
@@ -549,8 +441,8 @@ private:
   static const int FONT_TEX_HEIGHT = 128;
   static const int FONT_MAX_CHARS = 256;
 
-  void RenderOverlayText(float x, float y, const char *fmt, ...);
-  void RenderOverlayStr(float x, float y, const char *str);
+  void RenderOverlayText(float x, float y, bool yflipped, const char *fmt, ...);
+  void RenderOverlayStr(float x, float y, bool yflipped, const char *str);
 
   struct BackbufferImage
   {
@@ -580,7 +472,7 @@ private:
   WrappedOpenGL &operator=(const WrappedOpenGL &);
 
 public:
-  WrappedOpenGL(const GLHookSet &funcs, GLPlatform &platform);
+  WrappedOpenGL(GLPlatform &platform);
   virtual ~WrappedOpenGL();
 
   APIProperties APIProps;
@@ -608,7 +500,6 @@ public:
   }
   SDFile &GetStructuredFile() { return *m_StructuredFile; }
   void SetFetchCounters(bool in) { m_FetchCounters = in; };
-  const GLHookSet &GetHookset() { return m_Real; }
   void SetDebugMsgContext(const char *context) { m_DebugMsgContext = context; }
   void AddDebugMessage(DebugMessage msg)
   {
@@ -643,15 +534,136 @@ public:
   void ActivateContext(GLWindowingData winData);
   void WindowSize(void *windowHandle, uint32_t w, uint32_t h);
   void SwapBuffers(void *windowHandle);
-  void CreateVRAPITextureSwapChain(GLuint tex, GLenum textureType, GLenum internalformat,
-                                   GLsizei width, GLsizei height, GLint levels);
   void HandleVRFrameMarkers(const GLchar *buf, GLsizei length);
-  void DisableVRFrameMarkers();
-
+  bool UsesVRFrameMarkers() { return m_UsesVRMarkers; }
   void FirstFrame(void *ctx, void *wndHandle);
 
   void StartFrameCapture(void *dev, void *wnd);
   bool EndFrameCapture(void *dev, void *wnd);
+
+  // map with key being mip level, value being stored data
+  typedef std::map<int, std::vector<byte>> CompressedDataStore;
+
+  struct ShaderData
+  {
+    ShaderData() : type(eGL_NONE), prog(0), version(0) {}
+    GLenum type;
+    vector<string> sources;
+    vector<string> includepaths;
+    SPVModule spirv;
+    std::string disassembly;
+    ShaderReflection reflection;
+    GLuint prog;
+    int version;
+
+    // used only when we're capturing and don't have driver-side reflection so we need to emulate
+    glslang::TShader *glslangShader = NULL;
+
+    // used for if the application actually uploaded SPIR-V
+    std::vector<uint32_t> spirvWords;
+
+    // the parameters passed to glSpecializeShader
+    std::string entryPoint;
+    std::vector<uint32_t> specIDs;
+    std::vector<uint32_t> specValues;
+
+    // pre-calculated bindpoint mapping for SPIR-V shaders. NOT valid for normal GLSL shaders
+    ShaderBindpointMapping mapping;
+
+    void ProcessCompilation(WrappedOpenGL &drv, ResourceId id, GLuint realShader);
+    void ProcessSPIRVCompilation(WrappedOpenGL &drv, ResourceId id, GLuint realShader,
+                                 const GLchar *pEntryPoint, GLuint numSpecializationConstants,
+                                 const GLuint *pConstantIndex, const GLuint *pConstantValue);
+  };
+
+  struct ProgramData
+  {
+    ProgramData() : linked(false) { RDCEraseEl(stageShaders); }
+    vector<ResourceId> shaders;
+
+    map<GLint, GLint> locationTranslate;
+
+    // this flag indicates the program was created with glCreateShaderProgram and cannot be relinked
+    // again (because that function implicitly detaches and destroys the shader). However we only
+    // need to relink when restoring things like frag data or attrib bindings which must be relinked
+    // to apply - and since the application *also* could not have relinked them, they must be
+    // unchanged since creation. So in this case, we can skip the relink since it was impossible for
+    // the application to modify anything.
+    bool shaderProgramUnlinkable = false;
+    bool linked;
+    ResourceId stageShaders[6];
+
+    // used only when we're capturing and don't have driver-side reflection so we need to emulate
+    glslang::TProgram *glslangProgram = NULL;
+  };
+
+  struct PipelineData
+  {
+    PipelineData()
+    {
+      RDCEraseEl(stagePrograms);
+      RDCEraseEl(stageShaders);
+    }
+
+    struct ProgramUse
+    {
+      ProgramUse(ResourceId id_, GLbitfield use_) : id(id_), use(use_) {}
+      ResourceId id;
+      GLbitfield use;
+    };
+
+    ResourceId stagePrograms[6];
+    ResourceId stageShaders[6];
+  };
+
+  std::map<ResourceId, ShaderData> m_Shaders;
+  std::map<ResourceId, ProgramData> m_Programs;
+  std::map<ResourceId, PipelineData> m_Pipelines;
+
+  struct TextureData
+  {
+    TextureData()
+        : curType(eGL_NONE),
+          dimension(0),
+          emulated(false),
+          view(false),
+          width(0),
+          height(0),
+          depth(0),
+          samples(0),
+          creationFlags(TextureCategory::NoFlags),
+          internalFormat(eGL_NONE),
+          internalFormatHint(eGL_NONE),
+          mipsValid(0),
+          renderbufferReadTex(0)
+    {
+      renderbufferFBOs[0] = renderbufferFBOs[1] = 0;
+    }
+    GLResource resource;
+    GLenum curType;
+    GLint dimension;
+    bool emulated, view;
+    GLint width, height, depth, samples;
+    TextureCategory creationFlags;
+    GLenum internalFormat, internalFormatHint;
+    GLuint mipsValid;
+
+    // since renderbuffers cannot be read from, we have to create a texture of identical
+    // size/format,
+    // and define FBOs for blitting to it - the renderbuffer is attached to the first FBO and the
+    // texture is
+    // bound to the second.
+    GLuint renderbufferReadTex;
+    GLuint renderbufferFBOs[2];
+
+    // since compressed textures cannot be read back on GLES we have to store them during the
+    // uploading
+    CompressedDataStore compressedData;
+
+    void GetCompressedImageDataGLES(int mip, GLenum target, size_t size, byte *buf);
+  };
+
+  std::map<ResourceId, TextureData> m_Textures;
 
   IMPLEMENT_FUNCTION_SERIALISED(void, glBindTexture, GLenum target, GLuint texture);
   IMPLEMENT_FUNCTION_SERIALISED(void, glBindTextures, GLuint first, GLsizei count,
@@ -2264,7 +2276,7 @@ public:
 class ScopedDebugContext
 {
 public:
-  ScopedDebugContext(WrappedOpenGL *gl, const char *fmt, ...)
+  ScopedDebugContext(WrappedOpenGL *driver, const char *fmt, ...)
   {
     va_list args;
     va_start(args, fmt);
@@ -2273,11 +2285,11 @@ public:
     StringFormat::vsnprintf(buf, 1023, fmt, args);
     va_end(args);
 
-    m_GL = gl;
-    m_GL->SetDebugMsgContext(buf);
+    m_Driver = driver;
+    m_Driver->SetDebugMsgContext(buf);
   }
 
-  ~ScopedDebugContext() { m_GL->SetDebugMsgContext(""); }
+  ~ScopedDebugContext() { m_Driver->SetDebugMsgContext(""); }
 private:
-  WrappedOpenGL *m_GL;
+  WrappedOpenGL *m_Driver;
 };

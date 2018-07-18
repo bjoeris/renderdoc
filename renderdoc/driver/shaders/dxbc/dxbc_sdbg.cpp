@@ -98,8 +98,7 @@ SDBGChunk::SDBGChunk(void *data)
   m_HasDebugInfo = true;
 }
 
-void SDBGChunk::GetFileLine(size_t instruction, uintptr_t offset, int32_t &fileIdx,
-                            int32_t &lineNum) const
+void SDBGChunk::GetLineInfo(size_t instruction, uintptr_t offset, LineColumnInfo &lineInfo) const
 {
   if(instruction < m_Instructions.size())
   {
@@ -108,10 +107,24 @@ void SDBGChunk::GetFileLine(size_t instruction, uintptr_t offset, int32_t &fileI
     {
       const SDBGSymbol &sym = m_SymbolTable[symID];
 
-      fileIdx = sym.fileID;
-      lineNum = sym.lineNum - 1;
+      lineInfo.fileIndex = sym.fileID;
+      lineInfo.lineStart = sym.lineNum;
+      lineInfo.lineEnd = sym.lineNum;
+      lineInfo.colStart = 0;
+      lineInfo.colEnd = 0;
+      lineInfo.callstack = {m_Entry};
     }
   }
+}
+
+bool SDBGChunk::HasLocals() const
+{
+  return false;
+}
+
+void SDBGChunk::GetLocals(size_t instruction, uintptr_t offset,
+                          rdcarray<LocalVariableMapping> &locals) const
+{
 }
 
 string SDBGChunk::GetSymbolName(int symbolID)

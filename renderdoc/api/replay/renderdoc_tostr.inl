@@ -518,6 +518,7 @@ std::string DoStringise(const ShaderBuiltin &el)
     STRINGISE_ENUM_CLASS_NAMED(DepthOutput, "Depth Output");
     STRINGISE_ENUM_CLASS_NAMED(DepthOutputGreaterEqual, "Depth Output (GEqual)");
     STRINGISE_ENUM_CLASS_NAMED(DepthOutputLessEqual, "Depth Output (LEqual)");
+    STRINGISE_ENUM_CLASS_NAMED(StencilReference, "Stencil Ref Value");
   }
   END_ENUM_STRINGISE();
 }
@@ -679,6 +680,18 @@ std::string DoStringise(const VarType &el)
     STRINGISE_ENUM_CLASS_NAMED(UInt, "uint");
     STRINGISE_ENUM_CLASS_NAMED(Double, "double");
     STRINGISE_ENUM_CLASS_NAMED(Unknown, "unknown");
+  }
+  END_ENUM_STRINGISE();
+}
+
+template <>
+std::string DoStringise(const RegisterType &el)
+{
+  BEGIN_ENUM_STRINGISE(RegisterType)
+  {
+    STRINGISE_ENUM_CLASS(Temporary);
+    STRINGISE_ENUM_CLASS(IndexedTemporary);
+    STRINGISE_ENUM_CLASS(Output);
   }
   END_ENUM_STRINGISE();
 }

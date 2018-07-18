@@ -1148,7 +1148,7 @@ void WrappedVulkan::vkCmdBeginRenderPass(VkCommandBuffer commandBuffer,
     VkResourceRecord *fb = GetRecord(pRenderPassBegin->framebuffer);
 
     record->MarkResourceFrameReferenced(fb->GetResourceID(), eFrameRef_Read);
-    for(size_t i = 0; i < VkResourceRecord::MaxImageAttachments; i++)
+    for(size_t i = 0; fb->imageAttachments[i].barrier.sType; i++)
     {
       VkResourceRecord *att = fb->imageAttachments[i].record;
       if(att == NULL)
@@ -1334,7 +1334,7 @@ void WrappedVulkan::vkCmdEndRenderPass(VkCommandBuffer commandBuffer)
 
     std::vector<VkImageMemoryBarrier> barriers;
 
-    for(size_t i = 0; i < VkResourceRecord::MaxImageAttachments; i++)
+    for(size_t i = 0; fb->imageAttachments[i].barrier.sType; i++)
     {
       if(fb->imageAttachments[i].barrier.oldLayout == fb->imageAttachments[i].barrier.newLayout)
         continue;
@@ -2081,10 +2081,15 @@ bool WrappedVulkan::Serialise_vkCmdPipelineBarrier(
 
         RemapQueueFamilyIndices(bufBarriers.back().srcQueueFamilyIndex,
                                 bufBarriers.back().dstQueueFamilyIndex);
+
+        if(IsLoading(m_State))
+        {
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(std::make_pair(
+              GetResID(pBufferMemoryBarriers[i].buffer),
+              EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID, ResourceUsage::Barrier)));
+        }
       }
     }
-
-    ResourceId origcmd = GetResourceManager()->GetOriginalID(GetResID(commandBuffer));
 
     for(uint32_t i = 0; i < imageMemoryBarrierCount; i++)
     {
@@ -2100,9 +2105,9 @@ bool WrappedVulkan::Serialise_vkCmdPipelineBarrier(
 
         if(IsLoading(m_State))
         {
-          m_BakedCmdBufferInfo[origcmd].resourceUsage.push_back(std::make_pair(
+          m_BakedCmdBufferInfo[m_LastCmdBufferID].resourceUsage.push_back(std::make_pair(
               GetResID(pImageMemoryBarriers[i].image),
-              EventUsage(m_BakedCmdBufferInfo[origcmd].curEventID, ResourceUsage::Barrier)));
+              EventUsage(m_BakedCmdBufferInfo[m_LastCmdBufferID].curEventID, ResourceUsage::Barrier)));
         }
       }
     }

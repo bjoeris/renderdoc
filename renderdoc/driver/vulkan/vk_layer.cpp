@@ -47,29 +47,22 @@
 // set environment variables
 class VulkanHook : LibraryHook
 {
-  VulkanHook() { LibraryHooks::GetInstance().RegisterHook(VulkanLibraryName, this); }
-  bool CreateHooks(const char *libName)
+  VulkanHook() {}
+  void RegisterHooks()
   {
+    RDCLOG("Registering Vulkan hooks");
+
+    // we don't register any library or function hooks because we use the layer system
+
     // we assume the implicit layer is registered - the UI will prompt the user about installing it.
     Process::RegisterEnvironmentModification(EnvironmentModification(
         EnvMod::Set, EnvSep::NoSep, "ENABLE_VULKAN_RENDERDOC_CAPTURE", "1"));
 
     // check options to set further variables, and apply
-    OptionsUpdated(libName);
-
-    return true;
+    OptionsUpdated();
   }
 
-  void EnableHooks(const char *libName, bool enable)
-  {
-    // set the env var to 0 to disable the implicit layer
-    Process::RegisterEnvironmentModification(EnvironmentModification(
-        EnvMod::Set, EnvSep::NoSep, "ENABLE_VULKAN_RENDERDOC_CAPTURE", enable ? "1" : "0"));
-
-    Process::ApplyEnvironmentModification();
-  }
-
-  void OptionsUpdated(const char *libName)
+  void OptionsUpdated()
   {
     if(RenderDoc::Inst().GetCaptureOptions().apiValidation)
     {
@@ -306,6 +299,11 @@ VK_LAYER_RENDERDOC_CaptureGetDeviceProcAddr(VkDevice device, const char *pName)
   CheckDeviceExts();
 
   HookInitVulkanDeviceExts();
+
+  if(instDevInfo->brokenGetDeviceProcAddr)
+  {
+    HookInitVulkanInstanceExts();
+  }
 
   if(GetDeviceDispatchTable(device)->GetDeviceProcAddr == NULL)
     return NULL;

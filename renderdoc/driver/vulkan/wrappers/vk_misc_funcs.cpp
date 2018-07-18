@@ -639,15 +639,13 @@ VkResult WrappedVulkan::vkCreateFramebuffer(VkDevice device,
       VkResourceRecord *record = GetResourceManager()->AddResourceRecord(*pFramebuffer);
       record->AddChunk(chunk);
 
-      record->imageAttachments = new AttachmentInfo[VkResourceRecord::MaxImageAttachments];
-      RDCASSERT(pCreateInfo->attachmentCount <= VkResourceRecord::MaxImageAttachments);
-
-      RDCEraseMem(record->imageAttachments,
-                  sizeof(AttachmentInfo) * VkResourceRecord::MaxImageAttachments);
-
       VkResourceRecord *rpRecord = GetRecord(pCreateInfo->renderPass);
-
       record->AddParent(rpRecord);
+
+      uint32_t arrayCount = pCreateInfo->attachmentCount + 1;
+
+      record->imageAttachments = new AttachmentInfo[arrayCount];
+      RDCEraseMem(record->imageAttachments, sizeof(AttachmentInfo) * arrayCount);
 
       for(uint32_t i = 0; i < pCreateInfo->attachmentCount; i++)
       {
@@ -847,11 +845,12 @@ VkResult WrappedVulkan::vkCreateRenderPass(VkDevice device, const VkRenderPassCr
       VkResourceRecord *record = GetResourceManager()->AddResourceRecord(*pRenderPass);
       record->AddChunk(chunk);
 
-      record->imageAttachments = new AttachmentInfo[VkResourceRecord::MaxImageAttachments];
-      RDCASSERT(pCreateInfo->attachmentCount <= VkResourceRecord::MaxImageAttachments);
+      // +1 for the terminal value
+      uint32_t arrayCount = pCreateInfo->attachmentCount + 1;
 
-      RDCEraseMem(record->imageAttachments,
-                  sizeof(AttachmentInfo) * VkResourceRecord::MaxImageAttachments);
+      record->imageAttachments = new AttachmentInfo[arrayCount];
+
+      RDCEraseMem(record->imageAttachments, sizeof(AttachmentInfo) * arrayCount);
 
       for(uint32_t i = 0; i < pCreateInfo->attachmentCount; i++)
       {
@@ -1488,7 +1487,7 @@ VkResult WrappedVulkan::vkDebugMarkerSetObjectTagEXT(VkDevice device,
 
       unwrapped.object = data.unwrapped;
 
-      return ObjDisp(device)->DebugMarkerSetObjectTagEXT(device, &unwrapped);
+      return ObjDisp(device)->DebugMarkerSetObjectTagEXT(Unwrap(device), &unwrapped);
     }
   }
 
@@ -1535,7 +1534,7 @@ VkResult WrappedVulkan::vkDebugMarkerSetObjectNameEXT(VkDevice device,
     unwrapped.object = data.unwrapped;
 
     if(ObjDisp(device)->DebugMarkerSetObjectNameEXT)
-      ObjDisp(device)->DebugMarkerSetObjectNameEXT(device, &unwrapped);
+      ObjDisp(device)->DebugMarkerSetObjectNameEXT(Unwrap(device), &unwrapped);
 
     if(data.record)
     {
@@ -1644,7 +1643,7 @@ VkResult WrappedVulkan::vkSetDebugUtilsObjectNameEXT(VkDevice device,
     unwrapped.objectHandle = data.unwrapped;
 
     if(ObjDisp(device)->SetDebugUtilsObjectNameEXT)
-      ObjDisp(device)->SetDebugUtilsObjectNameEXT(device, &unwrapped);
+      ObjDisp(device)->SetDebugUtilsObjectNameEXT(Unwrap(device), &unwrapped);
 
     if(data.record)
     {
@@ -1687,7 +1686,7 @@ VkResult WrappedVulkan::vkSetDebugUtilsObjectTagEXT(VkDevice device,
 
       unwrapped.objectHandle = data.unwrapped;
 
-      return ObjDisp(device)->SetDebugUtilsObjectTagEXT(device, &unwrapped);
+      return ObjDisp(device)->SetDebugUtilsObjectTagEXT(Unwrap(device), &unwrapped);
     }
   }
 

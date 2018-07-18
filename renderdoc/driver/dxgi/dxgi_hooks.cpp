@@ -27,8 +27,6 @@
 #include "hooks/hooks.h"
 #include "dxgi_wrapped.h"
 
-#define DLL_NAME "dxgi.dll"
-
 typedef HRESULT(WINAPI *PFN_CREATE_DXGI_FACTORY)(REFIID, void **);
 typedef HRESULT(WINAPI *PFN_CREATE_DXGI_FACTORY2)(UINT, REFIID, void **);
 typedef HRESULT(WINAPI *PFN_GET_DEBUG_INTERFACE)(REFIID, void **);
@@ -74,113 +72,29 @@ struct RenderDocAnalysis : IDXGraphicsAnalysis
 class DXGIHook : LibraryHook
 {
 public:
-  DXGIHook()
+  void RegisterHooks()
   {
-    LibraryHooks::GetInstance().RegisterHook(DLL_NAME, this);
-    m_EnabledHooks = true;
-    m_HasHooks = false;
-  }
+    RDCLOG("Registering DXGI hooks");
 
-  bool CreateHooks(const char *libName)
-  {
-    bool success = true;
+    LibraryHooks::RegisterLibraryHook("dxgi.dll", NULL);
 
-    success &= CreateDXGIFactory.Initialize("CreateDXGIFactory", DLL_NAME, CreateDXGIFactory_hook);
-    success &= CreateDXGIFactory1.Initialize("CreateDXGIFactory1", DLL_NAME, CreateDXGIFactory1_hook);
-    // don't mind if these dosn't succeed
-    CreateDXGIFactory2.Initialize("CreateDXGIFactory2", DLL_NAME, CreateDXGIFactory2_hook);
-    GetDebugInterface.Initialize("DXGIGetDebugInterface", DLL_NAME, DXGIGetDebugInterface_hook);
-    GetDebugInterface1.Initialize("DXGIGetDebugInterface1", DLL_NAME, DXGIGetDebugInterface1_hook);
-
-    if(!success)
-      return false;
-
-    m_HasHooks = true;
-    m_EnabledHooks = true;
-
-    return true;
-  }
-
-  void EnableHooks(const char *libName, bool enable) { m_EnabledHooks = enable; }
-  void OptionsUpdated(const char *libName) {}
-  bool UseHooks() { return (dxgihooks.m_HasHooks && dxgihooks.m_EnabledHooks); }
-  static HRESULT CreateWrappedFactory1(REFIID riid, void **ppFactory)
-  {
-    if(dxgihooks.m_HasHooks)
-      return dxgihooks.CreateDXGIFactory1_hook(riid, ppFactory);
-
-    HMODULE dxgi = GetModuleHandleA("dxgi.dll");
-
-    if(dxgi)
-    {
-      PFN_CREATE_DXGI_FACTORY createFunc =
-          (PFN_CREATE_DXGI_FACTORY)GetProcAddress(dxgi, "CreateDXGIFactory1");
-
-      if(!createFunc)
-      {
-        RDCERR("Trying to create hooked dxgi factory without dxgi loaded");
-        return E_INVALIDARG;
-      }
-
-      HRESULT ret = createFunc(riid, ppFactory);
-
-      if(SUCCEEDED(ret))
-        RefCountDXGIObject::HandleWrap(riid, ppFactory);
-
-      return ret;
-    }
-    else
-    {
-      RDCERR("Something went seriously wrong, dxgi.dll couldn't be loaded!");
-      return E_UNEXPECTED;
-    }
-  }
-
-  static HRESULT CreateWrappedFactory2(UINT Flags, REFIID riid, void **ppFactory)
-  {
-    if(dxgihooks.m_HasHooks)
-      return dxgihooks.CreateDXGIFactory2_hook(Flags, riid, ppFactory);
-
-    HMODULE dxgi = GetModuleHandleA("dxgi.dll");
-
-    if(dxgi)
-    {
-      PFN_CREATE_DXGI_FACTORY2 createFunc =
-          (PFN_CREATE_DXGI_FACTORY2)GetProcAddress(dxgi, "CreateDXGIFactory2");
-
-      if(!createFunc)
-      {
-        RDCERR("Trying to create hooked dxgi factory without dxgi loaded");
-        return E_INVALIDARG;
-      }
-
-      HRESULT ret = createFunc(Flags, riid, ppFactory);
-
-      if(SUCCEEDED(ret))
-        RefCountDXGIObject::HandleWrap(riid, ppFactory);
-
-      return ret;
-    }
-    else
-    {
-      RDCERR("Something went seriously wrong, dxgi.dll couldn't be loaded!");
-      return E_UNEXPECTED;
-    }
+    CreateDXGIFactory.Register("dxgi.dll", "CreateDXGIFactory", CreateDXGIFactory_hook);
+    CreateDXGIFactory1.Register("dxgi.dll", "CreateDXGIFactory1", CreateDXGIFactory1_hook);
+    CreateDXGIFactory2.Register("dxgi.dll", "CreateDXGIFactory2", CreateDXGIFactory2_hook);
+    GetDebugInterface.Register("dxgi.dll", "DXGIGetDebugInterface", DXGIGetDebugInterface_hook);
+    GetDebugInterface1.Register("dxgi.dll", "DXGIGetDebugInterface1", DXGIGetDebugInterface1_hook);
   }
 
 private:
   static DXGIHook dxgihooks;
 
-  bool m_HasHooks;
-  bool m_EnabledHooks;
-
   RenderDocAnalysis m_RenderDocAnalysis;
 
-  Hook<PFN_CREATE_DXGI_FACTORY> CreateDXGIFactory;
-  Hook<PFN_CREATE_DXGI_FACTORY> CreateDXGIFactory1;
-  Hook<PFN_CREATE_DXGI_FACTORY2> CreateDXGIFactory2;
-  Hook<PFN_GET_DEBUG_INTERFACE> GetDebugInterface;
-  Hook<PFN_GET_DEBUG_INTERFACE1> GetDebugInterface1;
+  HookedFunction<PFN_CREATE_DXGI_FACTORY> CreateDXGIFactory;
+  HookedFunction<PFN_CREATE_DXGI_FACTORY> CreateDXGIFactory1;
+  HookedFunction<PFN_CREATE_DXGI_FACTORY2> CreateDXGIFactory2;
+  HookedFunction<PFN_GET_DEBUG_INTERFACE> GetDebugInterface;
+  HookedFunction<PFN_GET_DEBUG_INTERFACE1> GetDebugInterface1;
 
   static HRESULT WINAPI CreateDXGIFactory_hook(__in REFIID riid, __out void **ppFactory)
   {
@@ -188,7 +102,7 @@ private:
       *ppFactory = NULL;
     HRESULT ret = dxgihooks.CreateDXGIFactory()(riid, ppFactory);
 
-    if(SUCCEEDED(ret) && dxgihooks.m_EnabledHooks)
+    if(SUCCEEDED(ret))
       RefCountDXGIObject::HandleWrap(riid, ppFactory);
 
     return ret;
@@ -200,7 +114,7 @@ private:
       *ppFactory = NULL;
     HRESULT ret = dxgihooks.CreateDXGIFactory1()(riid, ppFactory);
 
-    if(SUCCEEDED(ret) && dxgihooks.m_EnabledHooks)
+    if(SUCCEEDED(ret))
       RefCountDXGIObject::HandleWrap(riid, ppFactory);
 
     return ret;
@@ -212,7 +126,7 @@ private:
       *ppFactory = NULL;
     HRESULT ret = dxgihooks.CreateDXGIFactory2()(Flags, riid, ppFactory);
 
-    if(SUCCEEDED(ret) && dxgihooks.m_EnabledHooks)
+    if(SUCCEEDED(ret))
       RefCountDXGIObject::HandleWrap(riid, ppFactory);
 
     return ret;
@@ -256,15 +170,3 @@ private:
 };
 
 DXGIHook DXGIHook::dxgihooks;
-
-extern "C" __declspec(dllexport) HRESULT
-    __cdecl RENDERDOC_CreateWrappedDXGIFactory1(REFIID riid, void **ppFactory)
-{
-  return DXGIHook::CreateWrappedFactory1(riid, ppFactory);
-}
-
-extern "C" __declspec(dllexport) HRESULT
-    __cdecl RENDERDOC_CreateWrappedDXGIFactory2(UINT Flags, REFIID riid, void **ppFactory)
-{
-  return DXGIHook::CreateWrappedFactory2(Flags, riid, ppFactory);
-}

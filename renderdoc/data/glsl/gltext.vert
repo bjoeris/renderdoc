@@ -22,28 +22,26 @@
  * THE SOFTWARE.
  ******************************************************************************/
 
-#ifdef VULKAN
-layout (binding = 3) uniform sampler2D tex0;
-#else // OPENGL
-layout (binding = 0) uniform sampler2D tex0;
-#endif
-layout (location = 0) out vec4 color_out;
+varying vec4 tex;
+varying vec2 glyphuv;
 
-layout (location = 0) in vec4 tex;
-layout (location = 1) in vec2 glyphuv;
+attribute vec2 pos;
+attribute vec2 uv;
+attribute float charidx;
+
+// must match defines in gl_rendertext.cpp
+#define FONT_FIRST_CHAR 32
+#define FONT_LAST_CHAR 126
+
+uniform vec4 posdata[FONT_LAST_CHAR - FONT_FIRST_CHAR + 1];
+uniform vec4 uvdata[FONT_LAST_CHAR - FONT_FIRST_CHAR + 1];
 
 void main(void)
 {
-	float text = 0.0f;
-
-	if(glyphuv.x >= 0.0f && glyphuv.x <= 1.0f &&
-	   glyphuv.y >= 0.0f && glyphuv.y <= 1.0f)
-	{
-		vec2 uv;
-		uv.x = mix(tex.x, tex.z, glyphuv.x);
-		uv.y = mix(tex.y, tex.w, glyphuv.y);
-		text = texture(tex0, uv.xy).x;
-	}
-
-	color_out = vec4(vec3(text), clamp(text + 0.5f, 0.0f, 1.0f));
+	vec4 glyphposdata = posdata[int(charidx)];
+	vec4 glyphuvdata = uvdata[int(charidx)];
+	
+	gl_Position = vec4(pos, 1, 1);
+	glyphuv.xy = (uv.xy - glyphposdata.xy) * glyphposdata.zw;
+	tex = glyphuvdata;
 }

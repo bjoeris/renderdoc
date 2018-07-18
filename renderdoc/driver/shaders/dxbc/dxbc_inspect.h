@@ -330,8 +330,11 @@ public:
 
   vector<pair<string, string> > Files;    // <filename, source>
 
-  virtual void GetFileLine(size_t instruction, uintptr_t offset, int32_t &fileIdx,
-                           int32_t &lineNum) const = 0;
+  virtual void GetLineInfo(size_t instruction, uintptr_t offset, LineColumnInfo &lineInfo) const = 0;
+
+  virtual bool HasLocals() const = 0;
+  virtual void GetLocals(size_t instruction, uintptr_t offset,
+                         rdcarray<LocalVariableMapping> &locals) const = 0;
 };
 
 uint32_t DecodeFlags(const ShaderCompileFlags &compileFlags);

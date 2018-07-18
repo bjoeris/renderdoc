@@ -37,6 +37,14 @@ public:
 
   VARIANT_CAST(RemoteHost);
 
+  DOCUMENT("");
+  bool operator==(const RemoteHost &o) const
+  {
+    return hostname == o.hostname && friendlyName == o.friendlyName && runCommand == o.runCommand &&
+           serverRunning == o.serverRunning && connected == o.connected && busy == o.busy &&
+           versionMismatch == o.versionMismatch;
+  }
+  bool operator!=(const RemoteHost &o) const { return !(*this == o); }
   DOCUMENT(
       "Ping the host to check current status - if the server is running, connection status, etc.");
   void CheckStatus();
@@ -66,7 +74,8 @@ Returns the name to display for this host in the UI, either :data:`friendlyName`
   DOCUMENT("Returns ``True`` if this host represents a connected ADB (Android) device.");
   bool IsADB() const
   {
-    return hostname[0] == 'a' && hostname[1] == 'd' && hostname[2] == 'b' && hostname[3] == ':';
+    return hostname.count() > 4 && hostname[0] == 'a' && hostname[1] == 'd' && hostname[2] == 'b' &&
+           hostname[3] == ':';
   }
   DOCUMENT("Returns ``True`` if this host represents the special localhost device.");
   bool IsLocalhost() const { return hostname == "localhost"; }

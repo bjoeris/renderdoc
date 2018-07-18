@@ -29,6 +29,8 @@
 class RDTreeWidget;
 class RDTreeWidgetModel;
 
+typedef QSet<QString> RDTreeWidgetExpansionState;
+
 class RDTreeWidgetItem
 {
 public:
@@ -41,6 +43,7 @@ public:
   void setData(int column, int role, const QVariant &value);
 
   void addChild(RDTreeWidgetItem *item);
+  void insertChild(int index, RDTreeWidgetItem *child);
 
   // the data above requires allocating a bunch of vectors since it's stored per-column. Where
   // possible, just use this single per-item tag
@@ -63,6 +66,7 @@ public:
   RDTreeWidgetItem *takeChild(int index);
   void removeChild(RDTreeWidgetItem *child);
   void clear();
+  inline int dataCount() const { return m_text.count(); }
   inline int childCount() const { return m_children.count(); }
   inline RDTreeWidgetItem *parent() const { return m_parent; }
   inline RDTreeWidget *treeWidget() const { return m_widget; }
@@ -93,6 +97,8 @@ public:
     m_fore = foreground;
     dataChanged(0, Qt::ForegroundRole);
   }
+  inline QBrush background() { return m_back; }
+  inline QBrush foreground() { return m_fore; }
   inline QString text(int column) const { return m_text[column].toString(); }
   inline void setText(int column, const QVariant &value)
   {
@@ -260,6 +266,11 @@ public:
   void setSelectedItem(RDTreeWidgetItem *node);
   void setCurrentItem(RDTreeWidgetItem *node);
 
+  void saveExpansion(RDTreeWidgetExpansionState &state, QString prefix, RDTreeWidgetItem *root,
+                     int keyColumn);
+  void applySavedExpansion(RDTreeWidgetExpansionState &state, QString prefix,
+                           RDTreeWidgetItem *root, int keyColumn);
+
   RDTreeWidgetItem *itemAt(const QPoint &p) const;
   RDTreeWidgetItem *itemAt(int x, int y) const { return itemAt(QPoint(x, y)); }
   void expandItem(RDTreeWidgetItem *item);
@@ -267,6 +278,8 @@ public:
   void collapseItem(RDTreeWidgetItem *item);
   void collapseAllItems(RDTreeWidgetItem *item);
   void scrollToItem(RDTreeWidgetItem *node);
+
+  void copySelection();
 
   void clear();
 
@@ -287,7 +300,6 @@ private:
   void leaveEvent(QEvent *e) override;
   void focusOutEvent(QFocusEvent *event) override;
   void keyPressEvent(QKeyEvent *e) override;
-
   void drawBranches(QPainter *painter, const QRect &rect, const QModelIndex &index) const override;
 
   void selectionChanged(const QItemSelection &selected, const QItemSelection &deselected) override;
@@ -295,8 +307,8 @@ private:
 
   void setModel(QAbstractItemModel *model) override {}
   void itemDataChanged(RDTreeWidgetItem *item, int column, int role);
-  void beginAddChild(RDTreeWidgetItem *item);
-  void endAddChild(RDTreeWidgetItem *item);
+  void beginInsertChild(RDTreeWidgetItem *item, int index);
+  void endInsertChild(RDTreeWidgetItem *item, int index);
 
   friend class RDTreeWidgetModel;
   friend class RDTreeWidgetItem;

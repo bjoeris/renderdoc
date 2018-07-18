@@ -28,8 +28,6 @@
 #include "d3d12_command_queue.h"
 #include "d3d12_device.h"
 
-#define DLL_NAME "d3d12.dll"
-
 typedef HRESULT(WINAPI *PFN_D3D12_ENABLE_EXPERIMENTAL_FEATURES)(UINT NumFeatures, const IID *pIIDs,
                                                                 void *pConfigurationStructs,
                                                                 UINT *pConfigurationStructSizes);
@@ -88,17 +86,9 @@ public:
 class D3D12Hook : LibraryHook
 {
 public:
-  D3D12Hook()
+  void RegisterHooks()
   {
-    LibraryHooks::GetInstance().RegisterHook(DLL_NAME, this);
-    m_HasHooks = false;
-    m_EnabledHooks = true;
-    m_InsideCreate = false;
-  }
-
-  bool CreateHooks(const char *libName)
-  {
-    bool success = true;
+    RDCLOG("Registering D3D12 hooks");
 
     WrappedIDXGISwapChain4::RegisterD3DDeviceCallback(GetD3D12DeviceIfAlloc);
 
@@ -106,45 +96,26 @@ public:
     if(GetD3DCompiler() == NULL)
     {
       RDCERR("Failed to load d3dcompiler_??.dll - not inserting D3D12 hooks.");
-      return false;
+      return;
     }
 
-    success &= CreateDevice.Initialize("D3D12CreateDevice", DLL_NAME, D3D12CreateDevice_hook);
-    success &= GetDebugInterface.Initialize("D3D12GetDebugInterface", DLL_NAME,
-                                            D3D12GetDebugInterface_hook);
-    success &= EnableExperimentalFeatures.Initialize("D3D12EnableExperimentalFeatures", DLL_NAME,
-                                                     D3D12EnableExperimentalFeatures_hook);
+    LibraryHooks::RegisterLibraryHook("d3d12.dll", NULL);
 
-    if(!success)
-      return false;
-
-    m_HasHooks = true;
-    m_EnabledHooks = true;
-
-    return true;
-  }
-
-  void EnableHooks(const char *libName, bool enable) { m_EnabledHooks = enable; }
-  void OptionsUpdated(const char *libName) {}
-  bool UseHooks() { return (d3d12hooks.m_HasHooks && d3d12hooks.m_EnabledHooks); }
-  static HRESULT CreateWrappedDevice(IUnknown *pAdapter, D3D_FEATURE_LEVEL MinimumFeatureLevel,
-                                     REFIID riid, void **ppDevice)
-  {
-    return d3d12hooks.Create_Internal(pAdapter, MinimumFeatureLevel, riid, ppDevice);
+    CreateDevice.Register("d3d12.dll", "D3D12CreateDevice", D3D12CreateDevice_hook);
+    GetDebugInterface.Register("d3d12.dll", "D3D12GetDebugInterface", D3D12GetDebugInterface_hook);
+    EnableExperimentalFeatures.Register("d3d12.dll", "D3D12EnableExperimentalFeatures",
+                                        D3D12EnableExperimentalFeatures_hook);
   }
 
 private:
   static D3D12Hook d3d12hooks;
 
-  bool m_HasHooks;
-  bool m_EnabledHooks;
-
-  Hook<PFN_D3D12_GET_DEBUG_INTERFACE> GetDebugInterface;
-  Hook<PFN_D3D12_CREATE_DEVICE> CreateDevice;
-  Hook<PFN_D3D12_ENABLE_EXPERIMENTAL_FEATURES> EnableExperimentalFeatures;
+  HookedFunction<PFN_D3D12_GET_DEBUG_INTERFACE> GetDebugInterface;
+  HookedFunction<PFN_D3D12_CREATE_DEVICE> CreateDevice;
+  HookedFunction<PFN_D3D12_ENABLE_EXPERIMENTAL_FEATURES> EnableExperimentalFeatures;
 
   // re-entrancy detection (can happen in rare cases with e.g. fraps)
-  bool m_InsideCreate;
+  bool m_InsideCreate = false;
 
   HRESULT Create_Internal(IUnknown *pAdapter, D3D_FEATURE_LEVEL MinimumFeatureLevel, REFIID riid,
                           void **ppDevice)
@@ -153,22 +124,16 @@ private:
     // special. Just grab the trampolined function and call it.
     if(m_InsideCreate)
     {
-      PFN_D3D12_CREATE_DEVICE createFunc = NULL;
+      PFN_D3D12_CREATE_DEVICE createFunc = CreateDevice();
 
-      // shouldn't ever get in here if we're in the case without hooks but let's be safe.
-      if(m_HasHooks)
-      {
-        createFunc = CreateDevice();
-      }
-      else
+      if(!createFunc)
       {
         HMODULE d3d12 = GetModuleHandleA("d3d12.dll");
 
         if(d3d12)
-        {
           createFunc = (PFN_D3D12_CREATE_DEVICE)GetProcAddress(d3d12, "D3D12CreateDevice");
-        }
-        else
+
+        if(!createFunc)
         {
           RDCERR("Something went seriously wrong, d3d12.dll couldn't be loaded!");
           return E_UNEXPECTED;
@@ -189,76 +154,21 @@ private:
 
     RDCDEBUG("Call to Create_Internal Feature Level %x", MinimumFeatureLevel, ToStr(riid).c_str());
 
-    bool reading = RenderDoc::Inst().IsReplayApp();
+    // we should no longer go through here in the replay application
+    RDCASSERT(!RenderDoc::Inst().IsReplayApp());
 
-    if(reading)
-    {
-      RDCDEBUG("In replay app");
-    }
+    bool EnableDebugLayer = false;
 
-    const bool EnableDebugLayer =
-// toggle on/off if you want debug layer during replay
-#if ENABLED(RDOC_DEVEL)
-        RenderDoc::Inst().IsReplayApp() ||
-#endif
-        (m_EnabledHooks && !reading && RenderDoc::Inst().GetCaptureOptions().apiValidation);
-
-    if(EnableDebugLayer)
-    {
-      PFN_D3D12_GET_DEBUG_INTERFACE getfn = GetDebugInterface();
-
-      if(getfn == NULL)
-        getfn = (PFN_D3D12_GET_DEBUG_INTERFACE)GetProcAddress(GetModuleHandleA("d3d12.dll"),
-                                                              "D3D12GetDebugInterface");
-
-      if(getfn)
-      {
-        ID3D12Debug *debug = NULL;
-        HRESULT hr = getfn(__uuidof(ID3D12Debug), (void **)&debug);
-
-        if(SUCCEEDED(hr) && debug)
-        {
-          debug->EnableDebugLayer();
-
-          RDCDEBUG("Enabling debug layer");
-
-// enable this to get GPU-based validation, where available, whenever we enable API validation
-#if 0
-          ID3D12Debug1 *debug1 = NULL;
-          hr = debug->QueryInterface(__uuidof(ID3D12Debug1), (void **)&debug1);
-
-          if(SUCCEEDED(hr) && debug1)
-          {
-            RDCDEBUG("Enabling GPU-based validation");
-            debug1->SetEnableGPUBasedValidation(true);
-            SAFE_RELEASE(debug1);
-          }
-          else
-          {
-            RDCDEBUG("GPU-based validation not available");
-          }
-#endif
-        }
-        else
-        {
-          RDCERR("Couldn't enable debug layer: %x", hr);
-        }
-
-        SAFE_RELEASE(debug);
-      }
-      else
-      {
-        RDCERR("Couldn't find D3D12GetDebugInterface!");
-      }
-    }
+    if(RenderDoc::Inst().GetCaptureOptions().apiValidation)
+      EnableDebugLayer = EnableD3D12DebugLayer(GetDebugInterface());
 
     RDCDEBUG("Calling real createdevice...");
 
-    PFN_D3D12_CREATE_DEVICE createFunc =
-        (PFN_D3D12_CREATE_DEVICE)GetProcAddress(GetModuleHandleA("d3d12.dll"), "D3D12CreateDevice");
+    PFN_D3D12_CREATE_DEVICE createFunc = CreateDevice();
 
     if(createFunc == NULL)
-      createFunc = CreateDevice();
+      createFunc = (PFN_D3D12_CREATE_DEVICE)GetProcAddress(GetModuleHandleA("d3d12.dll"),
+                                                           "D3D12CreateDevice");
 
     // shouldn't ever get here, we should either have it from procaddress or the trampoline, but
     // let's be safe.
@@ -275,7 +185,7 @@ private:
 
     RDCDEBUG("Called real createdevice... HRESULT: %s", ToStr(ret).c_str());
 
-    if(SUCCEEDED(ret) && m_EnabledHooks && ppDevice)
+    if(SUCCEEDED(ret) && ppDevice)
     {
       RDCDEBUG("succeeded and hooking.");
 
@@ -302,7 +212,7 @@ private:
           dev = (ID3D12Device *)dev1;
         }
 
-        WrappedID3D12Device *wrap = new WrappedID3D12Device(dev, &params, EnableDebugLayer);
+        WrappedID3D12Device *wrap = new WrappedID3D12Device(dev, params, EnableDebugLayer);
 
         RDCDEBUG("created wrapped device.");
 
@@ -370,11 +280,3 @@ private:
 };
 
 D3D12Hook D3D12Hook::d3d12hooks;
-
-extern "C" __declspec(dllexport) HRESULT
-    __cdecl RENDERDOC_CreateWrappedD3D12Device(IUnknown *pAdapter,
-                                               D3D_FEATURE_LEVEL MinimumFeatureLevel, REFIID riid,
-                                               void **ppDevice)
-{
-  return D3D12Hook::CreateWrappedDevice(pAdapter, MinimumFeatureLevel, riid, ppDevice);
-}

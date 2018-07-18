@@ -22,9 +22,9 @@
  * THE SOFTWARE.
  ******************************************************************************/
 
+#include "driver/gl/gl_dispatch_table_defs.h"
 #include "gl_common.h"
 #include "gl_driver.h"
-#include "gl_hookset_defs.h"
 
 template <>
 std::string DoStringise(const GLChunk &el)
@@ -43,15 +43,9 @@ std::string DoStringise(const GLChunk &el)
 
 // re-use list of GL functions as chunks. Many of these will be aliased. This may not appear in the
 // same order as the definition, but that's OK.
-#undef HookExtension
-#define HookExtension(funcPtrType, function) \
-  STRINGISE_ENUM_CLASS_NAMED(function, STRINGIZE(function));
+#define StringiseFunction(function, alias) STRINGISE_ENUM_CLASS_NAMED(alias, STRINGIZE(alias));
 
-#undef HookExtensionAlias
-#define HookExtensionAlias(funcPtrType, function, alias) \
-  STRINGISE_ENUM_CLASS_NAMED(alias, STRINGIZE(alias));
-
-    HookCheckGLExtensions()
+    ForEachSupported(StringiseFunction)
   }
   END_ENUM_STRINGISE()
 }
@@ -152,7 +146,7 @@ std::string DoStringise(const RDCGLenum &el)
   /*
     grep -Eih '#define[ \t]*[A-Z_0-9]*[ \t]*0x[0-9A-F]{4,}\s*$'\
         gl32.h glcorearb.h glext.h glxext.h wglext.h gl3platform.h legacygl.h glesext.h \
-        egl.h eglext.h eglplatform.h khrplatform.h VrApi_Config.h VrApi_Ext.h VrApi_Types.h |
+        egl.h eglext.h eglplatform.h khrplatform.h |
         awk '{print $2" "$3}' | grep -v '_BIT[_ ]' |
         sed -e '{s# 0x0*# #g}' | awk -F"[. ]" '!a[$2]++' |
         sed -e '{s%\(.*\) \(.*\)%    TOSTR_CASE_STRINGIZE_GLENUM(\1)%g}' |

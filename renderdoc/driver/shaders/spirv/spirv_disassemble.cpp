@@ -2106,6 +2106,14 @@ static bool IsUnmodified(SPVFunction *func, SPVInstruction *from, SPVInstruction
     return true;
   }
 
+  // hack - anything over 3 levels of recursion and we just bail rather than checking further.
+  static int recurse = 0;
+
+  if(recurse > 3)
+    return false;
+
+  recurse++;
+
   // otherwise, recurse
   bool ret = true;
 
@@ -2119,6 +2127,7 @@ static bool IsUnmodified(SPVFunction *func, SPVInstruction *from, SPVInstruction
     ret &= IsUnmodified(func, from->op->arguments[i], to);
   }
 
+  recurse--;
   return ret;
 }
 
@@ -3702,6 +3711,7 @@ ShaderBuiltin BuiltInToSystemAttribute(ShaderStage stage, const spv::BuiltIn el)
     case spv::BuiltInBaseInstance: return ShaderBuiltin::BaseInstance;
     case spv::BuiltInDrawIndex: return ShaderBuiltin::DrawIndex;
     case spv::BuiltInViewIndex: return ShaderBuiltin::ViewportIndex;
+    case spv::BuiltInFragStencilRefEXT: return ShaderBuiltin::StencilReference;
     default: break;
   }
 

@@ -65,10 +65,12 @@ ShaderViewer::ShaderViewer(ICaptureContext &ctx, QWidget *parent)
   ui->setupUi(this);
 
   ui->constants->setFont(Formatter::PreferredFont());
-  ui->variables->setFont(Formatter::PreferredFont());
+  ui->registers->setFont(Formatter::PreferredFont());
+  ui->locals->setFont(Formatter::PreferredFont());
   ui->watch->setFont(Formatter::PreferredFont());
   ui->inputSig->setFont(Formatter::PreferredFont());
   ui->outputSig->setFont(Formatter::PreferredFont());
+  ui->callstack->setFont(Formatter::PreferredFont());
 
   // we create this up front so its state stays persistent as much as possible.
   m_FindReplace = new FindReplace(this);
@@ -102,24 +104,6 @@ ShaderViewer::ShaderViewer(ICaptureContext &ctx, QWidget *parent)
 
     QObject::connect(m_DisassemblyView, &ScintillaEdit::keyPressed, this,
                      &ShaderViewer::readonly_keyPressed);
-
-    // C# LightCoral
-    m_DisassemblyView->markerSetBack(CURRENT_MARKER, SCINTILLA_COLOUR(240, 128, 128));
-    m_DisassemblyView->markerSetBack(CURRENT_MARKER + 1, SCINTILLA_COLOUR(240, 128, 128));
-    m_DisassemblyView->markerDefine(CURRENT_MARKER, SC_MARK_SHORTARROW);
-    m_DisassemblyView->markerDefine(CURRENT_MARKER + 1, SC_MARK_BACKGROUND);
-
-    // C# LightSlateGray
-    m_DisassemblyView->markerSetBack(FINISHED_MARKER, SCINTILLA_COLOUR(119, 136, 153));
-    m_DisassemblyView->markerSetBack(FINISHED_MARKER + 1, SCINTILLA_COLOUR(119, 136, 153));
-    m_DisassemblyView->markerDefine(FINISHED_MARKER, SC_MARK_ROUNDRECT);
-    m_DisassemblyView->markerDefine(FINISHED_MARKER + 1, SC_MARK_BACKGROUND);
-
-    // C# Red
-    m_DisassemblyView->markerSetBack(BREAKPOINT_MARKER, SCINTILLA_COLOUR(255, 0, 0));
-    m_DisassemblyView->markerSetBack(BREAKPOINT_MARKER + 1, SCINTILLA_COLOUR(255, 0, 0));
-    m_DisassemblyView->markerDefine(BREAKPOINT_MARKER, SC_MARK_CIRCLE);
-    m_DisassemblyView->markerDefine(BREAKPOINT_MARKER + 1, SC_MARK_BACKGROUND);
 
     m_Scintillas.push_back(m_DisassemblyView);
 
@@ -204,10 +188,12 @@ void ShaderViewer::editShader(bool customShader, const QString &entryPoint, cons
 
   m_DisassemblyView = NULL;
 
-  // hide watch, constants, variables
+  // hide debugging windows
   ui->watch->hide();
-  ui->variables->hide();
+  ui->registers->hide();
   ui->constants->hide();
+  ui->callstack->hide();
+  ui->locals->hide();
 
   ui->snippets->setVisible(customShader);
 
@@ -223,6 +209,8 @@ void ShaderViewer::editShader(bool customShader, const QString &entryPoint, cons
   ui->regFormatSep->hide();
   ui->intView->hide();
   ui->floatView->hide();
+  ui->debugToggleSep->hide();
+  ui->debugToggle->hide();
 
   // hide signatures
   ui->inputSig->hide();
@@ -340,7 +328,26 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
         m_DisassemblyView->setText(disasm.c_str());
         m_DisassemblyView->setReadOnly(true);
 
+        bool preferSourceDebug = false;
+
+        for(const ShaderCompileFlag &flag : m_ShaderDetails->debugInfo.compileFlags.flags)
+        {
+          if(flag.name == "preferSourceDebug")
+          {
+            preferSourceDebug = true;
+            break;
+          }
+        }
+
         updateDebugging();
+
+        // we do updateDebugging() again because the first call finds the scintilla for the current
+        // source file, the second time jumps to it.
+        if(preferSourceDebug)
+        {
+          gotoSourceDebugging();
+          updateDebugging();
+        }
       });
     });
   }
@@ -351,7 +358,6 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
   QObject::connect(m_DisassemblyView, &ScintillaEdit::buttonReleased, this,
                    &ShaderViewer::disassembly_buttonReleased);
 
-  // suppress the built-in context menu and hook up our own
   if(trace)
   {
     if(m_Stage == ShaderStage::Vertex)
@@ -367,20 +373,7 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
       ANALYTIC_SET(ShaderDebug.Compute, true);
     }
 
-    m_DisassemblyView->usePopUp(SC_POPUP_NEVER);
-
     m_DisassemblyFrame->layout()->removeWidget(m_DisassemblyToolbar);
-
-    m_DisassemblyView->setContextMenuPolicy(Qt::CustomContextMenu);
-    QObject::connect(m_DisassemblyView, &ScintillaEdit::customContextMenuRequested, this,
-                     &ShaderViewer::disassembly_contextMenu);
-
-    m_DisassemblyView->setMouseDwellTime(500);
-
-    QObject::connect(m_DisassemblyView, &ScintillaEdit::dwellStart, this,
-                     &ShaderViewer::disasm_tooltipShow);
-    QObject::connect(m_DisassemblyView, &ScintillaEdit::dwellEnd, this,
-                     &ShaderViewer::disasm_tooltipHide);
   }
 
   if(shader && !shader->debugInfo.files.isEmpty())
@@ -390,11 +383,20 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
     else
       setWindowTitle(shader->entryPoint);
 
-    int fileIdx = 0;
+    // add all the files, skipping any that have empty contents. We push a NULL in that case so the
+    // indices still match up with what the debug info expects. Debug info *shouldn't* point us at
+    // an empty file, but if it does we'll just bail out when we see NULL
+    m_FileScintillas.reserve(shader->debugInfo.files.count());
 
     QWidget *sel = NULL;
     for(const ShaderSourceFile &f : shader->debugInfo.files)
     {
+      if(f.contents.isEmpty())
+      {
+        m_FileScintillas.push_back(NULL);
+        continue;
+      }
+
       QString name = QFileInfo(f.filename).fileName();
       QString text = f.contents;
 
@@ -403,7 +405,7 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
       if(sel == NULL)
         sel = scintilla;
 
-      fileIdx++;
+      m_FileScintillas.push_back(scintilla);
     }
 
     if(trace || sel == NULL)
@@ -426,17 +428,29 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
     ui->inputSig->hide();
     ui->outputSig->hide();
 
-    ui->variables->setColumns({tr("Name"), tr("Type"), tr("Value")});
-    ui->variables->header()->setSectionResizeMode(0, QHeaderView::Interactive);
-    ui->variables->header()->setSectionResizeMode(1, QHeaderView::Interactive);
-    ui->variables->header()->setSectionResizeMode(2, QHeaderView::Stretch);
+    if(shader->debugInfo.files.isEmpty())
+    {
+      ui->debugToggle->setEnabled(false);
+      ui->debugToggle->setText(tr("HLSL Unavailable"));
+    }
+
+    ui->registers->setColumns({tr("Name"), tr("Type"), tr("Value")});
+    ui->registers->header()->setSectionResizeMode(0, QHeaderView::Interactive);
+    ui->registers->header()->setSectionResizeMode(1, QHeaderView::Interactive);
+    ui->registers->header()->setSectionResizeMode(2, QHeaderView::Stretch);
+
+    ui->locals->setColumns({tr("Name"), tr("Register(s)"), tr("Type"), tr("Value")});
+    ui->locals->header()->setSectionResizeMode(0, QHeaderView::Interactive);
+    ui->locals->header()->setSectionResizeMode(1, QHeaderView::Interactive);
+    ui->locals->header()->setSectionResizeMode(2, QHeaderView::Interactive);
+    ui->locals->header()->setSectionResizeMode(3, QHeaderView::Stretch);
 
     ui->constants->setColumns({tr("Name"), tr("Type"), tr("Value")});
     ui->constants->header()->setSectionResizeMode(0, QHeaderView::Interactive);
     ui->constants->header()->setSectionResizeMode(1, QHeaderView::Interactive);
     ui->constants->header()->setSectionResizeMode(2, QHeaderView::Stretch);
 
-    ui->variables->setTooltipElidedItems(false);
+    ui->registers->setTooltipElidedItems(false);
     ui->constants->setTooltipElidedItems(false);
 
     ui->watch->setWindowTitle(tr("Watch"));
@@ -446,27 +460,53 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
     ui->docking->setToolWindowProperties(
         ui->watch, ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
 
-    ui->variables->setWindowTitle(tr("Variables"));
+    ui->registers->setWindowTitle(tr("Registers"));
     ui->docking->addToolWindow(
-        ui->variables,
+        ui->registers,
         ToolWindowManager::AreaReference(ToolWindowManager::AddTo, ui->docking->areaOf(ui->watch)));
     ui->docking->setToolWindowProperties(
-        ui->variables, ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
+        ui->registers, ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
 
     ui->constants->setWindowTitle(tr("Constants && Resources"));
     ui->docking->addToolWindow(
         ui->constants, ToolWindowManager::AreaReference(ToolWindowManager::LeftOf,
-                                                        ui->docking->areaOf(ui->variables), 0.5f));
+                                                        ui->docking->areaOf(ui->registers), 0.5f));
     ui->docking->setToolWindowProperties(
         ui->constants, ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
 
-    m_DisassemblyView->setMarginWidthN(1, 20.0 * devicePixelRatioF());
+    ui->callstack->setWindowTitle(tr("Callstack"));
+    ui->docking->addToolWindow(
+        ui->callstack, ToolWindowManager::AreaReference(ToolWindowManager::RightOf,
+                                                        ui->docking->areaOf(ui->registers), 0.2f));
+    ui->docking->setToolWindowProperties(
+        ui->callstack, ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
 
-    // display current line in margin 2, distinct from breakpoint in margin 1
-    sptr_t markMask = (1 << CURRENT_MARKER) | (1 << FINISHED_MARKER);
+    if(m_Trace->hasLocals)
+    {
+      ui->locals->setWindowTitle(tr("Local Variables"));
+      ui->docking->addToolWindow(
+          ui->locals, ToolWindowManager::AreaReference(ToolWindowManager::AddTo,
+                                                       ui->docking->areaOf(ui->registers)));
+      ui->docking->setToolWindowProperties(
+          ui->locals, ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
+    }
+    else
+    {
+      ui->locals->hide();
+    }
 
-    m_DisassemblyView->setMarginMaskN(1, m_DisassemblyView->marginMaskN(1) & ~markMask);
-    m_DisassemblyView->setMarginMaskN(2, m_DisassemblyView->marginMaskN(2) | markMask);
+    m_Line2Inst.resize(m_ShaderDetails->debugInfo.files.count());
+
+    for(size_t inst = 0; inst < m_Trace->lineInfo.size(); inst++)
+    {
+      const LineColumnInfo &line = m_Trace->lineInfo[inst];
+
+      if(line.fileIndex < 0 || line.fileIndex >= m_Line2Inst.count())
+        continue;
+
+      for(uint32_t lineNum = line.lineStart; lineNum <= line.lineEnd; lineNum++)
+        m_Line2Inst[line.fileIndex][lineNum] = inst;
+    }
 
     QObject::connect(ui->stepBack, &QToolButton::clicked, this, &ShaderViewer::stepBack);
     QObject::connect(ui->stepNext, &QToolButton::clicked, this, &ShaderViewer::stepNext);
@@ -476,28 +516,62 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
     QObject::connect(ui->runToSample, &QToolButton::clicked, this, &ShaderViewer::runToSample);
     QObject::connect(ui->runToNaNOrInf, &QToolButton::clicked, this, &ShaderViewer::runToNanOrInf);
 
-    QObject::connect(new QShortcut(QKeySequence(Qt::Key_F10), m_DisassemblyView),
-                     &QShortcut::activated, this, &ShaderViewer::stepNext);
-    QObject::connect(new QShortcut(QKeySequence(Qt::Key_F10 | Qt::ShiftModifier), m_DisassemblyView),
+    for(ScintillaEdit *edit : m_Scintillas)
+    {
+      edit->setMarginWidthN(1, 20.0 * devicePixelRatioF());
+
+      // display current line in margin 2, distinct from breakpoint in margin 1
+      sptr_t markMask = (1 << CURRENT_MARKER) | (1 << FINISHED_MARKER);
+
+      edit->setMarginMaskN(1, edit->marginMaskN(1) & ~markMask);
+      edit->setMarginMaskN(2, edit->marginMaskN(2) | markMask);
+
+      // suppress the built-in context menu and hook up our own
+      edit->usePopUp(SC_POPUP_NEVER);
+
+      edit->setContextMenuPolicy(Qt::CustomContextMenu);
+      QObject::connect(edit, &ScintillaEdit::customContextMenuRequested, this,
+                       &ShaderViewer::debug_contextMenu);
+
+      edit->setMouseDwellTime(500);
+
+      QObject::connect(edit, &ScintillaEdit::dwellStart, this, &ShaderViewer::disasm_tooltipShow);
+      QObject::connect(edit, &ScintillaEdit::dwellEnd, this, &ShaderViewer::disasm_tooltipHide);
+    }
+
+    // register the shortcuts globally for this shader viewer so it works regardless of the active
+    // scintilla
+    QObject::connect(new QShortcut(QKeySequence(Qt::Key_F10), this), &QShortcut::activated, this,
+                     &ShaderViewer::stepNext);
+    QObject::connect(new QShortcut(QKeySequence(Qt::Key_F10 | Qt::ShiftModifier), this),
                      &QShortcut::activated, this, &ShaderViewer::stepBack);
-    QObject::connect(
-        new QShortcut(QKeySequence(Qt::Key_F10 | Qt::ControlModifier), m_DisassemblyView),
-        &QShortcut::activated, this, &ShaderViewer::runToCursor);
-    QObject::connect(new QShortcut(QKeySequence(Qt::Key_F5), m_DisassemblyView),
-                     &QShortcut::activated, this, &ShaderViewer::run);
-    QObject::connect(new QShortcut(QKeySequence(Qt::Key_F5 | Qt::ShiftModifier), m_DisassemblyView),
+    QObject::connect(new QShortcut(QKeySequence(Qt::Key_F10 | Qt::ControlModifier), this),
+                     &QShortcut::activated, this, &ShaderViewer::runToCursor);
+    QObject::connect(new QShortcut(QKeySequence(Qt::Key_F5), this), &QShortcut::activated, this,
+                     &ShaderViewer::run);
+    QObject::connect(new QShortcut(QKeySequence(Qt::Key_F5 | Qt::ShiftModifier), this),
                      &QShortcut::activated, this, &ShaderViewer::runBack);
-    QObject::connect(new QShortcut(QKeySequence(Qt::Key_F9), m_DisassemblyView),
-                     &QShortcut::activated, [this]() { ToggleBreakpoint(); });
+    QObject::connect(new QShortcut(QKeySequence(Qt::Key_F9), this), &QShortcut::activated,
+                     [this]() { ToggleBreakpoint(); });
 
     // event filter to pick up tooltip events
     ui->constants->installEventFilter(this);
-    ui->variables->installEventFilter(this);
+    ui->registers->installEventFilter(this);
     ui->watch->installEventFilter(this);
 
     SetCurrentStep(0);
 
     QObject::connect(ui->watch, &RDTableWidget::keyPress, this, &ShaderViewer::watch_keyPress);
+
+    ui->watch->setContextMenuPolicy(Qt::CustomContextMenu);
+    QObject::connect(ui->watch, &RDTableWidget::customContextMenuRequested, this,
+                     &ShaderViewer::variables_contextMenu);
+    ui->registers->setContextMenuPolicy(Qt::CustomContextMenu);
+    QObject::connect(ui->registers, &RDTreeWidget::customContextMenuRequested, this,
+                     &ShaderViewer::variables_contextMenu);
+    ui->locals->setContextMenuPolicy(Qt::CustomContextMenu);
+    QObject::connect(ui->locals, &RDTreeWidget::customContextMenuRequested, this,
+                     &ShaderViewer::variables_contextMenu);
 
     ui->watch->insertRow(0);
 
@@ -510,13 +584,17 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
     }
 
     ui->watch->resizeRowsToContents();
+
+    ToolWindowManager::raiseToolWindow(m_DisassemblyFrame);
   }
   else
   {
     // hide watch, constants, variables
     ui->watch->hide();
-    ui->variables->hide();
+    ui->registers->hide();
     ui->constants->hide();
+    ui->locals->hide();
+    ui->callstack->hide();
 
     // hide debugging toolbar buttons
     ui->debugSep->hide();
@@ -530,6 +608,8 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
     ui->regFormatSep->hide();
     ui->intView->hide();
     ui->floatView->hide();
+    ui->debugToggleSep->hide();
+    ui->debugToggle->hide();
 
     // show input and output signatures
     ui->inputSig->setColumns(
@@ -608,6 +688,41 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
     ui->docking->setToolWindowProperties(
         ui->outputSig, ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
   }
+
+  for(ScintillaEdit *edit : m_Scintillas)
+  {
+    // C# LightCoral
+    edit->markerSetBack(CURRENT_MARKER, SCINTILLA_COLOUR(240, 128, 128));
+    edit->markerSetBack(CURRENT_MARKER + 1, SCINTILLA_COLOUR(240, 128, 128));
+    edit->markerDefine(CURRENT_MARKER, SC_MARK_SHORTARROW);
+    edit->markerDefine(CURRENT_MARKER + 1, SC_MARK_BACKGROUND);
+    edit->indicSetFore(CURRENT_INDICATOR, SCINTILLA_COLOUR(240, 128, 128));
+    edit->indicSetAlpha(CURRENT_INDICATOR, 220);
+    edit->indicSetOutlineAlpha(CURRENT_INDICATOR, 255);
+    edit->indicSetUnder(CURRENT_INDICATOR, true);
+    edit->indicSetStyle(CURRENT_INDICATOR, INDIC_STRAIGHTBOX);
+    edit->indicSetHoverFore(CURRENT_INDICATOR, SCINTILLA_COLOUR(240, 128, 128));
+    edit->indicSetHoverStyle(CURRENT_INDICATOR, INDIC_STRAIGHTBOX);
+
+    // C# LightSlateGray
+    edit->markerSetBack(FINISHED_MARKER, SCINTILLA_COLOUR(119, 136, 153));
+    edit->markerSetBack(FINISHED_MARKER + 1, SCINTILLA_COLOUR(119, 136, 153));
+    edit->markerDefine(FINISHED_MARKER, SC_MARK_ROUNDRECT);
+    edit->markerDefine(FINISHED_MARKER + 1, SC_MARK_BACKGROUND);
+    edit->indicSetFore(FINISHED_INDICATOR, SCINTILLA_COLOUR(119, 136, 153));
+    edit->indicSetAlpha(FINISHED_INDICATOR, 220);
+    edit->indicSetOutlineAlpha(FINISHED_INDICATOR, 255);
+    edit->indicSetUnder(FINISHED_INDICATOR, true);
+    edit->indicSetStyle(FINISHED_INDICATOR, INDIC_STRAIGHTBOX);
+    edit->indicSetHoverFore(FINISHED_INDICATOR, SCINTILLA_COLOUR(119, 136, 153));
+    edit->indicSetHoverStyle(FINISHED_INDICATOR, INDIC_STRAIGHTBOX);
+
+    // C# Red
+    edit->markerSetBack(BREAKPOINT_MARKER, SCINTILLA_COLOUR(255, 0, 0));
+    edit->markerSetBack(BREAKPOINT_MARKER + 1, SCINTILLA_COLOUR(255, 0, 0));
+    edit->markerDefine(BREAKPOINT_MARKER, SC_MARK_CIRCLE);
+    edit->markerDefine(BREAKPOINT_MARKER + 1, SC_MARK_BACKGROUND);
+  }
 }
 
 void ShaderViewer::updateWindowTitle()
@@ -628,6 +743,21 @@ void ShaderViewer::updateWindowTitle()
     else
       setWindowTitle(shaderName);
   }
+}
+
+void ShaderViewer::gotoSourceDebugging()
+{
+  if(m_CurInstructionScintilla)
+  {
+    ToolWindowManager::raiseToolWindow(m_CurInstructionScintilla);
+    m_CurInstructionScintilla->setFocus(Qt::MouseFocusReason);
+  }
+}
+
+void ShaderViewer::gotoDisassemblyDebugging()
+{
+  ToolWindowManager::raiseToolWindow(m_DisassemblyFrame);
+  m_DisassemblyFrame->setFocus(Qt::MouseFocusReason);
 }
 
 ShaderViewer::~ShaderViewer()
@@ -760,11 +890,26 @@ void ShaderViewer::editable_keyPressed(QKeyEvent *event)
   }
 }
 
-void ShaderViewer::disassembly_contextMenu(const QPoint &pos)
+void ShaderViewer::debug_contextMenu(const QPoint &pos)
 {
-  int scintillaPos = m_DisassemblyView->positionFromPoint(pos.x(), pos.y());
+  ScintillaEdit *edit = qobject_cast<ScintillaEdit *>(QObject::sender());
+
+  bool isDisasm = (edit == m_DisassemblyView);
+
+  int scintillaPos = edit->positionFromPoint(pos.x(), pos.y());
 
   QMenu contextMenu(this);
+
+  QAction gotoOther(isDisasm ? tr("Go to Source") : tr("Go to Disassembly"), this);
+
+  QObject::connect(&gotoOther, &QAction::triggered, [this, isDisasm]() {
+    if(isDisasm)
+      gotoSourceDebugging();
+    else
+      gotoDisassemblyDebugging();
+
+    updateDebugging();
+  });
 
   QAction intDisplay(tr("Integer register display"), this);
   QAction floatDisplay(tr("Float register display"), this);
@@ -777,6 +922,12 @@ void ShaderViewer::disassembly_contextMenu(const QPoint &pos)
 
   QObject::connect(&intDisplay, &QAction::triggered, this, &ShaderViewer::on_intView_clicked);
   QObject::connect(&floatDisplay, &QAction::triggered, this, &ShaderViewer::on_floatView_clicked);
+
+  if(isDisasm && m_CurInstructionScintilla == NULL)
+    gotoOther.setEnabled(false);
+
+  contextMenu.addAction(&gotoOther);
+  contextMenu.addSeparator();
 
   contextMenu.addAction(&intDisplay);
   contextMenu.addAction(&floatDisplay);
@@ -801,19 +952,98 @@ void ShaderViewer::disassembly_contextMenu(const QPoint &pos)
   QAction copyText(tr("Copy"), this);
   QAction selectAll(tr("Select All"), this);
 
-  copyText.setEnabled(!m_DisassemblyView->selectionEmpty());
+  copyText.setEnabled(!edit->selectionEmpty());
 
-  QObject::connect(&copyText, &QAction::triggered, [this] {
-    m_DisassemblyView->copyRange(m_DisassemblyView->selectionStart(),
-                                 m_DisassemblyView->selectionEnd());
-  });
-  QObject::connect(&selectAll, &QAction::triggered, [this] { m_DisassemblyView->selectAll(); });
+  QObject::connect(&copyText, &QAction::triggered,
+                   [edit] { edit->copyRange(edit->selectionStart(), edit->selectionEnd()); });
+  QObject::connect(&selectAll, &QAction::triggered, [edit] { edit->selectAll(); });
 
   contextMenu.addAction(&copyText);
   contextMenu.addAction(&selectAll);
   contextMenu.addSeparator();
 
-  RDDialog::show(&contextMenu, m_DisassemblyView->viewport()->mapToGlobal(pos));
+  RDDialog::show(&contextMenu, edit->viewport()->mapToGlobal(pos));
+}
+
+void ShaderViewer::variables_contextMenu(const QPoint &pos)
+{
+  QAbstractItemView *w = qobject_cast<QAbstractItemView *>(QObject::sender());
+
+  QMenu contextMenu(this);
+
+  QAction copyValue(tr("Copy"), this);
+  QAction addWatch(tr("Add Watch"), this);
+  QAction deleteWatch(tr("Delete Watch"), this);
+  QAction clearAll(tr("Clear All"), this);
+
+  contextMenu.addAction(&copyValue);
+  contextMenu.addSeparator();
+  contextMenu.addAction(&addWatch);
+
+  if(QObject::sender() == ui->watch)
+  {
+    QObject::connect(&copyValue, &QAction::triggered, [this] { ui->watch->copySelection(); });
+
+    contextMenu.addAction(&deleteWatch);
+    contextMenu.addSeparator();
+    contextMenu.addAction(&clearAll);
+
+    // start with no row selected
+    int selRow = -1;
+
+    QList<QTableWidgetItem *> items = ui->watch->selectedItems();
+    for(QTableWidgetItem *item : items)
+    {
+      // if no row is selected, or the same as this item, set selected row to this item's
+      if(selRow == -1 || selRow == item->row())
+      {
+        selRow = item->row();
+      }
+      else
+      {
+        // we only get here if we see an item on a different row selected - that means too many rows
+        // so bail out
+        selRow = -1;
+        break;
+      }
+    }
+
+    // if we have a selected row that isn't the last one, we can add/delete this item
+    deleteWatch.setEnabled(selRow >= 0 && selRow < ui->watch->rowCount() - 1);
+    addWatch.setEnabled(selRow >= 0 && selRow < ui->watch->rowCount() - 1);
+
+    QObject::connect(&addWatch, &QAction::triggered, [this, selRow] {
+      QTableWidgetItem *item = ui->watch->item(selRow, 0);
+
+      if(item)
+        AddWatch(item->text());
+    });
+
+    QObject::connect(&deleteWatch, &QAction::triggered,
+                     [this, selRow] { ui->watch->removeRow(selRow); });
+
+    QObject::connect(&clearAll, &QAction::triggered, [this] {
+      while(ui->watch->rowCount() > 1)
+        ui->watch->removeRow(0);
+    });
+  }
+  else
+  {
+    RDTreeWidget *tree = qobject_cast<RDTreeWidget *>(w);
+
+    QObject::connect(&copyValue, &QAction::triggered, [tree] { tree->copySelection(); });
+
+    addWatch.setEnabled(tree->selectedItem() != NULL);
+
+    QObject::connect(&addWatch, &QAction::triggered, [this, tree] {
+      if(tree == ui->locals)
+        AddWatch(tree->selectedItem()->tag().toString());
+      else
+        AddWatch(tree->selectedItem()->text(0));
+    });
+  }
+
+  RDDialog::show(&contextMenu, w->viewport()->mapToGlobal(pos));
 }
 
 void ShaderViewer::disassembly_buttonReleased(QMouseEvent *event)
@@ -827,6 +1057,24 @@ void ShaderViewer::disassembly_buttonReleased(QMouseEvent *event)
 
     QString text = QString::fromUtf8(m_DisassemblyView->textRange(start, end));
 
+    QRegularExpression regexp(lit("^[xyzwrgba]+$"));
+
+    // if we match a swizzle look before that for the register
+    if(regexp.match(text).hasMatch())
+    {
+      start--;
+      while(isspace(m_DisassemblyView->charAt(start)))
+        start--;
+
+      if(m_DisassemblyView->charAt(start) == '.')
+      {
+        end = m_DisassemblyView->wordEndPosition(start - 1, true);
+        start = m_DisassemblyView->wordStartPosition(start - 1, true);
+
+        text = QString::fromUtf8(m_DisassemblyView->textRange(start, end));
+      }
+    }
+
     if(!text.isEmpty())
     {
       VariableTag tag;
@@ -838,9 +1086,9 @@ void ShaderViewer::disassembly_buttonReleased(QMouseEvent *event)
         start = 0;
         end = m_DisassemblyView->length();
 
-        for(int i = 0; i < ui->variables->topLevelItemCount(); i++)
+        for(int i = 0; i < ui->registers->topLevelItemCount(); i++)
         {
-          RDTreeWidgetItem *item = ui->variables->topLevelItem(i);
+          RDTreeWidgetItem *item = ui->registers->topLevelItem(i);
           if(item->tag().value<VariableTag>() == tag)
             item->setBackgroundColor(QColor::fromHslF(
                 0.333f, 1.0f, qBound(0.25, palette().color(QPalette::Base).lightnessF(), 0.85)));
@@ -982,7 +1230,37 @@ bool ShaderViewer::stepBack()
   if(CurrentStep() == 0)
     return false;
 
-  SetCurrentStep(CurrentStep() - 1);
+  if(isSourceDebugging())
+  {
+    const ShaderDebugState &oldstate = m_Trace->states[CurrentStep()];
+
+    LineColumnInfo oldLine =
+        m_Trace->lineInfo[qMin(m_Trace->lineInfo.size() - 1, (size_t)oldstate.nextInstruction)];
+
+    while(CurrentStep() < m_Trace->states.count())
+    {
+      m_CurrentStep--;
+
+      const ShaderDebugState &state = m_Trace->states[m_CurrentStep];
+
+      if(m_Breakpoints.contains((int)state.nextInstruction))
+        break;
+
+      if(m_CurrentStep == 0)
+        break;
+
+      if(m_Trace->lineInfo[state.nextInstruction] == oldLine)
+        continue;
+
+      break;
+    }
+
+    SetCurrentStep(CurrentStep());
+  }
+  else
+  {
+    SetCurrentStep(CurrentStep() - 1);
+  }
 
   return true;
 }
@@ -995,7 +1273,36 @@ bool ShaderViewer::stepNext()
   if(CurrentStep() + 1 >= m_Trace->states.count())
     return false;
 
-  SetCurrentStep(CurrentStep() + 1);
+  if(isSourceDebugging())
+  {
+    const ShaderDebugState &oldstate = m_Trace->states[CurrentStep()];
+
+    LineColumnInfo oldLine = m_Trace->lineInfo[oldstate.nextInstruction];
+
+    while(CurrentStep() < m_Trace->states.count())
+    {
+      m_CurrentStep++;
+
+      const ShaderDebugState &state = m_Trace->states[m_CurrentStep];
+
+      if(m_Breakpoints.contains((int)state.nextInstruction))
+        break;
+
+      if(m_CurrentStep + 1 >= m_Trace->states.count())
+        break;
+
+      if(m_Trace->lineInfo[state.nextInstruction] == oldLine)
+        continue;
+
+      break;
+    }
+
+    SetCurrentStep(CurrentStep());
+  }
+  else
+  {
+    SetCurrentStep(CurrentStep() + 1);
+  }
 
   return true;
 }
@@ -1005,15 +1312,44 @@ void ShaderViewer::runToCursor()
   if(!m_Trace)
     return;
 
-  sptr_t i = m_DisassemblyView->lineFromPosition(m_DisassemblyView->currentPos());
+  ScintillaEdit *cur = currentScintilla();
 
-  for(; i < m_DisassemblyView->lineCount(); i++)
+  if(cur != m_DisassemblyView)
   {
-    int line = instructionForLine(i);
-    if(line >= 0)
+    int scintillaIndex = m_FileScintillas.indexOf(cur);
+
+    if(scintillaIndex < 0)
+      return;
+
+    sptr_t i = cur->lineFromPosition(cur->currentPos()) + 1;
+
+    QMap<int32_t, size_t> &fileMap = m_Line2Inst[scintillaIndex];
+
+    // find the next line that maps to an instruction
+    for(; i < cur->lineCount(); i++)
     {
-      runTo(line, true);
-      break;
+      if(fileMap.contains(i))
+      {
+        runTo((int)fileMap[i], true);
+        return;
+      }
+    }
+
+    // if we didn't find one, just run
+    run();
+  }
+  else
+  {
+    sptr_t i = m_DisassemblyView->lineFromPosition(m_DisassemblyView->currentPos());
+
+    for(; i < m_DisassemblyView->lineCount(); i++)
+    {
+      int line = instructionForLine(i);
+      if(line >= 0)
+      {
+        runTo(line, true);
+        break;
+      }
     }
   }
 }
@@ -1189,10 +1525,146 @@ void ShaderViewer::addFileList()
       list, ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
 }
 
+void ShaderViewer::combineStructures(RDTreeWidgetItem *root)
+{
+  RDTreeWidgetItem temp;
+
+  // we perform a filter moving from root to temp. At each point we check the node:
+  // * if the node has no struct or array prefix, it gets moved
+  // * if the node does have a prefix, we sweep finding all matching elements with the same prefix,
+  //   strip the prefix off them and make a combined node, then recurse to combine anything
+  //   underneath. We aren't greedy in picking prefixes so this should generate a struct/array tree.
+  // * in the event that a node has no matching elements we move it across as if it had no prefix.
+  // * we iterate from last to first, because when combining elements that may be spread out in the
+  //   list of children, we want to combine up to the position of the last item, not the position of
+  //   the first.
+
+  for(int c = root->childCount() - 1; c >= 0;)
+  {
+    RDTreeWidgetItem *child = root->takeChild(c);
+    c--;
+
+    QString name = child->text(0);
+
+    int dotIndex = name.indexOf(QLatin1Char('.'));
+    int arrIndex = name.indexOf(QLatin1Char('['));
+
+    // if this node doesn't have any segments, just move it across.
+    if(dotIndex < 0 && arrIndex < 0)
+    {
+      temp.insertChild(0, child);
+      continue;
+    }
+
+    // store the index of the first separator
+    int sepIndex = dotIndex;
+    bool isArray = false;
+    if(sepIndex == -1 || (arrIndex > 0 && arrIndex < sepIndex))
+    {
+      sepIndex = arrIndex;
+      isArray = true;
+    }
+
+    // we have a valid node to match against, record the prefix (including separator character)
+    QString prefix = name.mid(0, sepIndex + 1);
+
+    QVector<RDTreeWidgetItem *> matches = {child};
+
+    // iterate down from the next item
+    for(int n = c; n >= 0; n--)
+    {
+      RDTreeWidgetItem *testNode = root->child(n);
+
+      QString testName = testNode->text(0);
+
+      QString testprefix = testName.mid(0, sepIndex + 1);
+
+      // no match - continue
+      if(testprefix != prefix)
+        continue;
+
+      // match, take this child
+      matches.push_back(root->takeChild(n));
+
+      // also decrement c since we're taking a child ahead of where that loop will go.
+      c--;
+    }
+
+    // no other matches with the same prefix, just move across
+    if(matches.count() == 1)
+    {
+      temp.insertChild(0, child);
+      continue;
+    }
+
+    // sort the children by name
+    std::sort(matches.begin(), matches.end(),
+              [](const RDTreeWidgetItem *a, const RDTreeWidgetItem *b) {
+                return a->text(0) < b->text(0);
+              });
+
+    // create a new parent with just the prefix
+    QVariantList values = {name.mid(0, sepIndex)};
+    for(int i = 1; i < child->dataCount(); i++)
+      values.push_back(QVariant());
+    RDTreeWidgetItem *parent = new RDTreeWidgetItem(values);
+
+    // add all the children (stripping the prefix from their name)
+    for(RDTreeWidgetItem *item : matches)
+    {
+      if(!isArray)
+        item->setText(0, item->text(0).mid(sepIndex + 1));
+      parent->addChild(item);
+
+      if(item->background().color().isValid())
+        parent->setBackground(item->background());
+      if(item->foreground().color().isValid())
+        parent->setForeground(item->foreground());
+    }
+
+    // recurse and combine members of this object if a struct
+    if(!isArray)
+      combineStructures(parent);
+
+    // now add to the list
+    temp.insertChild(0, parent);
+  }
+
+  if(root->childCount() > 0)
+    qCritical() << "Some objects left on root!";
+
+  // move all the children back from the temp object into the parameter
+  while(temp.childCount() > 0)
+    root->addChild(temp.takeChild(0));
+}
+
+RDTreeWidgetItem *ShaderViewer::findLocal(RDTreeWidgetItem *root, QString name)
+{
+  if(root->tag().toString() == name)
+    return root;
+
+  for(int i = 0; i < root->childCount(); i++)
+  {
+    RDTreeWidgetItem *ret = findLocal(root->child(i), name);
+    if(ret)
+      return ret;
+  }
+
+  return NULL;
+}
+
 void ShaderViewer::updateDebugging()
 {
   if(!m_Trace || m_CurrentStep < 0 || m_CurrentStep >= m_Trace->states.count())
     return;
+
+  if(ui->debugToggle->isEnabled())
+  {
+    if(isSourceDebugging())
+      ui->debugToggle->setText(tr("Debug in Assembly"));
+    else
+      ui->debugToggle->setText(tr("Debug in HLSL"));
+  }
 
   const ShaderDebugState &state = m_Trace->states[m_CurrentStep];
 
@@ -1211,6 +1683,18 @@ void ShaderViewer::updateDebugging()
   m_DisassemblyView->markerDeleteAll(FINISHED_MARKER);
   m_DisassemblyView->markerDeleteAll(FINISHED_MARKER + 1);
 
+  if(m_CurInstructionScintilla)
+  {
+    m_CurInstructionScintilla->markerDeleteAll(CURRENT_MARKER);
+    m_CurInstructionScintilla->markerDeleteAll(CURRENT_MARKER + 1);
+    m_CurInstructionScintilla->markerDeleteAll(FINISHED_MARKER);
+    m_CurInstructionScintilla->markerDeleteAll(FINISHED_MARKER + 1);
+
+    m_CurInstructionScintilla->indicatorClearRange(0, m_CurInstructionScintilla->length());
+
+    m_CurInstructionScintilla = NULL;
+  }
+
   for(sptr_t i = 0; i < m_DisassemblyView->lineCount(); i++)
   {
     if(QString::fromUtf8(m_DisassemblyView->getLine(i).trimmed())
@@ -1224,6 +1708,70 @@ void ShaderViewer::updateDebugging()
 
       ensureLineScrolled(m_DisassemblyView, i);
       break;
+    }
+  }
+
+  ui->callstack->clear();
+
+  if(state.nextInstruction < m_Trace->lineInfo.size())
+  {
+    LineColumnInfo &lineInfo = m_Trace->lineInfo[state.nextInstruction];
+
+    for(const rdcstr &s : lineInfo.callstack)
+      ui->callstack->insertItem(0, s);
+
+    if(lineInfo.fileIndex >= 0 && lineInfo.fileIndex < m_FileScintillas.count())
+    {
+      m_CurInstructionScintilla = m_FileScintillas[lineInfo.fileIndex];
+
+      if(m_CurInstructionScintilla)
+      {
+        for(sptr_t line = lineInfo.lineStart; line <= (sptr_t)lineInfo.lineEnd; line++)
+        {
+          if(line == (sptr_t)lineInfo.lineEnd)
+            m_CurInstructionScintilla->markerAdd(line - 1, done ? FINISHED_MARKER : CURRENT_MARKER);
+
+          if(lineInfo.colStart == 0)
+          {
+            // with no column info, add a marker on the whole line
+            m_CurInstructionScintilla->markerAdd(line - 1,
+                                                 done ? FINISHED_MARKER + 1 : CURRENT_MARKER + 1);
+          }
+          else
+          {
+            // otherwise add an indicator on the column range.
+
+            // Start from the full position/length for this line
+            sptr_t pos = m_CurInstructionScintilla->positionFromLine(line - 1);
+            sptr_t len = m_CurInstructionScintilla->lineEndPosition(line - 1) - pos;
+
+            // if we're on the last line of the range, restrict the length to end on the last column
+            if(line == (sptr_t)lineInfo.lineEnd && lineInfo.colEnd != 0)
+              len = lineInfo.colEnd;
+
+            // if we're on the start of the range (which may also be the last line above too), shift
+            // inwards towards the first column
+            if(line == (sptr_t)lineInfo.lineStart)
+            {
+              pos += lineInfo.colStart - 1;
+              len -= lineInfo.colStart - 1;
+            }
+
+            m_CurInstructionScintilla->setIndicatorCurrent(done ? FINISHED_INDICATOR
+                                                                : CURRENT_INDICATOR);
+            m_CurInstructionScintilla->indicatorFillRange(pos, len);
+          }
+        }
+
+        if(isSourceDebugging() ||
+           ui->docking->areaOf(m_CurInstructionScintilla) != ui->docking->areaOf(m_DisassemblyFrame))
+          ToolWindowManager::raiseToolWindow(m_CurInstructionScintilla);
+
+        int pos = m_CurInstructionScintilla->positionFromLine(lineInfo.lineStart - 1);
+        m_CurInstructionScintilla->setSelection(pos, pos);
+
+        ensureLineScrolled(m_CurInstructionScintilla, lineInfo.lineStart - 1);
+      }
     }
   }
 
@@ -1346,10 +1894,159 @@ void ShaderViewer::updateDebugging()
     }
   }
 
-  if(ui->variables->topLevelItemCount() == 0)
+  if(m_Trace->hasLocals)
+  {
+    const QString stateprefix = lit("!!@");
+
+    RDTreeWidgetExpansionState expansion;
+    ui->locals->saveExpansion(expansion, stateprefix, ui->locals->invisibleRootItem(), 0);
+
+    ui->locals->clear();
+
+    const QString xyzw = lit("xyzw");
+
+    RDTreeWidgetItem fakeroot;
+
+    for(size_t lidx = 0; lidx < state.locals.size(); lidx++)
+    {
+      // iterate in reverse order, so newest locals tend to end up on top
+      const LocalVariableMapping &l = state.locals[state.locals.size() - 1 - lidx];
+
+      QString localName = l.localName;
+      QString regNames, typeName;
+      QString value;
+
+      bool modified = false;
+
+      if(l.type == VarType::UInt)
+        typeName = lit("uint");
+      else if(l.type == VarType::Int)
+        typeName = lit("int");
+      else if(l.type == VarType::Float)
+        typeName = lit("float");
+      else if(l.type == VarType::Double)
+        typeName = lit("double");
+
+      if(l.registers[0].type == RegisterType::IndexedTemporary)
+      {
+        typeName += lit("[]");
+
+        regNames = QFormatStr("x%1").arg(l.registers[0].index);
+
+        for(const RegisterRange &mr : state.modified)
+        {
+          if(mr.type == RegisterType::IndexedTemporary && mr.index == l.registers[0].index)
+          {
+            modified = true;
+            break;
+          }
+        }
+      }
+      else
+      {
+        if(l.rows > 1)
+          typeName += QFormatStr("%1x%2").arg(l.rows).arg(l.columns);
+        else
+          typeName += QString::number(l.columns);
+
+        for(uint32_t i = 0; i < l.regCount; i++)
+        {
+          const RegisterRange &r = l.registers[i];
+
+          for(const RegisterRange &mr : state.modified)
+          {
+            if(mr.type == r.type && mr.index == r.index && mr.component == r.component)
+            {
+              modified = true;
+              break;
+            }
+          }
+
+          if(!value.isEmpty())
+            value += lit(", ");
+          if(!regNames.isEmpty())
+            regNames += lit(", ");
+
+          if(r.type == RegisterType::Undefined)
+          {
+            regNames += lit("-");
+            value += lit("?");
+            continue;
+          }
+
+          const ShaderVariable *var = GetRegisterVariable(r);
+
+          if(var)
+          {
+            // if the previous register was the same, just append our component
+            if(i > 0 && r.type == l.registers[i - 1].type && r.index == l.registers[i - 1].index)
+            {
+              // remove the auto-appended ", " - there must be one because this isn't the first
+              // register
+              regNames.chop(2);
+              regNames += xyzw[r.component];
+            }
+            else
+            {
+              regNames += QFormatStr("%1.%2").arg(var->name).arg(xyzw[r.component]);
+            }
+
+            if(l.type == VarType::UInt)
+              value += Formatter::Format(var->value.uv[r.component]);
+            else if(l.type == VarType::Int)
+              value += Formatter::Format(var->value.iv[r.component]);
+            else if(l.type == VarType::Float)
+              value += Formatter::Format(var->value.fv[r.component]);
+            else if(l.type == VarType::Double)
+              value += Formatter::Format(var->value.dv[r.component]);
+          }
+          else
+          {
+            regNames += lit("<error>");
+            value += lit("<error>");
+          }
+        }
+      }
+
+      RDTreeWidgetItem *node = new RDTreeWidgetItem({localName, regNames, typeName, value});
+
+      node->setTag(localName);
+
+      if(modified)
+        node->setForegroundColor(QColor(Qt::red));
+
+      if(l.registers[0].type == RegisterType::IndexedTemporary)
+      {
+        const ShaderVariable *var = NULL;
+
+        if(l.registers[0].index < state.indexableTemps.size())
+          var = &state.indexableTemps[l.registers[0].index];
+
+        for(int t = 0; var && t < var->members.count(); t++)
+        {
+          node->addChild(new RDTreeWidgetItem({
+              QFormatStr("%1[%2]").arg(localName).arg(t), QFormatStr("%1[%2]").arg(regNames).arg(t),
+              typeName, RowString(var->members[t], 0, l.type),
+          }));
+        }
+      }
+
+      fakeroot.addChild(node);
+    }
+
+    // recursively combine nodes with the same prefix together
+    combineStructures(&fakeroot);
+
+    while(fakeroot.childCount() > 0)
+      ui->locals->addTopLevelItem(fakeroot.takeChild(0));
+
+    ui->locals->applySavedExpansion(expansion, stateprefix, ui->locals->invisibleRootItem(), 0);
+  }
+
+  if(ui->registers->topLevelItemCount() == 0)
   {
     for(int i = 0; i < state.registers.count(); i++)
-      ui->variables->addTopLevelItem(
+      ui->registers->addTopLevelItem(
           new RDTreeWidgetItem({state.registers[i].name, lit("temporary"), QString()}));
 
     for(int i = 0; i < state.indexableTemps.count(); i++)
@@ -1359,33 +2056,70 @@ void ShaderViewer::updateDebugging()
       for(int t = 0; t < state.indexableTemps[i].members.count(); t++)
         node->addChild(new RDTreeWidgetItem(
             {state.indexableTemps[i].members[t].name, lit("indexable"), QString()}));
-      ui->variables->addTopLevelItem(node);
+      ui->registers->addTopLevelItem(node);
     }
 
     for(int i = 0; i < state.outputs.count(); i++)
-      ui->variables->addTopLevelItem(
+      ui->registers->addTopLevelItem(
           new RDTreeWidgetItem({state.outputs[i].name, lit("output"), QString()}));
   }
 
-  ui->variables->beginUpdate();
+  ui->registers->beginUpdate();
 
   int v = 0;
 
   for(int i = 0; i < state.registers.count(); i++)
   {
-    RDTreeWidgetItem *node = ui->variables->topLevelItem(v++);
+    RDTreeWidgetItem *node = ui->registers->topLevelItem(v++);
 
     node->setText(2, stringRep(state.registers[i], false));
     node->setTag(QVariant::fromValue(VariableTag(VariableCategory::Temporaries, i)));
+
+    bool modified = false;
+
+    for(const RegisterRange &mr : state.modified)
+    {
+      if(mr.type == RegisterType::Temporary && mr.index == i)
+      {
+        modified = true;
+        break;
+      }
+    }
+
+    if(modified)
+      node->setForegroundColor(QColor(Qt::red));
+    else
+      node->setForeground(QBrush());
   }
 
   for(int i = 0; i < state.indexableTemps.count(); i++)
   {
-    RDTreeWidgetItem *node = ui->variables->topLevelItem(v++);
+    RDTreeWidgetItem *node = ui->registers->topLevelItem(v++);
+
+    bool modified = false;
+
+    for(const RegisterRange &mr : state.modified)
+    {
+      if(mr.type == RegisterType::IndexedTemporary && mr.index == i)
+      {
+        modified = true;
+        break;
+      }
+    }
+
+    if(modified)
+      node->setForegroundColor(QColor(Qt::red));
+    else
+      node->setForeground(QBrush());
 
     for(int t = 0; t < state.indexableTemps[i].members.count(); t++)
     {
       RDTreeWidgetItem *child = node->child(t);
+
+      if(modified)
+        child->setForegroundColor(QColor(Qt::red));
+      else
+        child->setForeground(QBrush());
 
       child->setText(2, stringRep(state.indexableTemps[i].members[t], false));
       child->setTag(QVariant::fromValue(VariableTag(VariableCategory::IndexTemporaries, t, i)));
@@ -1394,20 +2128,35 @@ void ShaderViewer::updateDebugging()
 
   for(int i = 0; i < state.outputs.count(); i++)
   {
-    RDTreeWidgetItem *node = ui->variables->topLevelItem(v++);
+    RDTreeWidgetItem *node = ui->registers->topLevelItem(v++);
 
     node->setText(2, stringRep(state.outputs[i], false));
     node->setTag(QVariant::fromValue(VariableTag(VariableCategory::Outputs, i)));
+
+    bool modified = false;
+
+    for(const RegisterRange &mr : state.modified)
+    {
+      if(mr.type == RegisterType::Output && mr.index == i)
+      {
+        modified = true;
+        break;
+      }
+    }
+
+    if(modified)
+      node->setForegroundColor(QColor(Qt::red));
+    else
+      node->setForeground(QBrush());
   }
 
-  ui->variables->endUpdate();
+  ui->registers->endUpdate();
 
   ui->watch->setUpdatesEnabled(false);
 
   for(int i = 0; i < ui->watch->rowCount() - 1; i++)
   {
     QTableWidgetItem *item = ui->watch->item(i, 0);
-    ui->watch->setItem(i, 1, new QTableWidgetItem(tr("register", "watch type")));
 
     QString reg = item->text().trimmed();
 
@@ -1425,6 +2174,10 @@ void ShaderViewer::updateDebugging()
 
     if(match.hasMatch())
     {
+      item = new QTableWidgetItem(tr("register", "watch type"));
+      item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+      ui->watch->setItem(i, 2, item);
+
       QString regtype = match.captured(1);
       QString regidx = match.captured(2);
       QString swizzle = match.captured(3).replace(QLatin1Char('.'), QString());
@@ -1530,26 +2283,108 @@ void ShaderViewer::updateDebugging()
             val += lit(", ");
         }
 
+        item = new QTableWidgetItem(vr.name);
+        item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+        ui->watch->setItem(i, 1, item);
+
         item = new QTableWidgetItem(val);
         item->setData(Qt::UserRole, QVariant::fromValue(VariableTag(varCat, regindex, arrIndex)));
+        item->setFlags(item->flags() & ~Qt::ItemIsEditable);
 
-        ui->watch->setItem(i, 2, item);
+        ui->watch->setItem(i, 3, item);
 
         continue;
       }
     }
+    else
+    {
+      regexp = QRegularExpression(lit("^(.+)(\\.[xyzwrgba]+)?(,[xfiudb])?$"));
 
-    ui->watch->setItem(i, 2, new QTableWidgetItem(tr("Error evaluating expression")));
+      match = regexp.match(reg);
+
+      if(match.hasMatch())
+      {
+        QString variablename = match.captured(1);
+
+        RDTreeWidgetItem *local = findLocal(ui->locals->invisibleRootItem(), match.captured(1));
+
+        if(local)
+        {
+          // TODO apply swizzle/typecast ?
+
+          item = new QTableWidgetItem(local->text(1));
+          item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+          ui->watch->setItem(i, 1, item);
+
+          item = new QTableWidgetItem(local->text(2));
+          item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+          ui->watch->setItem(i, 2, item);
+
+          if(local->childCount() > 0)
+          {
+            // can't display structs
+            item = new QTableWidgetItem(lit("{...}"));
+            item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+            ui->watch->setItem(i, 3, item);
+          }
+          else
+          {
+            item = new QTableWidgetItem(local->text(3));
+            item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+            ui->watch->setItem(i, 3, item);
+          }
+
+          continue;
+        }
+      }
+    }
+
+    item = new QTableWidgetItem();
+    item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+    ui->watch->setItem(i, 2, item);
+
+    item = new QTableWidgetItem(tr("Error evaluating expression"));
+    item->setFlags(item->flags() & ~Qt::ItemIsEditable);
+    ui->watch->setItem(i, 3, item);
   }
 
   ui->watch->setUpdatesEnabled(true);
 
   ui->constants->resizeColumnToContents(0);
-  ui->variables->resizeColumnToContents(0);
+  ui->registers->resizeColumnToContents(0);
   ui->constants->resizeColumnToContents(1);
-  ui->variables->resizeColumnToContents(1);
+  ui->registers->resizeColumnToContents(1);
 
   updateVariableTooltip();
+}
+
+const ShaderVariable *ShaderViewer::GetRegisterVariable(const RegisterRange &r)
+{
+  const ShaderDebugState &state = m_Trace->states[m_CurrentStep];
+
+  const ShaderVariable *var = NULL;
+  switch(r.type)
+  {
+    case RegisterType::Undefined: break;
+    case RegisterType::Input:
+      if(r.index < m_Trace->inputs.size())
+        var = &m_Trace->inputs[r.index];
+      break;
+    case RegisterType::Temporary:
+      if(r.index < state.registers.size())
+        var = &state.registers[r.index];
+      break;
+    case RegisterType::IndexedTemporary:
+      if(r.index < state.indexableTemps.size())
+        var = &state.indexableTemps[r.index];
+      break;
+    case RegisterType::Output:
+      if(r.index < state.outputs.size())
+        var = &state.outputs[r.index];
+      break;
+  }
+
+  return var;
 }
 
 void ShaderViewer::ensureLineScrolled(ScintillaEdit *s, int line)
@@ -1558,7 +2393,7 @@ void ShaderViewer::ensureLineScrolled(ScintillaEdit *s, int line)
   int linesVisible = s->linesOnScreen();
 
   if(s->isVisible() && (line < firstLine || line > (firstLine + linesVisible)))
-    s->scrollCaret();
+    s->setFirstVisibleLine(qMax(0, line - linesVisible / 2));
 }
 
 int ShaderViewer::CurrentStep()
@@ -1582,15 +2417,42 @@ void ShaderViewer::ToggleBreakpoint(int instruction)
 
   if(instruction == -1)
   {
+    ScintillaEdit *cur = currentScintilla();
+
     // search forward for an instruction
-    instLine = m_DisassemblyView->lineFromPosition(m_DisassemblyView->currentPos());
-
-    for(; instLine < m_DisassemblyView->lineCount(); instLine++)
+    if(cur != m_DisassemblyView)
     {
-      instruction = instructionForLine(instLine);
+      int scintillaIndex = m_FileScintillas.indexOf(cur);
 
-      if(instruction >= 0)
-        break;
+      if(scintillaIndex < 0)
+        return;
+
+      // add one to go from scintilla line numbers (0-based) to ours (1-based)
+      sptr_t i = cur->lineFromPosition(cur->currentPos()) + 1;
+
+      QMap<int32_t, size_t> &fileMap = m_Line2Inst[scintillaIndex];
+
+      // find the next line that maps to an instruction
+      for(; i < cur->lineCount(); i++)
+      {
+        if(fileMap.contains(i))
+        {
+          instruction = (int)fileMap[i];
+          break;
+        }
+      }
+    }
+    else
+    {
+      instLine = m_DisassemblyView->lineFromPosition(m_DisassemblyView->currentPos());
+
+      for(; instLine < m_DisassemblyView->lineCount(); instLine++)
+      {
+        instruction = instructionForLine(instLine);
+
+        if(instruction >= 0)
+          break;
+      }
     }
   }
 
@@ -1618,6 +2480,21 @@ void ShaderViewer::ToggleBreakpoint(int instruction)
     {
       m_DisassemblyView->markerDelete(instLine, BREAKPOINT_MARKER);
       m_DisassemblyView->markerDelete(instLine, BREAKPOINT_MARKER + 1);
+
+      const LineColumnInfo &lineInfo = m_Trace->lineInfo[instruction];
+
+      if(lineInfo.fileIndex >= 0 && lineInfo.fileIndex < m_FileScintillas.count())
+      {
+        for(sptr_t line = lineInfo.lineStart; line <= (sptr_t)lineInfo.lineEnd; line++)
+        {
+          ScintillaEdit *s = m_FileScintillas[lineInfo.fileIndex];
+          if(s)
+          {
+            m_FileScintillas[lineInfo.fileIndex]->markerDelete(line - 1, BREAKPOINT_MARKER);
+            m_FileScintillas[lineInfo.fileIndex]->markerDelete(line - 1, BREAKPOINT_MARKER + 1);
+          }
+        }
+      }
     }
     m_Breakpoints.removeOne(instruction);
   }
@@ -1627,6 +2504,21 @@ void ShaderViewer::ToggleBreakpoint(int instruction)
     {
       m_DisassemblyView->markerAdd(instLine, BREAKPOINT_MARKER);
       m_DisassemblyView->markerAdd(instLine, BREAKPOINT_MARKER + 1);
+
+      const LineColumnInfo &lineInfo = m_Trace->lineInfo[instruction];
+
+      if(lineInfo.fileIndex >= 0 && lineInfo.fileIndex < m_FileScintillas.count())
+      {
+        for(sptr_t line = lineInfo.lineStart; line <= (sptr_t)lineInfo.lineEnd; line++)
+        {
+          ScintillaEdit *s = m_FileScintillas[lineInfo.fileIndex];
+          if(s)
+          {
+            m_FileScintillas[lineInfo.fileIndex]->markerAdd(line - 1, BREAKPOINT_MARKER);
+            m_FileScintillas[lineInfo.fileIndex]->markerAdd(line - 1, BREAKPOINT_MARKER + 1);
+          }
+        }
+      }
     }
     m_Breakpoints.push_back(instruction);
   }
@@ -1640,6 +2532,18 @@ void ShaderViewer::ShowErrors(const rdcstr &errors)
     m_Errors->setText(errors.c_str());
     m_Errors->setReadOnly(true);
   }
+}
+
+void ShaderViewer::AddWatch(const rdcstr &variable)
+{
+  int newRow = ui->watch->rowCount() - 1;
+  ui->watch->insertRow(ui->watch->rowCount() - 1);
+
+  ui->watch->setItem(newRow, 0, new QTableWidgetItem(variable));
+
+  ToolWindowManager::raiseToolWindow(ui->watch);
+  ui->watch->activateWindow();
+  ui->watch->QWidget::setFocus();
 }
 
 int ShaderViewer::snippetPos()
@@ -1975,27 +2879,39 @@ void ShaderViewer::disasm_tooltipShow(int x, int y)
   if(!m_Trace || m_CurrentStep < 0 || m_CurrentStep >= m_Trace->states.count())
     return;
 
-  // ignore any messages if we're already outside the viewport
-  if(!m_DisassemblyView->rect().contains(m_DisassemblyView->mapFromGlobal(QCursor::pos())))
+  ScintillaEdit *sc = qobject_cast<ScintillaEdit *>(QObject::sender());
+
+  if(!sc)
     return;
 
-  if(m_DisassemblyView->isVisible())
+  // ignore any messages if we're already outside the viewport
+  if(!sc->rect().contains(sc->mapFromGlobal(QCursor::pos())))
+    return;
+
+  if(sc->isVisible())
   {
-    sptr_t scintillaPos = m_DisassemblyView->positionFromPoint(x, y);
+    sptr_t scintillaPos = sc->positionFromPoint(x, y);
 
-    sptr_t start = m_DisassemblyView->wordStartPosition(scintillaPos, true);
-    sptr_t end = m_DisassemblyView->wordEndPosition(scintillaPos, true);
+    sptr_t start = sc->wordStartPosition(scintillaPos, true);
+    sptr_t end = sc->wordEndPosition(scintillaPos, true);
 
-    QString text = QString::fromUtf8(m_DisassemblyView->textRange(start, end));
+    do
+    {
+      // expand leftwards through simple struct . access
+      // TODO handle arrays
+      while(isspace(sc->charAt(start - 1)))
+        start--;
+
+      if(sc->charAt(start - 1) == '.')
+        start = sc->wordStartPosition(start - 2, true);
+      else
+        break;
+    } while(true);
+
+    QString text = QString::fromUtf8(sc->textRange(start, end)).trimmed();
 
     if(!text.isEmpty())
-    {
-      VariableTag tag;
-      getRegisterFromWord(text, tag.cat, tag.idx, tag.arrayIdx);
-
-      if(tag.cat != VariableCategory::Unknown && tag.idx >= 0 && tag.arrayIdx >= 0)
-        showVariableTooltip(tag.cat, tag.idx, tag.arrayIdx);
-    }
+      showVariableTooltip(text);
   }
 }
 
@@ -2015,8 +2931,26 @@ void ShaderViewer::showVariableTooltip(VariableCategory varCat, int varIdx, int 
   }
 
   m_TooltipVarCat = varCat;
+  m_TooltipName = QString();
   m_TooltipVarIdx = varIdx;
   m_TooltipArrayIdx = arrayIdx;
+  m_TooltipPos = QCursor::pos();
+
+  updateVariableTooltip();
+}
+
+void ShaderViewer::showVariableTooltip(QString name)
+{
+  VariableCategory varCat;
+  int varIdx;
+  int arrayIdx;
+  getRegisterFromWord(name, varCat, varIdx, arrayIdx);
+
+  if(varCat != VariableCategory::Unknown)
+    showVariableTooltip(varCat, varIdx, arrayIdx);
+
+  m_TooltipVarCat = VariableCategory::ByString;
+  m_TooltipName = name;
   m_TooltipPos = QCursor::pos();
 
   updateVariableTooltip();
@@ -2035,6 +2969,7 @@ const rdcarray<ShaderVariable> *ShaderViewer::GetVariableList(VariableCategory v
 
   switch(varCat)
   {
+    case VariableCategory::ByString:
     case VariableCategory::Unknown: vars = NULL; break;
     case VariableCategory::Temporaries: vars = &state.registers; break;
     case VariableCategory::IndexTemporaries:
@@ -2084,6 +3019,101 @@ void ShaderViewer::getRegisterFromWord(const QString &text, VariableCategory &va
 
 void ShaderViewer::updateVariableTooltip()
 {
+  if(!m_Trace || m_CurrentStep < 0 || m_CurrentStep >= m_Trace->states.count())
+    return;
+
+  const ShaderDebugState &state = m_Trace->states[m_CurrentStep];
+
+  if(m_TooltipVarCat == VariableCategory::ByString)
+  {
+    if(m_TooltipName.isEmpty())
+      return;
+
+    // first check the constants
+    QString bracketedName = lit("(") + m_TooltipName;
+    QString commaName = lit(", ") + m_TooltipName;
+    QList<ShaderVariable> constants;
+    for(ShaderVariable &block : m_Trace->constantBlocks)
+    {
+      for(ShaderVariable &c : block.members)
+      {
+        QString cname = c.name;
+
+        // this is a hack for now :(.
+        if(cname.startsWith(m_TooltipName) || cname.contains(bracketedName) ||
+           cname.contains(commaName))
+          constants.push_back(c);
+      }
+    }
+
+    if(constants.count() == 1)
+    {
+      QToolTip::showText(
+          m_TooltipPos,
+          QFormatStr("<pre>%1: %2</pre>").arg(constants[0].name).arg(RowString(constants[0], 0)));
+      return;
+    }
+    else if(constants.count() > 1)
+    {
+      QString tooltip =
+          QFormatStr("<pre>%1: %2\n").arg(m_TooltipName).arg(RowString(constants[0], 0));
+      QString spacing = QString(m_TooltipName.length(), QLatin1Char(' '));
+      for(int i = 1; i < constants.count(); i++)
+        tooltip += QFormatStr("%1  %2\n").arg(spacing).arg(RowString(constants[i], 0));
+      tooltip += lit("</pre>");
+      QToolTip::showText(m_TooltipPos, tooltip);
+      return;
+    }
+
+    // now check locals (if there are any)
+    for(const LocalVariableMapping &l : state.locals)
+    {
+      if(QString(l.localName) == m_TooltipName)
+      {
+        QString tooltip = QFormatStr("<pre>%1: ").arg(m_TooltipName);
+
+        for(uint32_t i = 0; i < l.regCount; i++)
+        {
+          const RegisterRange &r = l.registers[i];
+
+          if(i > 0)
+            tooltip += lit(", ");
+
+          if(r.type == RegisterType::Undefined)
+          {
+            tooltip += lit("?");
+            continue;
+          }
+
+          const ShaderVariable *var = GetRegisterVariable(r);
+
+          if(var)
+          {
+            if(l.type == VarType::UInt)
+              tooltip += Formatter::Format(var->value.uv[r.component]);
+            else if(l.type == VarType::Int)
+              tooltip += Formatter::Format(var->value.iv[r.component]);
+            else if(l.type == VarType::Float)
+              tooltip += Formatter::Format(var->value.fv[r.component]);
+            else if(l.type == VarType::Double)
+              tooltip += Formatter::Format(var->value.dv[r.component]);
+          }
+          else
+          {
+            tooltip += lit("&lt;error&gt;");
+          }
+        }
+
+        tooltip += lit("</pre>");
+
+        QToolTip::showText(m_TooltipPos, tooltip);
+        return;
+      }
+    }
+
+    return;
+  }
+
   if(m_TooltipVarIdx < 0)
     return;
 
@@ -2125,6 +3155,12 @@ void ShaderViewer::hideVariableTooltip()
 {
   QToolTip::hideText();
   m_TooltipVarIdx = -1;
+  m_TooltipName = QString();
+}
+
+bool ShaderViewer::isSourceDebugging()
+{
+  return !m_DisassemblyFrame->isVisible();
 }
 
 void ShaderViewer::on_findReplace_clicked()
@@ -2176,6 +3212,16 @@ void ShaderViewer::on_floatView_clicked()
 {
   ui->floatView->setChecked(true);
   ui->intView->setChecked(false);
+
+  updateDebugging();
+}
+
+void ShaderViewer::on_debugToggle_clicked()
+{
+  if(isSourceDebugging())
+    gotoDisassemblyDebugging();
+  else
+    gotoSourceDebugging();
 
   updateDebugging();
 }

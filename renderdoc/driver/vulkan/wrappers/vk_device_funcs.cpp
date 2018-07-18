@@ -27,6 +27,7 @@
 #include "../vk_rendertext.h"
 #include "../vk_shader_cache.h"
 #include "api/replay/version.h"
+#include "strings/string_utils.h"
 
 // intercept and overwrite the application info if present. We must use the same appinfo on
 // capture and replay, and the safer default is not to replay as if we were the original app but
@@ -455,9 +456,15 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
 
   modifiedCreateInfo.ppEnabledExtensionNames = addedExts;
 
+  bool brokenGetDeviceProcAddr = false;
+
   // override applicationInfo with RenderDoc's, but preserve apiVersion
   if(modifiedCreateInfo.pApplicationInfo)
   {
+    if(modifiedCreateInfo.pApplicationInfo->pEngineName &&
+       strlower(modifiedCreateInfo.pApplicationInfo->pEngineName) == "idtech")
+      brokenGetDeviceProcAddr = true;
+
     if(modifiedCreateInfo.pApplicationInfo->apiVersion >= VK_API_VERSION_1_0)
       renderdocAppInfo.apiVersion = modifiedCreateInfo.pApplicationInfo->apiVersion;
 
@@ -481,6 +488,8 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
   VkResourceRecord *record = GetResourceManager()->AddResourceRecord(m_Instance);
 
   record->instDevInfo = new InstanceDeviceInfo();
+
+  record->instDevInfo->brokenGetDeviceProcAddr = brokenGetDeviceProcAddr;
 
   record->instDevInfo->vulkanVersion = VK_API_VERSION_1_0;
 
@@ -554,6 +563,9 @@ void WrappedVulkan::Shutdown()
   for(size_t i = 0; i < m_InternalCmds.freecmds.size(); i++)
     GetResourceManager()->ReleaseWrappedResource(m_InternalCmds.freecmds[i]);
 
+  if(m_IndirectCommandBuffer != VK_NULL_HANDLE)
+    GetResourceManager()->ReleaseWrappedResource(m_IndirectCommandBuffer);
+
   // destroy the pool
   if(m_Device != VK_NULL_HANDLE && m_InternalCmds.cmdpool != VK_NULL_HANDLE)
   {
@@ -589,6 +601,8 @@ void WrappedVulkan::Shutdown()
     GetResourceManager()->ReleaseWrappedResource(m_ReplayPhysicalDevices[i]);
 
   m_Replay.DestroyResources();
+
+  m_IndirectBuffer.Destroy();
 
   // destroy debug manager and any objects it created
   SAFE_DELETE(m_DebugManager);
@@ -660,9 +674,9 @@ bool WrappedVulkan::Serialise_vkEnumeratePhysicalDevices(SerialiserType &ser, Vk
   uint32_t memIdxMap[VK_MAX_MEMORY_TYPES] = {0};
   // not used at the moment but useful for reference and might be used
   // in the future
-  VkPhysicalDeviceProperties physProps;
-  VkPhysicalDeviceMemoryProperties memProps;
-  VkPhysicalDeviceFeatures physFeatures;
+  VkPhysicalDeviceProperties physProps = {};
+  VkPhysicalDeviceMemoryProperties memProps = {};
+  VkPhysicalDeviceFeatures physFeatures = {};
   uint32_t queueCount = 0;
   VkQueueFamilyProperties queueProps[16] = {};
 
@@ -1893,6 +1907,9 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
 
       record->instDevInfo = new InstanceDeviceInfo();
 
+      record->instDevInfo->brokenGetDeviceProcAddr =
+          GetRecord(m_Instance)->instDevInfo->brokenGetDeviceProcAddr;
+
       record->instDevInfo->vulkanVersion = GetRecord(m_Instance)->instDevInfo->vulkanVersion;
 
 #undef CheckExt
@@ -2043,6 +2060,9 @@ void WrappedVulkan::vkDestroyDevice(VkDevice device, const VkAllocationCallbacks
   // data) here.
   for(size_t i = 0; i < m_InternalCmds.freecmds.size(); i++)
     GetResourceManager()->ReleaseWrappedResource(m_InternalCmds.freecmds[i]);
+
+  if(m_IndirectCommandBuffer != VK_NULL_HANDLE)
+    GetResourceManager()->ReleaseWrappedResource(m_IndirectCommandBuffer);
 
   // destroy our command pool
   if(m_InternalCmds.cmdpool != VK_NULL_HANDLE)

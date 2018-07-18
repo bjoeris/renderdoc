@@ -125,7 +125,7 @@
     <bool>true</bool>
    </property>
   </widget>
-  <widget class="RDTreeWidget" name="variables">
+  <widget class="RDTreeWidget" name="registers">
    <property name="geometry">
     <rect>
      <x>310</x>
@@ -136,15 +136,6 @@
    </property>
    <property name="frameShape">
     <enum>QFrame::NoFrame</enum>
-   </property>
-   <property name="indentation">
-    <number>0</number>
-   </property>
-   <property name="rootIsDecorated">
-    <bool>false</bool>
-   </property>
-   <property name="itemsExpandable">
-    <bool>false</bool>
    </property>
    <property name="allColumnsShowFocus">
     <bool>true</bool>
@@ -214,7 +205,7 @@
      </widget>
     </item>
     <item>
-     <widget class="Line" name="editSep">
+     <widget class="Line" name="line">
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
@@ -264,7 +255,7 @@
      </widget>
     </item>
     <item>
-     <widget class="Line" name="debugSep">
+     <widget class="Line" name="editSep">
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
@@ -331,6 +322,13 @@
      </widget>
     </item>
     <item>
+     <widget class="Line" name="debugSep">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
      <widget class="QToolButton" name="run">
       <property name="toolTip">
        <string>Run forwards (F5)</string>
@@ -347,13 +345,6 @@
       </property>
       <property name="autoRaise">
        <bool>true</bool>
-      </property>
-     </widget>
-    </item>
-    <item>
-     <widget class="Line" name="regFormatSep">
-      <property name="orientation">
-       <enum>Qt::Vertical</enum>
       </property>
      </widget>
     </item>
@@ -436,7 +427,7 @@
      </widget>
     </item>
     <item>
-     <widget class="Line" name="line">
+     <widget class="Line" name="regFormatSep">
       <property name="orientation">
        <enum>Qt::Vertical</enum>
       </property>
@@ -475,6 +466,32 @@
      </widget>
     </item>
     <item>
+     <widget class="Line" name="debugToggleSep">
+      <property name="orientation">
+       <enum>Qt::Vertical</enum>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QToolButton" name="debugToggle">
+      <property name="minimumSize">
+       <size>
+        <width>23</width>
+        <height>22</height>
+       </size>
+      </property>
+      <property name="toolTip">
+       <string>Change the debugging view</string>
+      </property>
+      <property name="text">
+       <string notr="true">Debug Toggle</string>
+      </property>
+      <property name="autoRaise">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item>
      <spacer name="horizontalSpacer">
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
@@ -492,9 +509,9 @@
   <widget class="RDTableWidget" name="watch">
    <property name="geometry">
     <rect>
-     <x>390</x>
-     <y>90</y>
-     <width>151</width>
+     <x>520</x>
+     <y>60</y>
+     <width>421</width>
      <height>131</height>
     </rect>
    </property>
@@ -529,6 +546,11 @@
    </column>
    <column>
     <property name="text">
+     <string>Register(s)</string>
+    </property>
+   </column>
+   <column>
+    <property name="text">
      <string>Type</string>
     </property>
    </column>
@@ -537,6 +559,38 @@
      <string>Value</string>
     </property>
    </column>
+  </widget>
+  <widget class="QListWidget" name="callstack">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>80</y>
+     <width>256</width>
+     <height>192</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::NoFrame</enum>
+   </property>
+   <property name="selectionMode">
+    <enum>QAbstractItemView::NoSelection</enum>
+   </property>
+  </widget>
+  <widget class="RDTreeWidget" name="locals">
+   <property name="geometry">
+    <rect>
+     <x>290</x>
+     <y>90</y>
+     <width>256</width>
+     <height>192</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::NoFrame</enum>
+   </property>
+   <property name="allColumnsShowFocus">
+    <bool>true</bool>
+   </property>
   </widget>
  </widget>
  <customwidgets>

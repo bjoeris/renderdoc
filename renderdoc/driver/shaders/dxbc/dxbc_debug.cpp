@@ -89,6 +89,9 @@ VarType State::OperationType(const OpcodeType &op) const
     case OPCODE_BUFINFO:
     case OPCODE_SAMPLE_INFO:
     case OPCODE_SAMPLE_POS:
+    case OPCODE_EVAL_CENTROID:
+    case OPCODE_EVAL_SAMPLE_INDEX:
+    case OPCODE_EVAL_SNAPPED:
     case OPCODE_LOD:
     case OPCODE_LD:
     case OPCODE_LD_MS: return VarType::Float;
@@ -587,7 +590,7 @@ bool State::Finished() const
   return dxbc && (done || nextInstruction >= (int)dxbc->GetNumInstructions());
 }
 
-void State::AssignValue(ShaderVariable &dst, uint32_t dstIndex, const ShaderVariable &src,
+bool State::AssignValue(ShaderVariable &dst, uint32_t dstIndex, const ShaderVariable &src,
                         uint32_t srcIndex)
 {
   if(src.type == VarType::Float)
@@ -603,7 +606,11 @@ void State::AssignValue(ShaderVariable &dst, uint32_t dstIndex, const ShaderVari
       flags |= ShaderEvents::GeneratedNanOrInf;
   }
 
+  bool ret = (dst.value.uv[dstIndex] != src.value.uv[srcIndex]);
+
   dst.value.uv[dstIndex] = src.value.uv[srcIndex];
+
+  return ret;
 }
 
 void State::SetDst(const ASMOperand &dstoper, const ASMOperation &op, const ShaderVariable &val)
@@ -629,10 +636,14 @@ void State::SetDst(const ASMOperand &dstoper, const ASMOperation &op, const Shad
     }
   }
 
+  RegisterRange range;
+  range.index = uint16_t(indices[0]);
+
   switch(dstoper.type)
   {
     case TYPE_TEMP:
     {
+      range.type = RegisterType::Temporary;
       RDCASSERT(indices[0] < (uint32_t)registers.size());
       if(indices[0] < (uint32_t)registers.size())
         v = &registers[(size_t)indices[0]];
@@ -640,6 +651,7 @@ void State::SetDst(const ASMOperand &dstoper, const ASMOperation &op, const Shad
     }
     case TYPE_INDEXABLE_TEMP:
     {
+      range.type = RegisterType::IndexedTemporary;
       RDCASSERT(dstoper.indices.size() == 2);
 
       if(dstoper.indices.size() == 2)
@@ -658,6 +670,7 @@ void State::SetDst(const ASMOperand &dstoper, const ASMOperation &op, const Shad
     }
     case TYPE_OUTPUT:
     {
+      range.type = RegisterType::Output;
       RDCASSERT(indices[0] < (uint32_t)outputs.size());
       if(indices[0] < (uint32_t)outputs.size())
         v = &outputs[(size_t)indices[0]];
@@ -676,6 +689,56 @@ void State::SetDst(const ASMOperand &dstoper, const ASMOperation &op, const Shad
     {
       // nothing to do!
       return;
+    }
+    case TYPE_OUTPUT_DEPTH:
+    case TYPE_OUTPUT_DEPTH_LESS_EQUAL:
+    case TYPE_OUTPUT_DEPTH_GREATER_EQUAL:
+    case TYPE_OUTPUT_STENCIL_REF:
+    case TYPE_OUTPUT_COVERAGE_MASK:
+    {
+      // handle all semantic outputs together
+      ShaderBuiltin builtin = ShaderBuiltin::Count;
+      switch(dstoper.type)
+      {
+        case TYPE_OUTPUT_DEPTH: builtin = ShaderBuiltin::DepthOutput; break;
+        case TYPE_OUTPUT_DEPTH_LESS_EQUAL: builtin = ShaderBuiltin::DepthOutputLessEqual; break;
+        case TYPE_OUTPUT_DEPTH_GREATER_EQUAL:
+          builtin = ShaderBuiltin::DepthOutputGreaterEqual;
+          break;
+        case TYPE_OUTPUT_STENCIL_REF: builtin = ShaderBuiltin::StencilReference; break;
+        case TYPE_OUTPUT_COVERAGE_MASK: builtin = ShaderBuiltin::MSAACoverage; break;
+        default: RDCERR("Invalid dest operand!"); break;
+      }
+
+      for(size_t i = 0; i < dxbc->m_OutputSig.size(); i++)
+      {
+        if(dxbc->m_OutputSig[i].systemValue == builtin)
+        {
+          v = &outputs[i];
+          break;
+        }
+      }
+
+      if(!v)
+      {
+        RDCERR("Couldn't find type %d by semantic matching, falling back to string match",
+               dstoper.type);
+
+        std::string name = dstoper.toString(dxbc, ToString::ShowSwizzle);
+        for(size_t i = 0; i < outputs.size(); i++)
+        {
+          if(outputs[i].name == name)
+          {
+            v = &outputs[i];
+            break;
+          }
+        }
+
+        if(v)
+          break;
+      }
+
+      break;
     }
     default:
     {
@@ -722,7 +785,13 @@ void State::SetDst(const ASMOperand &dstoper, const ASMOperation &op, const Shad
     {
       RDCASSERT(dstoper.comps[0] != 0xff);
 
-      AssignValue(*v, dstoper.comps[0], right, 0);
+      bool changed = AssignValue(*v, dstoper.comps[0], right, 0);
+
+      if(changed && range.type != RegisterType::Undefined)
+      {
+        range.component = dstoper.comps[0];
+        modified.push_back(range);
+      }
     }
     else
     {
@@ -733,13 +802,27 @@ void State::SetDst(const ASMOperand &dstoper, const ASMOperation &op, const Shad
         if(dstoper.comps[i] != 0xff)
         {
           RDCASSERT(dstoper.comps[i] < v->columns);
-          AssignValue(*v, dstoper.comps[i], right, dstoper.comps[i]);
+          bool changed = AssignValue(*v, dstoper.comps[i], right, dstoper.comps[i]);
           compsWritten++;
+
+          if(changed && range.type != RegisterType::Undefined)
+          {
+            range.component = dstoper.comps[i];
+            modified.push_back(range);
+          }
         }
       }
 
       if(compsWritten == 0)
-        AssignValue(*v, 0, right, 0);
+      {
+        bool changed = AssignValue(*v, 0, right, 0);
+
+        if(changed && range.type != RegisterType::Undefined)
+        {
+          range.component = 0;
+          modified.push_back(range);
+        }
+      }
     }
   }
 }
@@ -1116,6 +1199,8 @@ static uint32_t PopCount(uint32_t x)
 State State::GetNext(GlobalState &global, State quad[4]) const
 {
   State s = *this;
+
+  s.modified.clear();
 
   if(s.nextInstruction >= s.dxbc->GetNumInstructions())
     return s;
@@ -2663,6 +2748,79 @@ State State::GetNext(GlobalState &global, State quad[4]) const
       break;
     }
 
+    case OPCODE_EVAL_CENTROID:
+    case OPCODE_EVAL_SAMPLE_INDEX:
+    case OPCODE_EVAL_SNAPPED:
+    {
+      // opcodes only seem to be supported for regular inputs
+      RDCASSERT(op.operands[1].type == TYPE_INPUT);
+
+      GlobalState::SampleEvalCacheKey key;
+
+      key.quadIndex = quadIndex;
+
+      // if this is TYPE_INPUT we can look up the index directly
+      key.inputRegisterIndex = (int32_t)op.operands[1].indices[0].index;
+
+      for(int c = 0; c < 4; c++)
+      {
+        if(op.operands[0].comps[c] == 0xff)
+          break;
+
+        key.numComponents = c + 1;
+      }
+
+      key.firstComponent = op.operands[1].comps[op.operands[0].comps[0]];
+
+      if(op.operation == OPCODE_EVAL_SAMPLE_INDEX)
+      {
+        key.sample = srcOpers[1].value.i.x;
+      }
+      else if(op.operation == OPCODE_EVAL_SNAPPED)
+      {
+        key.offsetx = RDCCLAMP(srcOpers[1].value.i.x, -8, 7);
+        key.offsety = RDCCLAMP(srcOpers[1].value.i.y, -8, 7);
+      }
+      else if(op.operation == OPCODE_EVAL_CENTROID)
+      {
+        // OPCODE_EVAL_CENTROID is the default, -1 sample and 0,0 offset
+      }
+
+      // look up this combination in the cache, if we get a hit then return that value.
+      auto it = global.sampleEvalCache.find(key);
+      if(it != global.sampleEvalCache.end())
+      {
+        // perform source operand swizzling
+        ShaderVariable var = it->second;
+
+        for(int i = 0; i < 4; i++)
+          if(op.operands[1].comps[i] < 4)
+            var.value.uv[i] = it->second.value.uv[op.operands[1].comps[i]];
+
+        s.SetDst(op.operands[0], op, var);
+      }
+      else
+      {
+        // if we got here, either the cache is empty (we're not rendering MSAA at all) so we should
+        // just return the interpolant, or something went wrong and the item we want isn't cached so
+        // the best we can do is return the interpolant.
+
+        if(!global.sampleEvalCache.empty())
+        {
+          device->AddDebugMessage(
+              MessageCategory::Shaders, MessageSeverity::Medium, MessageSource::RuntimeWarning,
+              StringFormat::Fmt(
+                  "Shader debugging %d: %s\n"
+                  "No sample evaluate found in cache. Possible out-of-bounds sample index",
+                  s.nextInstruction - 1, op.str.c_str()));
+        }
+
+        s.SetDst(op.operands[0], op, srcOpers[0]);
+      }
+
+      break;
+    }
+
     case OPCODE_SAMPLE_INFO:
     case OPCODE_SAMPLE_POS:
     {
@@ -2675,32 +2833,41 @@ State State::GetNext(GlobalState &global, State quad[4]) const
 
       if(op.operands[1].type == TYPE_RASTERIZER)
       {
-        ID3D11RenderTargetView *rtv = NULL;
+        ID3D11RenderTargetView *rtv[8] = {};
         ID3D11DepthStencilView *dsv = NULL;
 
-        context->OMGetRenderTargets(1, &rtv, &dsv);
+        context->OMGetRenderTargets(8, rtv, &dsv);
 
         // try depth first - both should match sample count though to be valid
         if(dsv)
         {
           dsv->GetResource(&res);
         }
-        else if(rtv)
-        {
-          rtv->GetResource(&res);
-        }
         else
         {
-          RDCWARN("No targets bound for sampleinfo on rasterizer");
+          for(size_t i = 0; i < ARRAY_COUNT(rtv); i++)
+          {
+            if(rtv[i])
+            {
+              rtv[i]->GetResource(&res);
+              break;
+            }
+          }
+        }
+
+        if(!res)
+        {
+          RDCWARN("No targets bound for output when calling sampleinfo on rasterizer");
 
           device->AddDebugMessage(
               MessageCategory::Shaders, MessageSeverity::Medium, MessageSource::RuntimeWarning,
-              StringFormat::Fmt(
-                  "Shader debugging %d: %s\nNo targets bound for sampleinfo on rasterizer",
-                  s.nextInstruction - 1, op.str.c_str()));
+              StringFormat::Fmt("Shader debugging %d: %s\n"
+                                "No targets bound for output when calling sampleinfo on rasterizer",
+                                s.nextInstruction - 1, op.str.c_str()));
         }
 
-        SAFE_RELEASE(rtv);
+        for(size_t i = 0; i < ARRAY_COUNT(rtv); i++)
+          SAFE_RELEASE(rtv[i]);
         SAFE_RELEASE(dsv);
       }
       else if(op.operands[1].type == TYPE_RESOURCE && op.operands[1].indices.size() == 1 &&
@@ -2753,21 +2920,29 @@ State State::GetNext(GlobalState &global, State quad[4]) const
           D3D11_TEXTURE2D_DESC desc;
           ((ID3D11Texture2D *)res)->GetDesc(&desc);
 
-          // only returns a value for resources that are actually multisampled
-          if(desc.SampleDesc.Count > 1)
-            result.value.u.x = desc.SampleDesc.Count;
+          // returns 1 for non-multisampled resources
+          result.value.u.x = RDCMAX(1U, desc.SampleDesc.Count);
+        }
+        else
+        {
+          if(op.operands[1].type == TYPE_RASTERIZER)
+          {
+            // special behaviour for non-2D (i.e. by definition non-multisampled) textures when
+            // querying the rasterizer, just return 1.
+            result.value.u.x = 1;
+          }
+          else
+          {
+            device->AddDebugMessage(
+                MessageCategory::Shaders, MessageSeverity::Medium, MessageSource::RuntimeWarning,
+                StringFormat::Fmt("Shader debugging %d: %s\nResource specified is not a 2D texture",
+                                  s.nextInstruction - 1, op.str.c_str()));
+
+            result.value.u.x = 0;
+          }
         }
 
         SAFE_RELEASE(res);
-      }
-      else
-      {
-        RDCWARN("Non multisampled resource provided to sample_info");
-
-        device->AddDebugMessage(
-            MessageCategory::Shaders, MessageSeverity::Medium, MessageSource::RuntimeWarning,
-            StringFormat::Fmt("Shader debugging %d: %s\nSRV is NULL being queried by sampleinfo",
-                              s.nextInstruction - 1, op.str.c_str()));
       }
 
       // "If there is no resource bound to the specified slot, 0 is returned."

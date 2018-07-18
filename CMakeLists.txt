@@ -143,13 +143,14 @@ set(RENDERDOC_VERSION "${RENDERDOC_VERSION_MAJOR}.${RENDERDOC_VERSION_MINOR}")
 message(STATUS "Building RenderDoc version ${RENDERDOC_VERSION}")
 
 if(APPLE)
-    message(STATUS "Disabling Vulkan driver on apple")
+    message(STATUS "Disabling Vulkan and GLES drivers on apple")
     set(ENABLE_VULKAN OFF CACHE BOOL "" FORCE)
+    set(ENABLE_GLES OFF CACHE BOOL "" FORCE)
 endif()
 
 if(ANDROID)
     if(ENABLE_GL)
-        message(STATUS "Disabling GL driver on android and enabling GLES")
+        message(STATUS "Disabling GL driver on android")
     endif()
     set(ENABLE_GL OFF CACHE BOOL "" FORCE)
     set(ENABLE_GLES ON CACHE BOOL "" FORCE)
@@ -274,3 +275,29 @@ endif()
 # install documentation files
 install (FILES util/LINUX_DIST_README DESTINATION share/doc/renderdoc RENAME README)
 install (FILES LICENSE.md DESTINATION share/doc/renderdoc)
+
+message(STATUS "Enabled APIs:")
+if(ENABLE_GL)
+    message(STATUS "  - OpenGL")
+endif()
+
+if(ENABLE_GLES)
+    message(STATUS "  - OpenGL ES (EGL)")
+endif()
+
+if(ENABLE_VULKAN)
+    message(STATUS "  - Vulkan")
+endif()
+
+if(UNIX AND NOT ANDROID AND NOT APPLE)
+    message(STATUS "Enabled Window System Support:")
+
+    if(ENABLE_XLIB)
+        message(STATUS "  - XLib")
+    endif()
+
+    if(ENABLE_XCB)
+        message(STATUS "  - XCB")
+    endif()
+endif()
+

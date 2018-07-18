@@ -95,6 +95,39 @@ DECLARE_REFLECTION_ENUM(SectionType);
 
 // replay_shader.h
 
+DOCUMENT(R"(Represents the type of register a local variable maps to.
+
+.. data:: Undefined
+
+  No defined register.
+
+.. data:: Input
+
+  An input register.
+
+.. data:: Temporary
+
+  A normal temporary register.
+
+.. data:: IndexedTemporary
+
+  An indexed temporary register.
+
+.. data:: Output
+
+  An output register.
+)");
+enum class RegisterType : uint32_t
+{
+  Undefined,
+  Input,
+  Temporary,
+  IndexedTemporary,
+  Output,
+};
+
+DECLARE_REFLECTION_ENUM(RegisterType);
+
 DOCUMENT(R"(Represents the base type of a shader variable in debugging or constant blocks.
 
 .. data:: Float
@@ -716,6 +749,10 @@ to apply to multiple related things - see :data:`ClipDistance`, :data:`CullDista
 
   For indirect or multi-draw commands, the index of this draw call within the overall draw command.
 
+.. data:: StencilReference
+
+  The stencil reference to be used for stenciling operations on this fragment.
+
 )");
 enum class ShaderBuiltin : uint32_t
 {
@@ -752,6 +789,7 @@ enum class ShaderBuiltin : uint32_t
   BaseVertex,
   BaseInstance,
   DrawIndex,
+  StencilReference,
   Count,
 };
 

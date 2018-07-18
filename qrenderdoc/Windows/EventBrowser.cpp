@@ -252,8 +252,6 @@ void EventBrowser::OnCaptureLoaded()
   ui->exportDraws->setEnabled(true);
   ui->stepPrev->setEnabled(true);
   ui->stepNext->setEnabled(true);
-
-  m_Ctx.SetEventID({this}, lastEIDDraw.first, lastEIDDraw.first);
 }
 
 void EventBrowser::OnCaptureClosed()
@@ -1279,7 +1277,7 @@ void EventBrowser::Find(bool forward)
   if(ui->findEvent->text().isEmpty())
     return;
 
-  uint32_t curEID = m_Ctx.CurEvent();
+  uint32_t curEID = m_Ctx.CurSelectedEvent();
 
   RDTreeWidgetItem *node = ui->events->selectedItem();
   if(node)

@@ -26,6 +26,7 @@
 #pragma once
 
 #include "common/common.h"
+#include "core/core.h"
 #include "maths/vec.h"
 
 // typed enum so that templates will pick up specialisations
@@ -35,6 +36,34 @@
 #include "gl_enum.h"
 
 DECLARE_REFLECTION_ENUM(RDCGLenum);
+
+#if ENABLED(RDOC_WIN32)
+
+// Windows always supports both GL and GLES at compile time - because the driver may support
+// WGL_EXT_create_context_es2_profile.
+//
+// We try to replay using EGL first on all platforms, on windows this means having a libEGL.dll
+// available from an OpenGL ES emulator. This is treated as a plugin but it doesn't ship with
+// renderdoc, so if you want to replay GLES captures using such an emulator you need to drop the
+// appropriate libEGL.dll into plugins/gles/ in your RenderDoc folder.
+#define RENDERDOC_SUPPORT_GL
+#define RENDERDOC_SUPPORT_GLES
+
+// checks a runtime opt-out option to disallow hooking EGL on windows. This means that the
+// underlying GL or D3D calls will be captured instead.
+bool ShouldHookEGL();
+
+#else
+
+// other cases are defined by build-time configuration
+
+// for consistency, we always enable this on other platforms - if GLES support is disabled at
+// compile time then it does nothing.
+#define RENDERDOC_HOOK_EGL OPTION_ON
+
+#endif
+
+#define GL_APICALL
 
 // official headers
 #include "official/glcorearb.h"
@@ -48,6 +77,16 @@ DECLARE_REFLECTION_ENUM(RDCGLenum);
 #if ENABLED(RDOC_WIN32)
 #include "official/wglext.h"
 
+#define EGLAPI
+
+// force include the elgplatform.h, as we want to use
+// our own because the system one could be a bit older and
+// propably not suitable for the given egl.h
+#include "official/eglplatform.h"
+
+#include "official/egl.h"
+#include "official/eglext.h"
+
 struct GLWindowingData
 {
   GLWindowingData()
@@ -57,22 +96,38 @@ struct GLWindowingData
     wnd = NULL;
   }
 
-  void SetCtx(void *c) { ctx = (HGLRC)c; }
-  HDC DC;
-  HGLRC ctx;
+  union
+  {
+    HDC DC;
+    EGLDisplay egl_dpy;
+  };
+  union
+  {
+    HGLRC ctx;
+    EGLContext egl_ctx;
+  };
   HWND wnd;
+  EGLSurface egl_wnd;
+
+  EGLConfig egl_cfg;
 };
 
 #elif ENABLED(RDOC_LINUX)
 
-#ifdef RENDERDOC_SUPPORT_GL
+#if defined(RENDERDOC_SUPPORT_GL)
 // cheeky way to prevent GL/gl.h from being included, as we want to use
 // glcorearb.h from above
 #define __gl_h_
+
+// this prevents glx.h from including its own glxext.h
+#define GLX_GLXEXT_LEGACY
+
 #include <GL/glx.h>
 #include "official/glxext.h"
+
 #endif
-#if RENDERDOC_SUPPORT_GLES
+
+#if defined(RENDERDOC_SUPPORT_GLES)
 
 // force include the elgplatform.h, as we want to use
 // our own because the system one could be a bit older and
@@ -92,26 +147,28 @@ struct GLWindowingData
     wnd = 0;
   }
 
-  void SetCtx(void *c) { ctx = (GLContextPtr)c; }
-
 #if defined(RENDERDOC_SUPPORT_GL)
   typedef Display *GLDisplayPtr;
   typedef GLXContext GLContextPtr;
   typedef GLXDrawable GLWindowPtr;
+  typedef XVisualInfo *GLConfigPtr;
 #else
   typedef void *GLDisplayPtr;
   typedef void *GLContextPtr;
   typedef void *GLWindowPtr;
+  typedef void *GLConfigPtr;
 #endif
 
 #if defined(RENDERDOC_SUPPORT_GLES)
   typedef EGLDisplay GLESDisplayPtr;
   typedef EGLContext GLESContextPtr;
   typedef EGLSurface GLESWindowPtr;
+  typedef EGLConfig GLESConfigPtr;
 #else
   typedef void *GLESDisplayPtr;
   typedef void *GLESContextPtr;
   typedef void *GLESWindowPtr;
+  typedef void *GLESConfigPtr;
 #endif
 
   union
@@ -126,9 +183,11 @@ struct GLWindowingData
   };
   union
   {
-    GLWindowPtr wnd;
-    GLESWindowPtr egl_wnd;
+    GLConfigPtr cfg;
+    GLESConfigPtr egl_cfg;
   };
+  GLWindowPtr wnd;
+  GLESWindowPtr egl_wnd;
 };
 
 #elif ENABLED(RDOC_APPLE)
@@ -141,7 +200,6 @@ struct GLWindowingData
     wnd = 0;
   }
 
-  void SetCtx(void *c) { ctx = (void *)c; }
   void *ctx;
   void *wnd;
 };
@@ -160,24 +218,22 @@ struct GLWindowingData
 {
   GLWindowingData()
   {
-    egl_ctx = 0;
-    egl_dpy = 0;
-    egl_wnd = 0;
+    egl_ctx = NULL;
+    egl_dpy = NULL;
+    wnd = NULL;
+    egl_wnd = NULL;
   }
 
-  void SetCtx(void *c) { egl_ctx = (void *)c; }
   union
   {
     // currently required to allow compatiblity with the driver parts
     void *ctx;
     EGLContext egl_ctx;
   };
+  EGLSurface egl_wnd;
+  void *wnd;
   EGLDisplay egl_dpy;
-  union
-  {
-    EGLSurface egl_wnd;
-    void *wnd;
-  };
+  EGLConfig egl_cfg;
 };
 
 #else
@@ -189,10 +245,10 @@ struct GLWindowingData
 struct GLPlatform
 {
   // simple wrapper for OS functions to make/delete a context
-  virtual GLWindowingData MakeContext(GLWindowingData share) = 0;
-  virtual void DeleteContext(GLWindowingData context) = 0;
+  virtual GLWindowingData CloneTemporaryContext(GLWindowingData share) = 0;
+  virtual void DeleteClonedContext(GLWindowingData context) = 0;
   virtual void DeleteReplayContext(GLWindowingData context) = 0;
-  virtual void MakeContextCurrent(GLWindowingData data) = 0;
+  virtual bool MakeContextCurrent(GLWindowingData data) = 0;
   virtual void SwapBuffers(GLWindowingData context) = 0;
   virtual void GetOutputWindowDimensions(GLWindowingData context, int32_t &w, int32_t &h) = 0;
   virtual bool IsOutputWindowVisible(GLWindowingData context) = 0;
@@ -200,8 +256,55 @@ struct GLPlatform
                                            GLWindowingData share_context) = 0;
 
   // for 'backwards compatible' overlay rendering
-  virtual bool DrawQuads(float width, float height, const std::vector<Vec4f> &vertices) = 0;
+  virtual void DrawQuads(float width, float height, const std::vector<Vec4f> &vertices) = 0;
+
+  // for initialisation at replay time
+  virtual bool CanCreateGLESContext() = 0;
+  virtual bool PopulateForReplay() = 0;
+  virtual ReplayStatus InitialiseAPI(GLWindowingData &replayContext, RDCDriver api) = 0;
+  virtual void *GetReplayFunction(const char *funcname) = 0;
 };
+
+struct GLVersion
+{
+  int major;
+  int minor;
+};
+
+std::vector<GLVersion> GetReplayVersions(RDCDriver api);
+
+#if defined(RENDERDOC_SUPPORT_GL)
+
+// platform specific (WGL, GLX, etc)
+GLPlatform &GetGLPlatform();
+
+#endif
+
+#if defined(RENDERDOC_SUPPORT_GLES)
+
+// using EGL. Different name since it both platform GL and EGL libraries can be available at once
+GLPlatform &GetEGLPlatform();
+
+#endif
+
+// Win32 doesn't need to export GL functions, but we still want them as they are our hook
+// implementations.
+#if ENABLED(RDOC_WIN32)
+
+#define HOOK_EXPORT extern "C"
+#define HOOK_CC WINAPI
+
+#else
+
+#define HOOK_EXPORT extern "C" RENDERDOC_EXPORT_API
+#define HOOK_CC
+
+#endif
+
+class RDCFile;
+class IReplayDriver;
+
+ReplayStatus CreateReplayDevice(RDCFile *rdc, GLPlatform &platform, IReplayDriver **&driver);
 
 // define stubs so other platforms can define these functions, but empty
 #if DISABLED(RDOC_WIN32)
@@ -220,6 +323,11 @@ typedef BOOL(APIENTRYP *PFNWGLDXUNLOCKOBJECTSNVPROC)(HANDLE hDevice, GLint count
 #endif
 
 #include "api/replay/renderdoc_replay.h"
+
+// bit of a hack, to work around C4127: conditional expression is constant
+// on template parameters
+template <typename T>
+T CheckConstParam(T t);
 
 // define this if you e.g. haven't compiled the D3D modules and want to disable
 // interop capture support.
@@ -255,7 +363,6 @@ typedef BOOL(APIENTRYP *PFNWGLDXUNLOCKOBJECTSNVPROC)(HANDLE hDevice, GLint count
 #define IsReplayingAndReading() (ser.IsReading() && IsReplayMode(m_State))
 
 // no longer in glcorearb.h or glext.h
-const GLenum eGL_INTENSITY = (GLenum)0x8049;
 const GLenum eGL_LIGHTING = (GLenum)0x0B50;
 const GLenum eGL_ALPHA_TEST = (GLenum)0x0BC0;
 const GLenum eGL_CLAMP = (GLenum)0x2900;
@@ -265,8 +372,7 @@ const GLenum eGL_CLAMP = (GLenum)0x2900;
 const GLenum eGL_ZERO = (GLenum)0;
 const GLenum eGL_ONE = (GLenum)1;
 
-class WrappedOpenGL;
-struct GLHookSet;
+extern Threading::CriticalSection glLock;
 
 // replay only class for handling marker regions
 struct GLMarkerRegion
@@ -280,8 +386,6 @@ struct GLMarkerRegion
   static void Set(const std::string &marker, GLenum source = eGL_DEBUG_SOURCE_APPLICATION,
                   GLuint id = 0, GLenum severity = eGL_DEBUG_SEVERITY_NOTIFICATION);
   static void End();
-
-  static const GLHookSet *gl;
 };
 
 // TODO ideally we'd support the full state vector, and only fetch&restore state we actually change
@@ -305,7 +409,7 @@ struct GLPushPopState
   GLuint VAO;
   GLuint drawFBO;
 
-  GLboolean ColorMask[3];
+  GLboolean ColorMask[4];
 
   // if the current context wasn't created with CreateContextAttribs we do an immediate mode render,
   // so fewer states are pushed/popped.
@@ -316,9 +420,46 @@ struct GLPushPopState
   //
   // In the end, this is just a best-effort to keep going without crashing. Old GL versions aren't
   // supported.
-  void Push(const GLHookSet &gl, bool modern);
-  void Pop(const GLHookSet &gl, bool modern);
+  void Push(bool modern);
+  void Pop(bool modern);
 };
+
+template <class DispatchTable>
+void DrawQuads(DispatchTable &GL, float width, float height, const std::vector<Vec4f> &vertices)
+{
+  const GLenum GL_MATRIX_MODE = (GLenum)0x0BA0;
+  const GLenum GL_MODELVIEW = (GLenum)0x1700;
+  const GLenum GL_PROJECTION = (GLenum)0x1701;
+
+  GLenum prevMatMode = eGL_NONE;
+  GL.glGetIntegerv(GL_MATRIX_MODE, (GLint *)&prevMatMode);
+
+  GL.glMatrixMode(GL_PROJECTION);
+  GL.glPushMatrix();
+  GL.glLoadIdentity();
+  GL.glOrtho(0.0, width, height, 0.0, -1.0, 1.0);
+
+  GL.glMatrixMode(GL_MODELVIEW);
+  GL.glPushMatrix();
+  GL.glLoadIdentity();
+
+  GL.glBegin(eGL_QUADS);
+
+  for(size_t i = 0; i < vertices.size(); i++)
+  {
+    GL.glTexCoord2f(vertices[i].z, vertices[i].w);
+    GL.glVertex2f(vertices[i].x, vertices[i].y);
+  }
+
+  GL.glEnd();
+
+  GL.glMatrixMode(GL_PROJECTION);
+  GL.glPopMatrix();
+  GL.glMatrixMode(GL_MODELVIEW);
+  GL.glPopMatrix();
+
+  GL.glMatrixMode(prevMatMode);
+}
 
 size_t GLTypeSize(GLenum type);
 
@@ -332,9 +473,9 @@ size_t ShaderIdx(GLenum buf);
 GLenum ShaderBit(size_t idx);
 GLenum ShaderEnum(size_t idx);
 
-ResourceFormat MakeResourceFormat(const GLHookSet &gl, GLenum target, GLenum fmt);
+ResourceFormat MakeResourceFormat(GLenum target, GLenum fmt);
 GLenum MakeGLFormat(ResourceFormat fmt);
-Topology MakePrimitiveTopology(const GLHookSet &gl, GLenum Topo);
+Topology MakePrimitiveTopology(GLenum Topo);
 GLenum MakeGLPrimitiveTopology(Topology Topo);
 BufferCategory MakeBufferCategory(GLenum bufferTarget);
 AddressMode MakeAddressMode(GLenum addr);
@@ -348,14 +489,20 @@ BlendOperation MakeBlendOp(GLenum op);
 const char *BlendString(GLenum blendenum);
 const char *SamplerString(GLenum smpenum);
 
-void ClearGLErrors(const GLHookSet &gl);
+void ClearGLErrors();
 
-GLuint GetBoundVertexBuffer(const GLHookSet &gl, GLuint idx);
+GLuint GetBoundVertexBuffer(GLuint idx);
+GLint GetNumVertexBuffers();
 
-void GetBindpointMapping(const GLHookSet &gl, GLuint curProg, int shadIdx, ShaderReflection *refl,
+void GetBindpointMapping(GLuint curProg, int shadIdx, ShaderReflection *refl,
                          ShaderBindpointMapping &mapping);
 
 void ResortBindings(ShaderReflection *refl, ShaderBindpointMapping *mapping);
+
+// calls glBlitFramebuffer but ensures no state can interfere like scissor or color mask
+// pops state for only a single drawbuffer!
+void SafeBlitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0,
+                         GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
 
 enum UniformType
 {
@@ -424,6 +571,12 @@ enum AttribType
 
 DECLARE_REFLECTION_ENUM(AttribType);
 
+enum GLframebufferbitfield
+{
+};
+
+DECLARE_REFLECTION_ENUM(GLframebufferbitfield);
+
 extern int GLCoreVersion;
 extern bool GLIsCore;
 extern bool IsGLES;
@@ -434,9 +587,17 @@ extern bool IsGLES;
 // 99 means the extension never became core, so you can easily just do a check of CoreVersion >= NN
 // and they will always fail.
 #define EXTENSION_CHECKS()                                       \
+  EXT_TO_CHECK(13, 99, ARB_texture_border_clamp)                 \
   EXT_TO_CHECK(30, 30, EXT_transform_feedback)                   \
-  EXT_TO_CHECK(30, 30, EXT_draw_buffers2)                        \
+  EXT_TO_CHECK(30, 32, EXT_draw_buffers2)                        \
+  EXT_TO_CHECK(31, 99, EXT_framebuffer_sRGB)                     \
   EXT_TO_CHECK(31, 99, ARB_texture_buffer_object)                \
+  /* This is a hack, the extension doesn't exist but is      */  \
+  /* equivalent to GLES 3.1's addition of MSAA textures but  */  \
+  /* NOT array MSAA textures. We'll treat the real ext as a  */  \
+  /* super-set.                                              */  \
+  EXT_TO_CHECK(32, 31, ARB_texture_multisample_no_array)         \
+  EXT_TO_CHECK(32, 32, ARB_texture_multisample)                  \
   EXT_TO_CHECK(33, 30, ARB_explicit_attrib_location)             \
   EXT_TO_CHECK(33, 30, ARB_sampler_objects)                      \
   EXT_TO_CHECK(33, 30, ARB_texture_swizzle)                      \
@@ -449,7 +610,7 @@ extern bool IsGLES;
   EXT_TO_CHECK(40, 32, ARB_tessellation_shader)                  \
   EXT_TO_CHECK(40, 32, ARB_texture_cube_map_array)               \
   EXT_TO_CHECK(40, 30, ARB_transform_feedback2)                  \
-  EXT_TO_CHECK(41, 99, ARB_geometry_shader4)                     \
+  EXT_TO_CHECK(32, 32, ARB_geometry_shader4)                     \
   EXT_TO_CHECK(41, 31, ARB_separate_shader_objects)              \
   EXT_TO_CHECK(41, 99, ARB_viewport_array)                       \
   EXT_TO_CHECK(42, 99, ARB_base_instance)                        \
@@ -482,10 +643,12 @@ extern bool IsGLES;
   EXT_TO_CHECK(99, 99, EXT_raster_multisample)                   \
   EXT_TO_CHECK(99, 30, EXT_texture_swizzle)                      \
   EXT_TO_CHECK(99, 99, KHR_blend_equation_advanced_coherent)     \
+  EXT_TO_CHECK(99, 99, EXT_texture_sRGB_decode)                  \
   /* OpenGL ES extensions */                                     \
   EXT_TO_CHECK(99, 32, EXT_color_buffer_float)                   \
   EXT_TO_CHECK(99, 32, EXT_primitive_bounding_box)               \
   EXT_TO_CHECK(99, 32, OES_primitive_bounding_box)               \
+  EXT_TO_CHECK(99, 32, OES_texture_border_color)                 \
   EXT_TO_CHECK(99, 32, OES_texture_storage_multisample_2d_array) \
   EXT_TO_CHECK(99, 99, EXT_clip_cull_distance)                   \
   EXT_TO_CHECK(99, 99, EXT_multisample_compatibility)            \
@@ -503,6 +666,7 @@ extern bool IsGLES;
 // Either promoted extensions from EXT to ARB, or
 // desktop extensions and their roughly equivalent GLES alternatives
 #define EXTENSION_COMPATIBILITY_CHECKS()                                                    \
+  EXT_COMP_CHECK(ARB_texture_border_clamp, OES_texture_border_color)                        \
   EXT_COMP_CHECK(ARB_polygon_offset_clamp, EXT_polygon_offset_clamp)                        \
   EXT_COMP_CHECK(ARB_texture_filter_anisotropic, EXT_texture_filter_anisotropic)            \
   EXT_COMP_CHECK(ARB_base_instance, EXT_base_instance)                                      \
@@ -527,7 +691,8 @@ extern bool IsGLES;
   EXT_COMP_CHECK(ARB_viewport_array, NV_viewport_array)                                     \
   EXT_COMP_CHECK(ARB_viewport_array, OES_viewport_array)                                    \
   EXT_COMP_CHECK(ARB_texture_buffer_object, EXT_texture_buffer)                             \
-  EXT_COMP_CHECK(ARB_texture_buffer_object, OES_texture_buffer)
+  EXT_COMP_CHECK(ARB_texture_buffer_object, OES_texture_buffer)                             \
+  EXT_COMP_CHECK(EXT_framebuffer_sRGB, EXT_sRGB_write_control)
 
 // extensions we know we want to check for are precached, indexd by this enum
 enum ExtensionCheckEnum
@@ -559,36 +724,26 @@ enum VendorCheckEnum
 extern bool VendorCheck[VendorCheck_Count];
 
 // fills out the extension supported array and the version-specific checks above
-void DoVendorChecks(const GLHookSet &gl, GLPlatform &platform, GLWindowingData context);
-void CheckExtensions(const GLHookSet &gl);
+void DoVendorChecks(GLPlatform &platform, GLWindowingData context);
+void FetchEnabledExtensions();
 
 // verify that we got a replay context that we can work with
-bool CheckReplayContext(PFNGLGETSTRINGPROC getStr, PFNGLGETINTEGERVPROC getInt,
-                        PFNGLGETSTRINGIPROC getStri);
-bool ValidateFunctionPointers(const GLHookSet &real);
-
-namespace glEmulate
-{
-void EmulateUnsupportedFunctions(GLHookSet *hooks);
-void EmulateRequiredExtensions(GLHookSet *hooks);
-};
+bool CheckReplayContext();
+bool ValidateFunctionPointers();
 
 #include "core/core.h"
 #include "serialise/serialiser.h"
 
 struct ShaderReflection;
 
-void CopyProgramUniforms(const GLHookSet &gl, GLuint progSrc, GLuint progDst);
+void CopyProgramUniforms(GLuint progSrc, GLuint progDst);
 template <typename SerialiserType>
-void SerialiseProgramUniforms(SerialiserType &ser, CaptureState state, const GLHookSet &gl,
-                              GLuint prog, map<GLint, GLint> *locTranslate);
-void CopyProgramAttribBindings(const GLHookSet &gl, GLuint progsrc, GLuint progdst,
-                               ShaderReflection *refl);
-void CopyProgramFragDataBindings(const GLHookSet &gl, GLuint progsrc, GLuint progdst,
-                                 ShaderReflection *refl);
+void SerialiseProgramUniforms(SerialiserType &ser, CaptureState state, GLuint prog,
+                              map<GLint, GLint> *locTranslate);
+void CopyProgramAttribBindings(GLuint progsrc, GLuint progdst, ShaderReflection *refl);
+void CopyProgramFragDataBindings(GLuint progsrc, GLuint progdst, ShaderReflection *refl);
 template <typename SerialiserType>
-void SerialiseProgramBindings(SerialiserType &ser, CaptureState state, const GLHookSet &gl,
-                              GLuint prog);
+void SerialiseProgramBindings(SerialiserType &ser, CaptureState state, GLuint prog);
 
 struct DrawElementsIndirectCommand
 {

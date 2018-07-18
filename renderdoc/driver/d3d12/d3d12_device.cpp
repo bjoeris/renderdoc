@@ -86,7 +86,8 @@ ULONG STDMETHODCALLTYPE DummyID3D12DebugDevice::Release()
 HRESULT STDMETHODCALLTYPE DummyID3D12DebugDevice::QueryInterface(REFIID riid, void **ppvObject)
 {
   if(riid == __uuidof(ID3D12InfoQueue) || riid == __uuidof(ID3D12DebugDevice) ||
-     riid == __uuidof(ID3D12Device))
+     riid == __uuidof(ID3D12Device) || riid == __uuidof(ID3D12Device1) ||
+     riid == __uuidof(ID3D12Device2) || riid == __uuidof(ID3D12Device3))
     return m_pDevice->QueryInterface(riid, ppvObject);
 
   if(riid == __uuidof(IUnknown))
@@ -116,7 +117,8 @@ ULONG STDMETHODCALLTYPE WrappedID3D12DebugDevice::Release()
 HRESULT STDMETHODCALLTYPE WrappedID3D12DebugDevice::QueryInterface(REFIID riid, void **ppvObject)
 {
   if(riid == __uuidof(ID3D12InfoQueue) || riid == __uuidof(ID3D12DebugDevice) ||
-     riid == __uuidof(ID3D12Device))
+     riid == __uuidof(ID3D12Device) || riid == __uuidof(ID3D12Device1) ||
+     riid == __uuidof(ID3D12Device2) || riid == __uuidof(ID3D12Device3))
     return m_pDevice->QueryInterface(riid, ppvObject);
 
   if(riid == __uuidof(IUnknown))
@@ -131,7 +133,7 @@ HRESULT STDMETHODCALLTYPE WrappedID3D12DebugDevice::QueryInterface(REFIID riid, 
   return m_pDebug->QueryInterface(riid, ppvObject);
 }
 
-WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitParams *params,
+WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitParams params,
                                          bool enabledDebugLayer)
     : m_RefCounter(realDevice, false),
       m_SoftRefCounter(NULL, false),
@@ -305,8 +307,7 @@ WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitPara
     RDCDEBUG("Couldn't get ID3D12InfoQueue.");
   }
 
-  if(params)
-    m_InitParams = *params;
+  m_InitParams = params;
 }
 
 WrappedID3D12Device::~WrappedID3D12Device()
@@ -2782,6 +2783,13 @@ void WrappedID3D12Device::ReplayLog(uint32_t startEventID, uint32_t endEventID,
       m_Queues[i]->Signal(m_QueueFences[i], m_GPUSyncCounter);
 
     FlushLists(true);
+
+    // take this opportunity to reset command allocators to ensure we don't steadily leak over time.
+    if(m_DataUploadAlloc)
+      m_DataUploadAlloc->Reset();
+
+    for(ID3D12CommandAllocator *alloc : m_CommandAllocators)
+      alloc->Reset();
   }
 
   if(!partial)

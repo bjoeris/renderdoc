@@ -463,212 +463,20 @@ void DXBCFile::MakeDisassemblyString()
 
   size_t d = 0;
 
-  vector<vector<string> > fileLines;
-
-  if(m_DebugInfo)
-  {
-    vector<string> fileNames;
-
-    fileLines.resize(m_DebugInfo->Files.size());
-    fileNames.resize(m_DebugInfo->Files.size());
-
-    for(size_t i = 0; i < m_DebugInfo->Files.size(); i++)
-      fileNames[i] = m_DebugInfo->Files[i].first;
-
-    // we essentially do a copy-paste out of m_DebugInfo->Files into fileLines,
-    // by doing a mini-preprocess to handle #line directives. This means that
-    // any lines that our source file declares to be in another filename via a #line
-    // get put in the right place for what the debug information hopefully matches.
-    // We also concatenate duplicate lines and display them all, to handle edge
-    // cases where #lines declare duplicates.
-
-    for(size_t i = 0; i < m_DebugInfo->Files.size(); i++)
-    {
-      vector<string> srclines;
-      vector<string> *dstFile =
-          &fileLines[i];    // start off writing to the corresponding output file.
-
-      size_t dstLine = 0;
-
-      split(m_DebugInfo->Files[i].second, srclines, '\n');
-      srclines.push_back("");
-
-      // handle #line directives by inserting empty lines or erasing as necessary
-
-      for(size_t srcLine = 0; srcLine < srclines.size(); srcLine++)
-      {
-        if(srclines[srcLine].empty())
-        {
-          dstLine++;
-          continue;
-        }
-
-        char *c = &srclines[srcLine][0];
-        char *end = c + srclines[srcLine].size();
-
-        while(*c == '\t' || *c == ' ' || *c == '\r')
-          c++;
-
-        if(c == end)
-        {
-          // blank line, just advance line counter
-          dstLine++;
-          continue;
-        }
-
-        if(c + 5 > end || strncmp(c, "#line", 5))
-        {
-          // resize up to account for the current line, if necessary
-          dstFile->resize(RDCMAX(dstLine + 1, dstFile->size()));
-
-          // if non-empty, append this line (to allow multiple lines on the same line
-          // number to be concatenated)
-          if((*dstFile)[dstLine].empty())
-            (*dstFile)[dstLine] = srclines[srcLine];
-          else
-            (*dstFile)[dstLine] += "\n" + srclines[srcLine];
-
-          // advance line counter
-          dstLine++;
-
-          continue;
-        }
-
-        // we have a #line directive
-        c += 5;
-
-        if(c >= end)
-        {
-          // invalid #line, just advance line counter
-          dstLine++;
-          continue;
-        }
-
-        while(*c == '\t' || *c == ' ')
-          c++;
-
-        if(c >= end)
-        {
-          // invalid #line, just advance line counter
-          dstLine++;
-          continue;
-        }
-
-        // invalid #line, no line number. Skip/ignore and just advance line counter
-        if(*c < '0' || *c > '9')
-        {
-          dstLine++;
-          continue;
-        }
-
-        size_t newLineNum = 0;
-        while(*c >= '0' && *c <= '9')
-        {
-          newLineNum *= 10;
-          newLineNum += int((*c) - '0');
-          c++;
-        }
-
-        // convert to 0-indexed line number
-        if(newLineNum > 0)
-          newLineNum--;
-
-        while(*c == '\t' || *c == ' ')
-          c++;
-
-        // no filename
-        if(*c == 0)
-        {
-          // set the next line number, and continue processing
-          dstLine = newLineNum;
-          continue;
-        }
-        else if(*c == '"')
-        {
-          c++;
-
-          char *filename = c;
-
-          // parse out filename
-          while(*c != '"' && *c != 0)
-          {
-            if(*c == '\\')
-            {
-              // skip escaped characters
-              c += 2;
-            }
-            else
-            {
-              c++;
-            }
-          }
-
-          // parsed filename successfully
-          if(*c == '"')
-          {
-            *c = 0;
-
-            // find the new destination file
-            bool found = false;
-            size_t dstFileIdx = 0;
-
-            for(size_t f = 0; f < fileNames.size(); f++)
-            {
-              if(fileNames[f] == filename)
-              {
-                found = true;
-                dstFileIdx = f;
-                break;
-              }
-            }
-
-            if(found)
-            {
-              dstFile = &fileLines[dstFileIdx];
-            }
-            else
-            {
-              RDCWARN("Couldn't find filename '%s' in #line directive in debug info", filename);
-
-              // make a dummy file to write into that won't be used.
-              fileNames.push_back(filename);
-              fileLines.push_back(vector<string>());
-
-              dstFile = &fileLines.back();
-            }
-
-            // set the next line number, and continue processing
-            dstLine = newLineNum;
-
-            continue;
-          }
-          else
-          {
-            // invalid #line, ignore
-            continue;
-          }
-        }
-        else
-        {
-          // invalid #line, ignore
-          continue;
-        }
-      }
-    }
-
-    for(size_t i = 0; i < m_DebugInfo->Files.size(); i++)
-    {
-      if(m_DebugInfo->Files[i].second.empty())
-      {
-        merge(fileLines[i], m_DebugInfo->Files[i].second, '\n');
-      }
-    }
-  }
-
-  int32_t prevFile = -1;
-  int32_t prevLine = -1;
+  LineColumnInfo prevLineInfo;
 
   size_t debugInst = 0;
+
+  std::vector<std::vector<std::string>> fileLines;
+
+  // generate fileLines by splitting each file in the debug info
+  if(m_DebugInfo)
+  {
+    fileLines.resize(m_DebugInfo->Files.size());
+
+    for(size_t i = 0; i < m_DebugInfo->Files.size(); i++)
+      split(m_DebugInfo->Files[i].second, fileLines[i], '\n');
+  }
 
   for(size_t i = 0; i < m_Instructions.size(); i++)
   {
@@ -693,26 +501,33 @@ void DXBCFile::MakeDisassemblyString()
 
     if(m_DebugInfo)
     {
-      int32_t fileID = prevFile;
-      int32_t lineNum = prevLine;
+      LineColumnInfo lineInfo = prevLineInfo;
 
-      m_DebugInfo->GetFileLine(debugInst, m_Instructions[i].offset, fileID, lineNum);
+      m_DebugInfo->GetLineInfo(debugInst, m_Instructions[i].offset, lineInfo);
 
-      if(fileID >= 0 && lineNum >= 0 && (fileID != prevFile || lineNum != prevLine))
+      if(lineInfo.fileIndex >= 0 && lineInfo.lineStart >= 0 &&
+         (lineInfo.fileIndex != prevLineInfo.fileIndex ||
+          lineInfo.lineStart != prevLineInfo.lineStart))
       {
         string line = "";
-        if(fileID >= (int32_t)fileLines.size())
+        if(lineInfo.fileIndex >= (int32_t)fileLines.size())
         {
           line = "Unknown file";
         }
-        else if(fileLines[fileID].empty())
+        else if(fileLines[lineInfo.fileIndex].empty())
         {
           line = "";
         }
         else
         {
-          int32_t lineIdx = RDCMIN(lineNum, (int32_t)fileLines[fileID].size() - 1);
-          line = fileLines[fileID][lineIdx];
+          std::vector<std::string> &lines = fileLines[lineInfo.fileIndex];
+
+          int32_t lineIdx = RDCMIN(lineInfo.lineStart, (uint32_t)lines.size() - 1);
+
+          // line numbers are 1-based but we want a 0-based index
+          if(lineIdx > 0)
+            lineIdx--;
+          line = lines[lineIdx];
         }
 
         size_t startLine = line.find_first_not_of(" \t");
@@ -722,13 +537,28 @@ void DXBCFile::MakeDisassemblyString()
 
         m_Disassembly += "\n";
 
-        if((fileID != prevFile && fileID < (int32_t)fileLines.size()) || line == "")
+        if(((lineInfo.fileIndex != prevLineInfo.fileIndex ||
+             lineInfo.callstack.back() != prevLineInfo.callstack.back()) &&
+            lineInfo.fileIndex < (int32_t)fileLines.size()) ||
+           line == "")
         {
           m_Disassembly += "      ";    // "0000: "
           for(int in = 0; in < indent; in++)
             m_Disassembly += "  ";
-          m_Disassembly +=
-              StringFormat::Fmt("%s:%d\n", m_DebugInfo->Files[fileID].first.c_str(), lineNum + 1);
+
+          std::string func = lineInfo.callstack.back();
+
+          if(!func.empty())
+          {
+            m_Disassembly += StringFormat::Fmt("%s:%d - %s()\n",
+                                               m_DebugInfo->Files[lineInfo.fileIndex].first.c_str(),
+                                               lineInfo.lineStart, func.c_str());
+          }
+          else
+          {
+            m_Disassembly += StringFormat::Fmt(
+                "%s:%d\n", m_DebugInfo->Files[lineInfo.fileIndex].first.c_str(), lineInfo.lineStart);
+          }
         }
 
         if(line != "")
@@ -740,8 +570,7 @@ void DXBCFile::MakeDisassemblyString()
         }
       }
 
-      prevFile = fileID;
-      prevLine = lineNum;
+      prevLineInfo = lineInfo;
     }
 
     char buf[64] = {0};
