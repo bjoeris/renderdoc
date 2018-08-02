@@ -1212,7 +1212,8 @@ void GLReplay::SavePipelineState()
 
         pipe.samplers[unit].resourceId = rm->GetOriginalID(rm->GetID(SamplerRes(ctx, samp)));
 
-        if(target != eGL_TEXTURE_BUFFER)
+        if(target != eGL_TEXTURE_BUFFER && target != eGL_TEXTURE_2D_MULTISAMPLE &&
+           target != eGL_TEXTURE_2D_MULTISAMPLE_ARRAY)
         {
           if(samp != 0)
             drv.glGetSamplerParameterfv(samp, eGL_TEXTURE_BORDER_COLOR,
@@ -2517,6 +2518,22 @@ void GLReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
         drv.glGetTexImage(target, (GLint)mip, fmt, type, data.data());
       }
 
+      // packed D24S8 comes out the wrong way around from what we expect, so we re-swizzle it.
+      if(intFormat == eGL_DEPTH24_STENCIL8)
+      {
+        uint32_t *ptr = (uint32_t *)data.data();
+
+        for(GLsizei y = 0; y < height; y++)
+        {
+          for(GLsizei x = 0; x < width; x++)
+          {
+            const uint32_t val = *ptr;
+            *ptr = (val >> 8) | ((val & 0xff) << 24);
+            ptr++;
+          }
+        }
+      }
+
       // if we're saving to disk we make the decision to vertically flip any non-compressed
       // images. This is a bit arbitrary, but really origin top-left is common for all disk
       // formats so we do this flip from bottom-left origin. We only do this for saving to
@@ -3014,13 +3031,9 @@ void GLReplay::SetProxyTextureData(ResourceId texid, uint32_t arrayIdx, uint32_t
       drv.glCompressedTextureSubImage2DEXT(tex, target, (GLint)mip, 0, 0, width, height, fmt,
                                            (GLsizei)dataSize, data);
     }
-    else if(target == eGL_TEXTURE_2D_MULTISAMPLE)
+    else if(target == eGL_TEXTURE_2D_MULTISAMPLE || target == eGL_TEXTURE_2D_MULTISAMPLE_ARRAY)
     {
-      RDCUNIMPLEMENTED("multisampled proxy textures");
-    }
-    else if(target == eGL_TEXTURE_2D_MULTISAMPLE_ARRAY)
-    {
-      RDCUNIMPLEMENTED("multisampled proxy textures");
+      RDCERR("Unexpected compressed MSAA texture!");
     }
   }
   else
@@ -3072,13 +3085,53 @@ void GLReplay::SetProxyTextureData(ResourceId texid, uint32_t arrayIdx, uint32_t
       drv.glTextureSubImage2DEXT(tex, target, (GLint)mip, 0, 0, width, height, baseformat, datatype,
                                  data);
     }
-    else if(target == eGL_TEXTURE_2D_MULTISAMPLE)
+    else if(target == eGL_TEXTURE_2D_MULTISAMPLE || target == eGL_TEXTURE_2D_MULTISAMPLE_ARRAY)
     {
-      RDCUNIMPLEMENTED("multisampled proxy textures");
-    }
-    else if(target == eGL_TEXTURE_2D_MULTISAMPLE_ARRAY)
-    {
-      RDCUNIMPLEMENTED("multisampled proxy textures");
+      // create a temporary 2D array texture to upload the data to. Must use TexStorage to allow
+      // texture views inside CopyArrayToTex2DMS
+      GLuint uploadTex = 0;
+      drv.glGenTextures(1, &uploadTex);
+      drv.glBindTexture(eGL_TEXTURE_2D_ARRAY, uploadTex);
+      drv.glTextureStorage3DEXT(uploadTex, eGL_TEXTURE_2D_ARRAY, 1, texdetails.internalFormat,
+                                width, height, texdetails.samples * RDCMAX(1, texdetails.depth));
+      drv.glTexParameteri(eGL_TEXTURE_2D_ARRAY, eGL_TEXTURE_MAX_LEVEL, 0);
+
+      // packed D24S8 is expected the wrong way around from comes in, so we re-swizzle it here
+      if(texdetails.internalFormat == eGL_DEPTH24_STENCIL8)
+      {
+        const uint32_t *srcptr = (const uint32_t *)data;
+        bytebuf swizzled;
+        swizzled.resize(dataSize);
+        uint32_t *dstptr = (uint32_t *)swizzled.data();
+
+        for(GLsizei y = 0; y < height; y++)
+        {
+          for(GLsizei x = 0; x < width; x++)
+          {
+            const uint32_t val = *srcptr;
+            *dstptr = (val << 8) | ((val & 0xff000000) >> 24);
+            srcptr++;
+            dstptr++;
+          }
+        }
+
+        // upload the data to the given slice
+        drv.glTextureSubImage3DEXT(uploadTex, eGL_TEXTURE_2D_ARRAY, 0, 0, 0, (GLint)arrayIdx, width,
+                                   height, 1, baseformat, datatype, swizzled.data());
+      }
+      else
+      {
+        // upload the data to the given slice
+        drv.glTextureSubImage3DEXT(uploadTex, eGL_TEXTURE_2D_ARRAY, 0, 0, 0, (GLint)arrayIdx, width,
+                                   height, 1, baseformat, datatype, data);
+      }
+
+      // copy this slice into the 2D MSAA texture
+      CopyArrayToTex2DMS(tex, uploadTex, width, height, 1, texdetails.samples,
+                         texdetails.internalFormat, arrayIdx);
+
+      // delete the temporary texture
+      drv.glDeleteTextures(1, &uploadTex);
     }
   }
 }
@@ -3196,7 +3249,8 @@ void GLReplay::CloseReplayContext()
   m_pDriver->m_Platform.DeleteReplayContext(m_ReplayCtx);
 }
 
-ReplayStatus CreateReplayDevice(RDCFile *rdc, GLPlatform &platform, IReplayDriver **&driver)
+ReplayStatus CreateReplayDevice(RDCDriver rdcdriver, RDCFile *rdc, GLPlatform &platform,
+                                IReplayDriver **&driver)
 {
   GLInitParams initParams;
   uint64_t ver = GLInitParams::CurrentVersion;
@@ -3243,7 +3297,7 @@ ReplayStatus CreateReplayDevice(RDCFile *rdc, GLPlatform &platform, IReplayDrive
 
   GLWindowingData data = {};
 
-  ReplayStatus status = platform.InitialiseAPI(data, rdc->GetDriver());
+  ReplayStatus status = platform.InitialiseAPI(data, rdcdriver);
 
   // any errors will be already printed, just pass the error up
   if(status != ReplayStatus::Succeeded)
@@ -3283,11 +3337,11 @@ ReplayStatus CreateReplayDevice(RDCFile *rdc, GLPlatform &platform, IReplayDrive
   }
 
   WrappedOpenGL *gldriver = new WrappedOpenGL(platform);
-  gldriver->SetDriverType(rdc->GetDriver());
+  gldriver->SetDriverType(rdcdriver);
 
   GL.DriverForEmulation(gldriver);
 
-  RDCLOG("Created %s replay device.", ToStr(rdc->GetDriver()).c_str());
+  RDCLOG("Created %s replay device.", ToStr(rdcdriver).c_str());
 
   GLReplay *replay = gldriver->GetReplay();
   replay->SetProxy(rdc == NULL);
@@ -3377,7 +3431,7 @@ ReplayStatus GL_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
     return ReplayStatus::APIInitFailed;
   }
 
-  return CreateReplayDevice(rdc, GetGLPlatform(), driver);
+  return CreateReplayDevice(rdc ? rdc->GetDriver() : RDCDriver::OpenGL, rdc, GetGLPlatform(), driver);
 }
 
 static DriverRegistration GLDriverRegistration(RDCDriver::OpenGL, &GL_CreateReplayDevice);
@@ -3402,7 +3456,8 @@ ReplayStatus GLES_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
       return ReplayStatus::APIInitFailed;
     }
 
-    return CreateReplayDevice(rdc, GetEGLPlatform(), driver);
+    return CreateReplayDevice(rdc ? rdc->GetDriver() : RDCDriver::OpenGLES, rdc, GetEGLPlatform(),
+                              driver);
   }
 #if defined(RENDERDOC_SUPPORT_GL)
   else if(GetGLPlatform().CanCreateGLESContext())
@@ -3417,7 +3472,8 @@ ReplayStatus GLES_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
       return ReplayStatus::APIInitFailed;
     }
 
-    return CreateReplayDevice(rdc, GetGLPlatform(), driver);
+    return CreateReplayDevice(rdc ? rdc->GetDriver() : RDCDriver::OpenGLES, rdc, GetGLPlatform(),
+                              driver);
   }
 
   RDCERR(

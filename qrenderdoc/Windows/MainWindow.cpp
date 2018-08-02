@@ -159,6 +159,8 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
 
   m_RemoteProbeSemaphore.release();
   m_RemoteProbe = new LambdaThread([this]() {
+    RENDERDOC_AndroidInitialise();
+
     while(m_RemoteProbeSemaphore.available())
     {
       // do a remoteProbe immediately to populate the android hosts list on startup.
@@ -1773,6 +1775,17 @@ void MainWindow::switchContext()
     LambdaThread *th = new LambdaThread([this, host]() {
       // see if the server is up
       host->CheckStatus();
+
+      if(host->IsADB() && !RENDERDOC_IsAndroidSupported(host->hostname.c_str()))
+      {
+        GUIInvoke::call(this, [this]() {
+          statusText->setText(tr("Device unsupported, Android 6.0 is required."));
+          contextChooser->setIcon(Icons::disconnect());
+          contextChooser->setText(tr("Replay Context: Local"));
+          contextChooser->setEnabled(true);
+        });
+        return;
+      }
 
       if(!host->serverRunning && !host->runCommand.isEmpty())
       {

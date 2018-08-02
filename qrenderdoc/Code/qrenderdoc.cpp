@@ -347,6 +347,13 @@ int main(int argc, char *argv[])
     {
       PythonContext::GlobalInit();
 
+      if(updateApplied)
+      {
+        config.CheckUpdate_UpdateAvailable = false;
+        config.CheckUpdate_UpdateResponse = "";
+        config.Save();
+      }
+
       CaptureContext ctx(filename, remoteHost, remoteIdent, temp, config);
 
       Analytics::Prompt(ctx, config);
@@ -414,13 +421,6 @@ int main(int argc, char *argv[])
         }
       }
 
-      if(updateApplied)
-      {
-        config.CheckUpdate_UpdateAvailable = false;
-        config.CheckUpdate_UpdateResponse = "";
-        config.Save();
-      }
-
       while(ctx.isRunning())
       {
         application.processEvents(QEventLoop::WaitForMoreEvents);
@@ -430,6 +430,8 @@ int main(int argc, char *argv[])
 
       config.Save();
     }
+
+    RENDERDOC_AndroidShutdown();
 
     PythonContext::GlobalShutdown();
 

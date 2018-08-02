@@ -94,6 +94,8 @@ struct GLWindowingData
     DC = NULL;
     ctx = NULL;
     wnd = NULL;
+    egl_wnd = NULL;
+    egl_cfg = NULL;
   }
 
   union
@@ -144,7 +146,9 @@ struct GLWindowingData
   {
     dpy = NULL;
     ctx = NULL;
-    wnd = 0;
+    wnd = (GLWindowPtr)NULL;
+    egl_wnd = (GLESWindowPtr)NULL;
+    cfg = NULL;
   }
 
 #if defined(RENDERDOC_SUPPORT_GL)
@@ -222,6 +226,7 @@ struct GLWindowingData
     egl_dpy = NULL;
     wnd = NULL;
     egl_wnd = NULL;
+    egl_cfg = NULL;
   }
 
   union
@@ -303,8 +308,6 @@ GLPlatform &GetEGLPlatform();
 
 class RDCFile;
 class IReplayDriver;
-
-ReplayStatus CreateReplayDevice(RDCFile *rdc, GLPlatform &platform, IReplayDriver **&driver);
 
 // define stubs so other platforms can define these functions, but empty
 #if DISABLED(RDOC_WIN32)
