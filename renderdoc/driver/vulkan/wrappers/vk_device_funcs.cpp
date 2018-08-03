@@ -230,6 +230,15 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
     }
   }
 
+// TODO(akharlamov) This should come from external build rule, but for now keep it ON on Windows.
+#if defined(WIN32)
+#define RDOC_DEVELOPMENT 1
+#endif
+
+#if defined(RDOC_DEVELOPMENT)
+  bool hasValidationLayers = false;
+#endif
+
   // verify that extensions & layers are supported
   for(size_t i = 0; i < params.Layers.size(); i++)
   {
@@ -238,7 +247,18 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
       RDCERR("Capture requires layer '%s' which is not supported", params.Layers[i].c_str());
       return ReplayStatus::APIHardwareUnsupported;
     }
+
+#if defined(RDOC_DEVELOPMENT)
+    if(params.Layers[i] == "VK_LAYER_LUNARG_standard_validation")
+      hasValidationLayers = true;
+#endif
   }
+
+#if defined(RDOC_DEVELOPMENT)
+  if(!hasValidationLayers)
+    params.Layers.push_back("VK_LAYER_LUNARG_standard_validation");
+#endif
+#undef RDOC_DEVELOPMENT
 
   for(size_t i = 0; i < params.Extensions.size(); i++)
   {

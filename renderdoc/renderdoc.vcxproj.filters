@@ -109,6 +109,9 @@
     <Filter Include="Common\Serialise\Codecs">
       <UniqueIdentifier>{dc39ebda-045d-4d75-8ef9-0c927be3c7ff}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Common\Serialise\Codecs\CPP">
+      <UniqueIdentifier>{686696b2-2cce-403d-ad62-27a260fb70ce}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Android">
       <UniqueIdentifier>{f9ed2873-6120-4b34-a3c2-e57b2de31eb9}</UniqueIdentifier>
     </Filter>
@@ -459,6 +462,29 @@
     <ClInclude Include="api\replay\pipestate.h">
       <Filter>API\Replay</Filter>
     </ClInclude>
+    <ClInclude Include="serialise\codecs\vk_cpp_codec_state.h">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="serialise\codecs\ext_object.h">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\sample_cpp_trace\helper.h">
+      <Filter>Common\Serialise\Codecs\CPP</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\vk_cpp_codec_tracker.h">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\vk_cpp_codec_writer.h">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\vk_cpp_codec_file.h">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\intervals.h">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="maths\camera.cpp">
@@ -752,6 +778,9 @@
     <ClCompile Include="os\posix\android\android_network.cpp">
       <Filter>OS\Posix\Android</Filter>
     </ClCompile>
+    <ClCompile Include="serialise\codecs\sample_cpp_trace\main_win.cpp">
+      <Filter>Common\Serialise\Codecs\CPP</Filter>
+    </ClCompile>
     <ClCompile Include="android\android.cpp">
       <Filter>Android</Filter>
     </ClCompile>
@@ -808,6 +837,36 @@
     </ClCompile>
     <ClCompile Include="3rdparty\miniz\miniz.c">
       <Filter>3rdparty\miniz</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\sample_cpp_trace\main_yeti.cpp">
+      <Filter>Common\Serialise\Codecs\CPP</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\sample_cpp_trace\helper.cpp">
+      <Filter>Common\Serialise\Codecs\CPP</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker.cpp">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_writer.cpp">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\vk_cpp_codec.cpp">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_cmd.cpp">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_filter.cpp">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_internal.cpp">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_state.cpp">
+      <Filter>Common\Serialise\Codecs</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_state.cpp">
+      <Filter>Common\Serialise\Codecs</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -921,5 +980,13 @@
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="renderdoc.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="serialise\codecs\CMakeLists.txt">
+      <Filter>Common\Serialise\Codecs\CPP</Filter>
+    </Text>
+    <Text Include="serialise\codecs\sample_cpp_trace\CMakeLists.txt">
+      <Filter>Common\Serialise\Codecs\CPP</Filter>
+    </Text>
   </ItemGroup>
 </Project>

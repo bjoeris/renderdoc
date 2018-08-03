@@ -41,3 +41,10 @@ qrenderdoc/generated/
 .DS_Store
 plugins-*/
 __pycache__
+CMakeCache.txt
+CMakeFiles
+renderdoc/serialise/codecs/sample_cpp_trace/shader_*
+renderdoc/serialise/codecs/sample_cpp_trace/buffer_*
+renderdoc/serialise/codecs/sample_cpp_trace/gen_*.cpp
+renderdoc/serialise/codecs/sample_cpp_trace/gen_*.h
+renderdoc/serialise/codecs/VS2015_X64

@@ -1,0 +1,158 @@
+#if defined(__linux__) && !defined(__yeti__)
+
+#include <stdio.h>
+#include <string.h>
+#include <stdexcept>
+
+#include <X11/Xlib.h>
+
+#include "gen_main.h"
+
+int frameLoops = -1;
+double accumTimeWithReset = 0;
+double accumTime = 0;
+double avgTimeWithReset = 0;
+double avgTime = 0;
+double avgFPSWithReset = 0;
+double avgFPS = 0;
+uint64_t frames = 0;
+double avgFrameMilliseconds = 0;
+uint64_t performanceCounterFrequency;
+bool automated = false;
+bool resourceReset = false;
+
+Display *appDisplay;
+Window appWindow;
+
+#define RDOC_WINDOW_TITLE "RenderDoc Frame Loop"
+
+Display *CreateDisplay()
+{
+  Display *res = XOpenDisplay(nullptr);
+  if(!res)
+  {
+    throw std::runtime_error("Failed to open appDisplay");
+  }
+  return res;
+}
+
+Window CreateWindow()
+{
+  int screen = DefaultScreen(appDisplay);
+  Window window = XCreateSimpleWindow(
+      appDisplay, DefaultRootWindow(appDisplay), 0, 0, resolutionWidth, resolutionHeight, 0,
+      BlackPixel(appDisplay, screen), WhitePixel(appDisplay, screen));
+  XMapWindow(appDisplay, window);
+  XStoreName(appDisplay, window, RDOC_WINDOW_TITLE);
+  XFlush(appDisplay);
+
+  return window;
+}
+
+void CreateResources()
+{
+  appDisplay = CreateDisplay();
+  appWindow = CreateWindow();
+
+  main_create();
+  main_init();
+}
+
+//-----------------------------------------------------------------------------
+// ReleaseResources
+//-----------------------------------------------------------------------------
+void ReleaseResources()
+{
+  main_release();
+}
+
+void Render()
+{
+  main_prereset();
+  main_render();
+  main_postreset();
+}
+
+//-----------------------------------------------------------------------------
+// ParseCommandLine
+//-----------------------------------------------------------------------------
+static bool ParseCommandLine(int argc, char **argv)
+{
+  for(int i = 1; i < argc; ++i)
+  {
+    if(0 == strcmp(argv[i], "-repeat"))
+    {
+      ++i;
+      if(i >= argc)
+      {
+        return false;
+      }
+      frameLoops = atoi(argv[i]);
+    }
+    else if(0 == strcmp(argv[i], "-reset"))
+    {
+      resourceReset = true;
+    }
+    else
+    {
+      // Unknown command
+      return false;
+    }
+  }
+
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+// Usage
+//-----------------------------------------------------------------------------
+static void Usage()
+{
+  const char *usage =
+      "Options:\n"
+      "-repeat N    -- Number of frames to run\n"
+      "-reset       -- Perform a state reset in between frames\n";
+
+  fprintf(stderr, usage);
+}
+
+int main(int argc, char **argv)
+{
+  bool quit = false;
+
+  if(!ParseCommandLine(argc, argv))
+  {
+    Usage();
+    return EXIT_FAILURE;
+  }
+
+  try
+  {
+    CreateResources();
+
+    // TODO QueryPerformanceFrequency(&performanceCounterFrequency);
+
+    int repeatIteration = 0;
+    while(frameLoops == -1 || repeatIteration < frameLoops)
+    {
+      // TODO
+      // ProcessMessages(quit);
+      if(quit)
+      {
+        break;
+      }
+
+      Render();
+
+      repeatIteration = (std::max)(0, repeatIteration + 1);
+    }
+  }
+  catch(std::exception &e)
+  {
+    fprintf(stderr, "Error: %s", e.what());
+  }
+
+  ReleaseResources();
+}
+
+#endif

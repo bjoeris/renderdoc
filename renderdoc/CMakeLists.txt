@@ -146,6 +146,20 @@ set(sources
     serialise/rdcfile.cpp
     serialise/rdcfile.h
     serialise/codecs/xml_codec.cpp
+    serialise/codecs/vk_cpp_codec.cpp
+    serialise/codecs/vk_cpp_codec_file.h
+    serialise/codecs/vk_cpp_codec_state.cpp
+    serialise/codecs/vk_cpp_codec_state.h
+    serialise/codecs/vk_cpp_codec_tracker.cpp
+    serialise/codecs/vk_cpp_codec_tracker.h
+    serialise/codecs/vk_cpp_codec_tracker_cmd.cpp
+    serialise/codecs/vk_cpp_codec_tracker_filter.cpp
+    serialise/codecs/vk_cpp_codec_tracker_internal.cpp
+    serialise/codecs/vk_cpp_codec_tracker_state.cpp
+    serialise/codecs/vk_cpp_codec_writer.cpp
+    serialise/codecs/vk_cpp_codec_writer.h
+    serialise/codecs/intervals.h
+    serialise/codecs/ext_object.h
     serialise/codecs/chrome_json_codec.cpp
     serialise/comp_io_tests.cpp
     serialise/serialiser_tests.cpp
@@ -292,9 +306,9 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR APPLE)
     # Need to add -Wno-unknown-warning-option since only newer clang versions have
     # -Wno-unused-lambda-capture available
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND APPLE)
-	       # Only clang has this warning. Fixing it in this file causes a compile error on windows
-	       set_source_files_properties(os/os_specific.cpp
-	           PROPERTIES COMPILE_FLAGS "-Wno-unknown-warning-option -Wno-unused-lambda-capture")
+           # Only clang has this warning. Fixing it in this file causes a compile error on windows
+           set_source_files_properties(os/os_specific.cpp
+               PROPERTIES COMPILE_FLAGS "-Wno-unknown-warning-option -Wno-unused-lambda-capture")
     endif()
 endif()
 

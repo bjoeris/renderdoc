@@ -670,6 +670,7 @@ struct ConvertCommand : public Command
   {
     parser.add<string>("filename", 'f', "The file to convert from.", false);
     parser.add<string>("output", 'o', "The file to convert to.", false);
+    parser.add("shim", '\0', "Shim captured Vulkan commands.");
     parser.add<string>("input-format", 'i', "The format of the input file.", false, "",
                        formats_reader());
     parser.add<string>("convert-format", 'c', "The format of the output file.", false, "",
@@ -707,6 +708,14 @@ struct ConvertCommand : public Command
       std::cerr << "Need an output filename (-o)." << std::endl << std::endl;
       std::cerr << parser.usage() << std::endl;
       return 1;
+    }
+    if(parser.exist("shim"))
+    {
+      RENDERDOC_SetConfigSetting("shim", "true");
+    }
+    else
+    {
+      RENDERDOC_SetConfigSetting("shim", "false");
     }
 
     std::string infmt = parser.get<string>("input-format");
