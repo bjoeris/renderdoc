@@ -14,15 +14,16 @@ void TraceTracker::AccessBufferMemory(uint64_t buf_id, uint64_t offset, uint64_t
 {
   RDCASSERT(IsValidNonNullResouce(buf_id));
   ExtObject *memBinding = FindBufferMemBinding(buf_id);
-  uint64_t mem_id = memBinding->At(2)->U64();
-  uint64_t mem_offset = memBinding->At(3)->U64();
+  uint64_t mem_id = memBinding->At("memory")->U64();
+  uint64_t mem_offset = memBinding->At("memoryOffset")->U64();
   MemAllocWithResourcesMapIter mem_it = MemAllocFind(mem_id);
   RDCASSERT(mem_it != MemAllocEnd());
 
   ResourceWithViewsMapIter buf_it = ResourceCreateFind(buf_id);
   RDCASSERT(buf_it != ResourceCreateEnd());
-  ExtObject *ci = buf_it->second.sdobj->At(1);
-  uint64_t buf_size = ci->At(3)->U64();
+  ExtObject *ci = buf_it->second.sdobj->At("CreateInfo");
+  VkSharingMode sharingMode = (VkSharingMode)ci->At("sharingMode")->U64();
+  uint64_t buf_size = ci->At("size")->U64();
 
   if(size > buf_size - offset)
   {
@@ -34,8 +35,38 @@ void TraceTracker::AccessBufferMemory(uint64_t buf_id, uint64_t offset, uint64_t
     size = buf_size - offset;
   }
 
-  mem_it->second.memoryState.Update(offset + mem_offset, offset + mem_offset + size,
-                                    GetAccessStateTransition(action));
+  mem_it->second.Access(cmdQueueFamily, sharingMode, action, offset + mem_offset, size);
+}
+
+void TraceTracker::TransitionBufferQueueFamily(uint64_t buf_id, uint64_t srcQueueFamily,
+                                               uint64_t dstQueueFamily, uint64_t offset,
+                                               uint64_t size)
+{
+  RDCASSERT(IsValidNonNullResouce(buf_id));
+  ExtObject *memBinding = FindBufferMemBinding(buf_id);
+  uint64_t mem_id = memBinding->At("memory")->U64();
+  uint64_t mem_offset = memBinding->At("memoryOffset")->U64();
+  MemAllocWithResourcesMapIter mem_it = MemAllocFind(mem_id);
+  RDCASSERT(mem_it != MemAllocEnd());
+
+  ResourceWithViewsMapIter buf_it = ResourceCreateFind(buf_id);
+  RDCASSERT(buf_it != ResourceCreateEnd());
+  ExtObject *ci = buf_it->second.sdobj->At("CreateInfo");
+  VkSharingMode sharingMode = (VkSharingMode)ci->At("sharingMode")->U64();
+  uint64_t buf_size = ci->At("size")->U64();
+
+  if(size > buf_size - offset)
+  {
+    if(size != VK_WHOLE_SIZE)
+    {
+      RDCWARN("Buffer used in descriptor set update has size (%llu) but range listed is (%llu)",
+              buf_size, size);
+    }
+    size = buf_size - offset;
+  }
+
+  mem_it->second.TransitionQueueFamily(cmdQueueFamily, sharingMode, srcQueueFamily, dstQueueFamily,
+                                       mem_offset + offset, size);
 }
 
 void TraceTracker::ReadBoundVertexBuffers(uint64_t vertexCount, uint64_t instanceCount,
@@ -140,11 +171,11 @@ void TraceTracker::AccessMemoryInDescriptorSet(uint64_t descriptorSet_id, uint64
         // Only a sampler, no image to access
         break;
       case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
         action = ACCESS_ACTION_READ_WRITE;
       // Fall through; storage can also be read.
       case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
       case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
         for(int i = 0; i < binding.imageBindings.size(); i++)
         {
           BoundImage imageBinding = binding.imageBindings[i];
@@ -358,6 +389,7 @@ void TraceTracker::AccessImage(uint64_t image, ExtObject *subresource, ExtObject
     ExtObject *image_ci = image_it->second.sdobj->At(1);
     ExtObject *imageExtent = image_ci->At(5);
 
+    // TODO(akharlamov, bjoeris) I think this should include aspect for depth stencil resources.
     if(!isFullImage(imageExtent, offset, extent, mipLevel))
     {
       // action is 'clear', but only part of the image is cleared, which is actually a 'write'.
@@ -437,7 +469,8 @@ void TraceTracker::AccessAttachment(uint64_t attachment, AccessAction action,
 }
 
 void TraceTracker::TransitionImageLayout(uint64_t image, ExtObject *range, VkImageLayout oldLayout,
-                                         VkImageLayout newLayout, uint64_t srcQueueFamily, uint64_t dstQueueFamily)
+                                         VkImageLayout newLayout, uint64_t srcQueueFamily,
+                                         uint64_t dstQueueFamily)
 {
   VkImageAspectFlags aspectMask = (VkImageAspectFlags)range->At("aspectMask")->U64();
   uint64_t baseMip = range->At("baseMipLevel")->U64();
@@ -453,12 +486,14 @@ void TraceTracker::TransitionImageLayout(uint64_t image, ExtObject *range, VkIma
       imageState.Range(aspectMask, baseMip, levelCount, baseLayer, layerCount);
   for(ImageSubresourceRangeIter res_it = imageRange.begin(); res_it != imageRange.end(); res_it++)
   {
-    imageState.At(*res_it).Transition(cmdQueueFamily, oldLayout, newLayout, srcQueueFamily, dstQueueFamily);
+    imageState.At(*res_it).Transition(cmdQueueFamily, oldLayout, newLayout, srcQueueFamily,
+                                      dstQueueFamily);
   }
 }
 
 void TraceTracker::TransitionImageViewLayout(uint64_t viewID, VkImageLayout oldLayout,
-                                             VkImageLayout newLayout, uint64_t srcQueueFamily, uint64_t dstQueueFamily)
+                                             VkImageLayout newLayout, uint64_t srcQueueFamily,
+                                             uint64_t dstQueueFamily)
 {
   ResourceWithViewsMapIter view_it = ResourceCreateFind(viewID);
   RDCASSERT(view_it != ResourceCreateEnd());
@@ -484,7 +519,8 @@ void TraceTracker::TransitionImageViewLayout(uint64_t viewID, VkImageLayout oldL
       imageState.Range(aspectMask, baseMip, levelCount, baseLayer, layerCount, is2DView);
   for(ImageSubresourceRangeIter res_it = range.begin(); res_it != range.end(); res_it++)
   {
-    imageState.At(*res_it).Transition(cmdQueueFamily, oldLayout, newLayout, srcQueueFamily, dstQueueFamily);
+    imageState.At(*res_it).Transition(cmdQueueFamily, oldLayout, newLayout, srcQueueFamily,
+                                      dstQueueFamily);
   }
 }
 
@@ -500,7 +536,8 @@ void TraceTracker::TransitionAttachmentLayout(uint64_t attachment, VkImageLayout
   VkImageLayout oldLayout = bindingState.attachmentLayout[attachment];
   RDCASSERT(oldLayout != VK_IMAGE_LAYOUT_MAX_ENUM);
 
-  TransitionImageViewLayout(viewID, oldLayout, layout, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED);
+  TransitionImageViewLayout(viewID, oldLayout, layout, VK_QUEUE_FAMILY_IGNORED,
+                            VK_QUEUE_FAMILY_IGNORED);
 }
 
 void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
@@ -521,9 +558,16 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
     VkImageLayout initialLayout = (VkImageLayout)att_desc->At("initialLayout")->U64();
 
     VkAttachmentLoadOp loadOp;
-    if(IsDepthOrStencilFormat(format))
+    // If the format is Depth AND Stencil, both OPs need to be taken into account.
+    // If neither Op is LOAD then we can pretend loadOp is VK_ATTACHMENT_LOAD_OP_DONT_CARE
+    if(IsDepthAndStencilFormat(format))
     {
-      loadOp = (VkAttachmentLoadOp)att_desc->At("stencilLoadOp")->U64();
+      loadOp = (VkAttachmentLoadOp) att_desc->At("loadOp")->U64();
+      VkAttachmentLoadOp stencilLoadOp = (VkAttachmentLoadOp)att_desc->At("stencilLoadOp")->U64();
+      if (loadOp != VK_ATTACHMENT_LOAD_OP_LOAD && stencilLoadOp != VK_ATTACHMENT_LOAD_OP_LOAD)
+        loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      else
+        loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
     }
     else
     {
@@ -542,6 +586,8 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
         action = ACCESS_ACTION_WRITE;
       }
       AccessImageView(view_id, initialLayout, action);
+    } else {
+      AccessImageView(view_id, initialLayout, ACCESS_ACTION_READ);
     }
   }
 
@@ -563,7 +609,7 @@ void TraceTracker::BeginSubpass()
     ExtObject *attachmentRef = inputAttachments->At(i);
     uint64_t a = attachmentRef->At("attachment")->U64();
     LoadSubpassAttachment(attachmentRef);
-    AccessAttachment(a, ACCESS_ACTION_READ);
+    AccessAttachment(a, ACCESS_ACTION_READ_WRITE);
   }
   for(uint32_t i = 0; i < colorAttachments->Size(); i++)
   {
@@ -576,6 +622,8 @@ void TraceTracker::BeginSubpass()
   if(!depthStencilAttachment->IsNULL())
   {
     LoadSubpassAttachment(depthStencilAttachment);
+    uint64_t a = depthStencilAttachment->At("attachment")->U64();
+    AccessAttachment(a, ACCESS_ACTION_READ_WRITE);
   }
   bindingState.graphicsPipeline.subpassHasDraw = false;
 }

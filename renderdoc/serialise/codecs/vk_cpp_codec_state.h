@@ -152,6 +152,34 @@ AccessState AccessStateReadWriteTransition(AccessState s);
 // resource
 std::function<AccessState(AccessState)> GetAccessStateTransition(AccessAction action);
 
+struct MemoryState
+{
+  // The "current" access state (read/write) of the subresource.
+  // Updated by the command analysis functions called from CodeTracker::AnalyzeInitResources.
+  AccessState accessState = ACCESS_STATE_INIT;
+
+  // The queue family owning the subresource at the beginning of the frame.
+  uint64_t startQueueFamily = VK_QUEUE_FAMILY_IGNORED;
+
+  // The "current" queue family owning the subresource
+  // Updated by the command analysis functions called from CodeTracker::AnalyzeInitResources.
+  uint64_t queueFamily = VK_QUEUE_FAMILY_IGNORED;
+
+  // Indicates whether this memory region is currently acquired by a queue family.
+  bool isAcquired = false;
+
+  inline bool operator==(const MemoryState &rhs) const
+  {
+    return accessState == rhs.accessState && startQueueFamily == rhs.startQueueFamily &&
+           queueFamily == rhs.queueFamily && isAcquired == rhs.isAcquired;
+  }
+  inline bool operator!=(const MemoryState &rhs) const
+  {
+    return accessState != rhs.accessState || startQueueFamily != rhs.startQueueFamily ||
+           queueFamily != rhs.queueFamily || isAcquired != rhs.isAcquired;
+  }
+};
+
 // This structure describes a memory allocation (described through RenderDoc's
 // SDObject) and the list of all resources that are bound to that allocation.
 // It stores the list of memory ranges, which is used to keep track of
@@ -167,7 +195,7 @@ struct MemoryAllocationWithBoundResources
   ExtObject *allocateSDObj = NULL;
   BoundResources boundResources;
   std::vector<MemRange> ranges;
-  Intervals<AccessState> memoryState;
+  Intervals<MemoryState> memoryState;
   uint64_t hasAliasedResources = HasAliasedResourcesUnknown;
 
   inline MemoryAllocationWithBoundResources(ExtObject *allocateExt = NULL)
@@ -184,6 +212,11 @@ struct MemoryAllocationWithBoundResources
   std::vector<size_t> BoundResourcesOrderByResetRequiremnet();
 
   bool CheckAliasedResources(MemRange r);
+  void Access(uint64_t cmdQueueFamily, VkSharingMode sharingMode, AccessAction action,
+              uint64_t offset, uint64_t size);
+  void TransitionQueueFamily(uint64_t cmdQueueFamily, VkSharingMode sharingMode,
+                             uint64_t srcQueueFamily, uint64_t dstQueueFamily, uint64_t offset,
+                             uint64_t size);
 };
 
 // For each memory allocation ID, the map type below store allocation

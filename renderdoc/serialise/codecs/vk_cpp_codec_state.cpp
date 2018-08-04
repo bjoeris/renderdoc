@@ -152,6 +152,169 @@ bool MemoryAllocationWithBoundResources::CheckAliasedResources(MemRange r)
   return false;
 }
 
+void MemoryAllocationWithBoundResources::Access(uint64_t cmdQueueFamily, VkSharingMode sharingMode,
+                                                AccessAction action, uint64_t offset, uint64_t size)
+{
+  uint64_t end = offset + size;
+  std::function<AccessState(AccessState)> accessStateTransition = GetAccessStateTransition(action);
+  for(IntervalsIter<MemoryState> it = memoryState.find(offset);
+      it != memoryState.end() && it.start() < end; it++)
+  {
+    MemoryState state = it.value();
+    bool modified = false;
+    uint64_t memID = allocateSDObj->At("Memory")->U64();
+    uint64_t iStart = std::max(offset, it.start());
+    uint64_t iEnd = std::min(end, it.end());
+    if(state.queueFamily != cmdQueueFamily && cmdQueueFamily != VK_QUEUE_FAMILY_IGNORED &&
+       sharingMode != VK_SHARING_MODE_CONCURRENT)
+    {
+      if(state.queueFamily == VK_QUEUE_FAMILY_IGNORED)
+      {
+        // Resource has not yet been used by any queue family
+        // Automatically acquired by the current queue family
+        state.queueFamily = cmdQueueFamily;
+        state.isAcquired = true;
+        modified = true;
+        RDCDEBUG("Memory %llu range [%llu,%llu) implicitly acquired by queue family %llu.", memID,
+                 iStart, iEnd, cmdQueueFamily);
+      }
+      else
+      {
+        RDCWARN(
+            "Memory %llu range [%llu,%llu) accessed by queue family %llu while owned by queue "
+            "family %llu.",
+            memID, iStart, iEnd, cmdQueueFamily, state.queueFamily);
+      }
+    }
+    AccessState newAccessState = accessStateTransition(state.accessState);
+    if(newAccessState != state.accessState)
+    {
+      state.accessState = newAccessState;
+      modified = true;
+    }
+    if(modified)
+    {
+      it.setValue(offset, end, state);
+    }
+  }
+}
+
+void MemoryAllocationWithBoundResources::TransitionQueueFamily(uint64_t cmdQueueFamily,
+                                                               VkSharingMode sharingMode,
+                                                               uint64_t srcQueueFamily,
+                                                               uint64_t dstQueueFamily,
+                                                               uint64_t offset, uint64_t size)
+{
+  if(srcQueueFamily == dstQueueFamily || sharingMode == VK_SHARING_MODE_CONCURRENT)
+  {
+    return;
+  }
+  uint64_t memID = allocateSDObj->At("Memory")->U64();
+  uint64_t end = offset + size;
+  for(IntervalsIter<MemoryState> it = memoryState.find(offset);
+      it != memoryState.end() && it.start() < end; it++)
+  {
+    MemoryState state = it.value();
+    bool modified = false;
+    uint64_t iStart = std::max(offset, it.start());
+    uint64_t iEnd = std::min(end, it.end());
+    if(cmdQueueFamily == srcQueueFamily)
+    {
+      // Release
+      if(state.queueFamily == VK_QUEUE_FAMILY_IGNORED)
+      {
+        // We have yet to see any use of this memory on any queue.
+        // Assume it was previously used on the queue that is releasing it.
+        state.queueFamily = srcQueueFamily;
+        state.isAcquired = true;
+        modified = true;
+      }
+
+      if(srcQueueFamily != state.queueFamily)
+      {
+        RDCWARN(
+            "Memory %llu range [%llu,%llu) released by queue family %llu while owned by queue "
+            "family %llu",
+            memID, iStart, iEnd, srcQueueFamily, state.queueFamily);
+      }
+      if(state.isAcquired)
+      {
+        RDCDEBUG(
+            "Memory %llu range [%llu,%llu) released by queue family %llu to queue family %llu.",
+            memID, iStart, iEnd, srcQueueFamily, dstQueueFamily);
+        state.isAcquired = false;
+        modified = true;
+      }
+      else
+      {
+        RDCWARN(
+            "Memory %llu range [%llu,%llu) released by queue family %llu while it was not "
+            "acquired.",
+            memID, iStart, iEnd, srcQueueFamily);
+      }
+
+      if(dstQueueFamily == VK_QUEUE_FAMILY_EXTERNAL ||
+         dstQueueFamily == VK_QUEUE_FAMILY_EXTERNAL_KHR ||
+         dstQueueFamily == VK_QUEUE_FAMILY_FOREIGN_EXT)
+      {
+        // We won't see any acquires from the dstQueueFamily.
+        // Assume that the external queue family immediately acquires, and then releasese the
+        // resource.
+        // This way, the resource will be in the correct state when it is acquired back again.
+        state.queueFamily = dstQueueFamily;
+        modified = true;
+      }
+    }
+    else if(cmdQueueFamily == dstQueueFamily)
+    {
+      // Acquire
+      if(state.queueFamily == VK_QUEUE_FAMILY_IGNORED)
+      {
+        // We have yet to see any use of this memory on any queue.
+        // Assume it was previously used and released by the srcQueueFamily.
+        state.queueFamily = srcQueueFamily;
+        state.isAcquired = false;
+      }
+
+      if(srcQueueFamily != state.queueFamily)
+      {
+        RDCWARN(
+            "Memory %llu range [%llu,%llu) acquired from family %llu while owned by queue family "
+            "%llu",
+            memID, iStart, iEnd, srcQueueFamily, state.queueFamily);
+      }
+      if(state.isAcquired)
+      {
+        RDCWARN(
+            "Memory %llu range [%llu,%llu) acquired by queue family %llu while still owned by "
+            "queue family %llu.",
+            memID, iStart, iEnd, dstQueueFamily, srcQueueFamily);
+      }
+      else
+      {
+        RDCDEBUG(
+            "Memory %llu range [%llu,%llu) acquired by queue family %llu from queue family %llu.",
+            memID, iStart, iEnd, dstQueueFamily, srcQueueFamily);
+        state.isAcquired = true;
+        state.queueFamily = dstQueueFamily;
+        modified = true;
+      }
+    }
+    else
+    {
+      RDCWARN(
+          "Memory %llu range [%llu,%llu) was transitioned from queue family %llu to queue family "
+          "%llu by queue family %llu. The transition must be done by the source and destination "
+          "queue families.",
+          memID, iStart, iEnd, srcQueueFamily, dstQueueFamily, cmdQueueFamily);
+    }
+    if(modified)
+    {
+      it.setValue(offset, end, state);
+    }
+  }
+}
+
 uint32_t FrameGraph::FindCmdBufferIndex(ExtObject *o)
 {
   for(uint32_t i = 0; i < records.size(); i++)
@@ -452,7 +615,7 @@ void ImageSubresourceState::CheckLayout(VkImageLayout requestedLayout)
     {
       RDCWARN(
           "Image first used in layout %s, but no start layout was found in BeginCapture. "
-          "Image: %d, layer: %d, level: %d, aspect: %s",
+          "Image: %llu, layer: %llu, level: %llu, aspect: %s",
           ToStr(requestedLayout).c_str(), image, layer, mipLevel, ToStr(aspect).c_str());
     }
     layout = requestedLayout;
@@ -460,7 +623,8 @@ void ImageSubresourceState::CheckLayout(VkImageLayout requestedLayout)
   if(layout != requestedLayout && requestedLayout != VK_IMAGE_LAYOUT_UNDEFINED)
   {
     RDCWARN(
-        "Image requested in layout %s, but was in layout %s. Image: %d, layer: %d, level: %d, "
+        "Image requested in layout %s, but was in layout %s. Image: %llu, layer: %llu, level: "
+        "%llu, "
         "aspect: %s.",
         ToStr(requestedLayout).c_str(), ToStr(layout).c_str(), image, layer, mipLevel,
         ToStr(aspect).c_str());
@@ -482,8 +646,8 @@ void ImageSubresourceState::CheckQueueFamily(uint64_t cmdQueueFamily)
   if(cmdQueueFamily != queueFamily)
   {
     RDCWARN(
-        "Image used by queue family %d while owned by queue family %d. "
-        "Image: %d, layer: %d, level: %d, aspect: %s",
+        "Image used by queue family %llu while owned by queue family %llu. "
+        "Image: %llu, layer: %llu, level: %llu, aspect: %s",
         cmdQueueFamily, queueFamily, image, layer, mipLevel, ToStr(aspect).c_str());
   }
 }
@@ -527,15 +691,15 @@ void ImageSubresourceState::Transition(uint64_t cmdQueueFamily, VkImageLayout ol
       if(srcQueueFamily != queueFamily)
       {
         RDCWARN(
-            "Image released by queue family %d while owned by queue family %d. "
-            "Image: %d, layer: %d, level: %d, aspect: %s",
+            "Image released by queue family %llu while owned by queue family %llu. "
+            "Image: %llu, layer: %llu, level: %llu, aspect: %s",
             srcQueueFamily, queueFamily, image, layer, mipLevel, ToStr(aspect).c_str());
       }
       if(!isAcquiredByQueue)
       {
         RDCWARN(
-            "Image released multiple times by queue family %d. "
-            "Image: %d, layer: %d, level: %d, aspect: %s",
+            "Image released multiple times by queue family %llu. "
+            "Image: %llu, layer: %llu, level: %llu, aspect: %s",
             srcQueueFamily, image, layer, mipLevel, ToStr(aspect).c_str());
       }
       isAcquiredByQueue = false;
@@ -549,8 +713,8 @@ void ImageSubresourceState::Transition(uint64_t cmdQueueFamily, VkImageLayout ol
       if(isAcquiredByQueue)
       {
         RDCWARN(
-            "Image acquired by queue %d before being released by queue %d. "
-            "Image: %d, layer: %d, level: %d, aspect: %s",
+            "Image acquired by queue %llu before being released by queue %llu. "
+            "Image: %llu, layer: %llu, level: %llu, aspect: %s",
             dstQueueFamily, srcQueueFamily, image, layer, mipLevel, ToStr(aspect).c_str());
       }
       isAcquiredByQueue = true;

@@ -38,7 +38,7 @@ struct IntervalsIter
 
 private:
   typename std::map<uint64_t, T>::iterator iter;
-  const std::map<uint64_t, T> *owner;
+  std::map<uint64_t, T> *owner;
   IntervalsIter(std::map<uint64_t, T> *owner, typename std::map<uint64_t, T>::iterator iter)
       : iter(iter), owner(owner)
   {
@@ -76,8 +76,8 @@ public:
     owner = rhs.owner;
     return *this;
   }
-  inline uint64_t start() { return iter->first; }
-  inline uint64_t end()
+  inline uint64_t start() const { return iter->first; }
+  inline uint64_t end() const
   {
     typename std::map<uint64_t, T>::iterator next = iter;
     next++;
@@ -87,7 +87,57 @@ public:
     }
     return next->first;
   }
-  inline T &value() { return iter->second; }
+  inline const T &value() const { return iter->second; }
+  inline void setValue(uint64_t aStart, uint64_t aEnd, const T &aValue)
+  {
+    T old_value = this->value();
+    if(aValue == old_value || aEnd <= start() && end() <= aStart)
+    {
+      // The value is unchanged, or the specified interval is disjoint from this interval.
+      return;
+    }
+
+    // Add a new endpoint for aStart, if necessary, and update iter's value to aValue.
+    if(start() < aStart)
+    {
+      // The updated portion of this interval begins at aStart.
+      iter = owner->insert(std::pair<uint64_t, T>(aStart, aValue)).first;
+    }
+    else
+    {
+      // The updated portion of this interval begins at start()
+      iter->second = aValue;
+    }
+
+    // Add a new endpoint for aEnd, if necessary.
+    if(aEnd < end())
+    {
+      owner->insert(std::pair<uint64_t, T>(aEnd, old_value));
+    }
+
+    // Merge with preceding interval, if necessary
+    if(iter != owner->begin())
+    {
+      std::map<uint64_t, T>::iterator prev_it = iter;
+      prev_it--;
+      if(prev_it->second == iter->second)
+      {
+        owner->erase(iter);
+        iter = prev_it;
+      }
+    }
+
+    // Merge with succeding interval, if necessary
+    std::map<uint64_t, T>::iterator next_it = iter;
+    next_it++;
+    if(next_it != owner->end())
+    {
+      if(next_it->second == iter->second)
+      {
+        owner->erase(next_it);
+      }
+    }
+  }
 };
 
 template <typename T>
@@ -119,71 +169,6 @@ public:
     // This is the interval that contains the point
     it--;
     return Wrap(it);
-  }
-
-  // IntervalsUpdate adds the interval [start, end) to the family of intervals.
-  // Overlapping intervals' values are updated according to the `trans` function.
-  void Update(uint64_t start, uint64_t end, std::function<T(T)> trans)
-  {
-    if(start >= end)
-    {
-      return;
-    }
-    IntervalsIter<T> start_it = find(start);
-    // Loop over the intervals that overlap the [start, end).
-    while(start < end)
-    {
-      T oldValue = start_it.value();
-      T newValue = trans(oldValue);
-      // Check if the value of this overlapping interval actually changes; otherwise we don't do
-      // anything.
-      if(newValue != oldValue)
-      {
-        // Add the new start point
-        start_it = Wrap(StartPoints.insert(std::pair<uint64_t, T>(start, newValue)).first);
-        start_it.value() = newValue;
-        if(end < start_it.end())
-        {
-          // if the end point is also contained in this overlapping interval,
-          // then we need to put in a new point; after this point, the value goes back to this
-          // interval's original value.
-          StartPoints.insert(std::pair<uint64_t, T>(end, oldValue));
-        }
-
-        // Check if the new interval's value is equal to the previous interval, and merge if
-        // necessary.
-        if(start_it != this->begin())
-        {
-          IntervalsIter<T> prev_it = start_it;
-          prev_it--;
-          if(prev_it.value() == start_it.value())
-          {
-            StartPoints.erase(start_it.unwrap());
-            start_it = prev_it;
-          }
-        }
-
-        // Check if the new interval's value is equal to the next interval, and merge if necessary.
-        IntervalsIter<T> next_it = start_it;
-        next_it++;
-        if(next_it != this->end())
-        {
-          if(next_it.value() == start_it.value())
-          {
-            StartPoints.erase(next_it.unwrap());
-          }
-        }
-      }
-      // Move on to the next overlapping interval.
-      start_it++;
-      if(start_it == this->end())
-      {
-        return;
-      }
-      // update `start`, so that [start, end) only overlaps the intervals that have not yet been
-      // updated.
-      start = start_it.start();
-    }
   }
 };
 

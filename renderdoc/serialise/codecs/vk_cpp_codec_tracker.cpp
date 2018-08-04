@@ -296,14 +296,14 @@ void TraceTracker::ApplyMemoryUpdate(ExtObject *ext)
   SDChunk *ch = (SDChunk *)ext;
   RDCASSERT(ch->metadata.chunkID == (uint32_t)VulkanChunk::vkFlushMappedMemoryRanges);
 
-  ExtObject *range = ext->At(2);
-  ExtObject *memory = range->At(2);
-  uint64_t start = range->At(3)->U64();
-  uint64_t size = range->At(4)->U64();
-  uint64_t end = start + size;
+  ExtObject *range = ext->At("MemRange");
+  ExtObject *memory = range->At("memory");
+  uint64_t offset = range->At("offset")->U64();
+  uint64_t size = range->At("size")->U64();
 
   MemAllocWithResourcesMapIter it = MemAllocFind(memory->U64());
-  it->second.memoryState.Update(start, end, GetAccessStateTransition(ACCESS_ACTION_CLEAR));
+  it->second.Access(VK_QUEUE_FAMILY_IGNORED, VK_SHARING_MODE_CONCURRENT, ACCESS_ACTION_CLEAR,
+                    offset, size);
 }
 
 void TraceTracker::ApplyDescSetUpdate(ExtObject *ext)
@@ -740,6 +740,7 @@ void TraceTracker::AnalyzeMemoryResetRequirements()
           VkImageLayout initialLayout = (VkImageLayout)image_ci->At(14)->U64();
           if(initialLayout == VK_IMAGE_LAYOUT_PREINITIALIZED)
           {
+            uint64_t image_id = abr.createSDObj->At(3)->U64();
             abr.reset = RESET_REQUIREMENT_INIT;
           }
           if((optimizations & CODE_GEN_OPT_IMAGE_MEMORY_BIT) == 0)
@@ -752,10 +753,10 @@ void TraceTracker::AnalyzeMemoryResetRequirements()
         {
           MemRange range;
           range.MakeRange(abr.offset, abr.requirement);
-          for(IntervalsIter<AccessState> it = mem.memoryState.find(range.start);
+          for(IntervalsIter<MemoryState> it = mem.memoryState.find(range.start);
               it != mem.memoryState.end() && it.start() < range.end; it++)
           {
-            switch(it.value())
+            switch(it.value().accessState)
             {
               case ACCESS_STATE_READ:
                 abr.reset = std::min(RESET_REQUIREMENT_INIT, abr.reset);

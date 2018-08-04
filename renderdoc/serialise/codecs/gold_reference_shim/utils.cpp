@@ -12,7 +12,10 @@ uint32_t sw_height = 1080;
 std::map<VkImage, VkDeviceMemory> stagingImages;
 std::map<VkBuffer, VkDeviceMemory> stagingBuffers;
 
-#define FORMAT_ASPECT_BYTE_SIZE(f, a, bs) { VK_FORMAT_##f, std::pair<VkImageAspectFlags, uint32_t>(VK_IMAGE_ASPECT_##a##_BIT, bs) }
+#define FORMAT_ASPECT_BYTE_SIZE(f, a, bs)                                                 \
+  {                                                                                       \
+    VK_FORMAT_##f, std::pair<VkImageAspectFlags, uint32_t>(VK_IMAGE_ASPECT_##a##_BIT, bs) \
+  }
 
 // TODO(haiyu): This is not a complete list.
 std::map<VkFormat, std::pair<VkImageAspectFlags, uint32_t>> imageFormatInfoMap = {
@@ -28,12 +31,12 @@ std::map<VkFormat, std::pair<VkImageAspectFlags, uint32_t>> imageFormatInfoMap =
   FORMAT_ASPECT_BYTE_SIZE(R8G8B8A8_SNORM, COLOR, 4),
   FORMAT_ASPECT_BYTE_SIZE(R8G8B8A8_SSCALED, COLOR, 4),
   FORMAT_ASPECT_BYTE_SIZE(R8G8B8A8_SINT, COLOR, 4),
-  // FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_UNORM, COLOR, 8),
-  // FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_SNORM, COLOR, 8),
-  // FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_USCALED, COLOR, 8),
-  // FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_SSCALED, COLOR, 8),
-  // FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_UINT, COLOR, 8),
-  // FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_SINT, COLOR, 8),
+  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_UNORM, COLOR, 8),
+  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_SNORM, COLOR, 8),
+  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_USCALED, COLOR, 8),
+  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_SSCALED, COLOR, 8),
+  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_UINT, COLOR, 8),
+  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_SINT, COLOR, 8),
   FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_SFLOAT, COLOR, 8),
   FORMAT_ASPECT_BYTE_SIZE(D32_SFLOAT_S8_UINT, DEPTH, 4),
   FORMAT_ASPECT_BYTE_SIZE(D24_UNORM_S8_UINT, DEPTH, 4),
@@ -359,12 +362,17 @@ std::pair<T, T> mapData(std::vector<std::vector<T>> *data)
 void bufferToPpm(VkBuffer buffer, std::string filename, uint32_t width, uint32_t height,
                  VkFormat format)
 {
-  const char *data;
+  char *data;
   vkMapMemory(aux.device, stagingBuffers[buffer], 0, VK_WHOLE_SIZE, 0, (void **)&data);
   if(imageFormatInfoMap.find(format) == imageFormatInfoMap.end())
     return;
 
   std::ofstream file(filename, std::ios::out | std::ios::binary);
+  std::string rawFilename = filename.substr(0, filename.find_last_of(".")) + "_" +
+                            std::to_string(width) + "x" + std::to_string(height);
+  std::ofstream rawFile(rawFilename, std::ios::out | std::ios::binary);
+  rawFile.write(data, width * height * imageFormatInfoMap[format].second);
+  rawFile.close();
   // ppm header
   file << "P6\n" << width << "\n" << height << "\n" << 255 << "\n";
   // ppm binary pixel data
@@ -373,9 +381,6 @@ void bufferToPpm(VkBuffer buffer, std::string filename, uint32_t width, uint32_t
     case VK_FORMAT_B8G8R8A8_UNORM:
     case VK_FORMAT_B8G8R8A8_USCALED:
     case VK_FORMAT_B8G8R8A8_UINT:
-    case VK_FORMAT_B8G8R8A8_SNORM:
-    case VK_FORMAT_B8G8R8A8_SSCALED:
-    case VK_FORMAT_B8G8R8A8_SINT:
       [&]() {
         for(uint32_t y = 0; y < height; y++)
         {
@@ -391,9 +396,40 @@ void bufferToPpm(VkBuffer buffer, std::string filename, uint32_t width, uint32_t
         }
       }();
       break;
+    case VK_FORMAT_B8G8R8A8_SNORM:
+    case VK_FORMAT_B8G8R8A8_SSCALED:
+    case VK_FORMAT_B8G8R8A8_SINT:
+      [&]() {
+        for(uint32_t y = 0; y < height; y++)
+        {
+          char *row = (char *)data;
+          for(uint32_t x = 0; x < width; x++)
+          {
+            file << (*((uint8_t *)row + 2) ^ 0x80);
+            file << (*((uint8_t *)row + 1) ^ 0x80);
+            file << (*(uint8_t *)row ^ 0x80);
+            row = row + imageFormatInfoMap[format].second;
+          }
+          data += width * imageFormatInfoMap[format].second;
+        }
+      }();
+      break;
     case VK_FORMAT_R8G8B8A8_UNORM:
     case VK_FORMAT_R8G8B8A8_USCALED:
     case VK_FORMAT_R8G8B8A8_UINT:
+      [&]() {
+        for(uint32_t y = 0; y < height; y++)
+        {
+          char *row = (char *)data;
+          for(uint32_t x = 0; x < width; x++)
+          {
+            file.write(row, 3);
+            row = row + imageFormatInfoMap[format].second;
+          }
+          data += width * imageFormatInfoMap[format].second;
+        }
+      }();
+      break;
     case VK_FORMAT_R8G8B8A8_SNORM:
     case VK_FORMAT_R8G8B8A8_SSCALED:
     case VK_FORMAT_R8G8B8A8_SINT:
@@ -403,7 +439,44 @@ void bufferToPpm(VkBuffer buffer, std::string filename, uint32_t width, uint32_t
           char *row = (char *)data;
           for(uint32_t x = 0; x < width; x++)
           {
-            file.write(row, 3);
+            file << (*(uint8_t *)row ^ 0x80);
+            file << (*((uint8_t *)row + 1) ^ 0x80);
+            file << (*((uint8_t *)row + 2) ^ 0x80);
+            row = row + imageFormatInfoMap[format].second;
+          }
+          data += width * imageFormatInfoMap[format].second;
+        }
+      }();
+      break;
+    case VK_FORMAT_R16G16B16A16_UNORM:
+    case VK_FORMAT_R16G16B16A16_USCALED:
+    case VK_FORMAT_R16G16B16A16_UINT:
+      [&]() {
+        for(uint32_t y = 0; y < height; y++)
+        {
+          char *row = (char *)data;
+          for(uint32_t x = 0; x < width; x++)
+          {
+            file << (*(uint16_t *)row >> 8);
+            file << (*((uint16_t *)row + 1) >> 8);
+            file << (*((uint16_t *)row + 2) >> 8);
+            row = row + imageFormatInfoMap[format].second;
+          }
+          data += width * imageFormatInfoMap[format].second;
+        }
+      }();
+    case VK_FORMAT_R16G16B16A16_SNORM:
+    case VK_FORMAT_R16G16B16A16_SSCALED:
+    case VK_FORMAT_R16G16B16A16_SINT:
+      [&]() {
+        for(uint32_t y = 0; y < height; y++)
+        {
+          char *row = (char *)data;
+          for(uint32_t x = 0; x < width; x++)
+          {
+            file << ((*(uint16_t *)row ^ 0x8000) >> 8);
+            file << ((*((uint16_t *)row + 1) ^ 0x8000) >> 8);
+            file << ((*((uint16_t *)row + 2) ^ 0x8000) >> 8);
             row = row + imageFormatInfoMap[format].second;
           }
           data += width * imageFormatInfoMap[format].second;
@@ -440,9 +513,12 @@ void bufferToPpm(VkBuffer buffer, std::string filename, uint32_t width, uint32_t
           data += width * imageFormatInfoMap[format].second;
         }
         std::pair<float, float> minmax = mapData(&data_8);
-        std::string minmaxstr = "minmax value = " + std::to_string(minmax.first) + " " + std::to_string(minmax.second);
+#if defined(_WIN32)
+        std::string minmaxstr =
+            "minmax value = " + std::to_string(minmax.first) + " " + std::to_string(minmax.second);
         OutputDebugStringA(minmaxstr.c_str());
         OutputDebugStringA("\n");
+#endif
         for(auto row : data_8)
         {
           for(auto col : row)
@@ -470,10 +546,26 @@ void bufferToPpm(VkBuffer buffer, std::string filename, uint32_t width, uint32_t
       }();
       break;
     case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-    case VK_FORMAT_A2B10G10R10_SNORM_PACK32:
     case VK_FORMAT_A2B10G10R10_USCALED_PACK32:
-    case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:
     case VK_FORMAT_A2B10G10R10_UINT_PACK32:
+      [&]() {
+        for(uint32_t y = 0; y < height; y++)
+        {
+          char *row = (char *)data;
+          for(uint32_t x = 0; x < width; x++)
+          {
+            uint32_t v = *(uint32_t *)row;
+            file << uint8_t((v & 0x3ff) >> 2);
+            file << uint8_t((v >> 10 & 0x3ff) >> 2);
+            file << uint8_t((v >> 20 & 0x3ff) >> 2);
+            row = row + imageFormatInfoMap[format].second;
+          }
+          data += width * imageFormatInfoMap[format].second;
+        }
+      }();
+      break;
+    case VK_FORMAT_A2B10G10R10_SNORM_PACK32:
+    case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:
     case VK_FORMAT_A2B10G10R10_SINT_PACK32:
       [&]() {
         for(uint32_t y = 0; y < height; y++)
@@ -482,9 +574,9 @@ void bufferToPpm(VkBuffer buffer, std::string filename, uint32_t width, uint32_t
           for(uint32_t x = 0; x < width; x++)
           {
             uint32_t v = *(uint32_t *)row;
-            file << uint8_t((v & 0x3ff) / 4);
-            file << uint8_t(((v >> 10) & 0x3ff) / 4);
-            file << uint8_t(((v >> 20) & 0x3ff) / 4);
+            file << (uint8_t((v & 0x3ff) ^ 0x200) >> 2);
+            file << (uint8_t((v >> 10 & 0x3ff) ^ 0x200) >> 2);
+            file << (uint8_t((v >> 20 & 0x3ff) ^ 0x200) >> 2);
             row = row + imageFormatInfoMap[format].second;
           }
           data += width * imageFormatInfoMap[format].second;
@@ -621,7 +713,6 @@ void copyFramebufferAttachments(RenderPassInfo *rpInfo)
     imageCreateCI.format = ci.format;
     imageCreateCI.extent.width = ci.extent.width;
     imageCreateCI.extent.height = ci.extent.height;
-    // TODO: 3D image?
     assert(ci.extent.depth == 1);
     imageCreateCI.extent.depth = 1;
     imageCreateCI.arrayLayers = 1;

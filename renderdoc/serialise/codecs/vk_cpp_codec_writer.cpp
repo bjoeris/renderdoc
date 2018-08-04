@@ -1256,11 +1256,11 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
   {
     hasAliasedResources = mem_it->second.HasAliasedResources();
     files[pass]->PrintLn("/* Memory %u Usage:", resourceID);
-    for(IntervalsIter<AccessState> it = mem_it->second.memoryState.begin();
+    for(IntervalsIter<MemoryState> it = mem_it->second.memoryState.begin();
         it != mem_it->second.memoryState.end(); it++)
     {
       files[pass]->PrintLn("    (%#X, %#X): %s", it.start(), it.end(),
-                           stateNames[it.value()].c_str());
+                           stateNames[it.value().accessState].c_str());
     }
     files[pass]->PrintLn("*/");
   }

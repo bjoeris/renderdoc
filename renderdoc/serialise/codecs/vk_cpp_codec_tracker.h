@@ -337,6 +337,8 @@ private:
 
   // Helper functions for the Cmd*Analyze() methods
   void AccessBufferMemory(uint64_t buf_id, uint64_t offset, uint64_t size, AccessAction action);
+  void TransitionBufferQueueFamily(uint64_t buf_id, uint64_t srcQueueFamily,
+                                   uint64_t dstQueueFamily, uint64_t offset, uint64_t size);
   void ReadBoundVertexBuffers(uint64_t vertexCount, uint64_t instanceCount, uint64_t firstVertex,
                               uint64_t firstInstance);
   void AccessMemoryInBoundDescriptorSets(BoundPipeline &boundPipeline);
@@ -354,8 +356,10 @@ private:
                         VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM,
                         uint64_t baseArrayLayer = 0, uint64_t layerCount = VK_REMAINING_ARRAY_LAYERS);
   void TransitionImageLayout(uint64_t image, ExtObject *subresource, VkImageLayout oldlayout,
-                             VkImageLayout newLayout, uint64_t srcQueueFamily, uint64_t dstQueueFamily);
-  void TransitionImageViewLayout(uint64_t view, VkImageLayout oldLayout, VkImageLayout newLayout, uint64_t srcQueueFamily, uint64_t dstQueueFamily);
+                             VkImageLayout newLayout, uint64_t srcQueueFamily,
+                             uint64_t dstQueueFamily);
+  void TransitionImageViewLayout(uint64_t view, VkImageLayout oldLayout, VkImageLayout newLayout,
+                                 uint64_t srcQueueFamily, uint64_t dstQueueFamily);
   void TransitionAttachmentLayout(uint64_t attachment, VkImageLayout layout);
   void LoadSubpassAttachment(ExtObject *attachmentRef);
   void BeginSubpass();

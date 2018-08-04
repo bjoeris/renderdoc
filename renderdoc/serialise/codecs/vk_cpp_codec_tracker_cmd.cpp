@@ -58,10 +58,15 @@ void TraceTracker::CmdEndRenderPassAnalyze(ExtObject *end)
   {
     uint64_t viewID = framebufferAttachments->At(a)->U64();
     ExtObject *attachmentDesc = renderPassAttachments->At(a);
+    VkFormat format = (VkFormat)attachmentDesc->At("format")->U64();
+    VkAttachmentLoadOp loadOp = IsStencilFormat(format)
+                                    ? (VkAttachmentLoadOp)attachmentDesc->At("stencilLoadOp")->U64()
+                                    : (VkAttachmentLoadOp)attachmentDesc->At("loadOp")->U64();
 
     VkImageLayout finalLayout = (VkImageLayout)attachmentDesc->At("finalLayout")->U64();
 
-    TransitionImageViewLayout(viewID, bindingState.attachmentLayout[a], finalLayout, VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED);
+    TransitionImageViewLayout(viewID, bindingState.attachmentLayout[a], finalLayout,
+                              VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED);
   }
 
   beginRenderPassCmdBuffer.erase(commandBuffer);
@@ -442,6 +447,19 @@ void TraceTracker::CmdClearAttachmentsAnalyze(ExtObject *o)
 
 void TraceTracker::CmdPipelineBarrierAnalyze(ExtObject *o)
 {
+  ExtObject *bufBarriers = o->At("pBufferMemoryBarriers");
+  for(uint32_t i = 0; i < bufBarriers->Size(); i++)
+  {
+    ExtObject *barrier = bufBarriers->At(i);
+    uint64_t bufID = barrier->At("buffer")->U64();
+    uint64_t offset = barrier->At("offset")->U64();
+    uint64_t size = barrier->At("size")->U64();
+
+    uint64_t srcQueueFamilyIndex = barrier->At("srcQueueFamilyIndex")->U64();
+    uint64_t dstQueueFamilyIndex = barrier->At("dstQueueFamilyIndex")->U64();
+
+    TransitionBufferQueueFamily(bufID, srcQueueFamilyIndex, dstQueueFamilyIndex, offset, size);
+  }
   ExtObject *imgBarriers = o->At("pImageMemoryBarriers");
   for(uint32_t i = 0; i < imgBarriers->Size(); i++)
   {
@@ -461,7 +479,8 @@ void TraceTracker::CmdPipelineBarrierAnalyze(ExtObject *o)
     uint64_t srcQueueFamilyIndex = barrier->At("srcQueueFamilyIndex")->U64();
     uint64_t dstQueueFamilyIndex = barrier->At("dstQueueFamilyIndex")->U64();
 
-    TransitionImageLayout(imageID, range, oldLayout, newLayout, srcQueueFamilyIndex, dstQueueFamilyIndex);
+    TransitionImageLayout(imageID, range, oldLayout, newLayout, srcQueueFamilyIndex,
+                          dstQueueFamilyIndex);
   }
 }
 
