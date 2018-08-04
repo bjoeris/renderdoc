@@ -58,11 +58,6 @@ void TraceTracker::CmdEndRenderPassAnalyze(ExtObject *end)
   {
     uint64_t viewID = framebufferAttachments->At(a)->U64();
     ExtObject *attachmentDesc = renderPassAttachments->At(a);
-    VkFormat format = (VkFormat)attachmentDesc->At("format")->U64();
-    VkAttachmentLoadOp loadOp = IsStencilFormat(format)
-                                    ? (VkAttachmentLoadOp)attachmentDesc->At("stencilLoadOp")->U64()
-                                    : (VkAttachmentLoadOp)attachmentDesc->At("loadOp")->U64();
-
     VkImageLayout finalLayout = (VkImageLayout)attachmentDesc->At("finalLayout")->U64();
 
     TransitionImageViewLayout(viewID, bindingState.attachmentLayout[a], finalLayout,
@@ -80,7 +75,7 @@ void TraceTracker::CmdExecuteCommandsAnalyze(ExtObject *o)
   {
     uint32_t recordIndex = fg.FindCmdBufferIndex(commandBuffers->At(j));
     CmdBufferRecord &record = fg.records[recordIndex];
-    for(int k = 0; k < record.cmds.size(); k++)
+    for(uint64_t k = 0; k < record.cmds.size(); k++)
     {
       AnalyzeCmd(record.cmds[k]);
     }
@@ -153,6 +148,7 @@ void TraceTracker::CmdBindDescriptorSetsAnalyze(ExtObject *o)
                 dynamicOffsets->At(dynamicOffsetIndex)->U64();
             dynamicOffsetIndex++;
           }
+        default:break;
       }
     }
   }

@@ -365,7 +365,7 @@ void TraceTracker::AnalyzeInitResources()
       {
         uint32_t recordIndex = fg.FindCmdBufferIndex(commandBuffers->At(j));
         CmdBufferRecord &record = fg.records[recordIndex];
-        for(int k = 0; k < record.cmds.size(); k++)
+        for(uint64_t k = 0; k < record.cmds.size(); k++)
         {
           AnalyzeCmd(record.cmds[k]);
         }
@@ -548,6 +548,7 @@ bool TraceTracker::ResourceNeedsReset(uint64_t resourceID, bool forInit, bool fo
             // some part of the initial value could be read, and then written, so reset is required
             needsReset = true;
             break;
+          default: break;
         }
       }
 
@@ -595,6 +596,7 @@ void TraceTracker::ScanResourceCreation(StructuredChunkList &chunks, StructuredB
         TT_VK_CALL_INTERNAL_SWITCH(CreateGraphicsPipelines, ext);
         TT_VK_CALL_INTERNAL_SWITCH(CreateComputePipelines, ext);
         TT_VK_CALL_INTERNAL_SWITCH(EnumeratePhysicalDevices, ext);
+      default: break;
     }
   }
 }
@@ -640,6 +642,7 @@ void TraceTracker::ScanQueueSubmits(StructuredChunkList &chunks)
       case(uint32_t)VulkanChunk::vkCmdDraw:
       case(uint32_t)VulkanChunk::vkCmdDrawIndexed:
       case(uint32_t)VulkanChunk::vkCmdBindPipeline: AddCommandBufferToFrameGraph(ext); break;
+      default: break;
     }
   }
 }
@@ -657,6 +660,7 @@ void TraceTracker::ScanInitialContents(StructuredChunkList &chunks)
         InitialLayoutsInternal(as_ext(chunks[c]));
         break;
       case(uint32_t)SystemChunk::InitialContents: InitialContentsInternal(as_ext(chunks[c])); break;
+      default: break;
     }
   }
 }
@@ -740,7 +744,6 @@ void TraceTracker::AnalyzeMemoryResetRequirements()
           VkImageLayout initialLayout = (VkImageLayout)image_ci->At(14)->U64();
           if(initialLayout == VK_IMAGE_LAYOUT_PREINITIALIZED)
           {
-            uint64_t image_id = abr.createSDObj->At(3)->U64();
             abr.reset = RESET_REQUIREMENT_INIT;
           }
           if((optimizations & CODE_GEN_OPT_IMAGE_MEMORY_BIT) == 0)
@@ -764,6 +767,7 @@ void TraceTracker::AnalyzeMemoryResetRequirements()
               case ACCESS_STATE_RESET:
                 abr.reset = std::min(RESET_REQUIREMENT_RESET, abr.reset);
                 break;
+              default: break;
             }
           }
           if((optimizations & CODE_GEN_OPT_BUFFER_INIT_BIT) == 0)

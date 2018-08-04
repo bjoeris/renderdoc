@@ -516,17 +516,17 @@ void BindingState::BeginRenderPass(ExtObject *aRenderPass, ExtObject *aFramebuff
     ExtObject *resolveAttachments = subpass->At(6);
     ExtObject *depthStencilAttachment = subpass->At(7);
 
-    for(int j = 0; j < inputAttachments->Size(); j++)
+    for(uint64_t j = 0; j < inputAttachments->Size(); j++)
     {
       attachmentUse(s, inputAttachments->At(j)->At(0)->U64());
     }
 
-    for(int j = 0; j < colorAttachments->Size(); j++)
+    for(uint64_t j = 0; j < colorAttachments->Size(); j++)
     {
       attachmentUse(s, colorAttachments->At(j)->At(0)->U64());
     }
 
-    for(int j = 0; j < resolveAttachments->Size(); j++)
+    for(uint64_t j = 0; j < resolveAttachments->Size(); j++)
     {
       attachmentUse(s, resolveAttachments->At(j)->At(0)->U64());
     }

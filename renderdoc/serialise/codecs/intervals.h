@@ -91,7 +91,7 @@ public:
   inline void setValue(uint64_t aStart, uint64_t aEnd, const T &aValue)
   {
     T old_value = this->value();
-    if(aValue == old_value || aEnd <= start() && end() <= aStart)
+    if((aValue == old_value || aEnd <= start()) && end() <= aStart)
     {
       // The value is unchanged, or the specified interval is disjoint from this interval.
       return;
@@ -118,7 +118,7 @@ public:
     // Merge with preceding interval, if necessary
     if(iter != owner->begin())
     {
-      std::map<uint64_t, T>::iterator prev_it = iter;
+      typename std::map<uint64_t, T>::iterator prev_it = iter;
       prev_it--;
       if(prev_it->second == iter->second)
       {
@@ -128,7 +128,7 @@ public:
     }
 
     // Merge with succeding interval, if necessary
-    std::map<uint64_t, T>::iterator next_it = iter;
+    typename std::map<uint64_t, T>::iterator next_it = iter;
     next_it++;
     if(next_it != owner->end())
     {

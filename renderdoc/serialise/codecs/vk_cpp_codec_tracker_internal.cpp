@@ -27,7 +27,7 @@ void TraceTracker::CreateDeviceInternal(ExtObject *o)
   ExtObject *extensionCount = ci->At(7);
   ExtObject *extensions = ci->At(8);
   std::string debug_marker("VK_EXT_debug_marker");
-  for(int i = 0; i < extensions->Size(); i++)
+  for(uint64_t i = 0; i < extensions->Size(); i++)
   {
     if(debug_marker == extensions->At(i)->Str())
     {

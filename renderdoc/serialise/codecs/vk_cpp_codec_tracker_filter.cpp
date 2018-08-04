@@ -445,7 +445,7 @@ bool TraceTracker::FilterCreateGraphicsPipelines(ExtObject *o)
   // For some reason VkSpecializationMapEntry objects have 'constantID' field duplicated.
   // This removes the duplicate fields.
   ExtObject *stages = ci->At(4);
-  for(int i = 0; i < stages->Size(); i++)
+  for(uint64_t i = 0; i < stages->Size(); i++)
   {
     ExtObject *specializationInfo = stages->At(i)->At(6);
     if(specializationInfo->IsNULL())
@@ -453,7 +453,7 @@ bool TraceTracker::FilterCreateGraphicsPipelines(ExtObject *o)
       continue;
     }
     ExtObject *mapEntries = specializationInfo->At(1);
-    for(int j = 0; j < mapEntries->Size(); j++)
+    for(uint64_t j = 0; j < mapEntries->Size(); j++)
     {
       ExtObject *mapEntry = mapEntries->At(j);
       if(mapEntry->Size() != 3)
@@ -480,7 +480,7 @@ bool TraceTracker::FilterCreateComputePipelines(ExtObject *o)
   if(!specializationInfo->IsNULL())
   {
     ExtObject *mapEntries = specializationInfo->At(1);
-    for(int j = 0; j < mapEntries->Size(); j++)
+    for(uint64_t j = 0; j < mapEntries->Size(); j++)
     {
       ExtObject *mapEntry = mapEntries->At(j);
       if(mapEntry->Size() != 3)

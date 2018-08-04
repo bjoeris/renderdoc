@@ -176,7 +176,7 @@ void TraceTracker::AccessMemoryInDescriptorSet(uint64_t descriptorSet_id, uint64
       // Fall through; storage can also be read.
       case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
       case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-        for(int i = 0; i < binding.imageBindings.size(); i++)
+        for(uint64_t i = 0; i < binding.imageBindings.size(); i++)
         {
           BoundImage imageBinding = binding.imageBindings[i];
           if(!imageBinding.bound)
@@ -209,7 +209,7 @@ void TraceTracker::AccessMemoryInDescriptorSet(uint64_t descriptorSet_id, uint64
       // Fall through; storage can also be read.
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-        for(int i = 0; i < binding.bufferBindings.size(); i++)
+        for(uint64_t i = 0; i < binding.bufferBindings.size(); i++)
         {
           BoundBuffer bufferBinding = binding.bufferBindings[i];
           if(!bufferBinding.bound)
@@ -240,7 +240,7 @@ void TraceTracker::AccessMemoryInDescriptorSet(uint64_t descriptorSet_id, uint64
         action = ACCESS_ACTION_READ_WRITE;
       // Fall through; storage can also be read.
       case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-        for(int i = 0; i < binding.texelViewBindings.size(); i++)
+        for(uint64_t i = 0; i < binding.texelViewBindings.size(); i++)
         {
           uint64_t view_id = binding.texelViewBindings[i].texelBufferView;
           if(view_id == 0)
@@ -281,6 +281,7 @@ void TraceTracker::AccessMemoryInDescriptorSet(uint64_t descriptorSet_id, uint64
           AccessBufferMemory(buffer, offset, size, action);
         }
         break;
+      default: break;
     }
   }
 }
@@ -329,7 +330,7 @@ bool isFullImage(ExtObject *imageExtent, ExtObject *offset, ExtObject *extent, u
   uint64_t offsetV[3]{0, 0, 0};
   uint64_t imageExtentV[3];
   uint64_t extentV[3];
-  for(int i = 0; i < 3; i++)
+  for(uint64_t i = 0; i < 3; i++)
   {
     uint64_t d = imageExtent->At(i)->U64();
     imageExtentV[i] = extentV[i] =
@@ -338,7 +339,7 @@ bool isFullImage(ExtObject *imageExtent, ExtObject *offset, ExtObject *extent, u
   if(offset != NULL)
   {
     RDCASSERT(std::string(offset->Type()).substr(0, 8) == "VkOffset");
-    for(int i = 0; i < offset->Size(); i++)
+    for(uint64_t i = 0; i < offset->Size(); i++)
     {
       offsetV[i] = offset->At(i)->U64();
     }
@@ -346,13 +347,13 @@ bool isFullImage(ExtObject *imageExtent, ExtObject *offset, ExtObject *extent, u
   if(extent != NULL)
   {
     RDCASSERT(std::string(extent->Type()).substr(0, 8) == "VkExtent");
-    for(int i = 0; i < extent->Size(); i++)
+    for(uint64_t i = 0; i < extent->Size(); i++)
     {
       extentV[i] = extent->At(i)->U64();
     }
   }
   bool fullImage = true;
-  for(int i = 0; i < 3; i++)
+  for(uint64_t i = 0; i < 3; i++)
   {
     if(offsetV[i] != 0 || extentV[i] != imageExtentV[i])
     {
@@ -604,7 +605,7 @@ void TraceTracker::BeginSubpass()
   ExtObject *resolveAttachments = subpass->At("pResolveAttachments");
   ExtObject *depthStencilAttachment = subpass->At("pDepthStencilAttachment");
 
-  for(int i = 0; i < inputAttachments->Size(); i++)
+  for(uint64_t i = 0; i < inputAttachments->Size(); i++)
   {
     ExtObject *attachmentRef = inputAttachments->At(i);
     uint64_t a = attachmentRef->At("attachment")->U64();
@@ -652,7 +653,7 @@ void TraceTracker::EndSubpass()
   ExtObject *blendState = pipeline_ci->At(12);
   ExtObject *blendAttachmets = blendState->At(6);
 
-  for(int i = 0; i < colorAttachments->Size(); i++)
+  for(uint64_t i = 0; i < colorAttachments->Size(); i++)
   {
     uint64_t blendEnabled = blendAttachmets->At(i)->At(0)->U64();
     // "blendEnable controls whether blending is enabled for the corresponding color attachment. If
@@ -664,7 +665,7 @@ void TraceTracker::EndSubpass()
       AccessAttachment(colorAttachments->At(i)->At(0)->U64(), ACCESS_ACTION_READ_WRITE);
     }
   }
-  for(int i = 0; i < resolveAttachments->Size(); i++)
+  for(uint64_t i = 0; i < resolveAttachments->Size(); i++)
   {
     AccessAttachment(resolveAttachments->At(i)->At(0)->U64(), ACCESS_ACTION_WRITE);
   }
@@ -734,7 +735,9 @@ void TraceTracker::BufferImageCopyHelper(uint64_t buf_id, uint64_t img_id, ExtOb
         {
           case VK_FORMAT_D16_UNORM_S8_UINT: regionFormat = VK_FORMAT_D16_UNORM; break;
           case VK_FORMAT_D32_SFLOAT_S8_UINT: regionFormat = VK_FORMAT_D32_SFLOAT; break;
-        }
+          default: break;
+        } break;
+      default: break;
     }
 
     // rowSize = # bytes accessed per row

@@ -209,7 +209,8 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
 
           // all remaining resources should be not require reset nor initialization.
           reset = RESET_REQUIREMENT_NO_RESET;
-        }
+        } break;
+        default: break;
       }
       RDCASSERT(abr.reset >= reset);
     }
@@ -250,7 +251,8 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
       // Set InitSize_ to the final memory_size.
       const char *init_size_name = tracker->GetMemInitSizeVar(memory->U64());
       files[pass]->PrintLn("%s = memory_size;", init_size_name);
-    }
+    } break;
+    default: break;
   }
 }
 
