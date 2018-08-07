@@ -69,7 +69,7 @@ protected:
   func_array funcs = {"main",    "variables", "render",   "create",
                       "release", "init",      "prereset", "postreset"};
 
-  std::string file_dir;
+  std::string rootDirectory;
   typedef std::array<CodeFile *, ID_COUNT> file_array;
   file_array files;
 
@@ -122,7 +122,7 @@ protected:
   void ClearBufferData();
 
 public:
-  CodeWriter(std::string path) : file_dir{path}
+  CodeWriter(std::string path) : rootDirectory{path}
   {
     if(strcmp(RENDERDOC_GetConfigSetting("shim"), "true") == 0)
     {

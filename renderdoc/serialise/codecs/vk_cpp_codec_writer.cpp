@@ -50,11 +50,11 @@ void CodeWriter::Open()
   {
     if(i == ID_MAIN || i == ID_VAR)
     {
-      files[i] = new CodeFile(file_dir, funcs[i]);
+      files[i] = new CodeFile(rootDirectory, funcs[i]);
     }
     else
     {
-      files[i] = new MultiPartCodeFile(file_dir, funcs[i]);
+      files[i] = new MultiPartCodeFile(rootDirectory, funcs[i]);
     }
     files[i]->Open(funcs[i]);
   }
