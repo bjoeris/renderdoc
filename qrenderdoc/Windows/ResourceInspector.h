@@ -32,7 +32,7 @@ namespace Ui
 class ResourceInspector;
 }
 
-class QSortFilterProxyModel;
+class QCollatorSortFilterProxyModel;
 
 class RDTreeWidgetItem;
 class ResourceListItemModel;
@@ -85,5 +85,5 @@ private:
   ResourceId m_Resource;
   ResourceListItemModel *m_ResourceModel;
   int m_ResourceCacheID = -1;
-  QSortFilterProxyModel *m_FilterModel;
+  QCollatorSortFilterProxyModel *m_FilterModel;
 };

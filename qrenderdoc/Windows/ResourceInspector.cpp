@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 #include "ResourceInspector.h"
+#include <QCollator>
 #include <QKeyEvent>
 #include "3rdparty/toolwindowmanager/ToolWindowManagerArea.h"
 #include "Widgets/Extended/RDHeaderView.h"
@@ -110,10 +111,13 @@ ResourceInspector::ResourceInspector(ICaptureContext &ctx, QWidget *parent)
 
   m_ResourceModel = new ResourceListItemModel(this, m_Ctx);
 
-  m_FilterModel = new QSortFilterProxyModel(this);
+  m_FilterModel = new QCollatorSortFilterProxyModel(this);
   m_FilterModel->setSourceModel(m_ResourceModel);
   m_FilterModel->setFilterCaseSensitivity(Qt::CaseInsensitive);
   m_FilterModel->setFilterRole(FilterRole);
+  m_FilterModel->sort(0);
+  m_FilterModel->collator()->setNumericMode(true);
+  m_FilterModel->collator()->setCaseSensitivity(Qt::CaseInsensitive);
 
   ui->resourceList->setModel(m_FilterModel);
 
@@ -196,6 +200,9 @@ void ResourceInspector::Inspect(ResourceId id)
 {
   if(m_Resource == id)
     return;
+
+  if(m_Resource != ResourceId())
+    ui->initChunks->saveInternalExpansion(ToQStr(m_Resource), 0);
 
   m_Resource = id;
 
@@ -321,6 +328,9 @@ void ResourceInspector::Inspect(ResourceId id)
   }
 
   ui->initChunks->setUpdatesEnabled(true);
+
+  if(m_Resource != ResourceId())
+    ui->initChunks->applyInternalExpansion(ToQStr(m_Resource), 0);
 }
 
 void ResourceInspector::OnCaptureLoaded()
@@ -343,6 +353,7 @@ void ResourceInspector::OnCaptureClosed()
   m_ResourceModel->reset();
 
   ui->initChunks->clear();
+  ui->initChunks->clearInternalExpansions();
   ui->relatedResources->clear();
   ui->resourceUsage->clear();
 

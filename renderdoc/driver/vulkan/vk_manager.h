@@ -310,6 +310,7 @@ public:
     if(IsReplayMode(m_State))
       ResourceManager::RemoveWrapper(ToTypedHandle(Unwrap(obj)));
 
+    ResourceManager::MarkCleanResource(id);
     ResourceManager::ReleaseCurrentResource(id);
     VkResourceRecord *record = GetRecord(obj);
     if(record)
@@ -405,9 +406,9 @@ public:
   // helper for sparse mappings
   void MarkSparseMapReferenced(SparseMapping *sparse);
 
-private:
-  bool SerialisableResource(ResourceId id, VkResourceRecord *record);
+  void SetInternalResource(ResourceId id);
 
+private:
   bool ResourceTypeRelease(WrappedVkRes *res);
 
   bool Force_InitialState(WrappedVkRes *res, bool prepare);
