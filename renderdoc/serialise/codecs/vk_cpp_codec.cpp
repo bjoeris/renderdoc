@@ -236,9 +236,7 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
       case(uint32_t)VulkanChunk::vkRegisterDisplayEventEXT:
       case(uint32_t)VulkanChunk::SetShaderDebugPath:
       case(uint32_t)VulkanChunk::vkCmdIndirectSubCommand:
-      default:
-        RDCWARN("%s Vulkan call not implemented", ext->Name());
-        break;
+      default: RDCWARN("%s Vulkan call not implemented", ext->Name()); break;
     }
   }
   return ReplayStatus::Succeeded;

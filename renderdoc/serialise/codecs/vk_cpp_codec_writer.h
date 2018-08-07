@@ -116,7 +116,7 @@ protected:
   void CopyResetImage(ExtObject *o, uint32_t pass);
   void CopyResetBuffer(ExtObject *o, uint32_t pass);
   void ImageLayoutTransition(uint64_t image_id, ExtObject *subres, const char *old_layout,
-    uint32_t pass);
+                             uint32_t pass);
 
   void ReadBuffer(const char *name, uint64_t i);
   void ClearBufferData();
@@ -192,7 +192,6 @@ public:
   // Add a global variable of a given type into the VAR files.
   // For simple variable declarations, such as VkDevice VkDevice_1;
   std::string AddVar(const char *type, uint64_t id) { return AddVar(type, type, id); }
-
   // --------------------------------------------------------------------------
   void Resolution(uint32_t pass);
 
@@ -226,7 +225,7 @@ public:
 
   void AllocateCommandBuffers(ExtObject *o, uint32_t pass);
   void AllocateDescriptorSets(ExtObject *o, uint32_t pass);
-  
+
   void FlushMappedMemoryRanges(ExtObject *o, uint32_t pass);
   void UnmapMemory(ExtObject *o, uint32_t pass);
   void AcquireNextImage(ExtObject *o, uint32_t pass);

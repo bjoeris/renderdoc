@@ -562,9 +562,9 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
     // If neither Op is LOAD then we can pretend loadOp is VK_ATTACHMENT_LOAD_OP_DONT_CARE
     if(IsDepthAndStencilFormat(format))
     {
-      loadOp = (VkAttachmentLoadOp) att_desc->At("loadOp")->U64();
+      loadOp = (VkAttachmentLoadOp)att_desc->At("loadOp")->U64();
       VkAttachmentLoadOp stencilLoadOp = (VkAttachmentLoadOp)att_desc->At("stencilLoadOp")->U64();
-      if (loadOp != VK_ATTACHMENT_LOAD_OP_LOAD && stencilLoadOp != VK_ATTACHMENT_LOAD_OP_LOAD)
+      if(loadOp != VK_ATTACHMENT_LOAD_OP_LOAD && stencilLoadOp != VK_ATTACHMENT_LOAD_OP_LOAD)
         loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
       else
         loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -586,7 +586,9 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
         action = ACCESS_ACTION_WRITE;
       }
       AccessImageView(view_id, initialLayout, action);
-    } else {
+    }
+    else
+    {
       AccessImageView(view_id, initialLayout, ACCESS_ACTION_READ);
     }
   }
@@ -735,7 +737,8 @@ void TraceTracker::BufferImageCopyHelper(uint64_t buf_id, uint64_t img_id, ExtOb
           case VK_FORMAT_D16_UNORM_S8_UINT: regionFormat = VK_FORMAT_D16_UNORM; break;
           case VK_FORMAT_D32_SFLOAT_S8_UINT: regionFormat = VK_FORMAT_D32_SFLOAT; break;
           default: break;
-        } break;
+        }
+        break;
       default: break;
     }
 

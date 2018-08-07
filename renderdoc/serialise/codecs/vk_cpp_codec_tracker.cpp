@@ -734,7 +734,7 @@ void TraceTracker::AnalyzeMemoryResetRequirements()
 
       switch(abr.bindSDObj->ChunkID())
       {
-        case (uint32_t)VulkanChunk::vkBindImageMemory:
+        case(uint32_t)VulkanChunk::vkBindImageMemory:
         {
           ExtObject *image_ci = abr.createSDObj->At(1);
           VkImageLayout initialLayout = (VkImageLayout)image_ci->At(14)->U64();
@@ -748,7 +748,7 @@ void TraceTracker::AnalyzeMemoryResetRequirements()
           }
           break;
         }
-        case (uint32_t) VulkanChunk::vkBindBufferMemory:
+        case(uint32_t)VulkanChunk::vkBindBufferMemory:
         {
           MemRange range;
           range.MakeRange(abr.offset, abr.requirement);

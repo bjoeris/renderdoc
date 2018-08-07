@@ -570,7 +570,8 @@ bool TraceTracker::FilterBufferInfoDescSet(uint64_t buffer_id, uint64_t offset, 
     RDCWARN(
         "Buffer %llu has size (%llu) and is bound with (range %llu, offset %llu). "
         "Replacing with ~0ULL",    // should I replace it with (range - offset) instead?
-        buffer_id, buffer_size->U64(), range->U64(), offset);
+        buffer_id,
+        buffer_size->U64(), range->U64(), offset);
     range->U64() = VK_WHOLE_SIZE;
     // Force it to be unsigned int type
     range->type.basetype = SDBasic::UnsignedInteger;

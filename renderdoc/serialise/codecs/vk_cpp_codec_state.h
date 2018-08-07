@@ -210,7 +210,6 @@ struct MemoryAllocationWithBoundResources
   bool NeedsReset();
   bool NeedsInit();
   std::vector<size_t> BoundResourcesOrderByResetRequiremnet();
-
   bool CheckAliasedResources(MemRange r);
   void Access(uint64_t cmdQueueFamily, VkSharingMode sharingMode, AccessAction action,
               uint64_t offset, uint64_t size);

@@ -464,7 +464,7 @@ void TraceTracker::QueueSubmitInternal(ExtObject *o)
   for(uint64_t j = 0; j < si->Size(); j++)
   {
     ExtObject *cb = si->At(j)->At(6);
-    vk_cpp_codec::QueueSubmit qs = { o, o->At(0) };
+    vk_cpp_codec::QueueSubmit qs = {o, o->At(0)};
     uint64_t mem_updates = fg.updates.memory.size();
     uint64_t ds_updates = fg.updates.descset.size();
     for(uint64_t i = 0; i < cb->Size(); i++)

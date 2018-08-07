@@ -148,7 +148,7 @@ void TraceTracker::CmdBindDescriptorSetsAnalyze(ExtObject *o)
                 dynamicOffsets->At(dynamicOffsetIndex)->U64();
             dynamicOffsetIndex++;
           }
-        default:break;
+        default: break;
       }
     }
   }
