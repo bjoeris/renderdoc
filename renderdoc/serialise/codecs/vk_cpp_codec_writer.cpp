@@ -1287,7 +1287,7 @@ void CodeWriter::InitDescSet(ExtObject *o)
   };
 
   std::vector<DescSetInfoNames> writeDescriptorSets[2];
-  std::array<uint32_t, 2> passes = {ID_INIT, ID_PRERESET};
+  std::array<uint32_t, 2> passes = {{ID_INIT, ID_PRERESET}};
 
   DescriptorSetInfoMapIter descSetInfo_it = tracker->DescSetInfosFind(descriptorSetID);
 

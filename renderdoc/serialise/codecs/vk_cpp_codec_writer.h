@@ -83,8 +83,8 @@ public:
 
 protected:
   typedef std::array<std::string, ID_COUNT> func_array;
-  func_array funcs = {"main",    "variables", "render",   "create",
-                      "release", "init",      "prereset", "postreset"};
+  func_array funcs = {{"main",    "variables", "render",   "create",
+                      "release", "init",      "prereset", "postreset"}};
 
   std::string rootDirectory;
   typedef std::array<CodeFile *, ID_COUNT> file_array;
