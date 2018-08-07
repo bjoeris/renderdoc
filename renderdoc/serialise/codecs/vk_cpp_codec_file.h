@@ -53,11 +53,11 @@ protected:
   size_t bracket_count = 0;
   std::string spaces = "";
   std::string func_name = "";
-  std::string file_dir = "";
+  std::string directoryPath = "";
 
 public:
-  CodeFile(const std::string &dir_path, const std::string &file_name)
-      : file_dir(dir_path), func_name(file_name)
+  CodeFile(const std::string &dirPath, const std::string &file_name)
+      : directoryPath(dirPath), func_name(file_name)
   {
   }
 
@@ -167,8 +167,8 @@ public:
     std::string name = std::string("gen_") + file_name;
     header_name = name + std::string(".h");
     cpp_name = name + std::string(".cpp");
-    std::string header_path = file_dir + "/" + header_name;
-    std::string cpp_path = file_dir + "/" + cpp_name;
+    std::string header_path = directoryPath + "/" + header_name;
+    std::string cpp_path = directoryPath + "/" + cpp_name;
     FileIO::CreateParentDirectory(header_path);
     header = FileIO::fopen(header_path.c_str(), "wt");
     RDCASSERT(header != NULL);
@@ -197,7 +197,7 @@ public:
     std::string name = std::string("gen_") + file_name;
     cpp_name = name + std::string("_") + std::to_string(index) + std::string(".cpp");
 
-    std::string cpp_path = file_dir + "/" + cpp_name;
+    std::string cpp_path = directoryPath + "/" + cpp_name;
     FileIO::CreateParentDirectory(cpp_path);
     cpp = FileIO::fopen(cpp_path.c_str(), "wt");
     RDCASSERT(cpp != NULL);
@@ -205,7 +205,7 @@ public:
     if(header == NULL)
     {
       header_name = name + std::string(".h");
-      std::string header_path = file_dir + "/" + header_name;
+      std::string header_path = directoryPath + "/" + header_name;
       header = FileIO::fopen(header_path.c_str(), "wt");
       RDCASSERT(header != NULL);
       PrintLnH("#pragma once")
