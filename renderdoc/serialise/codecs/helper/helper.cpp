@@ -846,5 +846,5 @@ void MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMapp
 }
 
 std::string StageProgressString(const char *stage, uint32_t i, uint32_t N) {
-  return std::string("RenderDoc Frame Loop: " + std::string(stage) + " part" + std::to_string(i) + " of" + std::to_string(N));
+  return std::string("RenderDoc Frame Loop: " + std::string(stage) + " part " + std::to_string(i) + " of " + std::to_string(N));
 }
