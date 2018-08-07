@@ -275,9 +275,10 @@ CodeGenOpts GetEnvOpts()
   {
     optimizations &= ~CODE_GEN_OPT_IMAGE_INIT_BIT;
   }
-  if(OptimizationDisabled("RDOC_CODE_GEN_OPT_IMAGE_RESET"))
+  if (1) // OptimizationDisabled("RDOC_CODE_GEN_OPT_IMAGE_RESET")
   {
     optimizations &= ~CODE_GEN_OPT_IMAGE_RESET_BIT;
+    RDCWARN("Optimization for VkImage resets is disabled.");
   }
   if(OptimizationDisabled("RDOC_CODE_GEN_OPT_IMAGE_MEMORY"))
   {
