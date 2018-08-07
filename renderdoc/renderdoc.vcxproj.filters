@@ -874,6 +874,9 @@
     <ClCompile Include="serialise\codecs\vk_cpp_codec_writer_generic.cpp">
       <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
     </ClCompile>
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_writer_template_files.cpp">
+      <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="os\win32\comexport.def">

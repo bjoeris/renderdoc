@@ -247,7 +247,7 @@ void TraceTracker::ScanBinaryData(StructuredBufferList &buffers)
       continue;
 
     const char *name = GetVarFromMap(dataBlobs, "std::vector<uint8_t>", "buffer", i);
-    std::string full_name = file_dir + "/" + name;
+    std::string full_name = file_dir + "/" + "sample_cpp_trace" + "/" + name;
     FileIO::CreateParentDirectory(full_name);
     FILE *fbin = FileIO::fopen(full_name.c_str(), "wb");
     RDCASSERT(fbin != NULL);

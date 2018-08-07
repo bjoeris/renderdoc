@@ -32,14 +32,6 @@
 #include <utility>
 #include <vector>
 
-#include "common/common.h"
-#include "core/core.h"
-#include "driver/vulkan/vk_common.h"
-#include "driver/vulkan/vk_resources.h"
-#include "serialise/rdcfile.h"
-#include "ext_object.h"
-#include "vk_cpp_codec_state.h"
-#include "vk_cpp_codec_tracker.h"
 #include "vk_cpp_codec_writer.h"
 
 namespace vk_cpp_codec
@@ -78,6 +70,32 @@ void CodeWriter::Open()
   {
     files[ID_VAR]->PrintLnH("#include \"sample_cpp_shim/shim_vulkan.h\"");
   }
+
+  WriteTemplateFile("helper", "helper.h", helperH.c_str());
+  WriteTemplateFile("helper", "CMakeLists.txt", helperCMakeLists.c_str());
+  WriteTemplateFile("helper", "helper.cpp", (helperCppP1 + helperCppP2).c_str());
+  WriteTemplateFile("sample_cpp_trace", "main_win.cpp", mainWinCpp.c_str());
+  WriteTemplateFile("sample_cpp_trace", "main_yeti.cpp", mainYetiCpp.c_str());
+  WriteTemplateFile("sample_cpp_trace", "main_xlib.cpp", mainXlibCpp.c_str());
+  WriteTemplateFile("sample_cpp_trace", "common.h", commonH.c_str());
+  WriteTemplateFile("sample_cpp_trace", "CMakeLists.txt", projectCMakeLists.c_str());
+  WriteTemplateFile("", "CMakeLists.txt", rootCMakeLists.c_str());
+  WriteTemplateFile("", "build_yeti.bat", genScriptYeti.c_str());
+  WriteTemplateFile("", "build_vs2015.bat", genScriptWin.c_str());
+  WriteTemplateFile("", "build_xlib.bat", genScriptLinux.c_str());
+  WriteTemplateFile("", "build_vs2015_ninja.bat", genScriptWinNinja.c_str());
+}
+
+void CodeWriter::WriteTemplateFile(std::string subdir, std::string file, const char* str) {
+  std::string path = rootDirectory;
+  if (!subdir.empty())
+    path+="/" + subdir;
+  std::string filepath = path + "/" + file;
+  FileIO::CreateParentDirectory(filepath);
+
+  FILE *templateFile = FileIO::fopen(filepath.c_str(), "wt");
+  fprintf(templateFile, "%s", str);
+  fclose(templateFile);
 }
 
 void CodeWriter::Close()

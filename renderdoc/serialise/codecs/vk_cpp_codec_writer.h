@@ -39,6 +39,9 @@
 #include "driver/vulkan/vk_resources.h"
 #include "serialise/rdcfile.h"
 #include "vk_cpp_codec_file.h"
+#include "ext_object.h"
+#include "vk_cpp_codec_state.h"
+#include "vk_cpp_codec_tracker.h"
 
 namespace vk_cpp_codec
 {
@@ -48,6 +51,20 @@ class CodeWriter
 {
   friend TraceTracker;
 
+  static std::string rootCMakeLists;
+  static std::string projectCMakeLists;
+  static std::string helperCMakeLists;
+  static std::string mainWinCpp;
+  static std::string mainYetiCpp;
+  static std::string mainXlibCpp;
+  static std::string commonH;
+  static std::string helperH;
+  static std::string helperCppP1;
+  static std::string helperCppP2;
+  static std::string genScriptYeti;
+  static std::string genScriptWin;
+  static std::string genScriptLinux;
+  static std::string genScriptWinNinja;
 public:
   enum IDs
   {
@@ -78,6 +95,8 @@ protected:
   // Code project doesn't allow multiple calls to 'Open'.
   // Once you create a code project you get all the files you need.
   void Open();
+
+  void WriteTemplateFile(std::string subdir, std::string file, const char * str);
 
   const uint32_t kLinearizeMemory = 0;
 
