@@ -715,6 +715,12 @@ void TraceTracker::ScanFilter(StructuredChunkList &chunks)
         FilterCmdResolveImage(as_ext(chunks[c++]));
         break;
       case(uint32_t)VulkanChunk::vkCreateDevice: FilterCreateDevice(as_ext(chunks[c++])); break;
+      case (uint32_t) VulkanChunk::vkCmdPipelineBarrier:
+        if (!FilterCmdPipelineBarrier(as_ext(chunks[c])))
+          chunks.removeOne(chunks[c]);
+        else
+          c++;
+        break;
       default: c++; break;
     }
   }

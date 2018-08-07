@@ -312,7 +312,7 @@ private:
   void FilterCmdBlitImage(ExtObject *o);
   void FilterCmdResolveImage(ExtObject *o);
   void FilterCreateDevice(ExtObject *o);
-
+  bool FilterCmdPipelineBarrier(ExtObject *o);
   // --------------------------------------------------------------------------
   // Trace tracker 'Scans' the trace entirely several times to understand
   // what was happening in it to resources.
@@ -547,10 +547,6 @@ public:
   // Check of command buffer inherits presentation framebuffer or
   // renderpass and save command buffer in presentResources.
   void BeginCommandBuffer(ExtObject *o);
-  // Check if the objects in the pipeline barrier are valid and not NULL. If they
-  // aren't, remove them. Also check if there are presentation resources in the
-  // barrier, and if there are, add the command buffer to presentResources.
-  bool CmdPipelineBarrier(ExtObject *o);
   // Check if the objects in the event wait are valid and not NULL. If they
   // aren't, remove them. Also check if there are presentation resources in the
   // barrier, and if there are, add the command buffer to presentResources.

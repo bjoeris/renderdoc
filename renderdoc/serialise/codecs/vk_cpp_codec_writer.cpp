@@ -1455,7 +1455,8 @@ void CodeWriter::InitialLayouts(ExtObject *o, uint32_t pass)
       bool needsResourceInit = tracker->ResourceNeedsReset(image_id, true, false);
 
       // I assume that INIT and RESET are mutually exclusive.
-      RDCASSERT(!(needsResourceInit && needsResourceReset));
+      if ((tracker->Optimizations() & CODE_GEN_OPT_IMAGE_RESET_BIT) != 0)
+        RDCASSERT(!(needsResourceInit && needsResourceReset));
 
       ExtObject *subres = imageRegionState->At("subresourceRange");
       VkImageAspectFlags aspectMask = (VkImageAspectFlags)subres->At("aspectMask")->U64();

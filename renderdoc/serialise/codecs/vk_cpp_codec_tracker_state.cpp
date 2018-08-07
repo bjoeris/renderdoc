@@ -291,7 +291,7 @@ void TraceTracker::AccessImage(uint64_t image, VkImageAspectFlags aspectMask, ui
 {
   std::function<AccessState(AccessState)> transition = GetAccessStateTransition(action);
   ResourceWithViewsMapIter image_it = ResourceCreateFind(image);
-  if(image_it == ResourceCreateEnd())
+  if(image_it == ResourceCreateEnd() && !IsPresentationResource(image))
   {
     RDCASSERT(0);    // TODO: should this ever happen?
     return;

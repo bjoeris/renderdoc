@@ -63,7 +63,7 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
 #ifndef CODE_VULKAN_CASE
 #define CODE_VULKAN_CASE(func, ext, pass)                               \
   {                                                                     \
-    case(uint32_t)VulkanChunk::vk##func: code.##func(ext, pass); break; \
+    case(uint32_t)VulkanChunk::vk##func: code.func(ext, pass); break; \
   }
 #endif
 
@@ -172,6 +172,7 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
         CODE_VULKAN_CASE(CmdDrawIndexedIndirect, ext, pass);
         CODE_VULKAN_CASE(CmdDispatch, ext, pass);
         CODE_VULKAN_CASE(CmdDispatchIndirect, ext, pass);
+        CODE_VULKAN_CASE(CmdPipelineBarrier, ext, pass);
         CODE_VULKAN_CASE(EndCommandBuffer, ext, pass);
 
       // akharlamov: memory allocation, buffer and image creation and binding happens right after
@@ -199,10 +200,7 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
         else
           code.CreateImageView(ext, pass);
         break;
-      case(uint32_t)VulkanChunk::vkCmdPipelineBarrier:
-        if(tracker.CmdPipelineBarrier(ext))
-          code.CmdPipelineBarrier(ext, pass);
-        break;
+
       case(uint32_t)VulkanChunk::vkBeginCommandBuffer:
         tracker.BeginCommandBuffer(ext);
         code.BeginCommandBuffer(ext, pass);
