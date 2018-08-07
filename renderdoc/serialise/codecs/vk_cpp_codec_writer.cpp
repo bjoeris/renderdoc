@@ -99,8 +99,18 @@ void CodeWriter::Close()
           .PrintLn("vkBeginCommandBuffer(aux.command_buffer, &cmd_buffer_bi);\n");
     }
 
-    for(int j = 0; j <= static_cast<MultiPartCodeFile *>(files[i])->GetIndex(); j++)
+    int fileCount = static_cast<MultiPartCodeFile *>(files[i])->GetIndex();
+    for(int j = 0; j <= fileCount; j++)
     {
+      const char *stage = NULL;
+      if(i == ID_INIT)
+        stage = "Initializing Resources";
+      if(i == ID_CREATE)
+        stage = "Creating Resources";
+
+      if(i == ID_INIT || i == ID_CREATE)
+        files[ID_MAIN]->PrintLn("PostStageProgress(\"%s\", %d, %d);", stage, j, fileCount);
+
       files[ID_MAIN]->PrintLn("%s_%d();", funcs[i].c_str(), j);
     }
 
