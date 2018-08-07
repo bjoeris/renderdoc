@@ -51,7 +51,7 @@ void CreateResources();
 void ReleaseResources();
 void Render();
 
-std::string PostStageProgress(const char *stage, uint32_t i, uint32_t N) {
+void PostStageProgress(const char *stage, uint32_t i, uint32_t N) {
   SetWindowTextA(appHwnd, StageProgressString(stage, i, N).c_str());
 }
 

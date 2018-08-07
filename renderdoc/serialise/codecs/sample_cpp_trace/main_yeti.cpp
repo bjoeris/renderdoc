@@ -16,7 +16,7 @@
 
 #include "gen_main.h"
 
-std::string PostStageProgress(const char *stage, uint32_t i, uint32_t N) {
+void PostStageProgress(const char *stage, uint32_t i, uint32_t N) {
   fprintf(stdout, "%s\n", StageProgressString(stage, i, N).c_str());
 }
 

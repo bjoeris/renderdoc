@@ -12,4 +12,4 @@
 #include "helper/helper.h"
 #include "sample_cpp_shim/shim_vulkan.h"
 
-std::string PostStageProgress(const char *stage, uint32_t i, uint32_t N);
+void PostStageProgress(const char *stage, uint32_t i, uint32_t N);
