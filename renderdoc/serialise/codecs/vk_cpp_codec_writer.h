@@ -46,6 +46,8 @@ class TraceTracker;
 
 class CodeWriter
 {
+  friend TraceTracker;
+
 public:
   enum IDs
   {
@@ -85,10 +87,39 @@ protected:
   void EarlyAllocateMemory(uint32_t pass);
   void EarlyBindResourceMemory(uint32_t pass);
 
+  // This vulkan functions are not allowed to be called directly by
+  // codec.cpp.
   void CreateImage(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreateBuffer(ExtObject *o, uint32_t pass, bool global_ci = false);
   void AllocateMemory(ExtObject *o, uint32_t pass);
-  void BindImageOrBufferMemory(ExtObject *o, uint32_t pass);
+  void BindResourceMemory(ExtObject *o, uint32_t pass);
+
+  void GenericCreatePipelines(ExtObject *o, uint32_t pass, bool global_ci = false);
+  void GenericEvent(ExtObject *o, uint32_t pass);
+  void GenericVkCreate(ExtObject *o, uint32_t pass, bool global_ci = false);
+  void GenericWaitIdle(ExtObject *o, uint32_t pass);
+  void GenericCmdSetRectTest(ExtObject *o, uint32_t pass);
+  void GenericCmdSetStencilParam(ExtObject *o, uint32_t pass);
+  void GenericCmdEvent(ExtObject *o, uint32_t pass);
+  void GenericCmdDrawIndirect(ExtObject *o, uint32_t pass);
+
+  void CreateAuxResources(ExtObject *o, uint32_t pass, bool global_ci = false);
+  void HandleMemoryAllocationAndResourceCreation(uint32_t pass);
+  void BufferOrImageMemoryReqs(ExtObject *o, const char *get_mem_req_func, uint32_t pass);
+
+  void InlineVariable(ExtObject *o, uint32_t pass);
+  void LocalVariable(ExtObject *o, std::string suffix, uint32_t pass);
+
+  void InitSrcBuffer(ExtObject *o, uint32_t pass);
+  void InitDstBuffer(ExtObject *o, uint32_t pass);
+  void InitDescSet(ExtObject *o);
+  void CopyResetImage(ExtObject *o, uint32_t pass);
+  void CopyResetBuffer(ExtObject *o, uint32_t pass);
+  void ImageLayoutTransition(uint64_t image_id, ExtObject *subres, const char *old_layout,
+    uint32_t pass);
+
+  void ReadBuffer(const char *name, uint64_t i);
+  void ClearBufferData();
 
 public:
   CodeWriter(std::string path) : file_dir{path}
@@ -161,18 +192,14 @@ public:
   // Add a global variable of a given type into the VAR files.
   // For simple variable declarations, such as VkDevice VkDevice_1;
   std::string AddVar(const char *type, uint64_t id) { return AddVar(type, type, id); }
-  void ReadBuffer(const char *name, uint64_t i);
 
   // --------------------------------------------------------------------------
-  void InlineVariable(ExtObject *o, uint32_t pass);
-  void LocalVariable(ExtObject *o, std::string suffix, uint32_t pass);
   void Resolution(uint32_t pass);
 
   void EnumeratePhysicalDevices(ExtObject *o, uint32_t pass);
+  void GetDeviceQueue(ExtObject *o, uint32_t pass);
+  void GetSwapchainImagesKHR(ExtObject *o, uint32_t pass);
 
-  void HandleMemoryAllocationAndResourceCreation(uint32_t pass);
-
-  void GenericVkCreate(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreateInstance(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreatePresentFramebuffer(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreatePresentImageView(ExtObject *o, uint32_t pass, bool global_ci = false);
@@ -180,7 +207,10 @@ public:
   void CreateCommandPool(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreateFramebuffer(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreateRenderPass(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateSemaphoreOrFence(ExtObject *o, uint32_t pass, bool global_ci = false);
+  void CreateSemaphore(ExtObject *o, uint32_t pass, bool global_ci = false);
+  void CreateFence(ExtObject *o, uint32_t pass, bool global_ci = false);
+  void CreateEvent(ExtObject *o, uint32_t pass, bool global_ci = false);
+  void CreateQueryPool(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreateDescriptorSetLayout(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreateDescriptorUpdateTemplate(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreateImageView(ExtObject *o, uint32_t pass, bool global_ci = false);
@@ -189,69 +219,58 @@ public:
   void CreatePipelineLayout(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreatePipelineCache(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreateBufferView(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateSwapChain(ExtObject *o, uint32_t pass, bool global_ci = false);
+  void CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreateGraphicsPipelines(ExtObject *o, uint32_t pass, bool global_ci = false);
+  void CreateComputePipelines(ExtObject *o, uint32_t pass, bool global_ci = false);
   void CreateDevice(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateAuxResources(ExtObject *o, uint32_t pass, bool global_ci = false);
-
-  void GetDeviceQueue(ExtObject *o, uint32_t pass);
-  void GetSwapChainImagesKHR(ExtObject *o, uint32_t pass);
 
   void AllocateCommandBuffers(ExtObject *o, uint32_t pass);
   void AllocateDescriptorSets(ExtObject *o, uint32_t pass);
-
-  void BufferOrImageMemoryReqs(ExtObject *o, const char *get_mem_req_func, uint32_t pass);
-  void FlushMappedMemoryRegions(ExtObject *o, uint32_t pass);
-
-  void InitSrcBuffer(ExtObject *o, uint32_t pass);
-  void InitDstBuffer(ExtObject *o, uint32_t pass);
-  void InitDescSet(ExtObject *o);
-  void InitialContent(ExtObject *o);
-  void InitialLayouts(ExtObject *o, uint32_t pass);
-  void ClearBufferData();
-
-  void CopyResetImage(ExtObject *o, uint32_t pass);
-  void CopyResetBuffer(ExtObject *o, uint32_t pass);
-  void ImageLayoutTransition(uint64_t image_id, ExtObject *subres, const char *old_layout,
-                             uint32_t pass);
-
+  
+  void FlushMappedMemoryRanges(ExtObject *o, uint32_t pass);
+  void UnmapMemory(ExtObject *o, uint32_t pass);
   void AcquireNextImage(ExtObject *o, uint32_t pass);
   void BeginCommandBuffer(ExtObject *o, uint32_t pass);
   void EndCommandBuffer(ExtObject *o, uint32_t pass);
   void WaitForFences(ExtObject *o, uint32_t pass);
   void GetFenceStatus(ExtObject *o, uint32_t pass);
   void ResetFences(ExtObject *o, uint32_t pass);
-  void Event(ExtObject *o, uint32_t pass);
+  void GetEventStatus(ExtObject *o, uint32_t pass);
+  void SetEvent(ExtObject *o, uint32_t pass);
+  void ResetEvent(ExtObject *o, uint32_t pass);
   void QueueSubmit(ExtObject *o, uint32_t pass);
-  void QueueOrDeviceWaitIdle(ExtObject *o, uint32_t pass);
-  void EndFramePresent(ExtObject *o, uint32_t pass);
-  void EndFrameWaitIdle(ExtObject *o, uint32_t pass);
+  void QueueWaitIdle(ExtObject *o, uint32_t pass);
+  void DeviceWaitIdle(ExtObject *o, uint32_t pass);
   void UpdateDescriptorSets(ExtObject *o, uint32_t pass);
   void UpdateDescriptorSetWithTemplate(ExtObject *o, uint32_t pass);
-  void UnmapMemory(ExtObject *o, uint32_t pass);
 
   // Command recording API calls
   void CmdBeginRenderPass(ExtObject *o, uint32_t pass);
   void CmdNextSubpass(ExtObject *o, uint32_t pass);
   void CmdExecuteCommands(ExtObject *o, uint32_t pass);
   void CmdEndRenderPass(ExtObject *o, uint32_t pass);
-  void CmdSetViewportOrScissor(ExtObject *o, uint32_t pass);
+  void CmdSetViewport(ExtObject *o, uint32_t pass);
+  void CmdSetScissor(ExtObject *o, uint32_t pass);
   void CmdBindDescriptorSets(ExtObject *o, uint32_t pass);
   void CmdBindPipeline(ExtObject *o, uint32_t pass);
   void CmdBindVertexBuffers(ExtObject *o, uint32_t pass);
   void CmdBindIndexBuffer(ExtObject *o, uint32_t pass);
   void CmdDraw(ExtObject *o, uint32_t pass);
+  void CmdDrawIndirect(ExtObject *o, uint32_t pass);
   void CmdDrawIndexed(ExtObject *o, uint32_t pass);
-  void CmdDrawIndirectOrIndexedIndirect(ExtObject *o, uint32_t pass);
+  void CmdDrawIndexedIndirect(ExtObject *o, uint32_t pass);
   void CmdDispatch(ExtObject *o, uint32_t pass);
   void CmdDispatchIndirect(ExtObject *o, uint32_t pass);
-  void CmdEvent(ExtObject *o, uint32_t pass);
+  void CmdSetEvent(ExtObject *o, uint32_t pass);
+  void CmdResetEvent(ExtObject *o, uint32_t pass);
   void CmdWaitEvents(ExtObject *o, uint32_t pass);
   void CmdPipelineBarrier(ExtObject *o, uint32_t pass);
   void CmdPushConstants(ExtObject *o, uint32_t pass);
   void CmdSetDepthBias(ExtObject *o, uint32_t pass);
   void CmdSetDepthBounds(ExtObject *o, uint32_t pass);
-  void CmdSetStencilParam(ExtObject *o, uint32_t pass);
+  void CmdSetStencilCompareMask(ExtObject *o, uint32_t pass);
+  void CmdSetStencilWriteMask(ExtObject *o, uint32_t pass);
+  void CmdSetStencilReference(ExtObject *o, uint32_t pass);
   void CmdSetLineWidth(ExtObject *o, uint32_t pass);
   void CmdCopyBuffer(ExtObject *o, uint32_t pass);
   void CmdUpdateBuffer(ExtObject *o, uint32_t pass);
@@ -265,6 +284,11 @@ public:
   void CmdClearAttachments(ExtObject *o, uint32_t pass);
   void CmdClearDepthStencilImage(ExtObject *o, uint32_t pass);
   void CmdClearColorImage(ExtObject *o, uint32_t pass);
+
+  void EndFramePresent(ExtObject *o, uint32_t pass);
+  void EndFrameWaitIdle(ExtObject *o, uint32_t pass);
+  void InitialContents(ExtObject *o);
+  void InitialLayouts(ExtObject *o, uint32_t pass);
 };
 
 }    // namespace vk_cpp_codec

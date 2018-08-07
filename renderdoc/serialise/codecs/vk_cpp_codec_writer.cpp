@@ -384,7 +384,7 @@ void CodeWriter::EarlyBindResourceMemory(uint32_t pass)
   }
 }
 
-void CodeWriter::BindImageOrBufferMemory(ExtObject *o, uint32_t pass)
+void CodeWriter::BindResourceMemory(ExtObject *o, uint32_t pass)
 {
   ExtObject *device = o->At(0);
   ExtObject *object = o->At(1);
@@ -834,8 +834,18 @@ void CodeWriter::CreateRenderPass(ExtObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
-void CodeWriter::CreateSemaphoreOrFence(ExtObject *o, uint32_t pass, bool global_ci)
+
+void CodeWriter::CreateSemaphore(ExtObject *o, uint32_t pass, bool global_ci) {
+  GenericVkCreate(o, pass, global_ci);
+}
+void CodeWriter::CreateFence(ExtObject *o, uint32_t pass, bool global_ci)
 {
+  GenericVkCreate(o, pass, global_ci);
+}
+void CodeWriter::CreateEvent(ExtObject *o, uint32_t pass, bool global_ci) {
+  GenericVkCreate(o, pass, global_ci);
+}
+void CodeWriter::CreateQueryPool(ExtObject *o, uint32_t pass, bool global_ci) {
   GenericVkCreate(o, pass, global_ci);
 }
 void CodeWriter::CreateDescriptorSetLayout(ExtObject *o, uint32_t pass, bool global_ci)
@@ -885,7 +895,7 @@ void CodeWriter::CreateBufferView(ExtObject *o, uint32_t pass, bool global_ci)
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateSwapChain(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci)
 {
   ExtObject *device = o->At(0);
   ExtObject *ci = o->At(1);
@@ -991,7 +1001,15 @@ void CodeWriter::CreateSwapChain(ExtObject *o, uint32_t pass, bool global_ci)
   AddNamedVar("std::vector<VkImage>", tracker->PresentImagesStr());
 }
 
-void CodeWriter::CreateGraphicsPipelines(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateGraphicsPipelines(ExtObject *o, uint32_t pass, bool global_ci) {
+  GenericCreatePipelines(o, pass, global_ci);
+}
+
+void CodeWriter::CreateComputePipelines(ExtObject *o, uint32_t pass, bool global_ci) {
+  GenericCreatePipelines(o, pass, global_ci);
+}
+
+void CodeWriter::GenericCreatePipelines(ExtObject *o, uint32_t pass, bool global_ci)
 {
   ExtObject *device = o->At(0);
   ExtObject *cache = o->At(1);
@@ -1000,7 +1018,7 @@ void CodeWriter::CreateGraphicsPipelines(ExtObject *o, uint32_t pass, bool globa
   ExtObject *pipe = o->At(5);
 
   // CreateInfoCount must always be equal to '1'.
-  // CreateGraphicsPipelines can create multiple pipelines at the
+  // Create[Graphics|Compute]Pipelines can create multiple pipelines at the
   // same time, but RenderDoc splits these calls into multiple calls, one per
   // each pipeline object that is still alive at the time of capture.
   RDCASSERT(ci_count->U64() == 1);
@@ -1041,6 +1059,26 @@ void CodeWriter::CreateDevice(ExtObject *o, uint32_t pass, bool global_ci)
 
   AddNamedVar("AuxVkTraceResources", "aux");
   CreateAuxResources(o, pass);
+
+  // akharlamov: besides creating the device, resource creation,
+  // memory allocation and resource binding happens on CreateDevice.
+  // The reason behind this organization is that resource memory
+  // type requirement can be different on replay system and memory
+  // allocation needs to find an intersection of memory types of all
+  // the resources that would be bound to that allocation.
+  // In the code gen, this is achieved by:
+  // 1. Creating the device
+  // 2. For each memory allocation
+  //   a. Go over the list of resources that are bound to that allocation
+  //   b. Create those resources and get their memory requirements
+  //   c. Bitmask and the memoryTypeBits
+  //   d. The resulting bitmask of memoryTypeBits is used for memory allocation
+  //   (and thus intersection of all memoryTypeBits needs to be != 0)
+  //   If intersection is '0', the trace can't be replayed on this system.
+  //   e. Additionally if the memory allocation doesn't host aliased resources
+  //   then the size and binding offset of each resource is recalculated
+  //   and stored in a 'Remap' vector.
+  HandleMemoryAllocationAndResourceCreation(pass);
 }
 
 void CodeWriter::HandleMemoryAllocationAndResourceCreation(uint32_t pass)
@@ -1072,7 +1110,7 @@ void CodeWriter::GetDeviceQueue(ExtObject *o, uint32_t pass)
       .PrintLn("}");
 }
 
-void CodeWriter::GetSwapChainImagesKHR(ExtObject *o, uint32_t pass)
+void CodeWriter::GetSwapchainImagesKHR(ExtObject *o, uint32_t pass)
 {
   ExtObject *device = o->At(0);
   ExtObject *swapchain = o->At(1);
@@ -1568,7 +1606,7 @@ void CodeWriter::InitialLayouts(ExtObject *o, uint32_t pass)
   }
 }
 
-void CodeWriter::InitialContent(ExtObject *o)
+void CodeWriter::InitialContents(ExtObject *o)
 {
   switch(o->At(0)->U64())
   {
@@ -1677,13 +1715,23 @@ void CodeWriter::ResetFences(ExtObject *o, uint32_t pass)
       .PrintLn("}");
 }
 
-void CodeWriter::Event(ExtObject *o, uint32_t pass)
+void CodeWriter::GenericEvent(ExtObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
   files[pass]
       ->PrintLn("%s(%s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
                 tracker->GetResourceVar(o->At(1)->U64()))
       .PrintLn("}");
+}
+
+void CodeWriter::GetEventStatus(ExtObject *o, uint32_t pass) {
+  GenericEvent(o, pass);
+}
+void CodeWriter::SetEvent(ExtObject *o, uint32_t pass) {
+  GenericEvent(o, pass);
+}
+void CodeWriter::ResetEvent(ExtObject *o, uint32_t pass) { 
+  GenericEvent(o, pass); 
 }
 
 void CodeWriter::QueueSubmit(ExtObject *o, uint32_t pass)
@@ -1707,9 +1755,17 @@ void CodeWriter::QueueSubmit(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("}");
 }
 
-void CodeWriter::QueueOrDeviceWaitIdle(ExtObject *o, uint32_t pass)
+void CodeWriter::GenericWaitIdle(ExtObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("%s(%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()));
+}
+
+void CodeWriter::QueueWaitIdle(ExtObject *o, uint32_t pass) {
+  GenericWaitIdle(o, pass);
+}
+
+void CodeWriter::DeviceWaitIdle(ExtObject *o, uint32_t pass) {
+  GenericWaitIdle(o, pass);
 }
 
 void CodeWriter::EndFramePresent(ExtObject *o, uint32_t pass)
@@ -1753,7 +1809,7 @@ void CodeWriter::EndFrameWaitIdle(ExtObject *o, uint32_t pass)
     files[pass]->PrintLn("vkQueueWaitIdle(VkQueue_%llu);", it->second);
 }
 
-void CodeWriter::FlushMappedMemoryRegions(ExtObject *o, uint32_t pass)
+void CodeWriter::FlushMappedMemoryRanges(ExtObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
   ExtObject *device = o->At(0);
@@ -1939,14 +1995,40 @@ void CodeWriter::CmdEndRenderPass(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("%s(%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()));
 }
 
-void CodeWriter::CmdSetViewportOrScissor(ExtObject *o, uint32_t pass)
-{
+
+void CodeWriter::GenericCmdSetRectTest(ExtObject *o, uint32_t pass) {
   files[pass]->PrintLn("{");
   LocalVariable(o->At(3), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %llu, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->U64(), o->At(2)->U64(), o->At(3)->Name())
-      .PrintLn("}");
+    ->PrintLn("%s(%s, %llu, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+      o->At(1)->U64(), o->At(2)->U64(), o->At(3)->Name())
+    .PrintLn("}");
+}
+void CodeWriter::GenericCmdSetStencilParam(ExtObject *o, uint32_t pass) {
+  files[pass]->PrintLn("%s(%s, %s, %llu);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+    o->At(1)->Str(), o->At(2)->U64());
+}
+
+void CodeWriter::GenericCmdEvent(ExtObject *o, uint32_t pass) {
+  files[pass]->PrintLn("{");
+  files[pass]
+    ->PrintLn("%s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+      tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str())
+    .PrintLn("}");
+}
+void CodeWriter::GenericCmdDrawIndirect(ExtObject *o, uint32_t pass) {
+  files[pass]->PrintLn(
+    "%s(%s, %s, %llu, %llu, %llu);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+    tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->U64(), o->At(3)->U64(), o->At(4)->U64());
+
+}
+
+void CodeWriter::CmdSetViewport(ExtObject *o, uint32_t pass)
+{
+  GenericCmdSetRectTest(o, pass);
+}
+void CodeWriter::CmdSetScissor(ExtObject *o, uint32_t pass) {
+  GenericCmdSetRectTest(o, pass);
 }
 
 void CodeWriter::CmdBindDescriptorSets(ExtObject *o, uint32_t pass)
@@ -2000,11 +2082,13 @@ void CodeWriter::CmdDrawIndexed(ExtObject *o, uint32_t pass)
                        o->At(3)->U64(), o->At(4)->I64(), o->At(4)->U64());
 }
 
-void CodeWriter::CmdDrawIndirectOrIndexedIndirect(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdDrawIndirect(ExtObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn(
-      "%s(%s, %s, %llu, %llu, %llu);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-      tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->U64(), o->At(3)->U64(), o->At(4)->U64());
+  GenericCmdDrawIndirect(o, pass);
+}
+
+void CodeWriter::CmdDrawIndexedIndirect(ExtObject *o, uint32_t pass) {
+  GenericCmdDrawIndirect(o, pass);
 }
 
 void CodeWriter::CmdDispatch(ExtObject *o, uint32_t pass)
@@ -2020,13 +2104,13 @@ void CodeWriter::CmdDispatchIndirect(ExtObject *o, uint32_t pass)
                        tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->U64());
 }
 
-void CodeWriter::CmdEvent(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdSetEvent(ExtObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("{");
-  files[pass]
-      ->PrintLn("%s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str())
-      .PrintLn("}");
+  GenericCmdEvent(o, pass);
+}
+
+void CodeWriter::CmdResetEvent(ExtObject *o, uint32_t pass) {
+  GenericCmdEvent(o, pass);
 }
 
 void CodeWriter::CmdWaitEvents(ExtObject *o, uint32_t pass)
@@ -2078,10 +2162,14 @@ void CodeWriter::CmdSetDepthBounds(ExtObject *o, uint32_t pass)
                        o->At(1)->D64(), o->At(2)->D64());
 }
 
-void CodeWriter::CmdSetStencilParam(ExtObject *o, uint32_t pass)
-{
-  files[pass]->PrintLn("%s(%s, %s, %llu);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       o->At(1)->Str(), o->At(2)->U64());
+void CodeWriter::CmdSetStencilCompareMask(ExtObject *o, uint32_t pass) {
+  GenericCmdSetStencilParam(o, pass);
+}
+void CodeWriter::CmdSetStencilWriteMask(ExtObject *o, uint32_t pass) {
+  GenericCmdSetStencilParam(o, pass);
+}
+void CodeWriter::CmdSetStencilReference(ExtObject *o, uint32_t pass) {
+  GenericCmdSetStencilParam(o, pass);
 }
 
 void CodeWriter::CmdSetLineWidth(ExtObject *o, uint32_t pass)

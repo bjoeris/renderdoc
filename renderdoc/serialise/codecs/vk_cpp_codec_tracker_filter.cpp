@@ -255,7 +255,6 @@ bool TraceTracker::CmdPipelineBarrier(ExtObject *o)
         resource->U64() = PRESENT_IMAGE_OFFSET;
         presentResources.insert(ExtObjectIDMapPair(cmd->U64(), o));
       }
-
       i++;
     }
   }

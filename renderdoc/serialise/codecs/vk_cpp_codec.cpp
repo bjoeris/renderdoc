@@ -44,6 +44,13 @@
 
 namespace vk_cpp_codec
 {
+static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, const RDCFile &file,
+                                    uint64_t version, const StructuredChunkList &chunks,
+                                    RENDERDOC_ProgressCallback progress)
+{
+  code.Resolution(CodeWriter::ID_VAR);
+  uint32_t pass = CodeWriter::ID_CREATE;
+
 #ifndef CODE_ACQUIRE_NEXT_IMAGE
 #define CODE_ACQUIRE_NEXT_IMAGE(ext, pass) \
   if(pass == CodeWriter::ID_CREATE)        \
@@ -53,12 +60,12 @@ namespace vk_cpp_codec
   }
 #endif
 
-static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, const RDCFile &file,
-                                    uint64_t version, const StructuredChunkList &chunks,
-                                    RENDERDOC_ProgressCallback progress)
-{
-  code.Resolution(CodeWriter::ID_VAR);
-  uint32_t pass = CodeWriter::ID_CREATE;
+#ifndef CODE_VULKAN_CASE
+#define CODE_VULKAN_CASE(func, ext, pass)                               \
+  {                                                                     \
+    case(uint32_t)VulkanChunk::vk##func: code.##func(ext, pass); break; \
+  }
+#endif
 
   for(size_t c = 0; c < chunks.size(); c++)
   {
@@ -76,7 +83,7 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
       case(uint32_t)SystemChunk::DriverInit: code.CreateInstance(ext, pass); break;
       case(uint32_t)SystemChunk::InitialContents:
         CODE_ACQUIRE_NEXT_IMAGE(ext, pass);
-        code.InitialContent(ext);
+        code.InitialContents(ext);
         break;
       case(uint32_t)SystemChunk::InitialContentsList: CODE_ACQUIRE_NEXT_IMAGE(ext, pass); break;
       case(uint32_t)SystemChunk::CaptureScope: break;
@@ -89,68 +96,102 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
         code.EndFramePresent(ext, pass);
         code.EndFrameWaitIdle(ext, pass);
         break;
-      case(uint32_t)VulkanChunk::vkEnumeratePhysicalDevices:
-        code.EnumeratePhysicalDevices(ext, pass);
+
+        CODE_VULKAN_CASE(EnumeratePhysicalDevices, ext, pass);
+        CODE_VULKAN_CASE(GetDeviceQueue, ext, pass);
+        CODE_VULKAN_CASE(GetSwapchainImagesKHR, ext, pass);
+
+        CODE_VULKAN_CASE(AllocateCommandBuffers, ext, pass);
+        CODE_VULKAN_CASE(AllocateDescriptorSets, ext, pass);
+
+        CODE_VULKAN_CASE(CreateCommandPool, ext, pass);
+        CODE_VULKAN_CASE(CreateDevice, ext, pass);
+        CODE_VULKAN_CASE(CreateRenderPass, ext, pass);
+        CODE_VULKAN_CASE(CreateDescriptorPool, ext, pass);
+        CODE_VULKAN_CASE(CreateDescriptorSetLayout, ext, pass);
+        CODE_VULKAN_CASE(CreateDescriptorUpdateTemplate, ext, pass);
+        CODE_VULKAN_CASE(CreateBufferView, ext, pass);
+        CODE_VULKAN_CASE(CreateSampler, ext, pass);
+        CODE_VULKAN_CASE(CreateShaderModule, ext, pass);
+        CODE_VULKAN_CASE(CreatePipelineLayout, ext, pass);
+        CODE_VULKAN_CASE(CreatePipelineCache, ext, pass);
+        CODE_VULKAN_CASE(CreateGraphicsPipelines, ext, pass);
+        CODE_VULKAN_CASE(CreateComputePipelines, ext, pass);
+        CODE_VULKAN_CASE(CreateSemaphore, ext, pass);
+        CODE_VULKAN_CASE(CreateFence, ext, pass);
+        CODE_VULKAN_CASE(CreateQueryPool, ext, pass);
+        CODE_VULKAN_CASE(CreateEvent, ext, pass);
+        CODE_VULKAN_CASE(CreateSwapchainKHR, ext, pass);
+
+        CODE_VULKAN_CASE(UnmapMemory, ext, pass);
+        CODE_VULKAN_CASE(FlushMappedMemoryRanges, ext, pass);
+        CODE_VULKAN_CASE(GetFenceStatus, ext, pass);
+        CODE_VULKAN_CASE(ResetFences, ext, pass);
+        CODE_VULKAN_CASE(WaitForFences, ext, pass);
+        CODE_VULKAN_CASE(GetEventStatus, ext, pass);
+        CODE_VULKAN_CASE(SetEvent, ext, pass);
+        CODE_VULKAN_CASE(ResetEvent, ext, pass);
+        CODE_VULKAN_CASE(UpdateDescriptorSets, ext, pass);
+        CODE_VULKAN_CASE(UpdateDescriptorSetWithTemplate, ext, pass);
+        CODE_VULKAN_CASE(QueueWaitIdle, ext, pass);
+        CODE_VULKAN_CASE(DeviceWaitIdle, ext, pass);
+
+        CODE_VULKAN_CASE(CmdNextSubpass, ext, pass);
+        CODE_VULKAN_CASE(CmdExecuteCommands, ext, pass);
+        CODE_VULKAN_CASE(CmdEndRenderPass, ext, pass);
+        CODE_VULKAN_CASE(CmdBindPipeline, ext, pass);
+        CODE_VULKAN_CASE(CmdSetViewport, ext, pass);
+        CODE_VULKAN_CASE(CmdSetScissor, ext, pass);
+        CODE_VULKAN_CASE(CmdSetLineWidth, ext, pass);
+        CODE_VULKAN_CASE(CmdSetDepthBias, ext, pass);
+        CODE_VULKAN_CASE(CmdSetBlendConstants, ext, pass);
+        CODE_VULKAN_CASE(CmdSetDepthBounds, ext, pass);
+        CODE_VULKAN_CASE(CmdSetStencilCompareMask, ext, pass);
+        CODE_VULKAN_CASE(CmdSetStencilWriteMask, ext, pass);
+        CODE_VULKAN_CASE(CmdSetStencilReference, ext, pass);
+        CODE_VULKAN_CASE(CmdBindDescriptorSets, ext, pass);
+        CODE_VULKAN_CASE(CmdBindIndexBuffer, ext, pass);
+        CODE_VULKAN_CASE(CmdBindVertexBuffers, ext, pass);
+        CODE_VULKAN_CASE(CmdCopyBufferToImage, ext, pass);
+        CODE_VULKAN_CASE(CmdCopyImageToBuffer, ext, pass);
+        CODE_VULKAN_CASE(CmdCopyImage, ext, pass);
+        CODE_VULKAN_CASE(CmdBlitImage, ext, pass);
+        CODE_VULKAN_CASE(CmdResolveImage, ext, pass);
+        CODE_VULKAN_CASE(CmdCopyBuffer, ext, pass);
+        CODE_VULKAN_CASE(CmdUpdateBuffer, ext, pass);
+        CODE_VULKAN_CASE(CmdFillBuffer, ext, pass);
+        CODE_VULKAN_CASE(CmdPushConstants, ext, pass);
+        CODE_VULKAN_CASE(CmdClearColorImage, ext, pass);
+        CODE_VULKAN_CASE(CmdClearDepthStencilImage, ext, pass);
+        CODE_VULKAN_CASE(CmdClearAttachments, ext, pass);
+        CODE_VULKAN_CASE(CmdSetEvent, ext, pass);
+        CODE_VULKAN_CASE(CmdResetEvent, ext, pass);
+        CODE_VULKAN_CASE(CmdDraw, ext, pass);
+        CODE_VULKAN_CASE(CmdDrawIndirect, ext, pass);
+        CODE_VULKAN_CASE(CmdDrawIndexed, ext, pass);
+        CODE_VULKAN_CASE(CmdDrawIndexedIndirect, ext, pass);
+        CODE_VULKAN_CASE(CmdDispatch, ext, pass);
+        CODE_VULKAN_CASE(CmdDispatchIndirect, ext, pass);
+        CODE_VULKAN_CASE(EndCommandBuffer, ext, pass);
+
+      // akharlamov: memory allocation, buffer and image creation and binding happens right after
+      // device was created.
+      case(uint32_t)VulkanChunk::vkAllocateMemory:      // Fallthrough
+      case(uint32_t)VulkanChunk::vkCreateBuffer:        // Fallthrough
+      case(uint32_t)VulkanChunk::vkCreateImage:         // Fallthrough
+      case(uint32_t)VulkanChunk::vkBindBufferMemory:    // Fallthrough
+      case(uint32_t)VulkanChunk::vkBindImageMemory:
         break;
-      case(uint32_t)VulkanChunk::vkCreateDevice:
-        code.CreateDevice(ext, pass);
-        // akharlamov: besides creating the device, resource creation,
-        // memory allocation and resource binding happens on CreateDevice.
-        // The reason behind this organization is that resource memory
-        // type requirement can be different on replay system and memory
-        // allocation needs to find an intersection of memory types of all
-        // the resources that would be bound to that allocation.
-        // In the code gen, this is achieved by:
-        // 1. Creating the device
-        // 2. For each memory allocation
-        //   a. Go over the list of resources that are bound to that allocation
-        //   b. Create those resources and get their memory requirements
-        //   c. Bitmask and the memoryTypeBits
-        //   d. The resulting bitmask of memoryTypeBits is used for memory allocation
-        //   (and thus intersection of all memoryTypeBits needs to be != 0)
-        //   If intersection is '0', the trace can't be replayed on this system.
-        //   e. Additionally if the memory allocation doesn't host aliased resources
-        //   then the size and binding offset of each resource is recalculated
-        //   and stored in a 'Remap' vector.
-        code.HandleMemoryAllocationAndResourceCreation(pass);
-        break;
-      case(uint32_t)VulkanChunk::vkGetDeviceQueue: code.GetDeviceQueue(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkAllocateMemory:
-        // akharlamov: memory allocation happens right after device was created.
-        // code.AllocateMemory(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkUnmapMemory: code.UnmapMemory(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkFlushMappedMemoryRanges:
-        code.FlushMappedMemoryRegions(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCreateCommandPool: code.CreateCommandPool(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkAllocateCommandBuffers:
-        code.AllocateCommandBuffers(ext, pass);
-        break;
+
+      // akharlamov: VkImages aquired from swapchain are considered 'Presentable'. Any resource
+      // such as VkImageView, VkFramebuffer etc that is created using a 'Presentable' resource
+      // is also considered 'Presentable'. API calls used to deal with a 'Presentable' resources are
+      // modified by the code generator.
       case(uint32_t)VulkanChunk::vkCreateFramebuffer:
         if(tracker.CreateFramebuffer(ext))
           code.CreatePresentFramebuffer(ext, pass);
         else
           code.CreateFramebuffer(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCreateRenderPass: code.CreateRenderPass(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCreateDescriptorPool:
-        code.CreateDescriptorPool(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCreateDescriptorSetLayout:
-        code.CreateDescriptorSetLayout(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCreateDescriptorUpdateTemplate:
-        code.CreateDescriptorUpdateTemplate(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCreateBuffer:
-        // akharlamov: buffer creation happens right after device was created.
-        // code.CreateBuffer(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCreateBufferView: code.CreateBufferView(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCreateImage:
-        // akharlamov: image creation happens right after device was created.
-        // code.CreateImage(ext, pass);
         break;
       case(uint32_t)VulkanChunk::vkCreateImageView:
         if(tracker.CreateImageView(ext))
@@ -158,165 +199,45 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
         else
           code.CreateImageView(ext, pass);
         break;
-      case(uint32_t)VulkanChunk::vkCreateSampler: code.CreateSampler(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCreateShaderModule: code.CreateShaderModule(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCreatePipelineLayout:
-        code.CreatePipelineLayout(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCreatePipelineCache: code.CreatePipelineCache(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCreateGraphicsPipelines:
-        code.CreateGraphicsPipelines(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCreateComputePipelines:
-        code.CreateGraphicsPipelines(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkGetSwapchainImagesKHR:
-        code.GetSwapChainImagesKHR(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCreateSemaphore: code.CreateSemaphoreOrFence(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCreateFence: code.CreateSemaphoreOrFence(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkRegisterDeviceEventEXT: RDCASSERT(0); break;
-      case(uint32_t)VulkanChunk::vkRegisterDisplayEventEXT: RDCASSERT(0); break;
-      case(uint32_t)VulkanChunk::vkGetFenceStatus: code.GetFenceStatus(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkResetFences: code.ResetFences(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkWaitForFences: code.WaitForFences(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCreateEvent: code.GenericVkCreate(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkGetEventStatus: RDCASSERT(0); break;
-      case(uint32_t)VulkanChunk::vkSetEvent: code.Event(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkResetEvent: code.Event(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCreateQueryPool: code.GenericVkCreate(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkAllocateDescriptorSets:
-        code.AllocateDescriptorSets(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkUpdateDescriptorSets:
-        code.UpdateDescriptorSets(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkUpdateDescriptorSetWithTemplate:
-        code.UpdateDescriptorSetWithTemplate(ext, pass);
+      case(uint32_t)VulkanChunk::vkCmdPipelineBarrier:
+        if(tracker.CmdPipelineBarrier(ext))
+          code.CmdPipelineBarrier(ext, pass);
         break;
       case(uint32_t)VulkanChunk::vkBeginCommandBuffer:
         tracker.BeginCommandBuffer(ext);
         code.BeginCommandBuffer(ext, pass);
         break;
-      case(uint32_t)VulkanChunk::vkEndCommandBuffer: code.EndCommandBuffer(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkQueueWaitIdle:
-      case(uint32_t)VulkanChunk::vkDeviceWaitIdle: code.QueueOrDeviceWaitIdle(ext, pass); break;
       case(uint32_t)VulkanChunk::vkQueueSubmit:
         tracker.QueueSubmit(ext);
         code.QueueSubmit(ext, pass);
         break;
-      case(uint32_t)VulkanChunk::vkBindBufferMemory:
-        // akharlamov: buffer binding to memory happens right after device was created.
-        // code.BindImageOrBufferMemory(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkBindImageMemory:
-        // akharlamov: image binding to memory happens right after device was created.
-        // code.BindImageOrBufferMemory(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkQueueBindSparse: RDCASSERT(0); break;
       case(uint32_t)VulkanChunk::vkCmdBeginRenderPass:
         tracker.CmdBeginRenderPass(ext);
         code.CmdBeginRenderPass(ext, pass);
         break;
-      case(uint32_t)VulkanChunk::vkCmdNextSubpass: code.CmdNextSubpass(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdExecuteCommands: code.CmdExecuteCommands(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdEndRenderPass: code.CmdEndRenderPass(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdBindPipeline: code.CmdBindPipeline(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdSetViewport: code.CmdSetViewportOrScissor(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdSetScissor: code.CmdSetViewportOrScissor(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdSetLineWidth: code.CmdSetLineWidth(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdSetDepthBias: code.CmdSetDepthBias(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdSetBlendConstants:
-        code.CmdSetBlendConstants(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdSetDepthBounds: code.CmdSetDepthBounds(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdSetStencilCompareMask:
-        code.CmdSetStencilParam(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdSetStencilWriteMask:
-        code.CmdSetStencilParam(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdSetStencilReference:
-        code.CmdSetStencilParam(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdBindDescriptorSets:
-        code.CmdBindDescriptorSets(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdBindIndexBuffer: code.CmdBindIndexBuffer(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdBindVertexBuffers:
-        code.CmdBindVertexBuffers(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdCopyBufferToImage:
-        code.CmdCopyBufferToImage(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdCopyImageToBuffer:
-        code.CmdCopyImageToBuffer(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdCopyImage: code.CmdCopyImage(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdBlitImage: code.CmdBlitImage(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdResolveImage: code.CmdResolveImage(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdCopyBuffer: code.CmdCopyBuffer(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdUpdateBuffer: code.CmdUpdateBuffer(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdFillBuffer: code.CmdFillBuffer(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdPushConstants: code.CmdPushConstants(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdClearColorImage: code.CmdClearColorImage(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdClearDepthStencilImage:
-        code.CmdClearDepthStencilImage(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdClearAttachments: code.CmdClearAttachments(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdPipelineBarrier:
-        if(tracker.CmdPipelineBarrier(ext))
-          code.CmdPipelineBarrier(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdWriteTimestamp:
-        // RDCASSERT(0);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdCopyQueryPoolResults:
-        // RDCASSERT(0);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdBeginQuery:
-        // RDCASSERT(0);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdEndQuery:
-        // RDCASSERT(0);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdResetQueryPool:
-        // RDCASSERT(0);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdSetEvent: code.CmdEvent(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdResetEvent: code.CmdEvent(ext, pass); break;
       case(uint32_t)VulkanChunk::vkCmdWaitEvents:
         if(tracker.CmdWaitEvents(ext))
           code.CmdWaitEvents(ext, pass);
         break;
-      case(uint32_t)VulkanChunk::vkCmdDraw: code.CmdDraw(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdDrawIndirect:
-        code.CmdDrawIndirectOrIndexedIndirect(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdDrawIndexed: code.CmdDrawIndexed(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdDrawIndexedIndirect:
-        code.CmdDrawIndirectOrIndexedIndirect(ext, pass);
-        break;
-      case(uint32_t)VulkanChunk::vkCmdDispatch: code.CmdDispatch(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdDispatchIndirect: code.CmdDispatchIndirect(ext, pass); break;
+
+      // akharlamov: this is a reminder which Vk calls I'm aware of in RenderDoc, but that are
+      // not yet implemented in code generator.
+      case(uint32_t)VulkanChunk::vkQueueBindSparse:
+      case(uint32_t)VulkanChunk::vkCmdWriteTimestamp:
+      case(uint32_t)VulkanChunk::vkCmdCopyQueryPoolResults:
+      case(uint32_t)VulkanChunk::vkCmdBeginQuery:
+      case(uint32_t)VulkanChunk::vkCmdEndQuery:
+      case(uint32_t)VulkanChunk::vkCmdResetQueryPool:
       case(uint32_t)VulkanChunk::vkCmdDebugMarkerBeginEXT:
-        // RDCASSERT(0);
-        break;
       case(uint32_t)VulkanChunk::vkCmdDebugMarkerInsertEXT:
-        // RDCASSERT(0);
-        break;
       case(uint32_t)VulkanChunk::vkCmdDebugMarkerEndEXT:
-        // RDCASSERT(0);
-        break;
       case(uint32_t)VulkanChunk::vkDebugMarkerSetObjectNameEXT:
-        // RDCASSERT(0);
-        break;
-      case(uint32_t)VulkanChunk::SetShaderDebugPath: RDCASSERT(0); break;
-      case(uint32_t)VulkanChunk::vkCreateSwapchainKHR: code.CreateSwapChain(ext, pass); break;
-      case(uint32_t)VulkanChunk::vkCmdIndirectSubCommand: RDCASSERT(0); break;
+      case(uint32_t)VulkanChunk::vkRegisterDeviceEventEXT:
+      case(uint32_t)VulkanChunk::vkRegisterDisplayEventEXT:
+      case(uint32_t)VulkanChunk::SetShaderDebugPath:
+      case(uint32_t)VulkanChunk::vkCmdIndirectSubCommand:
       default:
         RDCWARN("%s Vulkan call not implemented", ext->Name());
-        RDCASSERT(0);
         break;
     }
   }
@@ -329,11 +250,11 @@ bool OptimizationDisabled(const char *name)
   size_t len = 0;
   char var[8];
   errno_t err = getenv_s(&len, var, sizeof(var), name);
-  if (err)
+  if(err)
     return false;
 #else
-  const char* var = getenv(name);
-  if (!var)
+  const char *var = getenv(name);
+  if(!var)
     return false;
 #endif
   return strcmp(var, "false") == 0;
@@ -406,6 +327,9 @@ ReplayStatus exportCPPZ(const char *filename, const RDCFile &rdc, const SDFile &
 
   return status;
 }
+
+#undef CODE_VULKAN_CASE
+#undef CODE_ACQUIRE_NEXT_IMAGE
 
 static ConversionRegistration CPPConversionRegistration(
     &exportCPPZ, {
