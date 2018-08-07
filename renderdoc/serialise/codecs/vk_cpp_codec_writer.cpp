@@ -138,12 +138,12 @@ void CodeWriter::EarlyCreateResource(uint32_t pass)
   for(ResourceWithViewsMapIter it = tracker->ResourceCreateBegin();
       it != tracker->ResourceCreateEnd(); it++)
   {
-    if(it->second.sdobj->name == std::string("vkCreateBuffer"))
+    if(it->second.sdobj->ChunkID() == (uint32_t)VulkanChunk::vkCreateBuffer)
     {
       tracker->CreateResource(it->second.sdobj);
       CreateBuffer(it->second.sdobj, pass, true);
     }
-    else if(it->second.sdobj->name == std::string("vkCreateImage"))
+    else if(it->second.sdobj->ChunkID() == (uint32_t) VulkanChunk::vkCreateImage)
     {
       tracker->CreateResource(it->second.sdobj);
       CreateImage(it->second.sdobj, pass, true);
@@ -1386,7 +1386,7 @@ void CodeWriter::ImageLayoutTransition(uint64_t image_id, ExtObject *subres, con
 
 void CodeWriter::InitialLayouts(ExtObject *o, uint32_t pass)
 {
-  RDCASSERT(((SDChunk *)o)->metadata.chunkID == (uint32_t)SystemChunk::CaptureBegin);
+  RDCASSERT(o->ChunkID() == (uint32_t)SystemChunk::CaptureBegin);
   RDCASSERT(o->At(0)->U64() > 0);
   uint64_t num = o->At(0)->U64();
   for(uint64_t i = 0; i < num; i++)

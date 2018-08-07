@@ -123,9 +123,8 @@ void TraceTracker::AccessMemoryInBoundDescriptorSets(BoundPipeline &boundPipelin
   ExtObjectIDMapIter pipeline_it = createdPipelines.find(boundPipeline.pipeline);
   RDCASSERT(pipeline_it != createdPipelines.end());
 
-  SDChunk *pipeline_ch = (SDChunk *)pipeline_it->second;
   uint64_t pipelineLayout_id = 0;
-  switch(pipeline_ch->metadata.chunkID)
+  switch(pipeline_it->second->ChunkID())
   {
     case(uint32_t)VulkanChunk::vkCreateGraphicsPipelines:
       pipelineLayout_id = pipeline_it->second->At(3)->At(14)->U64();

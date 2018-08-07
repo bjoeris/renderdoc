@@ -72,13 +72,13 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
     code.MultiPartSplit();
     tracker.CopiesClear();
 
-    SDChunk *chunk = chunks[c];
-    if(chunk->metadata.chunkID >= (uint32_t)VulkanChunk::vkEnumeratePhysicalDevices)
+    ExtObject *ext = as_ext(chunks[c]);
+    if(ext->ChunkID() >= (uint32_t)VulkanChunk::vkEnumeratePhysicalDevices)
     {
-      chunk->name = code.shimPrefix + string(chunk->name);
+      ext->name = code.shimPrefix + string(ext->name);
     }
-    ExtObject *ext = as_ext(chunk);
-    switch(chunk->metadata.chunkID)
+
+    switch(ext->ChunkID())
     {
       case(uint32_t)SystemChunk::DriverInit: code.CreateInstance(ext, pass); break;
       case(uint32_t)SystemChunk::InitialContents:

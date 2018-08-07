@@ -215,6 +215,11 @@ struct ExtObject : public SDObject
 
     return result.c_str();
   }
+  uint32_t ChunkID() const {
+    RDCASSERT(type.basetype == SDBasic::Chunk);
+    SDChunk * chunk = (SDChunk *)(this);
+    return chunk->metadata.chunkID;
+  }
 };
 
 inline ExtObject *as_ext(SDObject *sdo)

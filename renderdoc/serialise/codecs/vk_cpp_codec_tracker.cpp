@@ -293,8 +293,7 @@ uint64_t TraceTracker::CurrentQueueFamily()
 // --------------------------------------------------------------------------
 void TraceTracker::ApplyMemoryUpdate(ExtObject *ext)
 {
-  SDChunk *ch = (SDChunk *)ext;
-  RDCASSERT(ch->metadata.chunkID == (uint32_t)VulkanChunk::vkFlushMappedMemoryRanges);
+  RDCASSERT(ext->ChunkID() == (uint32_t)VulkanChunk::vkFlushMappedMemoryRanges);
 
   ExtObject *range = ext->At("MemRange");
   ExtObject *memory = range->At("memory");
@@ -308,11 +307,10 @@ void TraceTracker::ApplyMemoryUpdate(ExtObject *ext)
 
 void TraceTracker::ApplyDescSetUpdate(ExtObject *ext)
 {
-  SDChunk *ch = (SDChunk *)ext;
   ExtObject *descriptorWrites = NULL;
-  if(ch->metadata.chunkID == (uint32_t)VulkanChunk::vkUpdateDescriptorSets)
+  if(ext->ChunkID() == (uint32_t)VulkanChunk::vkUpdateDescriptorSets)
     descriptorWrites = ext->At(2);
-  if(ch->metadata.chunkID == (uint32_t)VulkanChunk::vkUpdateDescriptorSetWithTemplate)
+  if(ext->ChunkID() == (uint32_t)VulkanChunk::vkUpdateDescriptorSetWithTemplate)
     descriptorWrites = ext->At(3);
   RDCASSERT(descriptorWrites != NULL);
   for(uint64_t i = 0; i < descriptorWrites->Size(); i++)
@@ -320,7 +318,7 @@ void TraceTracker::ApplyDescSetUpdate(ExtObject *ext)
     WriteDescriptorSetInternal(descriptorWrites->At(i));
   }
 
-  if(ch->metadata.chunkID == (uint32_t)VulkanChunk::vkUpdateDescriptorSets)
+  if(ext->ChunkID() == (uint32_t)VulkanChunk::vkUpdateDescriptorSets)
   {
     ExtObject *descriptorCopies = ext->At(4);
     for(uint64_t i = 0; i < descriptorCopies->Size(); i++)
@@ -378,8 +376,7 @@ void TraceTracker::AnalyzeInitResources()
 
 void TraceTracker::AnalyzeCmd(ExtObject *ext)
 {
-  SDChunk *ch = (SDChunk *)ext;
-  switch(ch->metadata.chunkID)
+  switch(ext->ChunkID())
   {
     // Image related functions
     TT_VK_CALL_ANALYZE_SWITCH(CmdBeginRenderPass, ext);
@@ -566,7 +563,7 @@ void TraceTracker::ScanResourceCreation(StructuredChunkList &chunks, StructuredB
   for(size_t c = 0; c < chunks.size(); c++)
   {
     ExtObject *ext = as_ext(chunks[c]);
-    switch(chunks[c]->metadata.chunkID)
+    switch(ext->ChunkID())
     {
       case(uint32_t)VulkanChunk::vkCreateBuffer:
       case(uint32_t)VulkanChunk::vkCreateImage: CreateResourceInternal(ext); break;
@@ -606,7 +603,7 @@ void TraceTracker::ScanQueueSubmits(StructuredChunkList &chunks)
   for(size_t c = 0; c < chunks.size(); c++)
   {
     ExtObject *ext = as_ext(chunks[c]);
-    switch(chunks[c]->metadata.chunkID)
+    switch(ext->ChunkID())
     {
       TT_VK_CALL_INTERNAL_SWITCH(FlushMappedMemoryRanges, ext);
       TT_VK_CALL_INTERNAL_SWITCH(UpdateDescriptorSets, ext);
@@ -670,7 +667,7 @@ void TraceTracker::ScanFilter(StructuredChunkList &chunks)
   for(size_t c = 0; c < chunks.size();)
   {
     ExtObject *ext = as_ext(chunks[c]);
-    switch(chunks[c]->metadata.chunkID)
+    switch(ext->ChunkID())
     {
       case(uint32_t)SystemChunk::InitialContents:
       {
@@ -735,10 +732,9 @@ void TraceTracker::AnalyzeMemoryResetRequirements()
       BoundResource &abr = *br_it;
       abr.reset = RESET_REQUIREMENT_NO_RESET;
 
-      SDChunk *bindChunk = (SDChunk *)abr.bindSDObj;
-      switch((VulkanChunk)bindChunk->metadata.chunkID)
+      switch(abr.bindSDObj->ChunkID())
       {
-        case VulkanChunk::vkBindImageMemory:
+        case (uint32_t)VulkanChunk::vkBindImageMemory:
         {
           ExtObject *image_ci = abr.createSDObj->At(1);
           VkImageLayout initialLayout = (VkImageLayout)image_ci->At(14)->U64();
@@ -752,7 +748,7 @@ void TraceTracker::AnalyzeMemoryResetRequirements()
           }
           break;
         }
-        case VulkanChunk::vkBindBufferMemory:
+        case (uint32_t) VulkanChunk::vkBindBufferMemory:
         {
           MemRange range;
           range.MakeRange(abr.offset, abr.requirement);

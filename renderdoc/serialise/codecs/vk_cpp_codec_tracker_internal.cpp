@@ -69,7 +69,7 @@ ResourceWithViewsMapIter TraceTracker::GenericCreateResourceInternal(ExtObject *
   ResourceWithViewsMapIter it =
       createdResources.insert(ResourceWithViewsMapPair(resource_id, rwv)).first;
 
-  if(as_SDChunk(o)->metadata.chunkID == (uint32_t)VulkanChunk::vkCreateImage)
+  if(o->ChunkID() == (uint32_t)VulkanChunk::vkCreateImage)
   {
     imageStates.insert(
         ImageStateMapPair(resource_id, ImageState(resource_id, o->At("CreateInfo"))));
@@ -335,7 +335,7 @@ void TraceTracker::InitDescriptorSetInternal(ExtObject *o)
 
 void TraceTracker::InitialLayoutsInternal(ExtObject *o)
 {
-  RDCASSERT(((SDChunk *)o)->metadata.chunkID == (uint32_t)SystemChunk::CaptureBegin);
+  RDCASSERT(o->ChunkID() == (uint32_t)SystemChunk::CaptureBegin);
   RDCASSERT(o->At(0)->U64() > 0);
   for(uint64_t i = 0; i < o->At("NumImages")->U64(); i++)
   {
