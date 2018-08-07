@@ -157,6 +157,7 @@ set(sources
     serialise/codecs/vk_cpp_codec_tracker_internal.cpp
     serialise/codecs/vk_cpp_codec_tracker_state.cpp
     serialise/codecs/vk_cpp_codec_writer.cpp
+	serialise/codecs/vk_cpp_codec_writer_generic.cpp
     serialise/codecs/vk_cpp_codec_writer.h
     serialise/codecs/intervals.h
     serialise/codecs/ext_object.h

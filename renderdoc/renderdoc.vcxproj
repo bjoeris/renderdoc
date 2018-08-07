@@ -537,6 +537,7 @@
     <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_internal.cpp" />
     <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_state.cpp" />
     <ClCompile Include="serialise\codecs\vk_cpp_codec_writer.cpp" />
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_writer_generic.cpp" />
     <ClCompile Include="serialise\codecs\xml_codec.cpp" />
     <ClCompile Include="serialise\comp_io_tests.cpp" />
     <ClCompile Include="serialise\lz4io.cpp" />
