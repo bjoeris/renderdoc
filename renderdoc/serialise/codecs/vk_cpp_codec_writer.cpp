@@ -2023,7 +2023,6 @@ void CodeWriter::CmdCopyBuffer(ExtObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
   LocalVariable(o->At(4), "", pass);
-  // TODO(akharlamov) Is this resource aliased? If so, it needs a different type of update.
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
                 tracker->GetResourceVar(o->At(1)->U64()), tracker->GetResourceVar(o->At(2)->U64()),
@@ -2056,7 +2055,6 @@ void CodeWriter::CmdCopyImage(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   LocalVariable(o->At(6), "", pass);
   const char *dst_image = tracker->GetResourceVar(o->At(3)->U64());
-  // TODO(akharlamov) Is this resource aliased? If so, it needs a different type of update.
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %s, %llu, %s);", o->Name(),
                 tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
@@ -2069,7 +2067,6 @@ void CodeWriter::CmdBlitImage(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   LocalVariable(o->At(6), "", pass);
   const char *dst_image = tracker->GetResourceVar(o->At(3)->U64());
-  // TODO(akharlamov) Is this resource aliased? If so, it needs a different type of update.
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %s, %llu, %s, %s);", o->Name(),
                 tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
@@ -2083,7 +2080,6 @@ void CodeWriter::CmdResolveImage(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   LocalVariable(o->At(6), "", pass);
   const char *dst_image = tracker->GetResourceVar(o->At(3)->U64());
-  // TODO(akharlamov) Is this resource aliased? If so, it needs a different type of update.
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %s, %llu, %s);", o->Name(),
                 tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
@@ -2104,7 +2100,6 @@ void CodeWriter::CmdCopyBufferToImage(ExtObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
   LocalVariable(o->At(5), "", pass);
-  // TODO(akharlamov) Is this resource aliased? If so, it needs a different type of update.
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
                 tracker->GetResourceVar(o->At(1)->U64()), tracker->GetResourceVar(o->At(2)->U64()),
@@ -2116,7 +2111,6 @@ void CodeWriter::CmdCopyImageToBuffer(ExtObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
   LocalVariable(o->At(5), "", pass);
-  // TODO(akharlamov) Is this resource aliased? If so, it needs a different type of update.
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
                 tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str(),
