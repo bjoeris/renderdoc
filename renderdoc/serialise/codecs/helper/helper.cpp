@@ -1,4 +1,5 @@
 #include "helper.h"
+#include <string>
 
 VkBool32 VKAPI_PTR DebugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType,
                                  uint64_t object, size_t location, int32_t messageCode,
@@ -842,4 +843,8 @@ void MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMapp
     VkResult result = vkFlushMappedMemoryRanges(dev, (uint32_t)ranges.size(), ranges.data());
     assert(result == VK_SUCCESS);
   }
+}
+
+std::string StageProgressString(const char *stage, uint32_t i, uint32_t N) {
+  return std::string("RenderDoc Frame Loop: " + std::string(stage) + " part" + std::to_string(i) + " of" + std::to_string(N));
 }

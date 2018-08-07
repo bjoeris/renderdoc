@@ -104,3 +104,5 @@ inline uint64_t AlignedSize(uint64_t size, uint64_t alignment)
 inline uint64_t AlignedDown(uint64_t size, uint64_t alignment) {
   return (uint64_t(size / alignment)) * alignment;
 }
+
+std::string StageProgressString(const char *stage, uint32_t i, uint32_t N);

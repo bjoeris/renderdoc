@@ -26,6 +26,10 @@ Window appWindow;
 
 #define RDOC_WINDOW_TITLE "RenderDoc Frame Loop"
 
+std::string PostStageProgress(const char *stage, uint32_t i, uint32_t N) {
+  XStoreName(appDisplay, appWindow, StageProgressString(stage, i, N).c_str());
+}
+
 Display *CreateDisplay()
 {
   Display *res = XOpenDisplay(nullptr);

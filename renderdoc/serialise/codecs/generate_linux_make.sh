@@ -1,5 +1,1 @@
-export CC=/usr/bin/clang
-export CXX=/usr/bin/clang++
-rm -rf linux_build
-mkdir linux_build
-cmake -H. -Blinux_build
+export CC=clang && export CXX=clang++ && rm -rf linux_build && mkdir linux_build && cd linux_build && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release .. && ninja && echo "Build complete" 

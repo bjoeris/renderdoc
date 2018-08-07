@@ -6,11 +6,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <time.h>
-
 #include <vulkan/vulkan.h>
 
+#include <string>
+#include <sstream>
+#include <iostream>
+
 #include "gen_main.h"
+
+std::string PostStageProgress(const char *stage, uint32_t i, uint32_t N) {
+  fprintf(stdout, "%s\n", StageProgressString(stage, i, N).c_str());
+}
 
 void CreateResources();
 void ReleaseResources();

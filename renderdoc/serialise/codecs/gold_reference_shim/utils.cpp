@@ -1,7 +1,10 @@
+#include <cmath>
 #include <fstream>
 #include <functional>
 #include <limits>
 #include <map>
+
+#include <float.h>
 
 #include "helper/helper.h"
 #include "shim_vulkan.h"
@@ -346,7 +349,7 @@ std::pair<T, T> mapData(std::vector<std::vector<T>> *data)
     return std::pair<T,T>(minV, maxV);
 
   T denom = maxV - minV;
-  if (std::abs(denom) < FLT_EPSILON)
+  if (std::fabs(denom) < (T) FLT_EPSILON)
     denom = T(1);
 
   for(auto &row : *data)
