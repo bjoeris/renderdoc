@@ -253,8 +253,6 @@ void TraceTracker::ScanBinaryData(StructuredBufferList &buffers)
     RDCASSERT(fbin != NULL);
     FileIO::fwrite(buffers[i]->data(), 1, buffers[i]->size(), fbin);
     FileIO::fclose(fbin);
-
-    code->ReadBuffer(name, i);
   }
 }
 

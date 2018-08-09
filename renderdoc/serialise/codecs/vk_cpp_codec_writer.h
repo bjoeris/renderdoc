@@ -113,8 +113,6 @@ protected:
   void CopyResetBuffer(ExtObject *o, uint32_t pass);
   void ImageLayoutTransition(uint64_t image_id, ExtObject *subres, const char *old_layout,
                              uint32_t pass);
-
-  void ReadBuffer(const char *name, uint64_t i);
   void ClearBufferData();
 
 public:
@@ -284,6 +282,8 @@ public:
   void EndFrameWaitIdle(ExtObject *o, uint32_t pass);
   void InitialContents(ExtObject *o);
   void InitialLayouts(ExtObject *o, uint32_t pass);
+
+  void PrintReadBuffers(StructuredBufferList &buffers);
 };
 
 }    // namespace vk_cpp_codec

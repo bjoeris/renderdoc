@@ -293,6 +293,8 @@ ReplayStatus exportCPPZ(const char *filename, const RDCFile &rdc, const SDFile &
 
   tracker.Scan(chunks, buffers);
 
+  code.PrintReadBuffers(buffers);
+
   ReplayStatus status =
       vk_cpp_codec::Structured2Code(code, tracker, rdc, structData.version, chunks, progress);
 

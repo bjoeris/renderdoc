@@ -132,9 +132,14 @@ void CodeWriter::Close()
   files[ID_VAR] = NULL;
 }
 
-void CodeWriter::ReadBuffer(const char *name, uint64_t i)
-{
-  files[ID_CREATE]->PrintLn("ReadBuffer(\"%s\", %s);", name, name);
+void CodeWriter::PrintReadBuffers(StructuredBufferList &buffers) {
+  for (size_t i = 0; i < buffers.size(); i++) {
+    if (buffers[i]->size() == 0)
+      continue;
+
+    const char *name = tracker->GetDataBlobVar(i);
+    files[ID_CREATE]->PrintLn("ReadBuffer(\"%s\", %s);", name, name);
+  }
 }
 
 void CodeWriter::EarlyCreateResource(uint32_t pass)
