@@ -32,6 +32,8 @@
 #endif
 
 #include <algorithm>
+#include <iostream>
+#include <sstream>
 #include <vector>
 
 #include "vulkan/vulkan.h"
@@ -40,18 +42,54 @@
 
 #define var_to_string(s) #s
 
+#define VK_CHECK_RESULT(f)                                  \
+{                                                           \
+  VkResult res = f;                                         \
+  if (res != VK_SUCCESS)                                    \
+  {                                                         \
+    std::stringstream ss;                                   \
+    ss << "Fatal : VkResult is \"" << VkResultToString(res) \
+       << "\" in " << __FILE__ << " at line " << __LINE__;  \
+    std::cout << ss.str() <<std::endl;                      \
+    assert(res == VK_SUCCESS);                              \
+  }                                                         \
+}                                                           \
+
 struct AuxVkTraceResources
 {
   VkInstance instance;
   VkDevice device;
   VkPhysicalDevice physDevice;
   VkPhysicalDeviceProperties physDeviceProperties;
+  VkPhysicalDeviceMemoryProperties physDeviceMemoryProperties;
+  std::vector<VkQueueFamilyProperties> queueFamilyProperties;
   VkDebugReportCallbackEXT callback;
   VkCommandPool command_pool;
   VkCommandBuffer command_buffer;
   VkQueue queue;
   VkFence fence;
   VkSemaphore semaphore;
+
+  uint64_t getTimestampValidBits(VkQueue queue) {
+    uint64_t bits = 0;
+    if (!physDeviceProperties.limits.timestampComputeAndGraphics)
+      return 0;
+    for (uint32_t i = 0; i < queueFamilyProperties.size() && bits == 0; i++) {
+      if ((queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0 &&
+        (queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) == 0)
+        continue;
+      for (uint32_t j = 0; j < queueFamilyProperties[i].queueCount && bits == 0; j++) {
+        VkQueue q = NULL;
+        vkGetDeviceQueue(device, i, j, &q);
+        if (q == queue) {
+          bits = (queueFamilyProperties[i].timestampValidBits == 64) ?
+            UINT64_MAX :
+            (1ULL << queueFamilyProperties[i].timestampValidBits) - 1;
+        }
+      }
+    }
+    return bits;
+  }
 };
 
 struct Region
@@ -142,6 +180,38 @@ inline uint64_t AlignedDown(uint64_t size, uint64_t alignment)
   return (uint64_t(size / alignment)) * alignment;
 }
 
+inline std::string VkResultToString(VkResult r) {
+  switch (r) {
+#define RETURN_VK_RESULT_STRING(r) case VK_ ##r: return #r
+    RETURN_VK_RESULT_STRING(SUCCESS);
+    RETURN_VK_RESULT_STRING(NOT_READY);
+    RETURN_VK_RESULT_STRING(TIMEOUT);
+    RETURN_VK_RESULT_STRING(EVENT_SET);
+    RETURN_VK_RESULT_STRING(EVENT_RESET);
+    RETURN_VK_RESULT_STRING(INCOMPLETE);
+    RETURN_VK_RESULT_STRING(ERROR_OUT_OF_HOST_MEMORY);
+    RETURN_VK_RESULT_STRING(ERROR_OUT_OF_DEVICE_MEMORY);
+    RETURN_VK_RESULT_STRING(ERROR_INITIALIZATION_FAILED);
+    RETURN_VK_RESULT_STRING(ERROR_DEVICE_LOST);
+    RETURN_VK_RESULT_STRING(ERROR_MEMORY_MAP_FAILED);
+    RETURN_VK_RESULT_STRING(ERROR_LAYER_NOT_PRESENT);
+    RETURN_VK_RESULT_STRING(ERROR_EXTENSION_NOT_PRESENT);
+    RETURN_VK_RESULT_STRING(ERROR_FEATURE_NOT_PRESENT);
+    RETURN_VK_RESULT_STRING(ERROR_INCOMPATIBLE_DRIVER);
+    RETURN_VK_RESULT_STRING(ERROR_TOO_MANY_OBJECTS);
+    RETURN_VK_RESULT_STRING(ERROR_FORMAT_NOT_SUPPORTED);
+    RETURN_VK_RESULT_STRING(ERROR_SURFACE_LOST_KHR);
+    RETURN_VK_RESULT_STRING(ERROR_NATIVE_WINDOW_IN_USE_KHR);
+    RETURN_VK_RESULT_STRING(SUBOPTIMAL_KHR);
+    RETURN_VK_RESULT_STRING(ERROR_OUT_OF_DATE_KHR);
+    RETURN_VK_RESULT_STRING(ERROR_INCOMPATIBLE_DISPLAY_KHR);
+    RETURN_VK_RESULT_STRING(ERROR_VALIDATION_FAILED_EXT);
+    RETURN_VK_RESULT_STRING(ERROR_INVALID_SHADER_NV);
+#undef RETURN_VK_RESULT_STRING
+    default:
+    return "UNKNOWN_ERROR";
+  }
+}
 bool IsExtEnabled(const char *const *extList, uint32_t count, const char *ext);
 bool IsExtSupported(VkPhysicalDevice physicalDevice, const char *ext);
 
