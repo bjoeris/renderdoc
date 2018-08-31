@@ -95,7 +95,7 @@ WrappedVulkan::WrappedVulkan() : m_RenderState(this, &m_CreationInfo)
   if(RenderDoc::Inst().IsReplayApp())
   {
     if(VkMarkerRegion::vk == NULL)
-    VkMarkerRegion::vk = this;
+      VkMarkerRegion::vk = this;
 
     m_State = CaptureState::LoadingReplaying;
   }
@@ -644,7 +644,7 @@ static const VkExtensionProperties supportedExtensions[] = {
     },
 #ifdef VK_GOOGLE_yeti_surface
     {
-      VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME, VK_GOOGLE_YETI_SURFACE_SPEC_VERSION,
+        VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME, VK_GOOGLE_YETI_SURFACE_SPEC_VERSION,
     },
 #endif
 #ifdef VK_IMG_format_pvrtc
@@ -1550,7 +1550,7 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
   }
 
   RDCFile *rdc = RenderDoc::Inst().CreateRDC(RDCDriver::Vulkan, m_CapturedFrames.back().frameNumber,
-                                             jpgbuf, len, thwidth, thheight);
+                                             jpgbuf, len, thwidth, thheight, FileType::JPG);
 
   SAFE_DELETE_ARRAY(jpgbuf);
   SAFE_DELETE_ARRAY(thpixels);
@@ -3341,33 +3341,33 @@ void WrappedVulkan::AddFramebufferUsage(VulkanDrawcallTreeNode &drawNode, Resour
       const VulkanCreationInfo::RenderPass::Subpass &sub = rp.subpasses[subpass];
 
       for(size_t i = 0; i < sub.inputAttachments.size(); i++)
-    {
+      {
         uint32_t att = sub.inputAttachments[i];
-      if(att == VK_ATTACHMENT_UNUSED)
-        continue;
-      drawNode.resourceUsage.push_back(
-          std::make_pair(c.m_ImageView[fb.attachments[att].view].image,
-                         EventUsage(e, ResourceUsage::InputTarget, fb.attachments[att].view)));
-    }
+        if(att == VK_ATTACHMENT_UNUSED)
+          continue;
+        drawNode.resourceUsage.push_back(
+            std::make_pair(c.m_ImageView[fb.attachments[att].view].image,
+                           EventUsage(e, ResourceUsage::InputTarget, fb.attachments[att].view)));
+      }
 
       for(size_t i = 0; i < sub.colorAttachments.size(); i++)
-    {
+      {
         uint32_t att = sub.colorAttachments[i];
-      if(att == VK_ATTACHMENT_UNUSED)
-        continue;
-      drawNode.resourceUsage.push_back(
-          std::make_pair(c.m_ImageView[fb.attachments[att].view].image,
-                         EventUsage(e, ResourceUsage::ColorTarget, fb.attachments[att].view)));
-    }
+        if(att == VK_ATTACHMENT_UNUSED)
+          continue;
+        drawNode.resourceUsage.push_back(
+            std::make_pair(c.m_ImageView[fb.attachments[att].view].image,
+                           EventUsage(e, ResourceUsage::ColorTarget, fb.attachments[att].view)));
+      }
 
       if(sub.depthstencilAttachment >= 0)
-    {
+      {
         int32_t att = sub.depthstencilAttachment;
-      drawNode.resourceUsage.push_back(std::make_pair(
-          c.m_ImageView[fb.attachments[att].view].image,
-          EventUsage(e, ResourceUsage::DepthStencilTarget, fb.attachments[att].view)));
+        drawNode.resourceUsage.push_back(std::make_pair(
+            c.m_ImageView[fb.attachments[att].view].image,
+            EventUsage(e, ResourceUsage::DepthStencilTarget, fb.attachments[att].view)));
+      }
     }
-  }
   }
 }
 
