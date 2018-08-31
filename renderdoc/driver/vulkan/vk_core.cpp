@@ -30,10 +30,6 @@
 #include "strings/string_utils.h"
 #include "vk_debug.h"
 
-#ifdef __yeti__
-#include "stb/stb_image_write.h"
-#endif
-
 uint32_t VkInitParams::GetSerialiseSize()
 {
   // misc bytes and fixed integer members
@@ -1254,7 +1250,6 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
   byte *thpixels = NULL;
   uint16_t thwidth = 0;
   uint16_t thheight = 0;
-  int thpixelslen = 0;
 
   // gather backbuffer screenshot
   const uint32_t maxSize = 2048;
@@ -1424,8 +1419,7 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
       thwidth &= ~0x7;    // align down to multiple of 8
       thheight = uint16_t(thwidth * imInfo.extent.height / imInfo.extent.width);
 
-      thpixelslen = 3U * thwidth * thheight;
-      thpixels = new byte[thpixelslen];
+      thpixels = new byte[3U * thwidth * thheight];
 
       uint32_t stride = fmt.compByteWidth * fmt.compCount;
 
@@ -1533,56 +1527,32 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
     GetResourceManager()->ReleaseWrappedResource(readbackIm);
   }
 
-  byte *buf = NULL;
-  int buflen = 0;
-  FileType thformat = FileType::JPG;
+  byte *jpgbuf = NULL;
+  int len = thwidth * thheight;
 
   if(wnd)
   {
-#ifdef __yeti__
-    struct WriteCallbackData
-    {
-      std::vector<byte> buffer;
-
-      static void writeData(void *context, void *data, int size)
-      {
-        WriteCallbackData *pThis = static_cast<WriteCallbackData *>(context);
-        const byte *start = static_cast<const byte *>(data);
-        pThis->buffer.insert(pThis->buffer.end(), start, start + size);
-      }
-    };
-
-    WriteCallbackData callbackData;
-    stbi_write_png_to_func(&WriteCallbackData::writeData, &callbackData, thwidth, thheight, 3,
-                           thpixels, 0);
-    buf = new byte[callbackData.buffer.size()];
-    memcpy(buf, callbackData.buffer.data(), callbackData.buffer.size());
-    buflen = static_cast<int>(callbackData.buffer.size());
-    thformat = FileType::PNG;
-#else
-    buflen = thwidth * thheight;
-    buf = new byte[buflen];
+    jpgbuf = new byte[len];
 
     jpge::params p;
     p.m_quality = 80;
 
     bool success =
-        jpge::compress_image_to_jpeg_file_in_memory(buf, buflen, thwidth, thheight, 3, thpixels, p);
+        jpge::compress_image_to_jpeg_file_in_memory(jpgbuf, len, thwidth, thheight, 3, thpixels, p);
 
     if(!success)
     {
       RDCERR("Failed to compress to jpg");
-      SAFE_DELETE_ARRAY(buf);
+      SAFE_DELETE_ARRAY(jpgbuf);
       thwidth = 0;
       thheight = 0;
     }
-#endif
   }
 
   RDCFile *rdc = RenderDoc::Inst().CreateRDC(RDCDriver::Vulkan, m_CapturedFrames.back().frameNumber,
-                                             buf, buflen, thwidth, thheight, thformat);
+                                             jpgbuf, len, thwidth, thheight);
 
-  SAFE_DELETE_ARRAY(buf);
+  SAFE_DELETE_ARRAY(jpgbuf);
   SAFE_DELETE_ARRAY(thpixels);
 
   StreamWriter *captureWriter = NULL;
