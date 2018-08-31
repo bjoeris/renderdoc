@@ -181,8 +181,6 @@ RenderDoc &RenderDoc::Inst()
 
 void RenderDoc::RecreateCrashHandler()
 {
-  UnloadCrashHandler();
-
 #if ENABLED(RDOC_CRASH_HANDLER)
   m_ExHandler = new CrashHandler(m_ExHandler);
 #endif
@@ -1088,15 +1086,15 @@ void RenderDoc::FinishCaptureWriting(RDCFile *rdc, uint32_t frameNumber)
       delete w;
     }
 
-    delete rdc;
-
     RDCLOG("Written to disk: %s", m_CurrentLogFile.c_str());
 
-    CaptureData cap(m_CurrentLogFile, Timing::GetUnixTimestamp(), frameNumber);
+    CaptureData cap(m_CurrentLogFile, Timing::GetUnixTimestamp(), rdc->GetDriver(), frameNumber);
     {
       SCOPED_LOCK(m_CaptureLock);
       m_Captures.push_back(cap);
     }
+
+    delete rdc;
   }
 
   RenderDoc::Inst().SetProgress(CaptureProgress::FileWriting, 1.0f);

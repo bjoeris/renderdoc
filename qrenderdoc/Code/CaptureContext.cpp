@@ -279,6 +279,8 @@ void CaptureContext::LoadCaptureThreaded(const QString &captureFile, const QStri
 
     m_APIProps = r->GetAPIProperties();
 
+    m_TargetEncodings = r->GetTargetShaderEncodings();
+
     m_PostloadProgress = 0.2f;
 
     m_Drawcalls = &r->GetDrawcalls();
@@ -1457,13 +1459,14 @@ void CaptureContext::ShowResourceInspector()
   m_MainWindow->showResourceInspector();
 }
 
-IShaderViewer *CaptureContext::EditShader(bool customShader, const rdcstr &entryPoint,
-                                          const rdcstrpairs &files,
+IShaderViewer *CaptureContext::EditShader(bool customShader, ShaderStage stage,
+                                          const rdcstr &entryPoint, const rdcstrpairs &files,
+                                          ShaderEncoding shaderEncoding, ShaderCompileFlags flags,
                                           IShaderViewer::SaveCallback saveCallback,
                                           IShaderViewer::CloseCallback closeCallback)
 {
-  return ShaderViewer::EditShader(*this, customShader, entryPoint, files, saveCallback,
-                                  closeCallback, m_MainWindow->Widget());
+  return ShaderViewer::EditShader(*this, customShader, stage, entryPoint, files, shaderEncoding,
+                                  flags, saveCallback, closeCallback, m_MainWindow->Widget());
 }
 
 IShaderViewer *CaptureContext::DebugShader(const ShaderBindpointMapping *bind,

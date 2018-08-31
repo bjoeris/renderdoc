@@ -23,9 +23,11 @@
  ******************************************************************************/
 
 #include "PipelineStateViewer.h"
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QSvgRenderer>
+#include <QToolButton>
 #include <QXmlStreamWriter>
 #include "3rdparty/toolwindowmanager/ToolWindowManager.h"
 #include "Code/QRDUtils.h"
@@ -48,6 +50,9 @@ PipelineStateViewer::PipelineStateViewer(ICaptureContext &ctx, QWidget *parent)
   m_Vulkan = NULL;
 
   m_Current = NULL;
+
+  for(size_t i = 0; i < ARRAY_COUNT(editMenus); i++)
+    editMenus[i] = new QMenu(this);
 
   setToD3D11();
 
@@ -202,6 +207,9 @@ void PipelineStateViewer::setToVulkan()
 
 QXmlStreamWriter *PipelineStateViewer::beginHTMLExport()
 {
+  if(!m_Ctx.IsCaptureLoaded())
+    return NULL;
+
   QString filename = RDDialog::getSaveFileName(this, tr("Export pipeline state as HTML"), QString(),
                                                tr("HTML files (*.html)"));
 
@@ -541,34 +549,6 @@ void PipelineStateViewer::setMeshViewPixmap(RDLabel *meshView)
   });
 }
 
-bool PipelineStateViewer::PrepareShaderEditing(const ShaderReflection *shaderDetails,
-                                               QString &entryFunc, rdcstrpairs &files)
-{
-  if(!shaderDetails->debugInfo.files.empty())
-  {
-    entryFunc = shaderDetails->entryPoint;
-
-    QStringList uniqueFiles;
-
-    for(const ShaderSourceFile &s : shaderDetails->debugInfo.files)
-    {
-      QString filename = s.filename;
-      if(uniqueFiles.contains(filename.toLower()))
-      {
-        qWarning() << lit("Duplicate full filename") << filename;
-        continue;
-      }
-      uniqueFiles.push_back(filename.toLower());
-
-      files.push_back(make_rdcpair(s.filename, s.contents));
-    }
-
-    return true;
-  }
-
-  return false;
-}
-
 void PipelineStateViewer::MakeShaderVariablesHLSL(bool cbufferContents,
                                                   const rdcarray<ShaderConstant> &vars,
                                                   QString &struct_contents, QString &struct_defs)
@@ -610,7 +590,7 @@ void PipelineStateViewer::MakeShaderVariablesHLSL(bool cbufferContents,
 QString PipelineStateViewer::GenerateHLSLStub(const ShaderReflection *shaderDetails,
                                               const QString &entryFunc)
 {
-  QString hlsl = lit("// No HLSL available - function stub generated\n\n");
+  QString hlsl = lit("// HLSL function stub generated\n\n");
 
   const QString textureDim[ENUM_ARRAY_SIZE(TextureType)] = {
       lit("Unknown"),          lit("Buffer"),      lit("Texture1D"),      lit("Texture1DArray"),
@@ -715,159 +695,221 @@ QString PipelineStateViewer::GenerateHLSLStub(const ShaderReflection *shaderDeta
   return hlsl;
 }
 
-void PipelineStateViewer::EditShader(ShaderStage shaderType, ResourceId id,
-                                     const ShaderReflection *shaderDetails,
-                                     const QString &entryFunc, const rdcstrpairs &files)
+void PipelineStateViewer::shaderEdit_clicked()
 {
-  IShaderViewer *sv = m_Ctx.EditShader(
-      false, entryFunc, files,
-      // save callback
-      [entryFunc, shaderType, id, shaderDetails](ICaptureContext *ctx, IShaderViewer *viewer,
-                                                 const rdcstrpairs &updatedfiles) {
-        QString compileSource = updatedfiles[0].second;
+  QToolButton *sender = qobject_cast<QToolButton *>(QObject::sender());
+  if(!sender)
+    return;
 
-        ANALYTIC_SET(UIFeatures.ShaderEditing, true);
+  // activate the first item in the menu, if there are any items, as the default action.
+  QMenu *menu = sender->menu();
+  if(menu && !menu->actions().isEmpty())
+    menu->actions()[0]->trigger();
+}
 
-        // try and match up #includes against the files that we have. This isn't always
-        // possible as fxc only seems to include the source for files if something in
-        // that file was included in the compiled output. So you might end up with
-        // dangling #includes - we just have to ignore them
-        int offs = compileSource.indexOf(lit("#include"));
+IShaderViewer *PipelineStateViewer::EditShader(ResourceId id, ShaderStage shaderType,
+                                               const rdcstr &entry, ShaderCompileFlags compileFlags,
+                                               ShaderEncoding encoding, const rdcstrpairs &files)
+{
+  auto saveCallback = [shaderType, id](ICaptureContext *ctx, IShaderViewer *viewer,
+                                       ShaderEncoding shaderEncoding, ShaderCompileFlags flags,
+                                       rdcstr entryFunc, bytebuf shaderBytes) {
+    if(shaderBytes.isEmpty())
+      return;
 
-        while(offs >= 0)
-        {
-          // search back to ensure this is a valid #include (ie. not in a comment).
-          // Must only see whitespace before, then a newline.
-          int ws = qMax(0, offs - 1);
-          while(ws >= 0 &&
-                (compileSource[ws] == QLatin1Char(' ') || compileSource[ws] == QLatin1Char('\t')))
-            ws--;
+    ANALYTIC_SET(UIFeatures.ShaderEditing, true);
 
-          // not valid? jump to next.
-          if(ws > 0 && compileSource[ws] != QLatin1Char('\n'))
-          {
-            offs = compileSource.indexOf(lit("#include"), offs + 1);
-            continue;
-          }
+    // invoke off to the ReplayController to replace the capture's shader
+    // with our edited one
+    ctx->Replay().AsyncInvoke([ctx, entryFunc, shaderBytes, shaderEncoding, flags, shaderType, id,
+                               viewer](IReplayController *r) {
+      rdcstr errs;
 
-          int start = ws + 1;
+      ResourceId from = id;
+      ResourceId to;
 
-          bool tail = true;
+      std::tie(to, errs) =
+          r->BuildTargetShader(entryFunc.c_str(), shaderEncoding, shaderBytes, flags, shaderType);
 
-          int lineEnd = compileSource.indexOf(QLatin1Char('\n'), start + 1);
-          if(lineEnd == -1)
-          {
-            lineEnd = compileSource.length();
-            tail = false;
-          }
+      GUIInvoke::call(viewer->Widget(), [viewer, errs]() { viewer->ShowErrors(errs); });
+      if(to == ResourceId())
+      {
+        r->RemoveReplacement(from);
+        GUIInvoke::call(viewer->Widget(), [ctx]() { ctx->RefreshStatus(); });
+      }
+      else
+      {
+        r->ReplaceResource(from, to);
+        GUIInvoke::call(viewer->Widget(), [ctx]() { ctx->RefreshStatus(); });
+      }
+    });
+  };
 
-          ws = offs + sizeof("#include") - 1;
-          while(compileSource[ws] == QLatin1Char(' ') || compileSource[ws] == QLatin1Char('\t'))
-            ws++;
+  auto closeCallback = [id](ICaptureContext *ctx) {
+    // remove the replacement on close (we could make this more sophisticated if there
+    // was a place to control replaced resources/shaders).
+    ctx->Replay().AsyncInvoke([ctx, id](IReplayController *r) {
+      r->RemoveReplacement(id);
+      GUIInvoke::call(ctx->GetMainWindow()->Widget(), [ctx] { ctx->RefreshStatus(); });
+    });
+  };
 
-          QString line = compileSource.mid(offs, lineEnd - offs + 1);
-
-          if(compileSource[ws] != QLatin1Char('<') && compileSource[ws] != QLatin1Char('"'))
-          {
-            viewer->ShowErrors(lit("Invalid #include directive found:\r\n") + line);
-            return;
-          }
-
-          // find matching char, either <> or "";
-          int end = compileSource.indexOf(
-              compileSource[ws] == QLatin1Char('"') ? QLatin1Char('"') : QLatin1Char('>'), ws + 1);
-
-          if(end == -1)
-          {
-            viewer->ShowErrors(lit("Invalid #include directive found:\r\n") + line);
-            return;
-          }
-
-          QString fname = compileSource.mid(ws + 1, end - ws - 1);
-
-          QString fileText;
-
-          // look for exact match first
-          for(int i = 0; i < updatedfiles.count(); i++)
-          {
-            if(QString(updatedfiles[i].first) == fname)
-            {
-              fileText = updatedfiles[i].second;
-              break;
-            }
-          }
-
-          if(fileText.isEmpty())
-          {
-            QString search = QFileInfo(fname).fileName();
-
-            // if not, try and find the same filename (this is not proper include handling!)
-            for(const rdcstrpair &kv : updatedfiles)
-            {
-              if(QFileInfo(kv.first).fileName().compare(search, Qt::CaseInsensitive) == 0)
-              {
-                fileText = kv.second;
-                break;
-              }
-            }
-
-            if(fileText.isEmpty())
-              fileText = QFormatStr("// Can't find file %1\n").arg(fname);
-          }
-
-          compileSource = compileSource.left(offs) + lit("\n\n") + fileText + lit("\n\n") +
-                          (tail ? compileSource.mid(lineEnd + 1) : QString());
-
-          // need to start searching from the beginning - wasteful but allows nested includes to
-          // work
-          offs = compileSource.indexOf(lit("#include"));
-        }
-
-        for(const rdcstrpair &kv : updatedfiles)
-        {
-          if(kv.first == "@cmdline")
-            compileSource = QString(kv.second) + lit("\n\n") + compileSource;
-        }
-
-        // invoke off to the ReplayController to replace the capture's shader
-        // with our edited one
-        ctx->Replay().AsyncInvoke([ctx, entryFunc, compileSource, shaderType, id, shaderDetails,
-                                   viewer](IReplayController *r) {
-          rdcstr errs;
-
-          const ShaderCompileFlags &flags = shaderDetails->debugInfo.compileFlags;
-
-          ResourceId from = id;
-          ResourceId to;
-
-          std::tie(to, errs) = r->BuildTargetShader(
-              entryFunc.toUtf8().data(), compileSource.toUtf8().data(), flags, shaderType);
-
-          GUIInvoke::call(viewer->Widget(), [viewer, errs]() { viewer->ShowErrors(errs); });
-          if(to == ResourceId())
-          {
-            r->RemoveReplacement(from);
-            GUIInvoke::call(viewer->Widget(), [ctx]() { ctx->RefreshStatus(); });
-          }
-          else
-          {
-            r->ReplaceResource(from, to);
-            GUIInvoke::call(viewer->Widget(), [ctx]() { ctx->RefreshStatus(); });
-          }
-        });
-      },
-
-      // Close Callback
-      [id](ICaptureContext *ctx) {
-        // remove the replacement on close (we could make this more sophisticated if there
-        // was a place to control replaced resources/shaders).
-        ctx->Replay().AsyncInvoke([ctx, id](IReplayController *r) {
-          r->RemoveReplacement(id);
-          GUIInvoke::call(ctx->GetMainWindow()->Widget(), [ctx] { ctx->RefreshStatus(); });
-        });
-      });
+  IShaderViewer *sv = m_Ctx.EditShader(false, shaderType, entry, files, encoding, compileFlags,
+                                       saveCallback, closeCallback);
 
   m_Ctx.AddDockWindow(sv->Widget(), DockReference::AddTo, this);
+
+  return sv;
+}
+
+IShaderViewer *PipelineStateViewer::EditOriginalShaderSource(ResourceId id,
+                                                             const ShaderReflection *shaderDetails)
+{
+  QSet<uint> uniqueFiles;
+  rdcstrpairs files;
+
+  for(const ShaderSourceFile &s : shaderDetails->debugInfo.files)
+  {
+    QString filename = s.filename;
+
+    uint filenameHash = qHash(filename.toLower());
+
+    if(uniqueFiles.contains(filenameHash))
+    {
+      qWarning() << lit("Duplicate full filename") << filename;
+      continue;
+    }
+    uniqueFiles.insert(filenameHash);
+
+    files.push_back(make_rdcpair(s.filename, s.contents));
+  }
+
+  return EditShader(id, shaderDetails->stage, shaderDetails->entryPoint,
+                    shaderDetails->debugInfo.compileFlags, shaderDetails->debugInfo.encoding, files);
+}
+
+IShaderViewer *PipelineStateViewer::EditDecompiledSource(const ShaderProcessingTool &tool,
+                                                         ResourceId id,
+                                                         const ShaderReflection *shaderDetails)
+{
+  ShaderToolOutput out = tool.DisassembleShader(this, shaderDetails, "");
+
+  rdcstr source;
+  source.assign((const char *)out.result.data(), out.result.size());
+
+  rdcstrpairs files;
+  files.push_back(make_rdcpair<rdcstr, rdcstr>("decompiled", source));
+
+  IShaderViewer *sv = EditShader(id, shaderDetails->stage, shaderDetails->entryPoint,
+                                 shaderDetails->debugInfo.compileFlags, tool.output, files);
+
+  sv->ShowErrors(out.log);
+
+  return sv;
+}
+
+void PipelineStateViewer::SetupShaderEditButton(QToolButton *button, ResourceId pipelineId,
+                                                ResourceId shaderId,
+                                                const ShaderReflection *shaderDetails)
+{
+  if(!shaderDetails || !button->isEnabled() || button->popupMode() != QToolButton::MenuButtonPopup)
+    return;
+
+  QMenu *menu = editMenus[(int)shaderDetails->stage];
+
+  menu->clear();
+
+  rdcarray<ShaderEncoding> accepted = m_Ctx.TargetShaderEncodings();
+
+  // if we have original source and it's in a known format, display it as the first most preferred
+  // option
+  if(!shaderDetails->debugInfo.files.empty() &&
+     shaderDetails->debugInfo.encoding != ShaderEncoding::Unknown)
+  {
+    QAction *action =
+        new QAction(tr("Edit Source - %1").arg(shaderDetails->debugInfo.files[0].filename), menu);
+    action->setIcon(Icons::page_white_edit());
+
+    QObject::connect(action, &QAction::triggered, [this, shaderId, shaderDetails]() {
+      EditOriginalShaderSource(shaderId, shaderDetails);
+    });
+
+    menu->addAction(action);
+  }
+
+  // next up, try the shader processing tools in order - all the ones that will decompile from our
+  // native representation. We don't check here yet if we have a valid compiler to compile from the
+  // output to what we want.
+  for(const ShaderProcessingTool &tool : m_Ctx.Config().ShaderProcessors)
+  {
+    // skip tools that can't decode our shader, or doesn't produce a textual output
+    if(tool.input != shaderDetails->encoding || !IsTextRepresentation(tool.output))
+      continue;
+
+    QAction *action = new QAction(tr("Decompile with %1").arg(tool.name), menu);
+    action->setIcon(Icons::page_white_edit());
+
+    QObject::connect(action, &QAction::triggered, [this, tool, shaderId, shaderDetails]() {
+      EditDecompiledSource(tool, shaderId, shaderDetails);
+    });
+
+    menu->addAction(action);
+  }
+
+  // if all else fails we can generate a stub for editing. Skip this for GLSL as it always has
+  // source above which is preferred.
+  if(shaderDetails->encoding != ShaderEncoding::GLSL)
+  {
+    QString label = tr("Edit Generated Stub");
+
+    if(shaderDetails->encoding == ShaderEncoding::SPIRV)
+      label = tr("Edit Pseudocode");
+
+    QAction *action = new QAction(label, menu);
+    action->setIcon(Icons::page_white_edit());
+
+    QObject::connect(action, &QAction::triggered, [this, pipelineId, shaderId, shaderDetails]() {
+      QString entry;
+      QString src;
+
+      if(shaderDetails->encoding == ShaderEncoding::SPIRV)
+      {
+        m_Ctx.Replay().AsyncInvoke([this, pipelineId, shaderId, shaderDetails](IReplayController *r) {
+          rdcstr disasm = r->DisassembleShader(pipelineId, shaderDetails, "");
+
+          QString editeddisasm =
+              tr("####          PSEUDOCODE SPIR-V DISASSEMBLY            ###\n") +
+              tr("#### Use a SPIR-V decompiler to get compileable source ###\n\n");
+
+          editeddisasm += disasm;
+
+          GUIInvoke::call(this, [this, shaderId, shaderDetails, editeddisasm]() {
+            rdcstrpairs files;
+            files.push_back(make_rdcpair<rdcstr, rdcstr>("pseudocode", editeddisasm));
+
+            EditShader(shaderId, shaderDetails->stage, shaderDetails->entryPoint,
+                       ShaderCompileFlags(), ShaderEncoding::Unknown, files);
+          });
+        });
+      }
+      else if(shaderDetails->encoding == ShaderEncoding::DXBC)
+      {
+        entry = lit("EditedShader%1S").arg(ToQStr(shaderDetails->stage, GraphicsAPI::D3D11)[0]);
+
+        rdcstrpairs files;
+        files.push_back(make_rdcpair<rdcstr, rdcstr>("decompiled_stub.hlsl",
+                                                     GenerateHLSLStub(shaderDetails, entry)));
+
+        EditShader(shaderId, shaderDetails->stage, entry, ShaderCompileFlags(),
+                   ShaderEncoding::HLSL, files);
+      }
+
+    });
+
+    menu->addAction(action);
+  }
+
+  button->setMenu(menu);
 }
 
 bool PipelineStateViewer::SaveShaderFile(const ShaderReflection *shader)

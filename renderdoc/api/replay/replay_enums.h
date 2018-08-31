@@ -1320,6 +1320,12 @@ enum class GPUVendor : uint32_t
 
 DECLARE_REFLECTION_ENUM(GPUVendor);
 
+DOCUMENT(R"(Get the GPUVendor for a given PCI Vendor ID.
+
+:param int vendorID: The PCI Vendor ID
+:return: The vendor identified
+:rtype: GPUVendor
+)");
 constexpr GPUVendor GPUVendorFromPCIVendor(uint32_t vendorID)
 {
   // temporarily disable clang-format to make this more readable.
@@ -1376,6 +1382,10 @@ constexpr inline bool IsD3D(GraphicsAPI api)
 
 DOCUMENT(R"(Identifies a shader encoding used to pass shader code to an API.
 
+.. data:: Unknown
+
+  Unknown or unprocessable format.
+
 .. data:: DXBC
 
   DXBC binary shader, used by D3D11 and D3D12.
@@ -1387,15 +1397,42 @@ DOCUMENT(R"(Identifies a shader encoding used to pass shader code to an API.
 .. data:: SPIRV
 
   SPIR-V binary shader, used by Vulkan and with an extension by OpenGL.
+
+.. data:: SPIRVAsm
+
+  Canonical SPIR-V assembly form, used (indirectly via :data:`SPIRV`) by Vulkan and with an
+  extension by OpenGL.
+
+.. data:: HLSL
+
+  HLSL in string format, used by D3D11, D3D12, and Vulkan/GL via compilation to SPIR-V.
 )");
 enum class ShaderEncoding : uint32_t
 {
+  Unknown,
+  First = Unknown,
   DXBC,
   GLSL,
   SPIRV,
+  SPIRVAsm,
+  HLSL,
+  Count,
 };
 
+ITERABLE_OPERATORS(ShaderEncoding);
 DECLARE_REFLECTION_ENUM(ShaderEncoding);
+
+DOCUMENT(R"(Check whether or not this is a human readable text representation.
+
+:param ShaderEncoding e: The encoding to check.
+:return: ``True`` if it describes a text representation, ``False`` for a bytecode representation.
+:rtype: ``bool``
+)");
+constexpr inline bool IsTextRepresentation(ShaderEncoding encoding)
+{
+  return encoding == ShaderEncoding::HLSL || encoding == ShaderEncoding::GLSL ||
+         encoding == ShaderEncoding::SPIRVAsm;
+}
 
 DOCUMENT(R"(A primitive topology used for processing vertex data.
 
@@ -1664,7 +1701,7 @@ DOCUMENT(R"(Check whether or not this is a strip-type topology.
 
 :param Topology t: The topology to check.
 :return: ``True`` if it describes a strip topology, ``False`` for a list.
-:rtype: ``int``
+:rtype: ``bool``
 )");
 constexpr inline bool IsStrip(Topology topology)
 {

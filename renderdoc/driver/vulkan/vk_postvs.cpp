@@ -1197,8 +1197,9 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
     uint32_t *idx32 = NULL;
 
     // fetch ibuffer
-    GetBufferData(state.ibuffer.buf, state.ibuffer.offs + drawcall->indexOffset * idxsize,
-                  uint64_t(drawcall->numIndices) * idxsize, idxdata);
+    if(state.ibuffer.buf != ResourceId())
+      GetBufferData(state.ibuffer.buf, state.ibuffer.offs + drawcall->indexOffset * idxsize,
+                    uint64_t(drawcall->numIndices) * idxsize, idxdata);
 
     // figure out what the maximum index could be, so we can clamp our index buffer to something
     // sane
@@ -1351,6 +1352,13 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
 
     memcpy(idxData, &indices[0], indices.size() * sizeof(uint32_t));
 
+    VkMappedMemoryRange range = {
+        VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, uniqIdxBufMem, 0, VK_WHOLE_SIZE,
+    };
+
+    vkr = m_pDriver->vkFlushMappedMemoryRanges(m_Device, 1, &range);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
     m_pDriver->vkUnmapMemory(m_Device, uniqIdxBufMem);
 
     // rebase existing index buffer to point to the right elements in our stream-out'd
@@ -1398,6 +1406,13 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
     memcpy(idxData, idxdata.data(), idxdata.size());
+
+    VkMappedMemoryRange rebasedRange = {
+        VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, rebasedIdxBufMem, 0, VK_WHOLE_SIZE,
+    };
+
+    vkr = m_pDriver->vkFlushMappedMemoryRanges(m_Device, 1, &rebasedRange);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
     m_pDriver->vkUnmapMemory(m_Device, rebasedIdxBufMem);
   }
@@ -1449,7 +1464,8 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
         offs += drawcall->vertexOffset * vi->pVertexBindingDescriptions[vb].stride;
       }
 
-      GetBufferData(state.vbuffers[vb].buf, offs, len, origVBs[vb]);
+      if(state.vbuffers[vb].buf != ResourceId())
+        GetBufferData(state.vbuffers[vb].buf, offs, len, origVBs[vb]);
     }
 
     for(uint32_t i = 0; i < vi->vertexAttributeDescriptionCount; i++)
@@ -1684,6 +1700,13 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
             }
           }
         }
+
+        VkMappedMemoryRange range = {
+            VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, vbuffers[attr].mem, 0, VK_WHOLE_SIZE,
+        };
+
+        vkr = m_pDriver->vkFlushMappedMemoryRanges(m_Device, 1, &range);
+        RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
         m_pDriver->vkUnmapMemory(m_Device, vbuffers[attr].mem);
       }
@@ -1967,6 +1990,13 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
   // readback mesh data
   byte *byteData = NULL;
   vkr = m_pDriver->vkMapMemory(m_Device, readbackMem, 0, VK_WHOLE_SIZE, 0, (void **)&byteData);
+
+  VkMappedMemoryRange range = {
+      VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, readbackMem, 0, VK_WHOLE_SIZE,
+  };
+
+  vkr = m_pDriver->vkInvalidateMappedMemoryRanges(m_Device, 1, &range);
+  RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
   // do near/far calculations
 

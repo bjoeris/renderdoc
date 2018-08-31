@@ -492,45 +492,45 @@ struct GLDispatchTable
   PFNGLUNIFORMBLOCKBINDINGPROC glUniformBlockBinding;
   PFNGLSHADERSTORAGEBLOCKBINDINGPROC glShaderStorageBlockBinding;
   PFNGLUNIFORMSUBROUTINESUIVPROC glUniformSubroutinesuiv;
-  PFNGLUNIFORM1FPROC glUniform1f;
-  PFNGLUNIFORM1IPROC glUniform1i;
+  PFNGLUNIFORM1FPROC glUniform1f;      // aliases glUniform1fARB
+  PFNGLUNIFORM1IPROC glUniform1i;      // aliases glUniform1iARB
   PFNGLUNIFORM1UIPROC glUniform1ui;    // aliases glUniform1uiEXT
   PFNGLUNIFORM1DPROC glUniform1d;
-  PFNGLUNIFORM2FPROC glUniform2f;
-  PFNGLUNIFORM2IPROC glUniform2i;
+  PFNGLUNIFORM2FPROC glUniform2f;      // aliases glUniform2fARB
+  PFNGLUNIFORM2IPROC glUniform2i;      // aliases glUniform2iARB
   PFNGLUNIFORM2UIPROC glUniform2ui;    // aliases glUniform2uiEXT
   PFNGLUNIFORM2DPROC glUniform2d;
-  PFNGLUNIFORM3FPROC glUniform3f;
-  PFNGLUNIFORM3IPROC glUniform3i;
+  PFNGLUNIFORM3FPROC glUniform3f;      // aliases glUniform3fARB
+  PFNGLUNIFORM3IPROC glUniform3i;      // aliases glUniform3iARB
   PFNGLUNIFORM3UIPROC glUniform3ui;    // aliases glUniform3uiEXT
   PFNGLUNIFORM3DPROC glUniform3d;
-  PFNGLUNIFORM4FPROC glUniform4f;
-  PFNGLUNIFORM4IPROC glUniform4i;
+  PFNGLUNIFORM4FPROC glUniform4f;      // aliases glUniform4fARB
+  PFNGLUNIFORM4IPROC glUniform4i;      // aliases glUniform4iARB
   PFNGLUNIFORM4UIPROC glUniform4ui;    // aliases glUniform4uiEXT
   PFNGLUNIFORM4DPROC glUniform4d;
-  PFNGLUNIFORM1FVPROC glUniform1fv;
-  PFNGLUNIFORM1IVPROC glUniform1iv;
+  PFNGLUNIFORM1FVPROC glUniform1fv;      // aliases glUniform1fvARB
+  PFNGLUNIFORM1IVPROC glUniform1iv;      // aliases glUniform1ivARB
   PFNGLUNIFORM1UIVPROC glUniform1uiv;    // aliases glUniform1uivEXT
   PFNGLUNIFORM1DVPROC glUniform1dv;
-  PFNGLUNIFORM2FVPROC glUniform2fv;
-  PFNGLUNIFORM2IVPROC glUniform2iv;
+  PFNGLUNIFORM2FVPROC glUniform2fv;      // aliases glUniform2fvARB
+  PFNGLUNIFORM2IVPROC glUniform2iv;      // aliases glUniform2ivARB
   PFNGLUNIFORM2UIVPROC glUniform2uiv;    // aliases glUniform2uivEXT
   PFNGLUNIFORM2DVPROC glUniform2dv;
-  PFNGLUNIFORM3FVPROC glUniform3fv;
-  PFNGLUNIFORM3IVPROC glUniform3iv;
+  PFNGLUNIFORM3FVPROC glUniform3fv;      // aliases glUniform3fvARB
+  PFNGLUNIFORM3IVPROC glUniform3iv;      // aliases glUniform3ivARB
   PFNGLUNIFORM3UIVPROC glUniform3uiv;    // aliases glUniform3uivEXT
   PFNGLUNIFORM3DVPROC glUniform3dv;
-  PFNGLUNIFORM4FVPROC glUniform4fv;
-  PFNGLUNIFORM4IVPROC glUniform4iv;
+  PFNGLUNIFORM4FVPROC glUniform4fv;      // aliases glUniform4fvARB
+  PFNGLUNIFORM4IVPROC glUniform4iv;      // aliases glUniform4ivARB
   PFNGLUNIFORM4UIVPROC glUniform4uiv;    // aliases glUniform4uivEXT
   PFNGLUNIFORM4DVPROC glUniform4dv;
-  PFNGLUNIFORMMATRIX2FVPROC glUniformMatrix2fv;
+  PFNGLUNIFORMMATRIX2FVPROC glUniformMatrix2fv;      // aliases glUniformMatrix2fvARB
   PFNGLUNIFORMMATRIX2X3FVPROC glUniformMatrix2x3fv;
   PFNGLUNIFORMMATRIX2X4FVPROC glUniformMatrix2x4fv;
-  PFNGLUNIFORMMATRIX3FVPROC glUniformMatrix3fv;
+  PFNGLUNIFORMMATRIX3FVPROC glUniformMatrix3fv;      // aliases glUniformMatrix3fvARB
   PFNGLUNIFORMMATRIX3X2FVPROC glUniformMatrix3x2fv;
   PFNGLUNIFORMMATRIX3X4FVPROC glUniformMatrix3x4fv;
-  PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
+  PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;      // aliases glUniformMatrix4fvARB
   PFNGLUNIFORMMATRIX4X2FVPROC glUniformMatrix4x2fv;
   PFNGLUNIFORMMATRIX4X3FVPROC glUniformMatrix4x3fv;
   PFNGLUNIFORMMATRIX2DVPROC glUniformMatrix2dv;
@@ -671,6 +671,48 @@ struct GLDispatchTable
 
   // ARB_gl_spirv
   PFNGLSPECIALIZESHADERPROC glSpecializeShader; // aliases glSpecializeShaderARB
+
+  // EXT_external_objects
+  PFNGLGETUNSIGNEDBYTEVEXTPROC glGetUnsignedBytevEXT;
+  PFNGLGETUNSIGNEDBYTEI_VEXTPROC glGetUnsignedBytei_vEXT;
+  PFNGLDELETEMEMORYOBJECTSEXTPROC glDeleteMemoryObjectsEXT;
+  PFNGLISMEMORYOBJECTEXTPROC glIsMemoryObjectEXT;
+  PFNGLCREATEMEMORYOBJECTSEXTPROC glCreateMemoryObjectsEXT;
+  PFNGLMEMORYOBJECTPARAMETERIVEXTPROC glMemoryObjectParameterivEXT;
+  PFNGLGETMEMORYOBJECTPARAMETERIVEXTPROC glGetMemoryObjectParameterivEXT;
+  PFNGLTEXSTORAGEMEM2DEXTPROC glTexStorageMem2DEXT;
+  PFNGLTEXSTORAGEMEM2DMULTISAMPLEEXTPROC glTexStorageMem2DMultisampleEXT;
+  PFNGLTEXSTORAGEMEM3DEXTPROC glTexStorageMem3DEXT;
+  PFNGLTEXSTORAGEMEM3DMULTISAMPLEEXTPROC glTexStorageMem3DMultisampleEXT;
+  PFNGLBUFFERSTORAGEMEMEXTPROC glBufferStorageMemEXT;
+  PFNGLTEXTURESTORAGEMEM2DEXTPROC glTextureStorageMem2DEXT;
+  PFNGLTEXTURESTORAGEMEM2DMULTISAMPLEEXTPROC glTextureStorageMem2DMultisampleEXT;
+  PFNGLTEXTURESTORAGEMEM3DEXTPROC glTextureStorageMem3DEXT;
+  PFNGLTEXTURESTORAGEMEM3DMULTISAMPLEEXTPROC glTextureStorageMem3DMultisampleEXT;
+  PFNGLNAMEDBUFFERSTORAGEMEMEXTPROC glNamedBufferStorageMemEXT;
+  PFNGLTEXSTORAGEMEM1DEXTPROC glTexStorageMem1DEXT;
+  PFNGLTEXTURESTORAGEMEM1DEXTPROC glTextureStorageMem1DEXT;
+  PFNGLGENSEMAPHORESEXTPROC glGenSemaphoresEXT;
+  PFNGLDELETESEMAPHORESEXTPROC glDeleteSemaphoresEXT;
+  PFNGLISSEMAPHOREEXTPROC glIsSemaphoreEXT;
+  PFNGLSEMAPHOREPARAMETERUI64VEXTPROC glSemaphoreParameterui64vEXT;
+  PFNGLGETSEMAPHOREPARAMETERUI64VEXTPROC glGetSemaphoreParameterui64vEXT;
+  PFNGLWAITSEMAPHOREEXTPROC glWaitSemaphoreEXT;
+  PFNGLSIGNALSEMAPHOREEXTPROC glSignalSemaphoreEXT;
+
+  // EXT_external_objects_fd
+  PFNGLIMPORTMEMORYFDEXTPROC glImportMemoryFdEXT;
+  PFNGLIMPORTSEMAPHOREFDEXTPROC glImportSemaphoreFdEXT;
+
+  // EXT_external_objects_win32
+  PFNGLIMPORTMEMORYWIN32HANDLEEXTPROC glImportMemoryWin32HandleEXT;
+  PFNGLIMPORTMEMORYWIN32NAMEEXTPROC glImportMemoryWin32NameEXT;
+  PFNGLIMPORTSEMAPHOREWIN32HANDLEEXTPROC glImportSemaphoreWin32HandleEXT;
+  PFNGLIMPORTSEMAPHOREWIN32NAMEEXTPROC glImportSemaphoreWin32NameEXT;
+
+  // EXT_win32_keyed_mutex
+  PFNGLACQUIREKEYEDMUTEXWIN32EXTPROC glAcquireKeyedMutexWin32EXT;
+  PFNGLRELEASEKEYEDMUTEXWIN32EXTPROC glReleaseKeyedMutexWin32EXT;
 
   // EXT_direct_state_access below here. We only include the functions relevant for core 3.2+ GL,
   // not any functions for legacy functionality.
@@ -919,6 +961,14 @@ class WrappedOpenGL;
 // this function to register the 'active' GL implementation. This does mean e.g. we don't support
 // wgl or glX and EGL together in the same application.
 void SetDriverForHooks(WrappedOpenGL *driver);
+
+// On windows we support injecting into the program at runtime, so we need to only enable hooks when
+// we see context creation, to prevent crashes trying to handle function calls having seen no
+// intialisation. This can have false positives if the program creates a context late, but it's the
+// best we can do.
+#if ENABLED(RDOC_WIN32)
+void EnableHooks();
+#endif
 
 // this function looks up our list of hook entry points and returns our hook entry point instead of
 // the real function, if it exists, or the real function if not. It's used in the platform-specific

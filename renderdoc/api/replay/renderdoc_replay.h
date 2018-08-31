@@ -895,16 +895,33 @@ See :meth:`BuildCustomShader`.
 The language used is native to the API's renderer - HLSL for D3D based renderers, GLSL otherwise.
 
 :param str entry: The entry point to use when compiling.
-:param str source: The source file.
+:param ShaderEncoding sourceEncoding: The encoding of the source data.
+:param bytes source: The source data itself.
 :param ShaderCompileFlags compileFlags: API-specific compilation flags.
 :param ShaderStage type: The stage that this shader will be executed at.
 :return: A ``tuple`` with the id of the new shader if compilation was successful,
   :meth:`ResourceId.Null` otherwise, and a ``str`` with any warnings/errors from compilation.
 :rtype: ``tuple`` of :class:`ResourceId` and ``str``.
 )");
-  virtual rdcpair<ResourceId, rdcstr> BuildTargetShader(const char *entry, const char *source,
+  virtual rdcpair<ResourceId, rdcstr> BuildTargetShader(const char *entry,
+                                                        ShaderEncoding sourceEncoding, bytebuf source,
                                                         const ShaderCompileFlags &flags,
                                                         ShaderStage type) = 0;
+
+  DOCUMENT(R"(Retrieve the list of supported :class:`ShaderEncoding` which can be build using
+:meth:`BuildTargetShader`.
+
+The list is sorted in priority order, so if the caller has a shader in a form but could
+compile/translate it to another, prefer to satisfy the first encoding before later encodings.
+
+This typically means the 'native' encoding is listed first, and then subsequent encodings are
+compiled internally - so compiling externally could be preferable as it allows better customisation
+of the compile process or using alternate/updated tools.
+
+:return: The list of target shader encodings available.
+:rtype: ``list`` of :class:`ShaderEncoding`
+)");
+  virtual rdcarray<ShaderEncoding> GetTargetShaderEncodings() = 0;
 
   DOCUMENT(R"(Replace one resource with another for subsequent replay and analysis work.
 

@@ -74,7 +74,6 @@ private slots:
 
   // manual slots
   void shaderView_clicked();
-  void shaderEdit_clicked();
 
   void shaderSave_clicked();
   void resource_itemActivated(RDTreeWidgetItem *item, int column);
@@ -126,6 +125,8 @@ private:
   // keep track of the VB nodes (we want to be able to highlight them easily on hover)
   QList<RDTreeWidgetItem *> m_VBNodes;
   QList<RDTreeWidgetItem *> m_BindNodes;
+  // list of empty VB nodes that shouldn't be highlighted on hover
+  QList<RDTreeWidgetItem *> m_EmptyNodes;
 
   // from an combined image to its sampler (since we de-duplicate)
   QMap<RDTreeWidgetItem *, RDTreeWidgetItem *> m_CombinedImageSamplers;

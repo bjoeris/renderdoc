@@ -137,8 +137,10 @@ public:
   virtual void GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
                               const GetTextureDataParams &params, bytebuf &data) = 0;
 
-  virtual void BuildTargetShader(string source, string entry, const ShaderCompileFlags &compileFlags,
-                                 ShaderStage type, ResourceId *id, string *errors) = 0;
+  virtual void BuildTargetShader(ShaderEncoding sourceEncoding, bytebuf source, string entry,
+                                 const ShaderCompileFlags &compileFlags, ShaderStage type,
+                                 ResourceId *id, string *errors) = 0;
+  virtual rdcarray<ShaderEncoding> GetTargetShaderEncodings() = 0;
   virtual void ReplaceResource(ResourceId from, ResourceId to) = 0;
   virtual void RemoveReplacement(ResourceId id) = 0;
   virtual void FreeTargetResource(ResourceId id) = 0;
@@ -233,6 +235,8 @@ DrawcallDescription *SetupDrawcallPointers(std::vector<DrawcallDescription *> &d
 // to a linestrip with strip restart indices.
 void PatchLineStripIndexBuffer(const DrawcallDescription *draw, uint8_t *idx8, uint16_t *idx16,
                                uint32_t *idx32, std::vector<uint32_t> &patchedIndices);
+
+uint64_t CalcMeshOutputSize(uint64_t curSize, uint64_t requiredOutput);
 
 // simple cache for when we need buffer data for highlighting
 // vertices, typical use will be lots of vertices in the same

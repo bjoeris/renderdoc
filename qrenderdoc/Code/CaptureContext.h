@@ -107,6 +107,7 @@ public:
   CaptureModifications GetCaptureModifications() override { return m_CaptureMods; }
   const FrameDescription &FrameInfo() override { return m_FrameInfo; }
   const APIProperties &APIProps() override { return m_APIProps; }
+  rdcarray<ShaderEncoding> TargetShaderEncodings() override { return m_TargetEncodings; }
   uint32_t CurSelectedEvent() override { return m_SelectedEventID; }
   uint32_t CurEvent() override { return m_EventID; }
   const DrawcallDescription *CurSelectedDrawcall() override
@@ -191,8 +192,9 @@ public:
   void ShowPythonShell() override;
   void ShowResourceInspector() override;
 
-  IShaderViewer *EditShader(bool customShader, const rdcstr &entryPoint, const rdcstrpairs &files,
-                            IShaderViewer::SaveCallback saveCallback,
+  IShaderViewer *EditShader(bool customShader, ShaderStage stage, const rdcstr &entryPoint,
+                            const rdcstrpairs &files, ShaderEncoding shaderEncoding,
+                            ShaderCompileFlags flags, IShaderViewer::SaveCallback saveCallback,
                             IShaderViewer::CloseCallback closeCallback) override;
 
   IShaderViewer *DebugShader(const ShaderBindpointMapping *bind, const ShaderReflection *shader,
@@ -292,6 +294,7 @@ private:
   const rdcarray<DrawcallDescription> *m_Drawcalls;
   rdcarray<DrawcallDescription> m_EmptyDraws;
 
+  rdcarray<ShaderEncoding> m_TargetEncodings;
   APIProperties m_APIProps;
   FrameDescription m_FrameInfo;
   const DrawcallDescription *m_FirstDrawcall = NULL;

@@ -52,9 +52,6 @@ bool is_exr_file(FILE *f);
 struct ICrashHandler
 {
   virtual ~ICrashHandler() {}
-  virtual void WriteMinidump() = 0;
-  virtual void WriteMinidump(void *data) = 0;
-
   virtual void RegisterMemoryRegion(void *mem, size_t size) = 0;
   virtual void UnregisterMemoryRegion(void *mem) = 0;
 };
@@ -211,12 +208,13 @@ DECLARE_REFLECTION_ENUM(ReplayLogType);
 
 struct CaptureData
 {
-  CaptureData(string p, uint64_t t, uint32_t f)
-      : path(p), timestamp(t), frameNumber(f), retrieved(false)
+  CaptureData(string p, uint64_t t, RDCDriver d, uint32_t f)
+      : path(p), timestamp(t), driver(d), frameNumber(f), retrieved(false)
   {
   }
   string path;
   uint64_t timestamp;
+  RDCDriver driver;
   uint32_t frameNumber;
   bool retrieved;
 };

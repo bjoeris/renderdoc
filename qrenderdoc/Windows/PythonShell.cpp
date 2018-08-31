@@ -64,6 +64,10 @@ struct CaptureContextInvoker : ICaptureContext
   }
   virtual const FrameDescription &FrameInfo() override { return m_Ctx.FrameInfo(); }
   virtual const APIProperties &APIProps() override { return m_Ctx.APIProps(); }
+  virtual rdcarray<ShaderEncoding> TargetShaderEncodings() override
+  {
+    return m_Ctx.TargetShaderEncodings();
+  }
   virtual uint32_t CurSelectedEvent() override { return m_Ctx.CurSelectedEvent(); }
   virtual uint32_t CurEvent() override { return m_Ctx.CurEvent(); }
   virtual const DrawcallDescription *CurSelectedDrawcall() override
@@ -372,13 +376,15 @@ struct CaptureContextInvoker : ICaptureContext
   {
     InvokeVoidFunction(&ICaptureContext::ShowResourceInspector);
   }
-  virtual IShaderViewer *EditShader(bool customShader, const rdcstr &entryPoint,
-                                    const rdcstrpairs &files,
+  virtual IShaderViewer *EditShader(bool customShader, ShaderStage stage, const rdcstr &entryPoint,
+                                    const rdcstrpairs &files, ShaderEncoding shaderEncoding,
+                                    ShaderCompileFlags flags,
                                     IShaderViewer::SaveCallback saveCallback,
                                     IShaderViewer::CloseCallback closeCallback) override
   {
-    return InvokeRetFunction<IShaderViewer *>(&ICaptureContext::EditShader, customShader,
-                                              entryPoint, files, saveCallback, closeCallback);
+    return InvokeRetFunction<IShaderViewer *>(&ICaptureContext::EditShader, customShader, stage,
+                                              entryPoint, files, shaderEncoding, flags,
+                                              saveCallback, closeCallback);
   }
 
   virtual IShaderViewer *DebugShader(const ShaderBindpointMapping *bind,

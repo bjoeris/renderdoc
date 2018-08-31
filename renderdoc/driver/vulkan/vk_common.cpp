@@ -127,6 +127,7 @@ void GPUBuffer::Create(WrappedVulkan *driver, VkDevice dev, VkDeviceSize size, u
 {
   m_pDriver = driver;
   device = dev;
+  createFlags = flags;
 
   align = (VkDeviceSize)driver->GetDeviceProps().limits.minUniformBufferOffsetAlignment;
 
@@ -216,6 +217,17 @@ void *GPUBuffer::Map(uint32_t *bindoffset, VkDeviceSize usedsize)
   void *ptr = NULL;
   VkResult vkr = m_pDriver->vkMapMemory(device, mem, offset, size, 0, (void **)&ptr);
   RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+  if(createFlags & eGPUBufferReadback)
+  {
+    VkMappedMemoryRange range = {
+        VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, mem, offset, size,
+    };
+
+    vkr = m_pDriver->vkInvalidateMappedMemoryRanges(device, 1, &range);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+  }
+
   return ptr;
 }
 
@@ -232,6 +244,16 @@ void *GPUBuffer::Map(VkDeviceSize &bindoffset, VkDeviceSize usedsize)
 
 void GPUBuffer::Unmap()
 {
+  if(!(createFlags & eGPUBufferReadback) && !(createFlags & eGPUBufferGPULocal))
+  {
+    VkMappedMemoryRange range = {
+        VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, mem, 0, VK_WHOLE_SIZE,
+    };
+
+    VkResult vkr = m_pDriver->vkFlushMappedMemoryRanges(device, 1, &range);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+  }
+
   m_pDriver->vkUnmapMemory(device, mem);
 }
 
@@ -727,6 +749,40 @@ void UnwrapNextChain(CaptureState state, const char *structName, byte *&tempMem,
     else if(nextInput->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_RENDER_PASS_BEGIN_INFO)
     {
       CopyNextChainedStruct<VkDeviceGroupRenderPassBeginInfo>(tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR)
+    {
+      CopyNextChainedStruct<VkImageFormatListCreateInfoKHR>(tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO)
+    {
+      CopyNextChainedStruct<VkRenderPassMultiviewCreateInfo>(tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO)
+    {
+      CopyNextChainedStruct<VkImageViewUsageCreateInfo>(tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO)
+    {
+      CopyNextChainedStruct<VkRenderPassInputAttachmentAspectCreateInfo>(tempMem, nextInput,
+                                                                         nextChainTail);
+    }
+    else if(nextInput->sType ==
+            VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT)
+    {
+      CopyNextChainedStruct<VkPipelineRasterizationConservativeStateCreateInfoEXT>(
+          tempMem, nextInput, nextChainTail);
+    }
+    else if(nextInput->sType ==
+            VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO)
+    {
+      CopyNextChainedStruct<VkPipelineTessellationDomainOriginStateCreateInfo>(tempMem, nextInput,
+                                                                               nextChainTail);
+    }
+    else if(nextInput->sType == VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT)
+    {
+      CopyNextChainedStruct<VkPipelineVertexInputDivisorStateCreateInfoEXT>(tempMem, nextInput,
+                                                                            nextChainTail);
     }
     else
     {

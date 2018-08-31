@@ -142,7 +142,7 @@ GLPipelineStateViewer::GLPipelineStateViewer(ICaptureContext &ctx, PipelineState
   }
 
   for(QToolButton *b : editButtons)
-    QObject::connect(b, &QToolButton::clicked, this, &GLPipelineStateViewer::shaderEdit_clicked);
+    QObject::connect(b, &QToolButton::clicked, &m_Common, &PipelineStateViewer::shaderEdit_clicked);
 
   for(QToolButton *b : saveButtons)
     QObject::connect(b, &QToolButton::clicked, this, &GLPipelineStateViewer::shaderSave_clicked);
@@ -520,6 +520,7 @@ void GLPipelineStateViewer::clearShaderState(RDLabel *shader, RDTreeWidget *tex,
 void GLPipelineStateViewer::clearState()
 {
   m_VBNodes.clear();
+  m_EmptyNodes.clear();
 
   ui->viAttrs->clear();
   ui->viBuffers->clear();
@@ -539,6 +540,18 @@ void GLPipelineStateViewer::clearState()
                    ui->fsReadWrite);
   clearShaderState(ui->csShader, ui->csTextures, ui->csSamplers, ui->csUBOs, ui->csSubroutines,
                    ui->csReadWrite);
+
+  QToolButton *shaderButtons[] = {
+      ui->vsShaderViewButton, ui->tcsShaderViewButton, ui->tesShaderViewButton,
+      ui->gsShaderViewButton, ui->fsShaderViewButton,  ui->csShaderViewButton,
+      ui->vsShaderEditButton, ui->tcsShaderEditButton, ui->tesShaderEditButton,
+      ui->gsShaderEditButton, ui->fsShaderEditButton,  ui->csShaderEditButton,
+      ui->vsShaderSaveButton, ui->tcsShaderSaveButton, ui->tesShaderSaveButton,
+      ui->gsShaderSaveButton, ui->fsShaderSaveButton,  ui->csShaderSaveButton,
+  };
+
+  for(QToolButton *b : shaderButtons)
+    b->setEnabled(false);
 
   const QPixmap &tick = Pixmaps::tick(this);
   const QPixmap &cross = Pixmaps::cross(this);
@@ -1249,6 +1262,9 @@ void GLPipelineStateViewer::setState()
     ui->primRestart->setVisible(false);
   }
 
+  m_VBNodes.clear();
+  m_EmptyNodes.clear();
+
   vs = ui->viBuffers->verticalScrollBar()->value();
   ui->viBuffers->beginUpdate();
   ui->viBuffers->clear();
@@ -1278,7 +1294,10 @@ void GLPipelineStateViewer::setState()
         setInactiveRow(node);
 
       if(state.vertexInput.indexBuffer == ResourceId())
+      {
         setEmptyRow(node);
+        m_EmptyNodes.push_back(node);
+      }
 
       ui->viBuffers->addTopLevelItem(node);
     }
@@ -1294,6 +1313,7 @@ void GLPipelineStateViewer::setState()
           state.vertexInput.indexBuffer, draw ? draw->indexOffset * draw->indexByteWidth : 0)));
 
       setEmptyRow(node);
+      m_EmptyNodes.push_back(node);
 
       if(!ibufferUsed)
         setInactiveRow(node);
@@ -1301,8 +1321,6 @@ void GLPipelineStateViewer::setState()
       ui->viBuffers->addTopLevelItem(node);
     }
   }
-
-  m_VBNodes.clear();
 
   for(int i = 0; i < state.vertexInput.vertexBuffers.count(); i++)
   {
@@ -1327,7 +1345,10 @@ void GLPipelineStateViewer::setState()
       node->setTag(QVariant::fromValue(GLVBIBTag(v.resourceId, v.byteOffset)));
 
       if(!filledSlot)
+      {
         setEmptyRow(node);
+        m_EmptyNodes.push_back(node);
+      }
 
       if(!usedSlot)
         setInactiveRow(node);
@@ -1353,6 +1374,29 @@ void GLPipelineStateViewer::setState()
                  ui->fsSubroutines, ui->fsReadWrite);
   setShaderState(state.computeShader, ui->csShader, ui->csTextures, ui->csSamplers, ui->csUBOs,
                  ui->csSubroutines, ui->csReadWrite);
+
+  QToolButton *shaderButtons[] = {
+      ui->vsShaderViewButton, ui->tcsShaderViewButton, ui->tesShaderViewButton,
+      ui->gsShaderViewButton, ui->fsShaderViewButton,  ui->csShaderViewButton,
+      ui->vsShaderEditButton, ui->tcsShaderEditButton, ui->tesShaderEditButton,
+      ui->gsShaderEditButton, ui->fsShaderEditButton,  ui->csShaderEditButton,
+      ui->vsShaderSaveButton, ui->tcsShaderSaveButton, ui->tesShaderSaveButton,
+      ui->gsShaderSaveButton, ui->fsShaderSaveButton,  ui->csShaderSaveButton,
+  };
+
+  for(QToolButton *b : shaderButtons)
+  {
+    const GLPipe::Shader *stage = stageForSender(b);
+
+    if(stage == NULL || stage->shaderResourceId == ResourceId())
+      continue;
+
+    ShaderReflection *shaderDetails = stage->reflection;
+
+    b->setEnabled(shaderDetails != NULL);
+
+    m_Common.SetupShaderEditButton(b, ResourceId(), stage->shaderResourceId, shaderDetails);
+  }
 
   vs = ui->xfbBuffers->verticalScrollBar()->value();
   ui->xfbBuffers->beginUpdate();
@@ -2155,8 +2199,11 @@ void GLPipelineStateViewer::highlightIABind(int slot)
 
   if(slot < m_VBNodes.count())
   {
-    m_VBNodes[slot]->setBackgroundColor(col);
-    m_VBNodes[slot]->setForegroundColor(contrastingColor(col, QColor(0, 0, 0)));
+    if(!m_EmptyNodes.contains(m_VBNodes[slot]))
+    {
+      m_VBNodes[slot]->setBackgroundColor(col);
+      m_VBNodes[slot]->setForegroundColor(contrastingColor(col, QColor(0, 0, 0)));
+    }
   }
 
   for(int i = 0; i < ui->viAttrs->topLevelItemCount(); i++)
@@ -2219,8 +2266,11 @@ void GLPipelineStateViewer::on_viBuffers_mouseMove(QMouseEvent *e)
     }
     else
     {
-      item->setBackground(ui->viBuffers->palette().brush(QPalette::Window));
-      item->setForeground(ui->viBuffers->palette().brush(QPalette::WindowText));
+      if(!m_EmptyNodes.contains(item))
+      {
+        item->setBackground(ui->viBuffers->palette().brush(QPalette::Window));
+        item->setForeground(ui->viBuffers->palette().brush(QPalette::WindowText));
+      }
     }
   }
 }
@@ -2238,8 +2288,13 @@ void GLPipelineStateViewer::vertex_leave(QEvent *e)
 
   for(int i = 0; i < ui->viBuffers->topLevelItemCount(); i++)
   {
-    ui->viBuffers->topLevelItem(i)->setBackground(QBrush());
-    ui->viBuffers->topLevelItem(i)->setForeground(QBrush());
+    RDTreeWidgetItem *item = ui->viBuffers->topLevelItem(i);
+
+    if(m_EmptyNodes.contains(item))
+      continue;
+
+    item->setBackground(QBrush());
+    item->setForeground(QBrush());
   }
 
   ui->viAttrs->endUpdate();
@@ -2266,38 +2321,6 @@ void GLPipelineStateViewer::shaderView_clicked()
   IShaderViewer *shad = m_Ctx.ViewShader(shaderDetails, ResourceId());
 
   m_Ctx.AddDockWindow(shad->Widget(), DockReference::AddTo, this);
-}
-
-void GLPipelineStateViewer::shaderEdit_clicked()
-{
-  QWidget *sender = qobject_cast<QWidget *>(QObject::sender());
-  const GLPipe::Shader *stage = stageForSender(sender);
-
-  if(!stage || stage->shaderResourceId == ResourceId())
-    return;
-
-  const ShaderReflection *shaderDetails = stage->reflection;
-
-  if(!shaderDetails)
-    return;
-
-  QString entryFunc = lit("EditedShader%1S").arg(ToQStr(stage->stage, GraphicsAPI::OpenGL)[0]);
-
-  rdcstrpairs files;
-
-  bool hasOrigSource = m_Common.PrepareShaderEditing(shaderDetails, entryFunc, files);
-
-  if(!hasOrigSource)
-  {
-    // this would only happen if the GL program is uploading SPIR-V instead of GLSL.
-    files.clear();
-    files.push_back(make_rdcpair<rdcstr, rdcstr>("generated.glsl", "// TODO - disassemble SPIR-V"));
-  }
-
-  if(files.empty())
-    return;
-
-  m_Common.EditShader(stage->stage, stage->shaderResourceId, shaderDetails, entryFunc, files);
 }
 
 void GLPipelineStateViewer::shaderSave_clicked()

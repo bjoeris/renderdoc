@@ -146,7 +146,7 @@ D3D11PipelineStateViewer::D3D11PipelineStateViewer(ICaptureContext &ctx,
   }
 
   for(QToolButton *b : editButtons)
-    QObject::connect(b, &QToolButton::clicked, this, &D3D11PipelineStateViewer::shaderEdit_clicked);
+    QObject::connect(b, &QToolButton::clicked, &m_Common, &PipelineStateViewer::shaderEdit_clicked);
 
   for(QToolButton *b : saveButtons)
     QObject::connect(b, &QToolButton::clicked, this, &D3D11PipelineStateViewer::shaderSave_clicked);
@@ -791,6 +791,7 @@ void D3D11PipelineStateViewer::clearShaderState(RDLabel *shader, RDTreeWidget *t
 void D3D11PipelineStateViewer::clearState()
 {
   m_VBNodes.clear();
+  m_EmptyNodes.clear();
 
   ui->iaLayouts->clear();
   ui->iaBuffers->clear();
@@ -804,6 +805,18 @@ void D3D11PipelineStateViewer::clearState()
   clearShaderState(ui->dsShader, ui->dsResources, ui->dsSamplers, ui->dsCBuffers, ui->dsClasses);
   clearShaderState(ui->psShader, ui->psResources, ui->psSamplers, ui->psCBuffers, ui->psClasses);
   clearShaderState(ui->csShader, ui->csResources, ui->csSamplers, ui->csCBuffers, ui->csClasses);
+
+  QToolButton *shaderButtons[] = {
+      ui->vsShaderViewButton, ui->hsShaderViewButton, ui->dsShaderViewButton,
+      ui->gsShaderViewButton, ui->psShaderViewButton, ui->csShaderViewButton,
+      ui->vsShaderEditButton, ui->hsShaderEditButton, ui->dsShaderEditButton,
+      ui->gsShaderEditButton, ui->psShaderEditButton, ui->csShaderEditButton,
+      ui->vsShaderSaveButton, ui->hsShaderSaveButton, ui->dsShaderSaveButton,
+      ui->gsShaderSaveButton, ui->psShaderSaveButton, ui->csShaderSaveButton,
+  };
+
+  for(QToolButton *b : shaderButtons)
+    b->setEnabled(false);
 
   ui->csUAVs->clear();
 
@@ -849,6 +862,18 @@ void D3D11PipelineStateViewer::clearState()
   ui->stencils->clear();
 
   ui->predicateGroup->setVisible(false);
+
+  {
+    ui->groupX->setEnabled(false);
+    ui->groupY->setEnabled(false);
+    ui->groupZ->setEnabled(false);
+
+    ui->threadX->setEnabled(false);
+    ui->threadY->setEnabled(false);
+    ui->threadZ->setEnabled(false);
+
+    ui->debugThread->setEnabled(false);
+  }
 }
 
 void D3D11PipelineStateViewer::setShaderState(const D3D11Pipe::Shader &stage, RDLabel *shader,
@@ -1300,6 +1325,9 @@ void D3D11PipelineStateViewer::setState()
 
   bool ibufferUsed = draw && (draw->flags & DrawFlags::Indexed);
 
+  m_VBNodes.clear();
+  m_EmptyNodes.clear();
+
   vs = ui->iaBuffers->verticalScrollBar()->value();
   ui->iaBuffers->beginUpdate();
   ui->iaBuffers->clear();
@@ -1328,7 +1356,10 @@ void D3D11PipelineStateViewer::setState()
         setInactiveRow(node);
 
       if(state.inputAssembly.indexBuffer.resourceId == ResourceId())
+      {
         setEmptyRow(node);
+        m_EmptyNodes.push_back(node);
+      }
 
       ui->iaBuffers->addTopLevelItem(node);
     }
@@ -1346,6 +1377,7 @@ void D3D11PipelineStateViewer::setState()
                            (draw ? draw->indexOffset * draw->indexByteWidth : 0))));
 
       setEmptyRow(node);
+      m_EmptyNodes.push_back(node);
 
       if(!ibufferUsed)
         setInactiveRow(node);
@@ -1353,8 +1385,6 @@ void D3D11PipelineStateViewer::setState()
       ui->iaBuffers->addTopLevelItem(node);
     }
   }
-
-  m_VBNodes.clear();
 
   for(int i = 0; i < state.inputAssembly.vertexBuffers.count(); i++)
   {
@@ -1382,7 +1412,10 @@ void D3D11PipelineStateViewer::setState()
       node->setTag(QVariant::fromValue(D3D11VBIBTag(v.resourceId, v.byteOffset)));
 
       if(!filledSlot)
+      {
         setEmptyRow(node);
+        m_EmptyNodes.push_back(node);
+      }
 
       if(!usedSlot)
         setInactiveRow(node);
@@ -1408,6 +1441,27 @@ void D3D11PipelineStateViewer::setState()
                  ui->psClasses);
   setShaderState(state.computeShader, ui->csShader, ui->csResources, ui->csSamplers, ui->csCBuffers,
                  ui->csClasses);
+
+  QToolButton *shaderButtons[] = {
+      ui->vsShaderViewButton, ui->hsShaderViewButton, ui->dsShaderViewButton,
+      ui->gsShaderViewButton, ui->psShaderViewButton, ui->csShaderViewButton,
+      ui->vsShaderEditButton, ui->hsShaderEditButton, ui->dsShaderEditButton,
+      ui->gsShaderEditButton, ui->psShaderEditButton, ui->csShaderEditButton,
+      ui->vsShaderSaveButton, ui->hsShaderSaveButton, ui->dsShaderSaveButton,
+      ui->gsShaderSaveButton, ui->psShaderSaveButton, ui->csShaderSaveButton,
+  };
+
+  for(QToolButton *b : shaderButtons)
+  {
+    const D3D11Pipe::Shader *stage = stageForSender(b);
+
+    if(stage == NULL || stage->resourceId == ResourceId())
+      continue;
+
+    b->setEnabled(stage->reflection != NULL);
+
+    m_Common.SetupShaderEditButton(b, ResourceId(), stage->resourceId, stage->reflection);
+  }
 
   vs = ui->csUAVs->verticalScrollBar()->value();
   ui->csUAVs->beginUpdate();
@@ -2139,8 +2193,11 @@ void D3D11PipelineStateViewer::highlightIABind(int slot)
   {
     RDTreeWidgetItem *item = m_VBNodes[(int)slot];
 
-    item->setBackgroundColor(col);
-    item->setForegroundColor(contrastingColor(col, QColor(0, 0, 0)));
+    if(!m_EmptyNodes.contains(item))
+    {
+      item->setBackgroundColor(col);
+      item->setForegroundColor(contrastingColor(col, QColor(0, 0, 0)));
+    }
   }
 
   for(int i = 0; i < ui->iaLayouts->topLevelItemCount(); i++)
@@ -2203,8 +2260,11 @@ void D3D11PipelineStateViewer::on_iaBuffers_mouseMove(QMouseEvent *e)
     }
     else
     {
-      item->setBackground(ui->iaBuffers->palette().brush(QPalette::Window));
-      item->setForeground(QBrush());
+      if(!m_EmptyNodes.contains(item))
+      {
+        item->setBackground(ui->iaBuffers->palette().brush(QPalette::Window));
+        item->setForeground(QBrush());
+      }
     }
   }
 }
@@ -2230,6 +2290,9 @@ void D3D11PipelineStateViewer::vertex_leave(QEvent *e)
   for(int i = 0; i < ui->iaBuffers->topLevelItemCount(); i++)
   {
     RDTreeWidgetItem *item = ui->iaBuffers->topLevelItem(i);
+
+    if(m_EmptyNodes.contains(item))
+      continue;
 
     item->setBackground(QBrush());
     item->setForeground(QBrush());
@@ -2264,38 +2327,6 @@ void D3D11PipelineStateViewer::shaderView_clicked()
   IShaderViewer *shad = m_Ctx.ViewShader(shaderDetails, ResourceId());
 
   m_Ctx.AddDockWindow(shad->Widget(), DockReference::AddTo, this);
-}
-
-void D3D11PipelineStateViewer::shaderEdit_clicked()
-{
-  QWidget *sender = qobject_cast<QWidget *>(QObject::sender());
-  const D3D11Pipe::Shader *stage = stageForSender(sender);
-
-  if(!stage || stage->resourceId == ResourceId())
-    return;
-
-  const ShaderReflection *shaderDetails = stage->reflection;
-
-  if(!shaderDetails)
-    return;
-
-  QString entryFunc = lit("EditedShader%1S").arg(ToQStr(stage->stage, GraphicsAPI::D3D11)[0]);
-
-  rdcstrpairs files;
-
-  bool hasOrigSource = m_Common.PrepareShaderEditing(shaderDetails, entryFunc, files);
-
-  if(!hasOrigSource)
-  {
-    files.clear();
-    files.push_back(make_rdcpair<rdcstr, rdcstr>(
-        "generated.hlsl", m_Common.GenerateHLSLStub(shaderDetails, entryFunc)));
-  }
-
-  if(files.empty())
-    return;
-
-  m_Common.EditShader(stage->stage, stage->resourceId, shaderDetails, entryFunc, files);
 }
 
 void D3D11PipelineStateViewer::shaderSave_clicked()

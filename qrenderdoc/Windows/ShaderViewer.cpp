@@ -181,12 +181,40 @@ ShaderViewer::ShaderViewer(ICaptureContext &ctx, QWidget *parent)
   m_Ctx.AddCaptureViewer(this);
 }
 
-void ShaderViewer::editShader(bool customShader, const QString &entryPoint, const rdcstrpairs &files)
+void ShaderViewer::editShader(bool customShader, ShaderStage stage, const QString &entryPoint,
+                              const rdcstrpairs &files, ShaderEncoding shaderEncoding,
+                              ShaderCompileFlags flags)
 {
   m_Scintillas.removeOne(m_DisassemblyView);
   ui->docking->removeToolWindow(m_DisassemblyFrame);
 
   m_DisassemblyView = NULL;
+
+  m_Stage = stage;
+  m_Flags = flags;
+
+  // set up compilation parameters
+  QStringList strs;
+  strs.clear();
+  for(ShaderEncoding i : values<ShaderEncoding>())
+    strs << ToQStr(i);
+
+  ui->encoding->addItems(strs);
+  ui->encoding->setCurrentIndex((int)shaderEncoding);
+  ui->entryFunc->setText(entryPoint);
+
+  PopulateCompileTools();
+
+  QObject::connect(ui->encoding, OverloadedSlot<int>::of(&QComboBox::currentIndexChanged),
+                   [this](int) { PopulateCompileTools(); });
+  QObject::connect(ui->compileTool, OverloadedSlot<int>::of(&QComboBox::currentIndexChanged),
+                   [this](int) { PopulateCompileToolParameters(); });
+
+  // if it's a custom shader, hide the group entirely (don't allow customisation of compile
+  // parameters). We can still use it to store the parameters passed in. When visible we collapse it
+  // by default.
+  if(customShader)
+    ui->compilationGroup->hide();
 
   // hide debugging windows
   ui->watch->hide();
@@ -274,6 +302,17 @@ void ShaderViewer::editShader(bool customShader, const QString &entryPoint, cons
                                                  ui->docking->areaOf(m_Scintillas.front()), 0.2f));
   ui->docking->setToolWindowProperties(
       m_Errors, ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
+
+  if(!customShader)
+  {
+    ui->compilationGroup->setWindowTitle(tr("Compilation Settings"));
+    ui->docking->addToolWindow(ui->compilationGroup,
+                               ToolWindowManager::AreaReference(
+                                   ToolWindowManager::LeftOf, ui->docking->areaOf(m_Errors), 0.5f));
+    ui->docking->setToolWindowProperties(
+        ui->compilationGroup,
+        ToolWindowManager::HideCloseButton | ToolWindowManager::DisallowFloatWindow);
+  }
 }
 
 void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderReflection *shader,
@@ -286,6 +325,9 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
   m_Trace = trace;
   m_Stage = ShaderStage::Vertex;
   m_DebugContext = debugContext;
+
+  // no recompilation happening, hide that group
+  ui->compilationGroup->hide();
 
   // no replacing allowed, stay in find mode
   m_FindReplace->allowUserModeChange(false);
@@ -304,20 +346,23 @@ void ShaderViewer::debugShader(const ShaderBindpointMapping *bind, const ShaderR
 
       GUIInvoke::call(this, [this, targets, disasm]() {
         QStringList targetNames;
-        for(const rdcstr &t : targets)
+        for(int i = 0; i < targets.count(); i++)
         {
-          QString target = t;
-          targetNames << target;
+          QString target = targets[i];
+          targetNames << QString(targets[i]);
 
-          // if we have a SPIR-V disassembly option, and the shader is natively SPIR-V, add our own
-          // SPIR-V disassemblers right after
-          if(target.contains(lit("SPIR-V")) && m_ShaderDetails->encoding == ShaderEncoding::SPIRV)
+          if(i == 0)
           {
-            for(const SPIRVDisassembler &d : m_Ctx.Config().SPIRVDisassemblers)
-              targetNames << targetName(d);
+            // add any custom decompiling tools we have after the first one
+            for(const ShaderProcessingTool &d : m_Ctx.Config().ShaderProcessors)
+            {
+              if(d.input == m_ShaderDetails->encoding)
+                targetNames << targetName(d);
+            }
           }
         }
 
+        m_DisassemblyType->clear();
         m_DisassemblyType->addItems(targetNames);
         m_DisassemblyType->setCurrentIndex(0);
         QObject::connect(m_DisassemblyType, OverloadedSlot<int>::of(&QComboBox::currentIndexChanged),
@@ -1144,14 +1189,21 @@ void ShaderViewer::disassemble_typeChanged(int index)
   QString targetStr = m_DisassemblyType->currentText();
   QByteArray target = targetStr.toUtf8();
 
-  for(const SPIRVDisassembler &disasm : m_Ctx.Config().SPIRVDisassemblers)
+  for(const ShaderProcessingTool &disasm : m_Ctx.Config().ShaderProcessors)
   {
     if(targetStr == targetName(disasm))
     {
-      QString result = disasm.DisassembleShader(this, m_ShaderDetails);
+      ShaderToolOutput out = disasm.DisassembleShader(this, m_ShaderDetails, "");
+
+      const char *text;
+
+      if(out.result.isEmpty())
+        text = out.log.c_str();
+      else
+        text = (const char *)out.result.data();
 
       m_DisassemblyView->setReadOnly(false);
-      m_DisassemblyView->setText(result.toUtf8().data());
+      m_DisassemblyView->setText(text);
       m_DisassemblyView->setReadOnly(true);
       m_DisassemblyView->emptyUndoBuffer();
       return;
@@ -1492,9 +1544,9 @@ RDTreeWidgetItem *ShaderViewer::makeResourceRegister(const Bindpoint &bind, uint
   }
 }
 
-QString ShaderViewer::targetName(const SPIRVDisassembler &disasm)
+QString ShaderViewer::targetName(const ShaderProcessingTool &disasm)
 {
-  return lit("SPIR-V (%1)").arg(disasm.name);
+  return lit("%1 (%2)").arg(ToQStr(disasm.output)).arg(disasm.name);
 }
 
 void ShaderViewer::addFileList()
@@ -2531,6 +2583,9 @@ void ShaderViewer::ShowErrors(const rdcstr &errors)
     m_Errors->setReadOnly(false);
     m_Errors->setText(errors.c_str());
     m_Errors->setReadOnly(true);
+
+    if(!errors.isEmpty())
+      ToolWindowManager::raiseToolWindow(m_Errors);
   }
 }
 
@@ -3179,6 +3234,185 @@ void ShaderViewer::on_findReplace_clicked()
   m_FindReplace->takeFocus();
 }
 
+void ShaderViewer::PopulateCompileTools()
+{
+  ShaderEncoding encoding = ShaderEncoding(ui->encoding->currentIndex());
+  rdcarray<ShaderEncoding> accepted = m_Ctx.TargetShaderEncodings();
+
+  QStringList strs;
+  strs.clear();
+  for(const ShaderProcessingTool &tool : m_Ctx.Config().ShaderProcessors)
+  {
+    // skip tools that can't accept our inputs, or doesn't produce a supported output
+    if(tool.input != encoding || accepted.indexOf(tool.output) < 0)
+      continue;
+
+    strs << tool.name;
+  }
+
+  // if we can pass in the shader source as-is, add a built-in option
+  if(accepted.indexOf(encoding) >= 0)
+    strs << tr("Builtin");
+
+  ui->compileTool->clear();
+  ui->compileTool->addItems(strs);
+
+  // pick the first option as highest priority
+  ui->compileTool->setCurrentIndex(0);
+
+  // fill out parameters
+  PopulateCompileToolParameters();
+
+  if(strs.isEmpty())
+  {
+    ShowErrors(tr("No compilation tool found that takes %1 as input and produces compatible output")
+                   .arg(ToQStr(encoding)));
+  }
+}
+
+void ShaderViewer::PopulateCompileToolParameters()
+{
+  ShaderEncoding encoding = ShaderEncoding(ui->encoding->currentIndex());
+  rdcarray<ShaderEncoding> accepted = m_Ctx.TargetShaderEncodings();
+
+  ui->toolCommandLine->clear();
+
+  if(accepted.indexOf(encoding) >= 0 &&
+     ui->compileTool->currentIndex() == ui->compileTool->count() - 1)
+  {
+    // if we're using the last Builtin tool, there are no default parameters
+  }
+  else
+  {
+    for(const ShaderProcessingTool &tool : m_Ctx.Config().ShaderProcessors)
+    {
+      if(QString(tool.name) == ui->compileTool->currentText())
+      {
+        ui->toolCommandLine->setPlainText(tool.DefaultArguments());
+        ui->toolCommandLine->setEnabled(true);
+        break;
+      }
+    }
+  }
+
+  for(int i = 0; i < m_Flags.flags.count(); i++)
+  {
+    ShaderCompileFlag &flag = m_Flags.flags[i];
+    if(flag.name == "@cmdline")
+    {
+      // append command line from saved flags
+      ui->toolCommandLine->setPlainText(ui->toolCommandLine->toPlainText() +
+                                        lit(" %1").arg(flag.value));
+      break;
+    }
+  }
+}
+
+bool ShaderViewer::ProcessIncludeDirectives(QString &source, const rdcstrpairs &files)
+{
+  // try and match up #includes against the files that we have. This isn't always
+  // possible as fxc only seems to include the source for files if something in
+  // that file was included in the compiled output. So you might end up with
+  // dangling #includes - we just have to ignore them
+  int offs = source.indexOf(lit("#include"));
+
+  while(offs >= 0)
+  {
+    // search back to ensure this is a valid #include (ie. not in a comment).
+    // Must only see whitespace before, then a newline.
+    int ws = qMax(0, offs - 1);
+    while(ws >= 0 && (source[ws] == QLatin1Char(' ') || source[ws] == QLatin1Char('\t')))
+      ws--;
+
+    // not valid? jump to next.
+    if(ws > 0 && source[ws] != QLatin1Char('\n'))
+    {
+      offs = source.indexOf(lit("#include"), offs + 1);
+      continue;
+    }
+
+    int start = ws + 1;
+
+    bool tail = true;
+
+    int lineEnd = source.indexOf(QLatin1Char('\n'), start + 1);
+    if(lineEnd == -1)
+    {
+      lineEnd = source.length();
+      tail = false;
+    }
+
+    ws = offs + sizeof("#include") - 1;
+    while(source[ws] == QLatin1Char(' ') || source[ws] == QLatin1Char('\t'))
+      ws++;
+
+    QString line = source.mid(offs, lineEnd - offs + 1);
+
+    if(source[ws] != QLatin1Char('<') && source[ws] != QLatin1Char('"'))
+    {
+      ShowErrors(tr("Invalid #include directive found:\r\n") + line);
+      return false;
+    }
+
+    // find matching char, either <> or "";
+    int end =
+        source.indexOf(source[ws] == QLatin1Char('"') ? QLatin1Char('"') : QLatin1Char('>'), ws + 1);
+
+    if(end == -1)
+    {
+      ShowErrors(tr("Invalid #include directive found:\r\n") + line);
+      return false;
+    }
+
+    QString fname = source.mid(ws + 1, end - ws - 1);
+
+    QString fileText;
+
+    // look for exact match first
+    for(int i = 0; i < files.count(); i++)
+    {
+      if(QString(files[i].first) == fname)
+      {
+        fileText = files[i].second;
+        break;
+      }
+    }
+
+    if(fileText.isEmpty())
+    {
+      QString search = QFileInfo(fname).fileName();
+
+      // if not, try and find the same filename (this is not proper include handling!)
+      for(const rdcstrpair &kv : files)
+      {
+        if(QFileInfo(kv.first).fileName().compare(search, Qt::CaseInsensitive) == 0)
+        {
+          fileText = kv.second;
+          break;
+        }
+      }
+
+      if(fileText.isEmpty())
+        fileText = QFormatStr("// Can't find file %1\n").arg(fname);
+    }
+
+    source = source.left(offs) + lit("\n\n") + fileText + lit("\n\n") +
+             (tail ? source.mid(lineEnd + 1) : QString());
+
+    // need to start searching from the beginning - wasteful but allows nested includes to
+    // work
+    offs = source.indexOf(lit("#include"));
+  }
+
+  for(const rdcstrpair &kv : files)
+  {
+    if(kv.first == "@cmdline")
+      source = QString(kv.second) + lit("\n\n") + source;
+  }
+
+  return true;
+}
+
 void ShaderViewer::on_refresh_clicked()
 {
   if(m_Trace)
@@ -3187,8 +3421,19 @@ void ShaderViewer::on_refresh_clicked()
     return;
   }
 
-  if(m_SaveCallback)
+  // if we don't have any compile tools - even the 'builtin' one, this compilation is not going to
+  // succeed.
+  if(ui->compileTool->count() == 0)
   {
+    ShaderEncoding encoding = ShaderEncoding(ui->encoding->currentIndex());
+
+    ShowErrors(tr("No compilation tool found that takes %1 as input and produces compatible output")
+                   .arg(ToQStr(encoding)));
+  }
+  else if(m_SaveCallback)
+  {
+    ShaderEncoding encoding = ShaderEncoding(ui->encoding->currentIndex());
+
     rdcstrpairs files;
     for(ScintillaEdit *s : m_Scintillas)
     {
@@ -3196,7 +3441,66 @@ void ShaderViewer::on_refresh_clicked()
       files.push_back(make_rdcpair<rdcstr, rdcstr>(
           w->property("filename").toString(), QString::fromUtf8(s->getText(s->textLength() + 1))));
     }
-    m_SaveCallback(&m_Ctx, this, files);
+
+    if(files.isEmpty())
+      return;
+
+    QString source = files[0].second;
+
+    if(encoding == ShaderEncoding::HLSL || encoding == ShaderEncoding::GLSL)
+    {
+      bool success = ProcessIncludeDirectives(source, files);
+      if(!success)
+        return;
+    }
+
+    bytebuf shaderBytes(source.toUtf8());
+
+    rdcarray<ShaderEncoding> accepted = m_Ctx.TargetShaderEncodings();
+
+    if(accepted.indexOf(encoding) >= 0 &&
+       ui->compileTool->currentIndex() == ui->compileTool->count() - 1)
+    {
+      // if using the builtin compiler, just pass through
+    }
+    else
+    {
+      for(const ShaderProcessingTool &tool : m_Ctx.Config().ShaderProcessors)
+      {
+        if(QString(tool.name) == ui->compileTool->currentText())
+        {
+          ShaderToolOutput out = tool.CompileShader(this, source, ui->entryFunc->text(), m_Stage,
+                                                    ui->toolCommandLine->toPlainText());
+
+          ShowErrors(out.log);
+
+          if(out.result.isEmpty())
+            return;
+
+          encoding = tool.output;
+          shaderBytes = out.result;
+          break;
+        }
+      }
+    }
+
+    ShaderCompileFlags flags = m_Flags;
+
+    bool found = false;
+    for(ShaderCompileFlag &f : flags.flags)
+    {
+      if(f.name == "@cmdline")
+      {
+        f.value = ui->toolCommandLine->toPlainText();
+        found = true;
+        break;
+      }
+    }
+
+    if(!found)
+      flags.flags.push_back({"@cmdline", ui->toolCommandLine->toPlainText()});
+
+    m_SaveCallback(&m_Ctx, this, encoding, flags, ui->entryFunc->text(), shaderBytes);
   }
 }
 
