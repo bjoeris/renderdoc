@@ -1,4 +1,4 @@
-/******************************************************************************
+  /******************************************************************************
  * The MIT License (MIT)
  *
  * Copyright (c) 2017-2018 Baldur Karlsson
@@ -316,6 +316,11 @@ void RDCFile::Init(StreamReader &reader)
 
   m_SerVer = header.version;
 
+  // Fix the deprecated file version produced by RenderDoc shipped with v1.19 Yeti SDK.
+  // We have since changed the way we handle non-JPEG thumbnails.
+  if (m_SerVer == V1_1_VERSION_YETI)
+    m_SerVer = V1_0_VERSION;
+
   if(m_SerVer != SERIALISE_VERSION)
   {
     if(header.version < V1_0_VERSION)
@@ -331,8 +336,21 @@ void RDCFile::Init(StreamReader &reader)
         MAJOR_MINOR_VERSION_STRING, SERIALISE_VERSION, header.version, header.progVersion);
   }
 
+  FileType thumbFormat = FileType::JPG;
   BinaryThumbnail thumb;
-  reader.Read(&thumb, offsetof(BinaryThumbnail, data));
+  if (header.version == V1_1_VERSION_YETI)
+  {
+    ExtThumbnailHeader hdr;
+    reader.Read(hdr);
+    thumb.width = hdr.width;
+    thumb.height = hdr.height;
+    thumb.length = hdr.len;
+    thumbFormat = static_cast<FileType>(hdr.format);
+  }
+  else
+  {
+    reader.Read(&thumb, offsetof(BinaryThumbnail, data));
+  }
 
   if(reader.IsErrored())
   {
@@ -388,7 +406,7 @@ void RDCFile::Init(StreamReader &reader)
   m_Thumb.width = thumb.width;
   m_Thumb.height = thumb.height;
   m_Thumb.len = thumb.length;
-  m_Thumb.format = FileType::JPG;
+  m_Thumb.format = thumbFormat;
 
   if(m_Thumb.len > 0 && m_Thumb.width > 0 && m_Thumb.height > 0)
   {
@@ -713,7 +731,9 @@ void RDCFile::Create(const char *filename)
       thumbHeader.length = 0;
       jpgPixels = NULL;
     }
-    delete[] rawBuffer;
+
+    if (rawBuffer)
+      stbi_image_free(rawBuffer);
   }
 
   CaptureMetaData meta;
