@@ -28,9 +28,19 @@
 #include "d3d12_command_queue.h"
 #include "d3d12_debug.h"
 
-ID3D12GraphicsCommandList2 *WrappedID3D12GraphicsCommandList2::GetCrackedList()
+ID3D12GraphicsCommandList *WrappedID3D12GraphicsCommandList2::GetCrackedList()
 {
   return Unwrap(m_Cmd->m_BakedCmdListInfo[m_Cmd->m_LastCmdListID].crackedLists.back());
+}
+
+ID3D12GraphicsCommandList1 *WrappedID3D12GraphicsCommandList2::GetCrackedList1()
+{
+  return Unwrap1(m_Cmd->m_BakedCmdListInfo[m_Cmd->m_LastCmdListID].crackedLists.back());
+}
+
+ID3D12GraphicsCommandList2 *WrappedID3D12GraphicsCommandList2::GetCrackedList2()
+{
+  return Unwrap2(m_Cmd->m_BakedCmdListInfo[m_Cmd->m_LastCmdListID].crackedLists.back());
 }
 
 ID3D12GraphicsCommandList2 *WrappedID3D12GraphicsCommandList2::GetWrappedCrackedList()
@@ -522,7 +532,13 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_ResourceBarrier(
       ResourceId cmd = GetResID(pCommandList);
 
       for(UINT i = 0; i < NumBarriers; i++)
-        m_Cmd->m_BakedCmdListInfo[cmd].barriers.push_back(pBarriers[i]);
+      {
+        if(pBarriers[i].Type != D3D12_RESOURCE_BARRIER_TYPE_TRANSITION ||
+           pBarriers[i].Transition.pResource)
+        {
+          m_Cmd->m_BakedCmdListInfo[cmd].barriers.push_back(pBarriers[i]);
+        }
+      }
     }
   }
 
@@ -1590,7 +1606,7 @@ void WrappedID3D12GraphicsCommandList2::SetComputeRootDescriptorTable(
       if(num == UINT_MAX)
       {
         // find out how many descriptors are left after rangeStart
-        num = HeapNumDescriptors - offset;
+        num = HeapNumDescriptors - rangeStart->GetHeapIndex();
       }
 
       if(!RenderDoc::Inst().GetCaptureOptions().refAllResources)
@@ -2153,7 +2169,7 @@ void WrappedID3D12GraphicsCommandList2::SetGraphicsRootDescriptorTable(
       if(num == UINT_MAX)
       {
         // find out how many descriptors are left after rangeStart
-        num = HeapNumDescriptors - offset;
+        num = HeapNumDescriptors - rangeStart->GetHeapIndex();
       }
 
       if(!RenderDoc::Inst().GetCaptureOptions().refAllResources)
@@ -4294,7 +4310,7 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_ExecuteIndirect(
 
         m_Cmd->m_BakedCmdListInfo[m_Cmd->m_LastCmdListID].crackedLists.push_back(list);
 
-        m_Cmd->m_BakedCmdListInfo[m_Cmd->m_LastCmdListID].state.ApplyState(list);
+        m_Cmd->m_BakedCmdListInfo[m_Cmd->m_LastCmdListID].state.ApplyState(m_pDevice, list);
       }
 
       // perform indirect draw, but from patched buffer. It will be patched between the above list

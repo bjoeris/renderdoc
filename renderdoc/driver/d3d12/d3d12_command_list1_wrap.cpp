@@ -65,9 +65,9 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_AtomicCopyBufferUINT(
           deps[i] = Unwrap(ppDependentResources[i]);
 
         ID3D12GraphicsCommandList1 *list = m_Cmd->RerecordCmdList(m_Cmd->m_LastCmdListID);
-        Unwrap(list)->AtomicCopyBufferUINT(Unwrap(pDstBuffer), DstOffset, Unwrap(pSrcBuffer),
-                                           SrcOffset, Dependencies, deps.data(),
-                                           pDependentSubresourceRanges);
+        Unwrap1(list)->AtomicCopyBufferUINT(Unwrap(pDstBuffer), DstOffset, Unwrap(pSrcBuffer),
+                                            SrcOffset, Dependencies, deps.data(),
+                                            pDependentSubresourceRanges);
       }
     }
     else
@@ -77,12 +77,12 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_AtomicCopyBufferUINT(
       for(size_t i = 0; i < deps.size(); i++)
         deps[i] = Unwrap(ppDependentResources[i]);
 
-      Unwrap(pCommandList)
+      Unwrap1(pCommandList)
           ->AtomicCopyBufferUINT(Unwrap(pDstBuffer), DstOffset, Unwrap(pSrcBuffer), SrcOffset,
                                  Dependencies, deps.data(), pDependentSubresourceRanges);
-      GetCrackedList()->AtomicCopyBufferUINT(Unwrap(pDstBuffer), DstOffset, Unwrap(pSrcBuffer),
-                                             SrcOffset, Dependencies, deps.data(),
-                                             pDependentSubresourceRanges);
+      GetCrackedList1()->AtomicCopyBufferUINT(Unwrap(pDstBuffer), DstOffset, Unwrap(pSrcBuffer),
+                                              SrcOffset, Dependencies, deps.data(),
+                                              pDependentSubresourceRanges);
 
       {
         m_Cmd->AddEvent();
@@ -183,9 +183,9 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_AtomicCopyBufferUINT64(
           deps[i] = Unwrap(ppDependentResources[i]);
 
         ID3D12GraphicsCommandList1 *list = m_Cmd->RerecordCmdList(m_Cmd->m_LastCmdListID);
-        Unwrap(list)->AtomicCopyBufferUINT64(Unwrap(pDstBuffer), DstOffset, Unwrap(pSrcBuffer),
-                                             SrcOffset, Dependencies, deps.data(),
-                                             pDependentSubresourceRanges);
+        Unwrap1(list)->AtomicCopyBufferUINT64(Unwrap(pDstBuffer), DstOffset, Unwrap(pSrcBuffer),
+                                              SrcOffset, Dependencies, deps.data(),
+                                              pDependentSubresourceRanges);
       }
     }
     else
@@ -195,12 +195,12 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_AtomicCopyBufferUINT64(
       for(size_t i = 0; i < deps.size(); i++)
         deps[i] = Unwrap(ppDependentResources[i]);
 
-      Unwrap(pCommandList)
+      Unwrap1(pCommandList)
           ->AtomicCopyBufferUINT64(Unwrap(pDstBuffer), DstOffset, Unwrap(pSrcBuffer), SrcOffset,
                                    Dependencies, deps.data(), pDependentSubresourceRanges);
-      GetCrackedList()->AtomicCopyBufferUINT64(Unwrap(pDstBuffer), DstOffset, Unwrap(pSrcBuffer),
-                                               SrcOffset, Dependencies, deps.data(),
-                                               pDependentSubresourceRanges);
+      GetCrackedList1()->AtomicCopyBufferUINT64(Unwrap(pDstBuffer), DstOffset, Unwrap(pSrcBuffer),
+                                                SrcOffset, Dependencies, deps.data(),
+                                                pDependentSubresourceRanges);
 
       {
         m_Cmd->AddEvent();
@@ -280,6 +280,12 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_OMSetDepthBounds(SerialiserTyp
     return false;
   }
 
+  if(m_pDevice->GetOpts2().DepthBoundsTestSupported == 0)
+  {
+    RDCERR("Can't replay OMSetDepthBounds without device support");
+    return false;
+  }
+
   if(IsReplayingAndReading())
   {
     m_Cmd->m_LastCmdListID = GetResourceManager()->GetOriginalID(GetResID(pCommandList));
@@ -288,7 +294,7 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_OMSetDepthBounds(SerialiserTyp
     {
       if(m_Cmd->InRerecordRange(m_Cmd->m_LastCmdListID))
       {
-        Unwrap(m_Cmd->RerecordCmdList(m_Cmd->m_LastCmdListID))->OMSetDepthBounds(Min, Max);
+        Unwrap1(m_Cmd->RerecordCmdList(m_Cmd->m_LastCmdListID))->OMSetDepthBounds(Min, Max);
 
         if(m_Cmd->IsPartialCmdList(m_Cmd->m_LastCmdListID))
         {
@@ -299,8 +305,8 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_OMSetDepthBounds(SerialiserTyp
     }
     else
     {
-      Unwrap(pCommandList)->OMSetDepthBounds(Min, Max);
-      GetCrackedList()->OMSetDepthBounds(Min, Max);
+      Unwrap1(pCommandList)->OMSetDepthBounds(Min, Max);
+      GetCrackedList1()->OMSetDepthBounds(Min, Max);
 
       m_Cmd->m_BakedCmdListInfo[m_Cmd->m_LastCmdListID].state.depthBoundsMin = Min;
       m_Cmd->m_BakedCmdListInfo[m_Cmd->m_LastCmdListID].state.depthBoundsMax = Max;
@@ -351,7 +357,7 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_SetSamplePositions(
     {
       if(m_Cmd->InRerecordRange(m_Cmd->m_LastCmdListID))
       {
-        Unwrap(m_Cmd->RerecordCmdList(m_Cmd->m_LastCmdListID))
+        Unwrap1(m_Cmd->RerecordCmdList(m_Cmd->m_LastCmdListID))
             ->SetSamplePositions(NumSamplesPerPixel, NumPixels, pSamplePositions);
 
         if(m_Cmd->IsPartialCmdList(m_Cmd->m_LastCmdListID))
@@ -369,8 +375,8 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_SetSamplePositions(
     }
     else
     {
-      Unwrap(pCommandList)->SetSamplePositions(NumSamplesPerPixel, NumPixels, pSamplePositions);
-      GetCrackedList()->SetSamplePositions(NumSamplesPerPixel, NumPixels, pSamplePositions);
+      Unwrap1(pCommandList)->SetSamplePositions(NumSamplesPerPixel, NumPixels, pSamplePositions);
+      GetCrackedList1()->SetSamplePositions(NumSamplesPerPixel, NumPixels, pSamplePositions);
 
       {
         D3D12RenderState &state = m_Cmd->m_BakedCmdListInfo[m_Cmd->m_LastCmdListID].state;
@@ -438,20 +444,20 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_ResolveSubresourceRegion(
       if(m_Cmd->InRerecordRange(m_Cmd->m_LastCmdListID))
       {
         ID3D12GraphicsCommandList1 *list = m_Cmd->RerecordCmdList(m_Cmd->m_LastCmdListID);
-        Unwrap(list)->ResolveSubresourceRegion(Unwrap(pDstResource), DstSubresource, DstX, DstY,
-                                               Unwrap(pSrcResource), SrcSubresource, pSrcRect,
-                                               Format, ResolveMode);
+        Unwrap1(list)->ResolveSubresourceRegion(Unwrap(pDstResource), DstSubresource, DstX, DstY,
+                                                Unwrap(pSrcResource), SrcSubresource, pSrcRect,
+                                                Format, ResolveMode);
       }
     }
     else
     {
-      Unwrap(pCommandList)
+      Unwrap1(pCommandList)
           ->ResolveSubresourceRegion(Unwrap(pDstResource), DstSubresource, DstX, DstY,
                                      Unwrap(pSrcResource), SrcSubresource, pSrcRect, Format,
                                      ResolveMode);
-      GetCrackedList()->ResolveSubresourceRegion(Unwrap(pDstResource), DstSubresource, DstX, DstY,
-                                                 Unwrap(pSrcResource), SrcSubresource, pSrcRect,
-                                                 Format, ResolveMode);
+      GetCrackedList1()->ResolveSubresourceRegion(Unwrap(pDstResource), DstSubresource, DstX, DstY,
+                                                  Unwrap(pSrcResource), SrcSubresource, pSrcRect,
+                                                  Format, ResolveMode);
 
       {
         m_Cmd->AddEvent();
@@ -526,6 +532,12 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_SetViewInstanceMask(Serialiser
     return false;
   }
 
+  if(m_pDevice->GetOpts3().ViewInstancingTier == D3D12_VIEW_INSTANCING_TIER_NOT_SUPPORTED)
+  {
+    RDCERR("Can't replay SetViewInstanceMask without device support");
+    return false;
+  }
+
   if(IsReplayingAndReading())
   {
     m_Cmd->m_LastCmdListID = GetResourceManager()->GetOriginalID(GetResID(pCommandList));
@@ -534,7 +546,7 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_SetViewInstanceMask(Serialiser
     {
       if(m_Cmd->InRerecordRange(m_Cmd->m_LastCmdListID))
       {
-        Unwrap(m_Cmd->RerecordCmdList(m_Cmd->m_LastCmdListID))->SetViewInstanceMask(Mask);
+        Unwrap1(m_Cmd->RerecordCmdList(m_Cmd->m_LastCmdListID))->SetViewInstanceMask(Mask);
 
         if(m_Cmd->IsPartialCmdList(m_Cmd->m_LastCmdListID))
           m_Cmd->m_RenderState.viewInstMask = Mask;
@@ -542,8 +554,8 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_SetViewInstanceMask(Serialiser
     }
     else
     {
-      Unwrap(pCommandList)->SetViewInstanceMask(Mask);
-      GetCrackedList()->SetViewInstanceMask(Mask);
+      Unwrap1(pCommandList)->SetViewInstanceMask(Mask);
+      GetCrackedList1()->SetViewInstanceMask(Mask);
 
       m_Cmd->m_BakedCmdListInfo[m_Cmd->m_LastCmdListID].state.viewInstMask = Mask;
     }
@@ -596,14 +608,14 @@ bool WrappedID3D12GraphicsCommandList2::Serialise_WriteBufferImmediate(
     {
       if(m_Cmd->InRerecordRange(m_Cmd->m_LastCmdListID))
       {
-        Unwrap(m_Cmd->RerecordCmdList(m_Cmd->m_LastCmdListID))
+        Unwrap2(m_Cmd->RerecordCmdList(m_Cmd->m_LastCmdListID))
             ->WriteBufferImmediate(Count, pParams, pModes);
       }
     }
     else
     {
-      Unwrap(pCommandList)->WriteBufferImmediate(Count, pParams, pModes);
-      GetCrackedList()->WriteBufferImmediate(Count, pParams, pModes);
+      Unwrap2(pCommandList)->WriteBufferImmediate(Count, pParams, pModes);
+      GetCrackedList2()->WriteBufferImmediate(Count, pParams, pModes);
     }
   }
 

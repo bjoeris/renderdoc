@@ -20,16 +20,23 @@ mkdir -p dist/Release{32,64}
 
 # Copy files from release build in, without copying obj/
 pushd x64/Release
-find * -not -path 'obj*' -and -not -path 'pymodules*' -exec cp -r --parents '{}' ../../dist/Release64/ \;
+find * -not -path 'obj*' -and -not -path '*.lib' -and -not -path 'pymodules*' -exec cp -r --parents '{}' ../../dist/Release64/ \;
 popd
 
 pushd Win32/Release
-find * -not -path 'obj*' -and -not -path 'pymodules*' -exec cp -r --parents '{}' ../../dist/Release32/ \;
+find * -not -path 'obj*' -and -not -path '*.lib' -and -not -path 'pymodules*' -exec cp -r --parents '{}' ../../dist/Release32/ \;
 popd
 
-# Copy in d3dcompiler from windows kit 8.1
-cp /c/Program\ Files\ \(x86\)/Windows\ Kits/8.1/Redist/D3D/x64/d3dcompiler_47.dll dist/Release64/
-cp /c/Program\ Files\ \(x86\)/Windows\ Kits/8.1/Redist/D3D/x86/d3dcompiler_47.dll dist/Release32/
+# Copy in d3dcompiler from windows kit. Prefer 10 over 8.1 but either works
+if [ -f "${WIN_ROOT}c/Program Files (x86)/Windows Kits/10/Redist/D3D/x64/d3dcompiler_47.dll" ]; then
+	cp "${WIN_ROOT}c/Program Files (x86)/Windows Kits/10/Redist/D3D/x64/d3dcompiler_47.dll" dist/Release64/
+	cp "${WIN_ROOT}c/Program Files (x86)/Windows Kits/10/Redist/D3D/x86/d3dcompiler_47.dll" dist/Release32/
+elif [ -f "${WIN_ROOT}c/Program Files (x86)/Windows Kits/8.1/Redist/D3D/x64/d3dcompiler_47.dll" ]; then 
+	cp "${WIN_ROOT}c/Program Files (x86)/Windows Kits/8.1/Redist/D3D/x64/d3dcompiler_47.dll" dist/Release64/
+	cp "${WIN_ROOT}c/Program Files (x86)/Windows Kits/8.1/Redist/D3D/x86/d3dcompiler_47.dll" dist/Release32/
+else
+	echo "WARNING: Couldn't find d3dcompiler_47.dll from Windows Kits redist.";
+fi
 
 # Copy associated files that should be included with the distribution
 cp LICENSE.md Documentation/htmlhelp/*.chm dist/Release64/
@@ -74,6 +81,8 @@ fi
 # Generate a debug key for signing purposes
 if [ -f "$JAVA_HOME/bin/keytool.exe" ] && [ -d dist/Release64/plugins/android ]; then
 	"$JAVA_HOME/bin/keytool.exe" -genkey -keystore dist/Release64/plugins/android/renderdoc.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=, OU=, O=, L=,  S=, C="
+elif [ -f "$JAVA_HOME/bin/keytool" ] && [ -d dist/Release64/plugins/android ]; then
+	"$JAVA_HOME/bin/keytool" -genkey -keystore dist/Release64/plugins/android/renderdoc.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=, OU=, O=, L=,  S=, C="
 fi
 
 if [ -d dist/Release64/plugins/android ]; then
@@ -102,6 +111,9 @@ cp -R dist/ReleasePDBs32/{d3dcompiler_47.dll,renderdoc.dll,renderdoc.json,render
 VERSION=`grep -E "#define RENDERDOC_VERSION_(MAJOR|MINOR)" renderdoc/api/replay/version.h | tr -dc '[0-9\n]' | tr '\n' '.' | grep -Eo '[0-9]+\.[0-9]+'`
 
 export RENDERDOC_VERSION="${VERSION}"
+
+# Ensure this variable passes through to windows on WSL
+export WSLENV=$WSLENV:RENDERDOC_VERSION
 
 "$WIX/bin/candle.exe" -o dist/Installer32.wixobj util/installer/Installer32.wxs
 "$WIX/bin/light.exe" -ext WixUIExtension -sw1076 -loc util/installer/customtext.wxl -o dist/Installer32.msi dist/Installer32.wixobj
@@ -133,10 +145,8 @@ if [ -f "${REPO_ROOT}"/dist/Installer32.msi ]; then
 	gpg -o ${FILENAME}_64.msi.sig --detach-sign --armor ${FILENAME}_64.msi
 
 	# On windows, also sign the installers
-	if [ "$(uname)" != "Linux" ]; then
-		"${BUILD_ROOT}"/scripts/sign.sh ${FILENAME}_32.msi
-		"${BUILD_ROOT}"/scripts/sign.sh ${FILENAME}_64.msi
-	fi
+	"${BUILD_ROOT}"/scripts/sign.sh ${FILENAME}_32.msi
+	"${BUILD_ROOT}"/scripts/sign.sh ${FILENAME}_64.msi
 
 fi;
 

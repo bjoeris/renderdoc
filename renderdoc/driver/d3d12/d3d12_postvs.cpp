@@ -307,6 +307,10 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
     // render as points
     psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
 
+    // disable MSAA
+    psoDesc.SampleDesc.Count = 1;
+    psoDesc.SampleDesc.Quality = 0;
+
     // disable outputs
     RDCEraseEl(psoDesc.RTVFormats);
     psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
@@ -329,8 +333,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
     if(m_SOBufferSize < outputSize)
     {
       uint64_t oldSize = m_SOBufferSize;
-      while(m_SOBufferSize < outputSize)
-        m_SOBufferSize *= 2;
+      m_SOBufferSize = CalcMeshOutputSize(m_SOBufferSize, outputSize);
       RDCWARN("Resizing stream-out buffer from %llu to %llu for output data", oldSize,
               m_SOBufferSize);
       recreate = true;
@@ -349,7 +352,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
 
       list = GetDebugManager()->ResetDebugList();
 
-      rs.ApplyState(list);
+      rs.ApplyState(m_pDevice, list);
 
       list->SetPipelineState(pipe);
 
@@ -372,8 +375,9 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
     else    // drawcall is indexed
     {
       bytebuf idxdata;
-      GetBufferData(rs.ibuffer.buf, rs.ibuffer.offs + drawcall->indexOffset * rs.ibuffer.bytewidth,
-                    RDCMIN(drawcall->numIndices * rs.ibuffer.bytewidth, rs.ibuffer.size), idxdata);
+      if(rs.ibuffer.buf != ResourceId())
+        GetBufferData(rs.ibuffer.buf, rs.ibuffer.offs + drawcall->indexOffset * rs.ibuffer.bytewidth,
+                      RDCMIN(drawcall->numIndices * rs.ibuffer.bytewidth, rs.ibuffer.size), idxdata);
 
       vector<uint32_t> indices;
 
@@ -382,7 +386,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
 
       // only read as many indices as were available in the buffer
       uint32_t numIndices =
-          RDCMIN(uint32_t(idxdata.size() / rs.ibuffer.bytewidth), drawcall->numIndices);
+          RDCMIN(uint32_t(idxdata.size() / RDCMAX(1, rs.ibuffer.bytewidth)), drawcall->numIndices);
 
       uint32_t idxclamp = 0;
       if(drawcall->baseVertex < 0)
@@ -434,11 +438,12 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
         indexRemap[indices[i]] = i;
       }
 
-      if(m_SOBufferSize / sizeof(Vec4f) < indices.size() * sizeof(uint32_t))
+      outputSize = uint64_t(indices.size() * sizeof(uint32_t) * sizeof(Vec4f));
+
+      if(m_SOBufferSize < outputSize)
       {
         uint64_t oldSize = m_SOBufferSize;
-        while(m_SOBufferSize / sizeof(Vec4f) < indices.size() * sizeof(uint32_t))
-          m_SOBufferSize *= 2;
+        m_SOBufferSize = CalcMeshOutputSize(m_SOBufferSize, outputSize);
         RDCWARN("Resizing stream-out buffer from %llu to %llu for indices", oldSize, m_SOBufferSize);
         recreate = true;
       }
@@ -461,7 +466,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
 
       list = GetDebugManager()->ResetDebugList();
 
-      rs.ApplyState(list);
+      rs.ApplyState(m_pDevice, list);
 
       list->SetPipelineState(pipe);
 
@@ -830,7 +835,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
     {
       list = GetDebugManager()->ResetDebugList();
 
-      rs.ApplyState(list);
+      rs.ApplyState(m_pDevice, list);
 
       list->SetPipelineState(pipe);
 
@@ -886,11 +891,12 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
       range.End = 0;
       m_SOStagingBuffer->Unmap(0, &range);
 
-      if(m_SOBufferSize < data->PrimitivesStorageNeeded * 3 * stride)
+      uint64_t outputSize = data->PrimitivesStorageNeeded * 3 * stride;
+
+      if(m_SOBufferSize < outputSize)
       {
         uint64_t oldSize = m_SOBufferSize;
-        while(m_SOBufferSize < data->PrimitivesStorageNeeded * 3 * stride)
-          m_SOBufferSize *= 2;
+        m_SOBufferSize = CalcMeshOutputSize(m_SOBufferSize, outputSize);
         RDCWARN("Resizing stream-out buffer from %llu to %llu for output", oldSize, m_SOBufferSize);
         CreateSOBuffers();
       }
@@ -919,7 +925,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
         list->ResourceBarrier(1, &sobarr);
       }
 
-      rs.ApplyState(list);
+      rs.ApplyState(m_pDevice, list);
 
       list->SetPipelineState(pipe);
 
@@ -975,7 +981,7 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
       {
         list = GetDebugManager()->ResetDebugList();
 
-        rs.ApplyState(list);
+        rs.ApplyState(m_pDevice, list);
 
         list->SetPipelineState(pipe);
 
@@ -1025,11 +1031,12 @@ void D3D12Replay::InitPostVSBuffers(uint32_t eventId)
         D3D12_QUERY_DATA_SO_STATISTICS *data;
         hr = m_SOStagingBuffer->Map(0, &range, (void **)&data);
 
-        if(m_SOBufferSize < data->PrimitivesStorageNeeded * 3 * stride)
+        uint64_t outputSize = data->PrimitivesStorageNeeded * 3 * stride;
+
+        if(m_SOBufferSize < outputSize)
         {
           uint64_t oldSize = m_SOBufferSize;
-          while(m_SOBufferSize < data->PrimitivesStorageNeeded * 3 * stride)
-            m_SOBufferSize *= 2;
+          m_SOBufferSize = CalcMeshOutputSize(m_SOBufferSize, outputSize);
           RDCWARN("Resizing stream-out buffer from %llu to %llu for output", oldSize, m_SOBufferSize);
           CreateSOBuffers();
 

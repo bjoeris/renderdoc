@@ -201,6 +201,9 @@ void WrappedOpenGL::BuildGLExtensions()
   m_GLExtensions.push_back("GL_EXT_framebuffer_object");
   m_GLExtensions.push_back("GL_EXT_framebuffer_sRGB");
   m_GLExtensions.push_back("GL_EXT_gpu_shader4");
+  m_GLExtensions.push_back("GL_EXT_memory_object");
+  m_GLExtensions.push_back("GL_EXT_memory_object_fd");
+  m_GLExtensions.push_back("GL_EXT_memory_object_win32");
   m_GLExtensions.push_back("GL_EXT_multisample");
   m_GLExtensions.push_back("GL_EXT_multi_draw_arrays");
   m_GLExtensions.push_back("GL_EXT_packed_depth_stencil");
@@ -212,6 +215,9 @@ void WrappedOpenGL::BuildGLExtensions()
   m_GLExtensions.push_back("GL_EXT_post_depth_coverage");
   m_GLExtensions.push_back("GL_EXT_provoking_vertex");
   m_GLExtensions.push_back("GL_EXT_raster_multisample");
+  m_GLExtensions.push_back("GL_EXT_semaphore");
+  m_GLExtensions.push_back("GL_EXT_semaphore_fd");
+  m_GLExtensions.push_back("GL_EXT_semaphore_win32");
   m_GLExtensions.push_back("GL_EXT_shader_image_load_store");
   m_GLExtensions.push_back("GL_EXT_shader_image_load_formatted");
   m_GLExtensions.push_back("GL_EXT_shader_integer_mix");
@@ -238,6 +244,7 @@ void WrappedOpenGL::BuildGLExtensions()
   m_GLExtensions.push_back("GL_EXT_timer_query");
   m_GLExtensions.push_back("GL_EXT_transform_feedback");
   m_GLExtensions.push_back("GL_EXT_vertex_attrib_64bit");
+  m_GLExtensions.push_back("GL_EXT_win32_keyed_mutex");
   m_GLExtensions.push_back("GL_GREMEDY_frame_terminator");
   m_GLExtensions.push_back("GL_GREMEDY_string_marker");
   m_GLExtensions.push_back("GL_KHR_blend_equation_advanced");
@@ -954,6 +961,16 @@ void WrappedOpenGL::CreateContext(GLWindowingData winData, void *shareContext,
   }
 
   RenderDoc::Inst().AddDeviceFrameCapturer(ctxdata.ctx, this);
+
+  // re-configure callstack capture, since WrappedOpenGL constructor may run too early
+  uint32_t flags = m_ScratchSerialiser.GetChunkMetadataRecording();
+
+  if(RenderDoc::Inst().GetCaptureOptions().captureCallstacks)
+    flags |= WriteSerialiser::ChunkCallstack;
+  else
+    flags &= ~WriteSerialiser::ChunkCallstack;
+
+  m_ScratchSerialiser.SetChunkMetadataRecording(flags);
 }
 
 void WrappedOpenGL::RegisterReplayContext(GLWindowingData winData, void *shareContext, bool core,
@@ -1256,8 +1273,6 @@ void WrappedOpenGL::ActivateContext(GLWindowingData winData)
             record->AddChunk(scope.Get());
           }
 
-          GetResourceManager()->SetInternalResource(VertexArrayRes(GetCtx(), 0));
-
           // we immediately mark it dirty since the vertex array tracking functions expect a proper
           // VAO
           GetResourceManager()->MarkDirtyResource(id);
@@ -1275,8 +1290,6 @@ void WrappedOpenGL::ActivateContext(GLWindowingData winData)
           USE_SCRATCH_SERIALISER();
           SCOPED_SERIALISE_CHUNK(GLChunk::glContextInit);
           Serialise_ContextInit(ser);
-
-          GetResourceManager()->SetInternalResource(FramebufferRes(GetCtx(), 0));
 
           m_DeviceRecord->AddChunk(scope.Get());
         }
@@ -2320,6 +2333,8 @@ void WrappedOpenGL::ReleaseResource(GLResource res)
     case eResFeedback: GL.glDeleteTransformFeedbacks(1, &res.name); break;
     case eResQuery: GL.glDeleteQueries(1, &res.name); break;
     case eResSync: GL.glDeleteSync(GetResourceManager()->GetSync(res.name)); break;
+    case eResExternalMemory: GL.glDeleteMemoryObjectsEXT(1, &res.name); break;
+    case eResExternalSemaphore: GL.glDeleteSemaphoresEXT(1, &res.name); break;
   }
 }
 
@@ -3778,9 +3793,13 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glUniform1d:
     case GLChunk::glUniform1dv:
     case GLChunk::glUniform1f:
+    case GLChunk::glUniform1fARB:
     case GLChunk::glUniform1fv:
+    case GLChunk::glUniform1fvARB:
     case GLChunk::glUniform1i:
+    case GLChunk::glUniform1iARB:
     case GLChunk::glUniform1iv:
+    case GLChunk::glUniform1ivARB:
     case GLChunk::glUniform1ui:
     case GLChunk::glUniform1uiEXT:
     case GLChunk::glUniform1uiv:
@@ -3788,9 +3807,13 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glUniform2d:
     case GLChunk::glUniform2dv:
     case GLChunk::glUniform2f:
+    case GLChunk::glUniform2fARB:
     case GLChunk::glUniform2fv:
+    case GLChunk::glUniform2fvARB:
     case GLChunk::glUniform2i:
+    case GLChunk::glUniform2iARB:
     case GLChunk::glUniform2iv:
+    case GLChunk::glUniform2ivARB:
     case GLChunk::glUniform2ui:
     case GLChunk::glUniform2uiEXT:
     case GLChunk::glUniform2uiv:
@@ -3798,9 +3821,13 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glUniform3d:
     case GLChunk::glUniform3dv:
     case GLChunk::glUniform3f:
+    case GLChunk::glUniform3fARB:
     case GLChunk::glUniform3fv:
+    case GLChunk::glUniform3fvARB:
     case GLChunk::glUniform3i:
+    case GLChunk::glUniform3iARB:
     case GLChunk::glUniform3iv:
+    case GLChunk::glUniform3ivARB:
     case GLChunk::glUniform3ui:
     case GLChunk::glUniform3uiEXT:
     case GLChunk::glUniform3uiv:
@@ -3808,9 +3835,13 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glUniform4d:
     case GLChunk::glUniform4dv:
     case GLChunk::glUniform4f:
+    case GLChunk::glUniform4fARB:
     case GLChunk::glUniform4fv:
+    case GLChunk::glUniform4fvARB:
     case GLChunk::glUniform4i:
+    case GLChunk::glUniform4iARB:
     case GLChunk::glUniform4iv:
+    case GLChunk::glUniform4ivARB:
     case GLChunk::glUniform4ui:
     case GLChunk::glUniform4uiEXT:
     case GLChunk::glUniform4uiv:
@@ -3855,18 +3886,21 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glProgramUniformMatrix4x3fvEXT:
     case GLChunk::glUniformMatrix2dv:
     case GLChunk::glUniformMatrix2fv:
+    case GLChunk::glUniformMatrix2fvARB:
     case GLChunk::glUniformMatrix2x3dv:
     case GLChunk::glUniformMatrix2x3fv:
     case GLChunk::glUniformMatrix2x4dv:
     case GLChunk::glUniformMatrix2x4fv:
     case GLChunk::glUniformMatrix3dv:
     case GLChunk::glUniformMatrix3fv:
+    case GLChunk::glUniformMatrix3fvARB:
     case GLChunk::glUniformMatrix3x2dv:
     case GLChunk::glUniformMatrix3x2fv:
     case GLChunk::glUniformMatrix3x4dv:
     case GLChunk::glUniformMatrix3x4fv:
     case GLChunk::glUniformMatrix4dv:
     case GLChunk::glUniformMatrix4fv:
+    case GLChunk::glUniformMatrix4fvARB:
     case GLChunk::glUniformMatrix4x2dv:
     case GLChunk::glUniformMatrix4x2fv:
     case GLChunk::glUniformMatrix4x3dv:
@@ -3894,8 +3928,52 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
       return Serialise_glSpecializeShader(ser, 0, NULL, 0, NULL, NULL);
 
     case GLChunk::glFinish: return Serialise_glFinish(ser);
-    case GLChunk::glFlush:
-      return Serialise_glFlush(ser);
+    case GLChunk::glFlush: return Serialise_glFlush(ser);
+
+    case GLChunk::glCreateMemoryObjectsEXT: return Serialise_glCreateMemoryObjectsEXT(ser, 0, NULL);
+    case GLChunk::glMemoryObjectParameterivEXT:
+      return Serialise_glMemoryObjectParameterivEXT(ser, 0, eGL_NONE, 0);
+    case GLChunk::glTexStorageMem1DEXT:
+    case GLChunk::glTextureStorageMem1DEXT:
+      return Serialise_glTextureStorageMem1DEXT(ser, 0, 0, eGL_NONE, 0, 0, 0);
+    case GLChunk::glTexStorageMem2DEXT:
+    case GLChunk::glTextureStorageMem2DEXT:
+      return Serialise_glTextureStorageMem2DEXT(ser, 0, 0, eGL_NONE, 0, 0, 0, 0);
+    case GLChunk::glTexStorageMem2DMultisampleEXT:
+    case GLChunk::glTextureStorageMem2DMultisampleEXT:
+      return Serialise_glTextureStorageMem2DMultisampleEXT(ser, 0, 0, eGL_NONE, 0, 0, GL_FALSE, 0, 0);
+    case GLChunk::glTexStorageMem3DEXT:
+    case GLChunk::glTextureStorageMem3DEXT:
+      return Serialise_glTextureStorageMem3DEXT(ser, 0, 0, eGL_NONE, 0, 0, 0, 0, 0);
+    case GLChunk::glTexStorageMem3DMultisampleEXT:
+    case GLChunk::glTextureStorageMem3DMultisampleEXT:
+      return Serialise_glTextureStorageMem3DMultisampleEXT(ser, 0, 0, eGL_NONE, 0, 0, 0, GL_FALSE,
+                                                           0, 0);
+    case GLChunk::glBufferStorageMemEXT:
+    case GLChunk::glNamedBufferStorageMemEXT:
+      return Serialise_glNamedBufferStorageMemEXT(ser, 0, 0, 0, 0);
+    case GLChunk::glGenSemaphoresEXT: return Serialise_glGenSemaphoresEXT(ser, 0, NULL);
+    case GLChunk::glSemaphoreParameterui64vEXT:
+      return Serialise_glSemaphoreParameterui64vEXT(ser, 0, eGL_NONE, NULL);
+    case GLChunk::glWaitSemaphoreEXT:
+      return Serialise_glWaitSemaphoreEXT(ser, 0, 0, NULL, 0, NULL, NULL);
+    case GLChunk::glSignalSemaphoreEXT:
+      return Serialise_glSignalSemaphoreEXT(ser, 0, 0, NULL, 0, NULL, NULL);
+    case GLChunk::glImportMemoryFdEXT: return Serialise_glImportMemoryFdEXT(ser, 0, 0, eGL_NONE, 0);
+    case GLChunk::glImportSemaphoreFdEXT:
+      return Serialise_glImportSemaphoreFdEXT(ser, 0, eGL_NONE, 0);
+    case GLChunk::glImportMemoryWin32HandleEXT:
+      return Serialise_glImportMemoryWin32HandleEXT(ser, 0, 0, eGL_NONE, NULL);
+    case GLChunk::glImportMemoryWin32NameEXT:
+      return Serialise_glImportMemoryWin32NameEXT(ser, 0, 0, eGL_NONE, NULL);
+    case GLChunk::glImportSemaphoreWin32HandleEXT:
+      return Serialise_glImportSemaphoreWin32HandleEXT(ser, 0, eGL_NONE, NULL);
+    case GLChunk::glImportSemaphoreWin32NameEXT:
+      return Serialise_glImportSemaphoreWin32NameEXT(ser, 0, eGL_NONE, NULL);
+    case GLChunk::glAcquireKeyedMutexWin32EXT:
+      return Serialise_glAcquireKeyedMutexWin32EXT(ser, 0, 0, 0);
+    case GLChunk::glReleaseKeyedMutexWin32EXT:
+      return Serialise_glReleaseKeyedMutexWin32EXT(ser, 0, 0);
 
     // these functions are not currently serialised - they do nothing on replay and are not
     // serialised for information (it would be harmless and perhaps useful for the user to see
@@ -4211,6 +4289,16 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::wglDXUnlockObjectsNV:
     case GLChunk::glMaxShaderCompilerThreadsARB:
     case GLChunk::glMaxShaderCompilerThreadsKHR:
+
+    case GLChunk::glGetUnsignedBytevEXT:
+    case GLChunk::glGetUnsignedBytei_vEXT:
+    case GLChunk::glDeleteMemoryObjectsEXT:
+    case GLChunk::glIsMemoryObjectEXT:
+    case GLChunk::glGetMemoryObjectParameterivEXT:
+    case GLChunk::glDeleteSemaphoresEXT:
+    case GLChunk::glIsSemaphoreEXT:
+    case GLChunk::glGetSemaphoreParameterui64vEXT:
+
     case GLChunk::Max:
       RDCERR("Unexpected chunk %s, or missing case for processing! Skipping...",
              ToStr(chunk).c_str());
@@ -4819,7 +4907,7 @@ void WrappedOpenGL::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
   RDCASSERTEQUAL(status, ReplayStatus::Succeeded);
 
   // make sure to end any unbalanced replay events if we stopped in the middle of a frame
-  for(int i = 0; i < m_ReplayEventCount; i++)
+  for(int i = 0; m_ReplayMarkers && i < m_ReplayEventCount; i++)
     GLMarkerRegion::End();
 
   GLMarkerRegion::Set("!!!!RenderDoc Internal: Done replay");
