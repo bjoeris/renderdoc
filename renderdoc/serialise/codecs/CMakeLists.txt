@@ -142,5 +142,6 @@ ADD_SUBDIRECTORY("${CMAKE_SOURCE_DIR}/sample_cpp_shim"
                  "${CMAKE_BINARY_DIR}/sample_cpp_shim")
 ADD_SUBDIRECTORY("${CMAKE_SOURCE_DIR}/gold_reference_shim"
                  "${CMAKE_BINARY_DIR}/gold_reference_shim")
-ADD_SUBDIRECTORY("${CMAKE_SOURCE_DIR}/fix_renderpass"
-                 "${CMAKE_BINARY_DIR}/fix_renderpass")
+ADD_SUBDIRECTORY("${CMAKE_SOURCE_DIR}/amd_shader_info_shim"
+                 "${CMAKE_BINARY_DIR}/amd_shader_info_shim")
+

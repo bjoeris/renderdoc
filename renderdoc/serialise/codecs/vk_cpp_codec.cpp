@@ -232,9 +232,24 @@ bool OptimizationDisabled(const char *name)
   return strcmp(var, "false") == 0;
 }
 
+bool OptimizationEnabled(const char *name)
+{
+#ifdef _WIN32
+  size_t len = 0;
+  char var[8];
+  errno_t err = getenv_s(&len, var, sizeof(var), name);
+  if(err)
+    return false;
+#else
+  const char *var = getenv(name);
+  if(!var)
+    return false;
+#endif
+  return strcmp(var, "true") == 0;
+}
 CodeGenOpts GetEnvOpts()
 {
-  CodeGenOpts optimizations = CODE_GEN_OPT_ALL_OPTS;
+  CodeGenOpts optimizations = CODE_GEN_OPT_DEFAULT;
   if(OptimizationDisabled("RDOC_CODE_GEN_ALL_OPTS"))
   {
     optimizations = 0;
@@ -254,13 +269,20 @@ CodeGenOpts GetEnvOpts()
   if (1) // OptimizationDisabled("RDOC_CODE_GEN_OPT_IMAGE_RESET")
   {
     optimizations &= ~CODE_GEN_OPT_IMAGE_RESET_BIT;
-    RDCWARN("Optimization for VkImage resets is disabled.");
   }
   if(OptimizationDisabled("RDOC_CODE_GEN_OPT_IMAGE_MEMORY"))
   {
     optimizations &= ~CODE_GEN_OPT_IMAGE_MEMORY_BIT;
     optimizations &= ~CODE_GEN_OPT_IMAGE_INIT_BIT;
     optimizations &= ~CODE_GEN_OPT_IMAGE_RESET_BIT;
+  }
+  if(OptimizationEnabled("RDOC_CODE_GEN_OPT_BUFFER_DIFF"))
+  {
+    optimizations |= CODE_GEN_OPT_BUFFER_DIFF;
+  }
+  if(OptimizationEnabled("RDOC_CODE_GEN_OPT_IMAGE_DIFF"))
+  {
+    optimizations |= CODE_GEN_OPT_IMAGE_DIFF;
   }
   return optimizations;
 }

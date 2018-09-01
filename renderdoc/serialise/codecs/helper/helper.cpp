@@ -19,14 +19,14 @@ VkBool32 VKAPI_PTR DebugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjec
 }
 
 void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance,
-                           VkDebugReportFlagBitsEXT flags)
+                           uint32_t flags)
 {
   PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallback = VK_NULL_HANDLE;
   CreateDebugReportCallback = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
       instance, "vkCreateDebugReportCallbackEXT");
 
   VkDebugReportCallbackCreateInfoEXT ci = {VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
-                                           0, flags, DebugCallback, NULL};
+                                           0, VkDebugReportFlagBitsEXT(flags), DebugCallback, NULL};
   if(CreateDebugReportCallback != NULL)
   {
     VkResult result = CreateDebugReportCallback(instance, &ci, NULL, &aux.callback);
@@ -35,8 +35,7 @@ void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance,
 }
 
 VkPresentModeKHR GetCompatiblePresentMode(VkPresentModeKHR captured,
-                                          std::vector<VkPresentModeKHR> present)
-{
+  std::vector<VkPresentModeKHR> present) {
   for(uint32_t i = 0; i < present.size(); i++)
     if(present[i] == captured)
       return captured;
@@ -45,231 +44,10 @@ VkPresentModeKHR GetCompatiblePresentMode(VkPresentModeKHR captured,
   return present[0];
 }
 
-uint32_t FixCompressedSizes(VkFormat fmt, VkExtent3D &dim, uint32_t &offset)
-{
-  switch(fmt)
-  {
-    case VK_FORMAT_BC2_SRGB_BLOCK:
-    case VK_FORMAT_BC2_UNORM_BLOCK:
-    case VK_FORMAT_BC3_SRGB_BLOCK:
-    case VK_FORMAT_BC3_UNORM_BLOCK:
-    case VK_FORMAT_BC4_SNORM_BLOCK:
-    case VK_FORMAT_BC4_UNORM_BLOCK:
-    case VK_FORMAT_BC5_SNORM_BLOCK:
-    case VK_FORMAT_BC5_UNORM_BLOCK:
-    case VK_FORMAT_BC6H_SFLOAT_BLOCK:
-    case VK_FORMAT_BC6H_UFLOAT_BLOCK:
-    case VK_FORMAT_BC7_SRGB_BLOCK:
-    case VK_FORMAT_BC7_UNORM_BLOCK:
-    case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
-    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:
-    case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
-    case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
-      dim.width = (uint32_t)AlignedSize(dim.width, 4);
-      dim.height = (uint32_t)AlignedSize(dim.height, 4);
-      dim.depth = (uint32_t)AlignedSize(dim.depth, 1);
-      offset = (uint32_t)AlignedSize(offset, 4);
-      return 1;
-  }
-
-  offset = (uint32_t)AlignedSize(offset, 4);
-  return 0;
-}
-
-double SizeOfFormat(VkFormat fmt)
-{
-  switch(fmt)
-  {
-    case VK_FORMAT_R4G4_UNORM_PACK8:
-    case VK_FORMAT_R8_UNORM:
-    case VK_FORMAT_R8_SNORM:
-    case VK_FORMAT_R8_USCALED:
-    case VK_FORMAT_R8_SSCALED:
-    case VK_FORMAT_R8_UINT:
-    case VK_FORMAT_R8_SINT:
-    case VK_FORMAT_R8_SRGB: return 1.0;
-
-    case VK_FORMAT_R4G4B4A4_UNORM_PACK16:
-    case VK_FORMAT_B4G4R4A4_UNORM_PACK16:
-    case VK_FORMAT_R5G6B5_UNORM_PACK16:
-    case VK_FORMAT_B5G6R5_UNORM_PACK16:
-    case VK_FORMAT_R5G5B5A1_UNORM_PACK16:
-    case VK_FORMAT_B5G5R5A1_UNORM_PACK16:
-    case VK_FORMAT_A1R5G5B5_UNORM_PACK16:
-    case VK_FORMAT_R8G8_UNORM:
-    case VK_FORMAT_R8G8_SNORM:
-    case VK_FORMAT_R8G8_USCALED:
-    case VK_FORMAT_R8G8_SSCALED:
-    case VK_FORMAT_R8G8_UINT:
-    case VK_FORMAT_R8G8_SINT:
-    case VK_FORMAT_R8G8_SRGB:
-    case VK_FORMAT_R16_UNORM:
-    case VK_FORMAT_R16_SNORM:
-    case VK_FORMAT_R16_USCALED:
-    case VK_FORMAT_R16_SSCALED:
-    case VK_FORMAT_R16_UINT:
-    case VK_FORMAT_R16_SINT:
-    case VK_FORMAT_R16_SFLOAT:
-
-    case VK_FORMAT_D16_UNORM: return 2.0;
-
-    case VK_FORMAT_R8G8B8_UNORM:
-    case VK_FORMAT_R8G8B8_SNORM:
-    case VK_FORMAT_R8G8B8_USCALED:
-    case VK_FORMAT_R8G8B8_SSCALED:
-    case VK_FORMAT_R8G8B8_UINT:
-    case VK_FORMAT_R8G8B8_SINT:
-    case VK_FORMAT_R8G8B8_SRGB:
-    case VK_FORMAT_B8G8R8_UNORM:
-    case VK_FORMAT_B8G8R8_SNORM:
-    case VK_FORMAT_B8G8R8_USCALED:
-    case VK_FORMAT_B8G8R8_SSCALED:
-    case VK_FORMAT_B8G8R8_UINT:
-    case VK_FORMAT_B8G8R8_SINT:
-    case VK_FORMAT_B8G8R8_SRGB: return 3.0;
-
-    case VK_FORMAT_R8G8B8A8_UNORM:
-    case VK_FORMAT_R8G8B8A8_SNORM:
-    case VK_FORMAT_R8G8B8A8_USCALED:
-    case VK_FORMAT_R8G8B8A8_SSCALED:
-    case VK_FORMAT_R8G8B8A8_UINT:
-    case VK_FORMAT_R8G8B8A8_SINT:
-    case VK_FORMAT_R8G8B8A8_SRGB:
-    case VK_FORMAT_B8G8R8A8_UNORM:
-    case VK_FORMAT_B8G8R8A8_SNORM:
-    case VK_FORMAT_B8G8R8A8_USCALED:
-    case VK_FORMAT_B8G8R8A8_SSCALED:
-    case VK_FORMAT_B8G8R8A8_UINT:
-    case VK_FORMAT_B8G8R8A8_SINT:
-    case VK_FORMAT_B8G8R8A8_SRGB:
-    case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
-    case VK_FORMAT_A8B8G8R8_SNORM_PACK32:
-    case VK_FORMAT_A8B8G8R8_USCALED_PACK32:
-    case VK_FORMAT_A8B8G8R8_SSCALED_PACK32:
-    case VK_FORMAT_A8B8G8R8_UINT_PACK32:
-    case VK_FORMAT_A8B8G8R8_SINT_PACK32:
-    case VK_FORMAT_A8B8G8R8_SRGB_PACK32:
-    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
-    case VK_FORMAT_A2R10G10B10_SNORM_PACK32:
-    case VK_FORMAT_A2R10G10B10_USCALED_PACK32:
-    case VK_FORMAT_A2R10G10B10_SSCALED_PACK32:
-    case VK_FORMAT_A2R10G10B10_UINT_PACK32:
-    case VK_FORMAT_A2R10G10B10_SINT_PACK32:
-    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-    case VK_FORMAT_A2B10G10R10_SNORM_PACK32:
-    case VK_FORMAT_A2B10G10R10_USCALED_PACK32:
-    case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:
-    case VK_FORMAT_A2B10G10R10_UINT_PACK32:
-    case VK_FORMAT_A2B10G10R10_SINT_PACK32:
-    case VK_FORMAT_R16G16_UNORM:
-    case VK_FORMAT_R16G16_SNORM:
-    case VK_FORMAT_R16G16_USCALED:
-    case VK_FORMAT_R16G16_SSCALED:
-    case VK_FORMAT_R16G16_UINT:
-    case VK_FORMAT_R16G16_SINT:
-    case VK_FORMAT_R16G16_SFLOAT:
-    case VK_FORMAT_R32_UINT:
-    case VK_FORMAT_R32_SINT:
-    case VK_FORMAT_R32_SFLOAT:
-    case VK_FORMAT_B10G11R11_UFLOAT_PACK32:
-    case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32:
-    case VK_FORMAT_D32_SFLOAT:
-    case VK_FORMAT_D32_SFLOAT_S8_UINT: return 4.0;
-
-    case VK_FORMAT_R16G16B16A16_UNORM:
-    case VK_FORMAT_R16G16B16A16_SNORM:
-    case VK_FORMAT_R16G16B16A16_USCALED:
-    case VK_FORMAT_R16G16B16A16_SSCALED:
-    case VK_FORMAT_R16G16B16A16_UINT:
-    case VK_FORMAT_R16G16B16A16_SINT:
-    case VK_FORMAT_R16G16B16A16_SFLOAT:
-    case VK_FORMAT_R32G32_UINT:
-    case VK_FORMAT_R32G32_SINT:
-    case VK_FORMAT_R32G32_SFLOAT:
-    case VK_FORMAT_R64_UINT:
-    case VK_FORMAT_R64_SINT:
-    case VK_FORMAT_R64_SFLOAT: return 8.0;
-
-    case VK_FORMAT_R32G32B32A32_UINT:
-    case VK_FORMAT_R32G32B32A32_SINT:
-    case VK_FORMAT_R32G32B32A32_SFLOAT:
-    case VK_FORMAT_R64G64_UINT:
-    case VK_FORMAT_R64G64_SINT:
-    case VK_FORMAT_R64G64_SFLOAT: return 16.0;
-
-    case VK_FORMAT_BC2_SRGB_BLOCK:
-    case VK_FORMAT_BC2_UNORM_BLOCK:
-    case VK_FORMAT_BC3_SRGB_BLOCK:
-    case VK_FORMAT_BC3_UNORM_BLOCK:
-    case VK_FORMAT_BC5_SNORM_BLOCK:
-    case VK_FORMAT_BC5_UNORM_BLOCK:
-    case VK_FORMAT_BC6H_SFLOAT_BLOCK:
-    case VK_FORMAT_BC6H_UFLOAT_BLOCK:
-    case VK_FORMAT_BC7_SRGB_BLOCK:
-    case VK_FORMAT_BC7_UNORM_BLOCK: return 1.0;
-
-    case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
-    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:
-    case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
-    case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
-    case VK_FORMAT_BC4_SNORM_BLOCK:
-    case VK_FORMAT_BC4_UNORM_BLOCK: return 0.5;
-
-    default: assert(0);
-  }
-  return 0.0;
-}
-
-int MinDimensionSize(VkFormat format)
-{
-  switch(format)
-  {
-    case VK_FORMAT_BC2_SRGB_BLOCK:
-    case VK_FORMAT_BC2_UNORM_BLOCK:
-    case VK_FORMAT_BC3_SRGB_BLOCK:
-    case VK_FORMAT_BC3_UNORM_BLOCK:
-    case VK_FORMAT_BC4_SNORM_BLOCK:
-    case VK_FORMAT_BC4_UNORM_BLOCK:
-    case VK_FORMAT_BC5_SNORM_BLOCK:
-    case VK_FORMAT_BC5_UNORM_BLOCK:
-    case VK_FORMAT_BC6H_SFLOAT_BLOCK:
-    case VK_FORMAT_BC6H_UFLOAT_BLOCK:
-    case VK_FORMAT_BC7_SRGB_BLOCK:
-    case VK_FORMAT_BC7_UNORM_BLOCK: return 4;
-
-    case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
-    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:
-    case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
-    case VK_FORMAT_BC1_RGBA_SRGB_BLOCK: return 4;
-
-    default: return 1;
-  }
-}
-
-VkImageAspectFlags GetFullAspectFromFormat(VkFormat fmt)
-{
-  if(fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_D32_SFLOAT)
-    return VK_IMAGE_ASPECT_DEPTH_BIT;
-  else if(fmt == VK_FORMAT_D16_UNORM_S8_UINT || fmt == VK_FORMAT_D24_UNORM_S8_UINT ||
-          fmt == VK_FORMAT_D32_SFLOAT_S8_UINT)
-    return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-  else
-    return VK_IMAGE_ASPECT_COLOR_BIT;
-}
-
-VkImageAspectFlags GetAspectFromFormat(VkFormat fmt)
-{
-  if(fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_D32_SFLOAT || fmt == VK_FORMAT_D16_UNORM_S8_UINT ||
-     fmt == VK_FORMAT_D24_UNORM_S8_UINT || fmt == VK_FORMAT_D32_SFLOAT_S8_UINT)
-    return VK_IMAGE_ASPECT_DEPTH_BIT;
-  else
-    return VK_IMAGE_ASPECT_COLOR_BIT;
-}
-
-
 void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
   VkImageSubresourceRange subresourceRange, VkImageLayout newLayout, 
-  uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQueueFamily) {
+                           uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQueueFamily)
+{
   uint32_t all_access =
     VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
     VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT |
@@ -280,31 +58,44 @@ void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
     VK_ACCESS_HOST_WRITE_BIT;
 
   VkImageMemoryBarrier imgBarrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-    NULL, all_access, VK_ACCESS_TRANSFER_WRITE_BIT,
-    oldLayout, newLayout,
-    srcQueueFamily, dstQueueFamily,
-    dstImage, subresourceRange};
+                                     NULL,
+                                     all_access,
+                                     VK_ACCESS_TRANSFER_WRITE_BIT,
+                                     oldLayout,
+                                     newLayout,
+                                     srcQueueFamily,
+                                     dstQueueFamily,
+                                     dstImage,
+                                     subresourceRange};
 
   vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
 }
 
 void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImage,
-                           VkImageSubresourceRange subresourceRange, 
-                           VkImageLayout newLayout, VkImageLayout oldLayout)
+                           VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
+                           VkImageLayout oldLayout)
 {
-  ImageLayoutTransition(aux.command_buffer, dstImage, subresourceRange,
-    newLayout, VK_QUEUE_FAMILY_IGNORED, oldLayout, VK_QUEUE_FAMILY_IGNORED);
+  ImageLayoutTransition(aux.command_buffer, dstImage, subresourceRange, newLayout,
+                        VK_QUEUE_FAMILY_IGNORED, oldLayout, VK_QUEUE_FAMILY_IGNORED);
 }
 
 void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImage, VkImageCreateInfo dstCI,
                            VkImageLayout newLayout, VkImageLayout oldLayout)
 {
-  VkImageSubresourceRange subresourceRange = {GetFullAspectFromFormat(dstCI.format), 0,
+  VkImageSubresourceRange subresourceRange = {FullAspectFromFormat(dstCI.format), 0,
                                               VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
 
-  ImageLayoutTransition(aux, dstImage, subresourceRange,
-    newLayout, oldLayout);
+  ImageLayoutTransition(aux, dstImage, subresourceRange, newLayout, oldLayout);
+}
+
+void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImg, uint32_t arrayLayer,
+                           uint32_t mipLevel, VkImageAspectFlagBits aspect, VkImageLayout newLayout,
+                           VkImageLayout oldLayout)
+{
+  VkImageSubresourceRange subresourceRange = {aspect, mipLevel, 1, arrayLayer, 1};
+
+  ImageLayoutTransition(aux, dstImg, subresourceRange, newLayout, oldLayout);
 }
 
 void CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageCreateInfo dst_ci)
@@ -313,26 +104,44 @@ void CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageC
 
   if(dst_ci.samples == VK_SAMPLE_COUNT_1_BIT)
   {
+    VkImageAspectFlags aspect = FullAspectFromFormat(dst_ci.format);
+    VkImageAspectFlags color_depth_stencil =
+        VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    assert(((aspect & color_depth_stencil) != 0) &&
+           ((aspect & (~color_depth_stencil)) ==
+            0));    // only color, depth or stencil aspects are allowed
+
+    std::vector<VkImageAspectFlagBits> aspects;
+    if(aspect & VK_IMAGE_ASPECT_COLOR_BIT)
+      aspects.push_back(VK_IMAGE_ASPECT_COLOR_BIT);
+    if(aspect & VK_IMAGE_ASPECT_DEPTH_BIT)
+      aspects.push_back(VK_IMAGE_ASPECT_DEPTH_BIT);
+    if(aspect & VK_IMAGE_ASPECT_STENCIL_BIT)
+      aspects.push_back(VK_IMAGE_ASPECT_STENCIL_BIT);
+
     std::vector<VkBufferImageCopy> regions;
     uint32_t offset = 0;
+    for(uint32_t j = 0; j < aspects.size(); j++)
+    {
     for(uint32_t a = 0; a < dst_ci.arrayLayers; a++)
     {
       VkExtent3D dim = dst_ci.extent;
       uint32_t x = 0;
       FixCompressedSizes(dst_ci.format, dim, x);
-      for(uint32_t i = 0; i < dst_ci.mipLevels; i++)
+        for(uint32_t m = 0; m < dst_ci.mipLevels; m++)
       {
-        VkBufferImageCopy region = {offset,     dim.width,
-                                    dim.height, {GetAspectFromFormat(dst_ci.format), i, a, 1},
+          VkBufferImageCopy region = {offset,    dim.width, dim.height, {aspects[j], m, a, 1},
                                     {0, 0, 0},  dim};
-        offset += (uint32_t)(dim.depth * dim.width * dim.height * SizeOfFormat(dst_ci.format));
+          offset += (uint32_t)(dim.depth * dim.width * dim.height *
+                               SizeOfFormat(dst_ci.format, aspects[j]));
         dim.height = std::max<int>(dim.height / 2, 1);
         dim.width = std::max<int>(dim.width / 2, 1);
         dim.depth = std::max<int>(dim.depth / 2, 1);
         FixCompressedSizes(dst_ci.format, dim, offset);
         regions.push_back(region);
-      }
-    }
+        }    // mip
+      }      // array
+    }        // aspect
     const uint32_t kMaxUpdate = 100;
     for(uint32_t i = 0; i * kMaxUpdate < regions.size(); i++)
     {
@@ -349,6 +158,122 @@ void CopyResetBuffer(AuxVkTraceResources aux, VkBuffer dst, VkBuffer src, VkDevi
     return;
   VkBufferCopy region = {0, 0, size};
   vkCmdCopyBuffer(aux.command_buffer, src, dst, 1, &region);
+}
+
+void CopyImageToBuffer(AuxVkTraceResources aux, VkImage src, VkBuffer dst, VkImageCreateInfo src_ci)
+{
+  if(src_ci.samples == VK_SAMPLE_COUNT_1_BIT)
+  {
+    VkImageAspectFlags aspect = FullAspectFromFormat(src_ci.format);
+    VkImageAspectFlags color_depth_stencil =
+      VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+    assert(((aspect & color_depth_stencil) != 0) &&
+      ((aspect & (~color_depth_stencil)) ==
+        0));    // only color, depth or stencil aspects are allowed
+
+    std::vector<VkImageAspectFlagBits> aspects;
+    if (aspect & VK_IMAGE_ASPECT_COLOR_BIT)
+      aspects.push_back(VK_IMAGE_ASPECT_COLOR_BIT);
+    if (aspect & VK_IMAGE_ASPECT_DEPTH_BIT)
+      aspects.push_back(VK_IMAGE_ASPECT_DEPTH_BIT);
+    if (aspect & VK_IMAGE_ASPECT_STENCIL_BIT)
+      aspects.push_back(VK_IMAGE_ASPECT_STENCIL_BIT);
+
+    std::vector<VkBufferImageCopy> regions;
+    uint32_t offset = 0;
+    for (uint32_t j = 0; j < aspects.size(); j++) {
+      for (uint32_t a = 0; a < src_ci.arrayLayers; a++) {
+        VkExtent3D dim = src_ci.extent;
+        uint32_t x = 0;
+        FixCompressedSizes(src_ci.format, dim, x);
+        for (uint32_t m = 0; m < src_ci.mipLevels; m++) {
+          VkBufferImageCopy region = {offset,     dim.width,
+                                      dim.height, {aspects[j], m, a, 1},
+                                      {0, 0, 0},  dim};
+          offset += (uint32_t) (dim.depth * dim.width * dim.height * SizeOfFormat(src_ci.format, aspects[j]));
+          dim.height = std::max<int>(dim.height / 2, 1);
+          dim.width = std::max<int>(dim.width / 2, 1);
+          dim.depth = std::max<int>(dim.depth / 2, 1);
+          FixCompressedSizes(src_ci.format, dim, offset);
+          regions.push_back(region);
+        }
+      }
+    }
+    const uint32_t kMaxUpdate = 100;
+    for(uint32_t i = 0; i * kMaxUpdate < regions.size(); i++)
+    {
+      uint32_t count = std::min<uint32_t>(kMaxUpdate, (uint32_t)regions.size() - i * kMaxUpdate);
+      uint32_t offset = i * kMaxUpdate;
+      vkCmdCopyImageToBuffer(aux.command_buffer, src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst,
+                             count, regions.data() + offset);
+    }
+  }
+  else
+  {
+    assert(0);
+  }
+}
+
+void DiffDeviceMemory(AuxVkTraceResources aux, VkDeviceMemory expected,
+                      VkDeviceSize expected_offset, VkDeviceMemory actual,
+                      VkDeviceSize actual_offset, VkDeviceSize size, const char *name)
+{
+  uint8_t *expected_data = NULL;
+  VkResult result = vkMapMemory(aux.device, actual, actual_offset, size, 0, (void **)&expected_data);
+  assert(result == VK_SUCCESS);
+
+  uint8_t *actual_data = NULL;
+  result = vkMapMemory(aux.device, expected, expected_offset, size, 0, (void **)&actual_data);
+  assert(result == VK_SUCCESS);
+
+  if(memcmp(expected_data, actual_data, (size_t)size) != 0)
+  {
+    std::string message = name + std::string(" does not match\n");
+    printf("%s", message.c_str());
+#if defined(_WIN32)
+    OutputDebugStringA(message.c_str());
+#endif
+  }
+
+  vkUnmapMemory(aux.device, expected);
+  vkUnmapMemory(aux.device, actual);
+}
+
+void InitializeDiffBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *memory, size_t size,
+                          VkPhysicalDeviceMemoryProperties props)
+{
+  assert(buffer != NULL && memory != NULL);
+  if(size == 0)
+    return;
+
+  VkBufferCreateInfo buffer_ci = {
+      VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      NULL,
+      0,
+      size,
+      VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+      VK_SHARING_MODE_EXCLUSIVE,
+      0,
+      NULL};
+
+  VkResult result = vkCreateBuffer(device, &buffer_ci, NULL, buffer);
+  assert(result == VK_SUCCESS);
+
+  VkMemoryRequirements buffer_requirements;
+  vkGetBufferMemoryRequirements(device, *buffer, &buffer_requirements);
+
+  VkFlags gpu_and_cpu_visible = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+  uint32_t memory_type =
+      MemoryTypeIndex(gpu_and_cpu_visible, buffer_requirements.memoryTypeBits, props);
+
+  VkMemoryAllocateInfo memory_ai = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, NULL,
+                                    buffer_requirements.size, memory_type};
+
+  result = vkAllocateMemory(device, &memory_ai, NULL, memory);
+  assert(result == VK_SUCCESS);
+
+  result = vkBindBufferMemory(device, *buffer, *memory, 0);
+  assert(result == VK_SUCCESS);
 }
 
 void InitializeDestinationBuffer(VkDevice device, VkBuffer *dst_buffer, VkDeviceMemory dst_memory,
@@ -444,7 +369,8 @@ void InitializeSourceBuffer(VkDevice device, VkBuffer *src_buffer, VkDeviceMemor
   vkUnmapMemory(device, *src_memory);
 }
 
-void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance, VkPhysicalDevice physDevice, VkDevice device)
+void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance,
+                            VkPhysicalDevice physDevice, VkDevice device)
 {
   aux->instance = instance;
   aux->physDevice = physDevice;
@@ -822,11 +748,12 @@ void MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMapp
 
         VkMappedMemoryRange r = range;
         r.offset = mr.replay.offset + skipped_resource_bytes;
-        r.size = AlignedSize(r.offset + intersect.size, aux.physDeviceProperties.limits.nonCoherentAtomSize);
+        r.size = AlignedSize(r.offset + intersect.size,
+                             aux.physDeviceProperties.limits.nonCoherentAtomSize);
         r.offset = AlignedDown(r.offset, aux.physDeviceProperties.limits.nonCoherentAtomSize);
         r.size = r.size - r.offset;
-        if (r.offset + r.size > range.offset + range.size || 
-            r.offset + r.size > ai.allocationSize) {
+        if(r.offset + r.size > range.offset + range.size || r.offset + r.size > ai.allocationSize)
+        {
           r.size = VK_WHOLE_SIZE;
         }
         ranges.push_back(r);
@@ -845,6 +772,8 @@ void MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMapp
   }
 }
 
-std::string StageProgressString(const char *stage, uint32_t i, uint32_t N) {
-  return std::string("RenderDoc Frame Loop: " + std::string(stage) + " part " + std::to_string(i) + " of " + std::to_string(N));
+std::string StageProgressString(const char *stage, uint32_t i, uint32_t N)
+{
+  return std::string("RenderDoc Frame Loop: " + std::string(stage) + " part " + std::to_string(i) +
+                     " of " + std::to_string(N));
 }

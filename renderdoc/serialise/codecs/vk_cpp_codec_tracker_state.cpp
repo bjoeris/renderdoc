@@ -170,11 +170,11 @@ void TraceTracker::AccessMemoryInDescriptorSet(uint64_t descriptorSet_id, uint64
         // Only a sampler, no image to access
         break;
       case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
         action = ACCESS_ACTION_READ_WRITE;
       // Fall through; storage can also be read.
       case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
       case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
         for(uint64_t i = 0; i < binding.imageBindings.size(); i++)
         {
           BoundImage imageBinding = binding.imageBindings[i];
@@ -468,6 +468,80 @@ void TraceTracker::AccessAttachment(uint64_t attachment, AccessAction action,
   AccessImageView(view_id, layout, action, aspectMask, baseArrayLayer, layerCount);
 }
 
+void TraceTracker::AccessSubpassAttachments()
+{
+  ExtObject *subpasses = bindingState.renderPass->At(6);
+
+  RDCASSERT(bindingState.subpassIndex < subpasses->Size());
+  ExtObject *subpass = subpasses->At(bindingState.subpassIndex);
+  ExtObject *colorAttachments = subpass->At(5);
+  ExtObject *resolveAttachments = subpass->At(6);
+  ExtObject *depthStencilAttachment = subpass->At(7);
+
+  ExtObjectIDMapIter pipeline_it = createdPipelines.find(bindingState.graphicsPipeline.pipeline);
+  if(pipeline_it == createdPipelines.end())
+  {
+    return;
+  }
+  ExtObject *pipeline_ci = pipeline_it->second->At("CreateInfo");
+  ExtObject *depthStencilState = pipeline_ci->At("pDepthStencilState");
+  ExtObject *blendState = pipeline_ci->At("pColorBlendState");
+  ExtObject *blendAttachmets = blendState->At("pAttachments");
+
+  for(uint64_t i = 0; i < colorAttachments->Size(); i++)
+  {
+    ExtObject *blendAttachmentState = blendAttachmets->At(i);
+    uint64_t blendEnabled = blendAttachmentState->At("blendEnable")->U64();
+    VkColorComponentFlags colorWriteMask = blendAttachmentState->At("colorWriteMask")->U64();
+    AccessAction action;
+    if(blendEnabled == 0)
+    {
+      // Previous color is completely ignored, so write only
+      action = ACCESS_ACTION_WRITE;
+    }
+    else
+    {
+      // Blending may use the previous color, so read-write.
+      action = ACCESS_ACTION_READ_WRITE;
+    }
+    if(colorWriteMask != 0)
+    {
+      // Writing is enabled for at least some color component
+      AccessAttachment(colorAttachments->At(i)->At(0)->U64(), action);
+    }
+  }
+  for(uint64_t i = 0; i < resolveAttachments->Size(); i++)
+  {
+    AccessAttachment(resolveAttachments->At(i)->At(0)->U64(), ACCESS_ACTION_WRITE);
+  }
+  if(!depthStencilAttachment->IsNULL())
+  {
+    AccessAction action = ACCESS_ACTION_READ_WRITE;
+    if(depthStencilState->At("depthTestEnable")->U64() == 0)
+    {
+      action = ACCESS_ACTION_WRITE;
+    }
+    if(depthStencilState->At("depthWriteEnable")->U64() == 0)
+    {
+      switch(action)
+      {
+        case ACCESS_ACTION_READ_WRITE:
+          action = ACCESS_ACTION_READ;
+          break;
+        case ACCESS_ACTION_WRITE:
+          action = ACCESS_ACTION_NONE;
+          break;
+        default:
+          RDCASSERT(0);
+      }
+    }
+    if(action != ACCESS_ACTION_NONE)
+    {
+      AccessAttachment(depthStencilAttachment->At(0)->U64(), action);
+    }
+  }
+}
+
 void TraceTracker::TransitionImageLayout(uint64_t image, ExtObject *range, VkImageLayout oldLayout,
                                          VkImageLayout newLayout, uint64_t srcQueueFamily,
                                          uint64_t dstQueueFamily)
@@ -554,42 +628,56 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
 
   if(bindingState.subpassIndex == bindingState.attachmentFirstUse[attachment])
   {
+    // This is the first subpass to use the attachment. This triggers the attachment's loadOp/stencilLoadOp
+
     VkFormat format = (VkFormat)att_desc->At("format")->U64();
     VkImageLayout initialLayout = (VkImageLayout)att_desc->At("initialLayout")->U64();
 
-    VkAttachmentLoadOp loadOp;
-    // If the format is Depth AND Stencil, both OPs need to be taken into account.
-    // If neither Op is LOAD then we can pretend loadOp is VK_ATTACHMENT_LOAD_OP_DONT_CARE
-    if(IsDepthAndStencilFormat(format))
+    if(!IsStencilOnlyFormat(format))
     {
-      loadOp = (VkAttachmentLoadOp)att_desc->At("loadOp")->U64();
-      VkAttachmentLoadOp stencilLoadOp = (VkAttachmentLoadOp)att_desc->At("stencilLoadOp")->U64();
-      if(loadOp != VK_ATTACHMENT_LOAD_OP_LOAD && stencilLoadOp != VK_ATTACHMENT_LOAD_OP_LOAD)
-        loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+      // The attachment has a depth or color component; 
+      // load behaviour for depth/color component is defined by loadOp
+      VkAttachmentLoadOp loadOp = (VkAttachmentLoadOp)att_desc->At("loadOp")->U64();
+      AccessAction action;
+      if(loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR || loadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+      {
+        if(bindingState.isFullRenderArea)
+        {
+          action = ACCESS_ACTION_CLEAR;
+        }
       else
-        loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        {
+          action = ACCESS_ACTION_WRITE;
+        }
     }
     else
     {
-      loadOp = (VkAttachmentLoadOp)att_desc->At("loadOp")->U64();
+        action = ACCESS_ACTION_READ;
     }
-
-    if(loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR || loadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+      AccessImageView(view_id, initialLayout, action, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_COLOR_BIT);
+    }
+    if(IsStencilFormat(format))
     {
-      AccessAction action;
+      // The attachment has a stencil component;
+      // load behaviour for stencil component is defined by stencilLoadOp
+      VkAttachmentLoadOp stencilLoadOp = (VkAttachmentLoadOp)att_desc->At("stencilLoadOp")->U64();
+      AccessAction stencilAction;
+      if(stencilLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR || stencilLoadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+    {
       if(bindingState.isFullRenderArea)
       {
-        action = ACCESS_ACTION_CLEAR;
+          stencilAction = ACCESS_ACTION_CLEAR;
       }
       else
       {
-        action = ACCESS_ACTION_WRITE;
+          stencilAction = ACCESS_ACTION_WRITE;
       }
-      AccessImageView(view_id, initialLayout, action);
     }
     else
     {
-      AccessImageView(view_id, initialLayout, ACCESS_ACTION_READ);
+        stencilAction = ACCESS_ACTION_READ;
+      }
+      AccessImageView(view_id, initialLayout, stencilAction, VK_IMAGE_ASPECT_STENCIL_BIT);
     }
   }
 
@@ -611,7 +699,7 @@ void TraceTracker::BeginSubpass()
     ExtObject *attachmentRef = inputAttachments->At(i);
     uint64_t a = attachmentRef->At("attachment")->U64();
     LoadSubpassAttachment(attachmentRef);
-    AccessAttachment(a, ACCESS_ACTION_READ_WRITE);
+    AccessAttachment(a, ACCESS_ACTION_READ);
   }
   for(uint32_t i = 0; i < colorAttachments->Size(); i++)
   {
@@ -624,56 +712,11 @@ void TraceTracker::BeginSubpass()
   if(!depthStencilAttachment->IsNULL())
   {
     LoadSubpassAttachment(depthStencilAttachment);
-    uint64_t a = depthStencilAttachment->At("attachment")->U64();
-    AccessAttachment(a, ACCESS_ACTION_READ_WRITE);
   }
-  bindingState.graphicsPipeline.subpassHasDraw = false;
 }
 
 void TraceTracker::EndSubpass()
 {
-  if(!bindingState.graphicsPipeline.subpassHasDraw)
-  {
-    // No draws
-    return;
-  }
-  ExtObject *subpasses = bindingState.renderPass->At(6);
-
-  RDCASSERT(bindingState.subpassIndex < subpasses->Size());
-  ExtObject *subpass = subpasses->At(bindingState.subpassIndex);
-  ExtObject *colorAttachments = subpass->At(5);
-  ExtObject *resolveAttachments = subpass->At(6);
-  ExtObject *depthStencilAttachment = subpass->At(7);
-
-  ExtObjectIDMapIter pipeline_it = createdPipelines.find(bindingState.graphicsPipeline.pipeline);
-  if(pipeline_it == createdPipelines.end())
-  {
-    return;
-  }
-  ExtObject *pipeline_ci = pipeline_it->second->At(3);
-  ExtObject *blendState = pipeline_ci->At(12);
-  ExtObject *blendAttachmets = blendState->At(6);
-
-  for(uint64_t i = 0; i < colorAttachments->Size(); i++)
-  {
-    uint64_t blendEnabled = blendAttachmets->At(i)->At(0)->U64();
-    // "blendEnable controls whether blending is enabled for the corresponding color attachment. If
-    // blending is not enabled, the source fragment’s color for that attachment is passed through
-    // unmodified."
-    if(blendEnabled)
-    {
-      // TODO: depending on the blending settings, this may be just a write, rather than read/write.
-      AccessAttachment(colorAttachments->At(i)->At(0)->U64(), ACCESS_ACTION_READ_WRITE);
-    }
-  }
-  for(uint64_t i = 0; i < resolveAttachments->Size(); i++)
-  {
-    AccessAttachment(resolveAttachments->At(i)->At(0)->U64(), ACCESS_ACTION_WRITE);
-  }
-  if(!depthStencilAttachment->IsNULL())
-  {
-    AccessAttachment(depthStencilAttachment->At(0)->U64(), ACCESS_ACTION_WRITE);
-  }
 }
 
 ExtObject *TraceTracker::FindBufferMemBinding(uint64_t buf_id)

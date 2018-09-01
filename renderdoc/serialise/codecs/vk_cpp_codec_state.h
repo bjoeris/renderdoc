@@ -336,9 +336,6 @@ struct BoundPipeline
   // Map from the descriptor set number to the id of the bound descriptor set at that number
   U64Map descriptorSets;
 
-  // Indicates whether a draw command has been found within the current subpass
-  bool subpassHasDraw = false;
-
   inline BoundPipeline() {}
 };
 
@@ -431,6 +428,7 @@ public:
   inline bool operator==(const ImageSubresourceRangeIter &rhs) const { return res == rhs.res; }
   inline bool operator!=(const ImageSubresourceRangeIter &rhs) const { return res != rhs.res; }
   inline const ImageSubresource &operator*() { return res; }
+  inline const ImageSubresource *operator->() const { return &res; }
   static ImageSubresourceRangeIter end(const ImageSubresourceRange &range);
   static ImageSubresourceRangeIter begin(const ImageSubresourceRange &range);
 };

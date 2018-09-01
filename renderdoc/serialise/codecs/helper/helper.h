@@ -13,6 +13,8 @@
 
 #include "vulkan/vulkan.h"
 
+#include "format_helper.h"
+
 #define var_to_string(s) #s
 
 struct AuxVkTraceResources
@@ -66,7 +68,8 @@ void InitializeDestinationBuffer(VkDevice device, VkBuffer *dst_buffer, VkDevice
 void InitializeSourceBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *memory, size_t size,
                             uint8_t *initial_data, VkPhysicalDeviceMemoryProperties props,
                             MemoryRemapVec &remap);
-void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance, VkPhysicalDevice physDevice, VkDevice device);
+void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance,
+                            VkPhysicalDevice physDevice, VkDevice device);
 
 void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
   VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
@@ -78,21 +81,26 @@ void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dst, VkImageCreateIn
 void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dst,
                            VkImageSubresourceRange subresourceRange, VkImageLayout final_layout,
                            VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED);
-
-VkImageAspectFlags GetFullAspectFromFormat(VkFormat fmt);
-VkImageAspectFlags GetAspectFromFormat(VkFormat fmt);
+void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImg, uint32_t arrayLayer,
+                           uint32_t mipLevel, VkImageAspectFlagBits aspect, VkImageLayout newLayout,
+                           VkImageLayout oldLayout);
 
 void CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageCreateInfo dst_ci);
 void CopyResetBuffer(AuxVkTraceResources aux, VkBuffer dst, VkBuffer src, VkDeviceSize size);
+
+void CopyImageToBuffer(AuxVkTraceResources aux, VkImage src, VkBuffer dst, VkImageCreateInfo src_ci);
+void DiffDeviceMemory(AuxVkTraceResources aux, VkDeviceMemory expected,
+                      VkDeviceSize expected_offset, VkDeviceMemory actual,
+                      VkDeviceSize actual_offset, VkDeviceSize size, const char *name);
+void InitializeDiffBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *memory, size_t size,
+                          VkPhysicalDeviceMemoryProperties props);
 
 void MakePhysicalDeviceFeaturesMatch(const VkPhysicalDeviceFeatures &available,
                                      VkPhysicalDeviceFeatures *captured_request);
 
 void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance,
-                           VkDebugReportFlagBitsEXT flags);
+                           uint32_t flags);
 
-void MapUpdateAliased(uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,
-                      VkMemoryAllocateInfo &ai, MemoryRemapVec &remap, VkDevice dev);
 void MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,
                VkMemoryAllocateInfo &ai, MemoryRemapVec &remap, VkDevice dev);
 
@@ -101,7 +109,8 @@ inline uint64_t AlignedSize(uint64_t size, uint64_t alignment)
   return ((size / alignment) + ((size % alignment) > 0 ? 1 : 0)) * alignment;
 }
 
-inline uint64_t AlignedDown(uint64_t size, uint64_t alignment) {
+inline uint64_t AlignedDown(uint64_t size, uint64_t alignment)
+{
   return (uint64_t(size / alignment)) * alignment;
 }
 

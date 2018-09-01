@@ -1,7 +1,6 @@
 #include <cmath>
 #include <fstream>
 #include <functional>
-#include <limits>
 #include <map>
 
 #include <float.h>
@@ -10,623 +9,96 @@
 #include "shim_vulkan.h"
 #include "utils.h"
 
-uint32_t sw_width = 1920;
-uint32_t sw_height = 1080;
-std::map<VkImage, VkDeviceMemory> stagingImages;
-std::map<VkBuffer, VkDeviceMemory> stagingBuffers;
+void bufferToPpm(VkBuffer buffer, VkDeviceMemory mem, std::string filename, uint32_t width,
+                 uint32_t height, VkFormat format)
+  {
+  void *data;
+  vkMapMemory(aux.device, mem, 0, VK_WHOLE_SIZE, 0, &data);
 
-#define FORMAT_ASPECT_BYTE_SIZE(f, a, bs)                                                 \
-  {                                                                                       \
-    VK_FORMAT_##f, std::pair<VkImageAspectFlags, uint32_t>(VK_IMAGE_ASPECT_##a##_BIT, bs) \
-  }
+  // raw data
+  std::string rawFilename = filename.substr(0, filename.find_last_of("."));
+  std::ofstream rawFile(rawFilename, std::ios::out | std::ios::binary);
+  rawFile.write((char *) data, width * height * kImageAspectsAndByteSize[format].second);
+  rawFile.close();
 
-// TODO(haiyu): This is not a complete list.
-std::map<VkFormat, std::pair<VkImageAspectFlags, uint32_t>> imageFormatInfoMap = {
-  FORMAT_ASPECT_BYTE_SIZE(B8G8R8A8_UNORM, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(B8G8R8A8_USCALED, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(B8G8R8A8_UINT, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(B8G8R8A8_SNORM, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(B8G8R8A8_SSCALED, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(B8G8R8A8_SINT, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(R8G8B8A8_UNORM, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(R8G8B8A8_USCALED, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(R8G8B8A8_UINT, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(R8G8B8A8_SNORM, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(R8G8B8A8_SSCALED, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(R8G8B8A8_SINT, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_UNORM, COLOR, 8),
-  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_SNORM, COLOR, 8),
-  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_USCALED, COLOR, 8),
-  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_SSCALED, COLOR, 8),
-  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_UINT, COLOR, 8),
-  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_SINT, COLOR, 8),
-  FORMAT_ASPECT_BYTE_SIZE(R16G16B16A16_SFLOAT, COLOR, 8),
-  FORMAT_ASPECT_BYTE_SIZE(D32_SFLOAT_S8_UINT, DEPTH, 4),
-  FORMAT_ASPECT_BYTE_SIZE(D24_UNORM_S8_UINT, DEPTH, 4),
-  FORMAT_ASPECT_BYTE_SIZE(A2B10G10R10_UNORM_PACK32, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(A2B10G10R10_SNORM_PACK32, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(A2B10G10R10_USCALED_PACK32, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(A2B10G10R10_SSCALED_PACK32, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(A2B10G10R10_UINT_PACK32, COLOR, 4),
-  FORMAT_ASPECT_BYTE_SIZE(A2B10G10R10_SINT_PACK32, COLOR, 4),
-};
-
-std::string VkFormatToString(VkFormat f)
+  switch(format)
 {
-#define RETURN_VK_FORMAT_STRING(x) \
-  case VK_FORMAT_##x: return std::string(var_to_string(x));
-
-  switch(f)
-  {
-    RETURN_VK_FORMAT_STRING(UNDEFINED);
-    RETURN_VK_FORMAT_STRING(R4G4_UNORM_PACK8);
-    RETURN_VK_FORMAT_STRING(R4G4B4A4_UNORM_PACK16);
-    RETURN_VK_FORMAT_STRING(B4G4R4A4_UNORM_PACK16);
-    RETURN_VK_FORMAT_STRING(R5G6B5_UNORM_PACK16);
-    RETURN_VK_FORMAT_STRING(B5G6R5_UNORM_PACK16);
-    RETURN_VK_FORMAT_STRING(R5G5B5A1_UNORM_PACK16);
-    RETURN_VK_FORMAT_STRING(B5G5R5A1_UNORM_PACK16);
-    RETURN_VK_FORMAT_STRING(A1R5G5B5_UNORM_PACK16);
-    RETURN_VK_FORMAT_STRING(R8_UNORM);
-    RETURN_VK_FORMAT_STRING(R8_SNORM);
-    RETURN_VK_FORMAT_STRING(R8_USCALED);
-    RETURN_VK_FORMAT_STRING(R8_SSCALED);
-    RETURN_VK_FORMAT_STRING(R8_UINT);
-    RETURN_VK_FORMAT_STRING(R8_SINT);
-    RETURN_VK_FORMAT_STRING(R8_SRGB);
-    RETURN_VK_FORMAT_STRING(R8G8_UNORM);
-    RETURN_VK_FORMAT_STRING(R8G8_SNORM);
-    RETURN_VK_FORMAT_STRING(R8G8_USCALED);
-    RETURN_VK_FORMAT_STRING(R8G8_SSCALED);
-    RETURN_VK_FORMAT_STRING(R8G8_UINT);
-    RETURN_VK_FORMAT_STRING(R8G8_SINT);
-    RETURN_VK_FORMAT_STRING(R8G8_SRGB);
-    RETURN_VK_FORMAT_STRING(R8G8B8_UNORM);
-    RETURN_VK_FORMAT_STRING(R8G8B8_SNORM);
-    RETURN_VK_FORMAT_STRING(R8G8B8_USCALED);
-    RETURN_VK_FORMAT_STRING(R8G8B8_SSCALED);
-    RETURN_VK_FORMAT_STRING(R8G8B8_UINT);
-    RETURN_VK_FORMAT_STRING(R8G8B8_SINT);
-    RETURN_VK_FORMAT_STRING(R8G8B8_SRGB);
-    RETURN_VK_FORMAT_STRING(B8G8R8_UNORM);
-    RETURN_VK_FORMAT_STRING(B8G8R8_SNORM);
-    RETURN_VK_FORMAT_STRING(B8G8R8_USCALED);
-    RETURN_VK_FORMAT_STRING(B8G8R8_SSCALED);
-    RETURN_VK_FORMAT_STRING(B8G8R8_UINT);
-    RETURN_VK_FORMAT_STRING(B8G8R8_SINT);
-    RETURN_VK_FORMAT_STRING(B8G8R8_SRGB);
-    RETURN_VK_FORMAT_STRING(R8G8B8A8_UNORM);
-    RETURN_VK_FORMAT_STRING(R8G8B8A8_SNORM);
-    RETURN_VK_FORMAT_STRING(R8G8B8A8_USCALED);
-    RETURN_VK_FORMAT_STRING(R8G8B8A8_SSCALED);
-    RETURN_VK_FORMAT_STRING(R8G8B8A8_UINT);
-    RETURN_VK_FORMAT_STRING(R8G8B8A8_SINT);
-    RETURN_VK_FORMAT_STRING(R8G8B8A8_SRGB);
-    RETURN_VK_FORMAT_STRING(B8G8R8A8_UNORM);
-    RETURN_VK_FORMAT_STRING(B8G8R8A8_SNORM);
-    RETURN_VK_FORMAT_STRING(B8G8R8A8_USCALED);
-    RETURN_VK_FORMAT_STRING(B8G8R8A8_SSCALED);
-    RETURN_VK_FORMAT_STRING(B8G8R8A8_UINT);
-    RETURN_VK_FORMAT_STRING(B8G8R8A8_SINT);
-    RETURN_VK_FORMAT_STRING(B8G8R8A8_SRGB);
-    RETURN_VK_FORMAT_STRING(A8B8G8R8_UNORM_PACK32);
-    RETURN_VK_FORMAT_STRING(A8B8G8R8_SNORM_PACK32);
-    RETURN_VK_FORMAT_STRING(A8B8G8R8_USCALED_PACK32);
-    RETURN_VK_FORMAT_STRING(A8B8G8R8_SSCALED_PACK32);
-    RETURN_VK_FORMAT_STRING(A8B8G8R8_UINT_PACK32);
-    RETURN_VK_FORMAT_STRING(A8B8G8R8_SINT_PACK32);
-    RETURN_VK_FORMAT_STRING(A8B8G8R8_SRGB_PACK32);
-    RETURN_VK_FORMAT_STRING(A2R10G10B10_UNORM_PACK32);
-    RETURN_VK_FORMAT_STRING(A2R10G10B10_SNORM_PACK32);
-    RETURN_VK_FORMAT_STRING(A2R10G10B10_USCALED_PACK32);
-    RETURN_VK_FORMAT_STRING(A2R10G10B10_SSCALED_PACK32);
-    RETURN_VK_FORMAT_STRING(A2R10G10B10_UINT_PACK32);
-    RETURN_VK_FORMAT_STRING(A2R10G10B10_SINT_PACK32);
-    RETURN_VK_FORMAT_STRING(A2B10G10R10_UNORM_PACK32);
-    RETURN_VK_FORMAT_STRING(A2B10G10R10_SNORM_PACK32);
-    RETURN_VK_FORMAT_STRING(A2B10G10R10_USCALED_PACK32);
-    RETURN_VK_FORMAT_STRING(A2B10G10R10_SSCALED_PACK32);
-    RETURN_VK_FORMAT_STRING(A2B10G10R10_UINT_PACK32);
-    RETURN_VK_FORMAT_STRING(A2B10G10R10_SINT_PACK32);
-    RETURN_VK_FORMAT_STRING(R16_UNORM);
-    RETURN_VK_FORMAT_STRING(R16_SNORM);
-    RETURN_VK_FORMAT_STRING(R16_USCALED);
-    RETURN_VK_FORMAT_STRING(R16_SSCALED);
-    RETURN_VK_FORMAT_STRING(R16_UINT);
-    RETURN_VK_FORMAT_STRING(R16_SINT);
-    RETURN_VK_FORMAT_STRING(R16_SFLOAT);
-    RETURN_VK_FORMAT_STRING(R16G16_UNORM);
-    RETURN_VK_FORMAT_STRING(R16G16_SNORM);
-    RETURN_VK_FORMAT_STRING(R16G16_USCALED);
-    RETURN_VK_FORMAT_STRING(R16G16_SSCALED);
-    RETURN_VK_FORMAT_STRING(R16G16_UINT);
-    RETURN_VK_FORMAT_STRING(R16G16_SINT);
-    RETURN_VK_FORMAT_STRING(R16G16_SFLOAT);
-    RETURN_VK_FORMAT_STRING(R16G16B16_UNORM);
-    RETURN_VK_FORMAT_STRING(R16G16B16_SNORM);
-    RETURN_VK_FORMAT_STRING(R16G16B16_USCALED);
-    RETURN_VK_FORMAT_STRING(R16G16B16_SSCALED);
-    RETURN_VK_FORMAT_STRING(R16G16B16_UINT);
-    RETURN_VK_FORMAT_STRING(R16G16B16_SINT);
-    RETURN_VK_FORMAT_STRING(R16G16B16_SFLOAT);
-    RETURN_VK_FORMAT_STRING(R16G16B16A16_UNORM);
-    RETURN_VK_FORMAT_STRING(R16G16B16A16_SNORM);
-    RETURN_VK_FORMAT_STRING(R16G16B16A16_USCALED);
-    RETURN_VK_FORMAT_STRING(R16G16B16A16_SSCALED);
-    RETURN_VK_FORMAT_STRING(R16G16B16A16_UINT);
-    RETURN_VK_FORMAT_STRING(R16G16B16A16_SINT);
-    RETURN_VK_FORMAT_STRING(R16G16B16A16_SFLOAT);
-    RETURN_VK_FORMAT_STRING(R32_UINT);
-    RETURN_VK_FORMAT_STRING(R32_SINT);
-    RETURN_VK_FORMAT_STRING(R32_SFLOAT);
-    RETURN_VK_FORMAT_STRING(R32G32_UINT);
-    RETURN_VK_FORMAT_STRING(R32G32_SINT);
-    RETURN_VK_FORMAT_STRING(R32G32_SFLOAT);
-    RETURN_VK_FORMAT_STRING(R32G32B32_UINT);
-    RETURN_VK_FORMAT_STRING(R32G32B32_SINT);
-    RETURN_VK_FORMAT_STRING(R32G32B32_SFLOAT);
-    RETURN_VK_FORMAT_STRING(R32G32B32A32_UINT);
-    RETURN_VK_FORMAT_STRING(R32G32B32A32_SINT);
-    RETURN_VK_FORMAT_STRING(R32G32B32A32_SFLOAT);
-    RETURN_VK_FORMAT_STRING(R64_UINT);
-    RETURN_VK_FORMAT_STRING(R64_SINT);
-    RETURN_VK_FORMAT_STRING(R64_SFLOAT);
-    RETURN_VK_FORMAT_STRING(R64G64_UINT);
-    RETURN_VK_FORMAT_STRING(R64G64_SINT);
-    RETURN_VK_FORMAT_STRING(R64G64_SFLOAT);
-    RETURN_VK_FORMAT_STRING(R64G64B64_UINT);
-    RETURN_VK_FORMAT_STRING(R64G64B64_SINT);
-    RETURN_VK_FORMAT_STRING(R64G64B64_SFLOAT);
-    RETURN_VK_FORMAT_STRING(R64G64B64A64_UINT);
-    RETURN_VK_FORMAT_STRING(R64G64B64A64_SINT);
-    RETURN_VK_FORMAT_STRING(R64G64B64A64_SFLOAT);
-    RETURN_VK_FORMAT_STRING(B10G11R11_UFLOAT_PACK32);
-    RETURN_VK_FORMAT_STRING(E5B9G9R9_UFLOAT_PACK32);
-    RETURN_VK_FORMAT_STRING(D16_UNORM);
-    RETURN_VK_FORMAT_STRING(X8_D24_UNORM_PACK32);
-    RETURN_VK_FORMAT_STRING(D32_SFLOAT);
-    RETURN_VK_FORMAT_STRING(S8_UINT);
-    RETURN_VK_FORMAT_STRING(D16_UNORM_S8_UINT);
-    RETURN_VK_FORMAT_STRING(D24_UNORM_S8_UINT);
-    RETURN_VK_FORMAT_STRING(D32_SFLOAT_S8_UINT);
-    RETURN_VK_FORMAT_STRING(BC1_RGB_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC1_RGB_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC1_RGBA_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC1_RGBA_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC2_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC2_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC3_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC3_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC4_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC4_SNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC5_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC5_SNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC6H_UFLOAT_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC6H_SFLOAT_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC7_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(BC7_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8A1_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8A1_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8A8_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8A8_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(EAC_R11_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(EAC_R11_SNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(EAC_R11G11_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(EAC_R11G11_SNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_4x4_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_4x4_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_5x4_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_5x4_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_5x5_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_5x5_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_6x5_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_6x5_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_6x6_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_6x6_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_8x5_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_8x5_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_8x6_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_8x6_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_8x8_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_8x8_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_10x5_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_10x5_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_10x6_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_10x6_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_10x8_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_10x8_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_10x10_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_10x10_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_12x10_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_12x10_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_12x12_UNORM_BLOCK);
-    RETURN_VK_FORMAT_STRING(ASTC_12x12_SRGB_BLOCK);
-    RETURN_VK_FORMAT_STRING(G8B8G8R8_422_UNORM);
-    RETURN_VK_FORMAT_STRING(B8G8R8G8_422_UNORM);
-    RETURN_VK_FORMAT_STRING(G8_B8_R8_3PLANE_420_UNORM);
-    RETURN_VK_FORMAT_STRING(G8_B8R8_2PLANE_420_UNORM);
-    RETURN_VK_FORMAT_STRING(G8_B8_R8_3PLANE_422_UNORM);
-    RETURN_VK_FORMAT_STRING(G8_B8R8_2PLANE_422_UNORM);
-    RETURN_VK_FORMAT_STRING(G8_B8_R8_3PLANE_444_UNORM);
-    RETURN_VK_FORMAT_STRING(R10X6_UNORM_PACK16);
-    RETURN_VK_FORMAT_STRING(R10X6G10X6_UNORM_2PACK16);
-    RETURN_VK_FORMAT_STRING(R10X6G10X6B10X6A10X6_UNORM_4PACK16);
-    RETURN_VK_FORMAT_STRING(G10X6B10X6G10X6R10X6_422_UNORM_4PACK16);
-    RETURN_VK_FORMAT_STRING(B10X6G10X6R10X6G10X6_422_UNORM_4PACK16);
-    RETURN_VK_FORMAT_STRING(G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16);
-    RETURN_VK_FORMAT_STRING(G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16);
-    RETURN_VK_FORMAT_STRING(G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16);
-    RETURN_VK_FORMAT_STRING(G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16);
-    RETURN_VK_FORMAT_STRING(G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16);
-    RETURN_VK_FORMAT_STRING(R12X4_UNORM_PACK16);
-    RETURN_VK_FORMAT_STRING(R12X4G12X4_UNORM_2PACK16);
-    RETURN_VK_FORMAT_STRING(R12X4G12X4B12X4A12X4_UNORM_4PACK16);
-    RETURN_VK_FORMAT_STRING(G12X4B12X4G12X4R12X4_422_UNORM_4PACK16);
-    RETURN_VK_FORMAT_STRING(B12X4G12X4R12X4G12X4_422_UNORM_4PACK16);
-    RETURN_VK_FORMAT_STRING(G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16);
-    RETURN_VK_FORMAT_STRING(G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16);
-    RETURN_VK_FORMAT_STRING(G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16);
-    RETURN_VK_FORMAT_STRING(G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16);
-    RETURN_VK_FORMAT_STRING(G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16);
-    RETURN_VK_FORMAT_STRING(G16B16G16R16_422_UNORM);
-    RETURN_VK_FORMAT_STRING(B16G16R16G16_422_UNORM);
-    RETURN_VK_FORMAT_STRING(G16_B16_R16_3PLANE_420_UNORM);
-    RETURN_VK_FORMAT_STRING(G16_B16R16_2PLANE_420_UNORM);
-    RETURN_VK_FORMAT_STRING(G16_B16_R16_3PLANE_422_UNORM);
-    RETURN_VK_FORMAT_STRING(G16_B16R16_2PLANE_422_UNORM);
-    RETURN_VK_FORMAT_STRING(G16_B16_R16_3PLANE_444_UNORM);
-    RETURN_VK_FORMAT_STRING(PVRTC1_2BPP_UNORM_BLOCK_IMG);
-    RETURN_VK_FORMAT_STRING(PVRTC1_4BPP_UNORM_BLOCK_IMG);
-    RETURN_VK_FORMAT_STRING(PVRTC2_2BPP_UNORM_BLOCK_IMG);
-    RETURN_VK_FORMAT_STRING(PVRTC2_4BPP_UNORM_BLOCK_IMG);
-    RETURN_VK_FORMAT_STRING(PVRTC1_2BPP_SRGB_BLOCK_IMG);
-    RETURN_VK_FORMAT_STRING(PVRTC1_4BPP_SRGB_BLOCK_IMG);
-    RETURN_VK_FORMAT_STRING(PVRTC2_2BPP_SRGB_BLOCK_IMG);
-    RETURN_VK_FORMAT_STRING(PVRTC2_4BPP_SRGB_BLOCK_IMG);
-
-    default: assert(0);
-  }
-
-  return "ERROR";
-}
-
-uint8_t float32ToUint8(float f)
-{
-  if(f < 0.0f)
-  {
-    return 0.0f;
-  }
-  if(f > 1.0f)
-  {
-    return 255;
-  }
-  return uint8_t(f * 255);
-}
-
-float float16Tofloat32(uint32_t bits)
-{
-  uint32_t M = bits & 0x3FF;
-  uint32_t E = (bits >> 10) & 0x1F;
-  uint32_t S = (bits >> 15) & 1;
-  int sign = 1;
-  if(S > 0)
-    sign = -1;
-  if(E == 0 && M == 0)
-    return sign * float(0.0);
-  else if(E == 0 && M != 0)
-    return sign * float(M) / 1024.0 / 16384.0;
-  else if(E == 31 && M == 0)
-    return sign * std::numeric_limits<float>::infinity();
-  else if(E == 31 && M != 0)
-  {
-#if defined(_WIN32)
-    OutputDebugStringA("NaN \n");
-#endif
-    return 0;
-  }
-  else if(E <= 15)
-    return sign * (1 + float(M) / 1024.0) / float(uint32_t(1 << (15 - E)));
-  else
-    return sign * (1 + float(M) / 1024.0) * float(uint32_t(1 << (E - 15)));
-}
-
-template <typename T>
-std::pair<T, T> mapData(std::vector<std::vector<T>> *data)
-{
-  T maxV = 0;
-  T minV = FLT_MAX;
-  for(auto row : *data)
-  {
-    for(auto col : row)
+    case VK_FORMAT_D16_UNORM_S8_UINT:
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+    case VK_FORMAT_D32_SFLOAT_S8_UINT:
     {
-      maxV = maxV < col ? col : maxV;
-      minV = minV < col ? minV : col;
+      std::vector<uint8_t> outputDepth(width * height * 3);
+      fillPPM(outputDepth.data(), data, width, height, format);
+
+      std::string depthFilename(filename);
+      depthFilename.insert(filename.find_last_of("."), "_DEPTH");
+      std::ofstream depthFile(depthFilename, std::ios::out | std::ios::binary);
+      depthFile << "P6\n" << width << "\n" << height << "\n" << 255 << "\n";
+      depthFile.write((char *)outputDepth.data(), width * height * 3);
+      depthFile.close();
+
+      std::vector<uint8_t> outputStencil(width * height * 3);
+      fillPPM(outputStencil.data(), data, width, height, format, true);
+
+      std::string stencilFilename(filename);
+      stencilFilename.insert(filename.find_last_of("."), "_STENCIL");
+      std::ofstream stencilFile(stencilFilename, std::ios::out | std::ios::binary);
+      stencilFile << "P6\n" << width << "\n" << height << "\n" << 255 << "\n";
+      stencilFile.write((char *)outputStencil.data(), width * height * 3);
+      stencilFile.close();
     }
-  }
-  if(maxV == 0)
-    return std::pair<T,T>(minV, maxV);
-
-  T denom = maxV - minV;
-  if (std::fabs(denom) < (T) FLT_EPSILON)
-    denom = T(1);
-
-  for(auto &row : *data)
-  {
-    for(auto &col : row)
-    {
-      col = 255 * (col - minV) / denom;
-    }
-  }
-  return std::pair<T,T>(minV, maxV);
-}
-
-void bufferToPpm(VkBuffer buffer, std::string filename, uint32_t width, uint32_t height,
-                 VkFormat format)
+    break;
+    default:
 {
-  char *data;
-  vkMapMemory(aux.device, stagingBuffers[buffer], 0, VK_WHOLE_SIZE, 0, (void **)&data);
-  if(imageFormatInfoMap.find(format) == imageFormatInfoMap.end())
-    return;
+      std::vector<uint8_t> output(width * height * 3);
+      fillPPM(output.data(), data, width, height, format);
 
   std::ofstream file(filename, std::ios::out | std::ios::binary);
-  std::string rawFilename = filename.substr(0, filename.find_last_of(".")) + "_" +
-                            std::to_string(width) + "x" + std::to_string(height);
-  std::ofstream rawFile(rawFilename, std::ios::out | std::ios::binary);
-  rawFile.write(data, width * height * imageFormatInfoMap[format].second);
-  rawFile.close();
-  // ppm header
   file << "P6\n" << width << "\n" << height << "\n" << 255 << "\n";
-  // ppm binary pixel data
-  switch(format)
-  {
-    case VK_FORMAT_B8G8R8A8_UNORM:
-    case VK_FORMAT_B8G8R8A8_USCALED:
-    case VK_FORMAT_B8G8R8A8_UINT:
-      [&]() {
-        for(uint32_t y = 0; y < height; y++)
-        {
-          char *row = (char *)data;
-          for(uint32_t x = 0; x < width; x++)
-          {
-            file.write(row + 2, 1);
-            file.write(row + 1, 1);
-            file.write(row, 1);
-            row = row + imageFormatInfoMap[format].second;
+      file.write((char *)output.data(), width * height * 3);
+      file.close();
           }
-          data += width * imageFormatInfoMap[format].second;
-        }
-      }();
       break;
-    case VK_FORMAT_B8G8R8A8_SNORM:
-    case VK_FORMAT_B8G8R8A8_SSCALED:
-    case VK_FORMAT_B8G8R8A8_SINT:
-      [&]() {
-        for(uint32_t y = 0; y < height; y++)
-        {
-          char *row = (char *)data;
-          for(uint32_t x = 0; x < width; x++)
-          {
-            file << (*((uint8_t *)row + 2) ^ 0x80);
-            file << (*((uint8_t *)row + 1) ^ 0x80);
-            file << (*(uint8_t *)row ^ 0x80);
-            row = row + imageFormatInfoMap[format].second;
           }
-          data += width * imageFormatInfoMap[format].second;
-        }
-      }();
-      break;
-    case VK_FORMAT_R8G8B8A8_UNORM:
-    case VK_FORMAT_R8G8B8A8_USCALED:
-    case VK_FORMAT_R8G8B8A8_UINT:
-      [&]() {
-        for(uint32_t y = 0; y < height; y++)
-        {
-          char *row = (char *)data;
-          for(uint32_t x = 0; x < width; x++)
-          {
-            file.write(row, 3);
-            row = row + imageFormatInfoMap[format].second;
-          }
-          data += width * imageFormatInfoMap[format].second;
-        }
-      }();
-      break;
-    case VK_FORMAT_R8G8B8A8_SNORM:
-    case VK_FORMAT_R8G8B8A8_SSCALED:
-    case VK_FORMAT_R8G8B8A8_SINT:
-      [&]() {
-        for(uint32_t y = 0; y < height; y++)
-        {
-          char *row = (char *)data;
-          for(uint32_t x = 0; x < width; x++)
-          {
-            file << (*(uint8_t *)row ^ 0x80);
-            file << (*((uint8_t *)row + 1) ^ 0x80);
-            file << (*((uint8_t *)row + 2) ^ 0x80);
-            row = row + imageFormatInfoMap[format].second;
-          }
-          data += width * imageFormatInfoMap[format].second;
-        }
-      }();
-      break;
-    case VK_FORMAT_R16G16B16A16_UNORM:
-    case VK_FORMAT_R16G16B16A16_USCALED:
-    case VK_FORMAT_R16G16B16A16_UINT:
-      [&]() {
-        for(uint32_t y = 0; y < height; y++)
-        {
-          char *row = (char *)data;
-          for(uint32_t x = 0; x < width; x++)
-          {
-            file << (*(uint16_t *)row >> 8);
-            file << (*((uint16_t *)row + 1) >> 8);
-            file << (*((uint16_t *)row + 2) >> 8);
-            row = row + imageFormatInfoMap[format].second;
-          }
-          data += width * imageFormatInfoMap[format].second;
-        }
-      }();
-    case VK_FORMAT_R16G16B16A16_SNORM:
-    case VK_FORMAT_R16G16B16A16_SSCALED:
-    case VK_FORMAT_R16G16B16A16_SINT:
-      [&]() {
-        for(uint32_t y = 0; y < height; y++)
-        {
-          char *row = (char *)data;
-          for(uint32_t x = 0; x < width; x++)
-          {
-            file << ((*(uint16_t *)row ^ 0x8000) >> 8);
-            file << ((*((uint16_t *)row + 1) ^ 0x8000) >> 8);
-            file << ((*((uint16_t *)row + 2) ^ 0x8000) >> 8);
-            row = row + imageFormatInfoMap[format].second;
-          }
-          data += width * imageFormatInfoMap[format].second;
-        }
-      }();
-      break;
-    case VK_FORMAT_R16G16B16A16_SFLOAT:
-      [&]() {
-        for(uint32_t y = 0; y < height; y++)
-        {
-          char *row = (char *)data;
-          for(uint32_t x = 0; x < width; x++)
-          {
-            file << float32ToUint8(float16Tofloat32(uint32_t(*(uint16_t *)row)));
-            file << float32ToUint8(float16Tofloat32(uint32_t(*((uint16_t *)row + 1))));
-            file << float32ToUint8(float16Tofloat32(uint32_t(*((uint16_t *)row + 2))));
-            row = row + imageFormatInfoMap[format].second;
-          }
-          data += width * imageFormatInfoMap[format].second;
-        }
-      }();
-      break;
-    case VK_FORMAT_D32_SFLOAT_S8_UINT:
-      [&]() {
-        std::vector<std::vector<float>> data_8((int)height, std::vector<float>(width, 0));
-        for(uint32_t y = 0; y < height; y++)
-        {
-          char *row = (char *)data;
-          for(uint32_t x = 0; x < width; x++)
-          {
-            data_8[y][x] = *(float *) row;
-            row += imageFormatInfoMap[format].second;
-          }
-          data += width * imageFormatInfoMap[format].second;
-        }
-        std::pair<float, float> minmax = mapData(&data_8);
-#if defined(_WIN32)
-        std::string minmaxstr =
-            "minmax value = " + std::to_string(minmax.first) + " " + std::to_string(minmax.second);
-        OutputDebugStringA(minmaxstr.c_str());
-        OutputDebugStringA("\n");
-#endif
-        for(auto row : data_8)
-        {
-          for(auto col : row)
-          {
-            uint8_t color8 = uint8_t(col);
-            file << color8 << color8 << color8;
-          }
-        }
-      }();
-      break;
-    case VK_FORMAT_D24_UNORM_S8_UINT:
-      [&]() {
-        for(uint32_t y = 0; y < height; y++)
-        {
-          char *row = (char *)data;
-          for(uint32_t x = 0; x < width; x++)
-          {
-            file << *(uint8_t *)row;
-            file << *((uint8_t *)row + 1);
-            file << *((uint8_t *)row + 2);
-            row = row + imageFormatInfoMap[format].second;
-          }
-          data += width * imageFormatInfoMap[format].second;
-        }
-      }();
-      break;
-    case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-    case VK_FORMAT_A2B10G10R10_USCALED_PACK32:
-    case VK_FORMAT_A2B10G10R10_UINT_PACK32:
-      [&]() {
-        for(uint32_t y = 0; y < height; y++)
-        {
-          char *row = (char *)data;
-          for(uint32_t x = 0; x < width; x++)
-          {
-            uint32_t v = *(uint32_t *)row;
-            file << uint8_t((v & 0x3ff) >> 2);
-            file << uint8_t((v >> 10 & 0x3ff) >> 2);
-            file << uint8_t((v >> 20 & 0x3ff) >> 2);
-            row = row + imageFormatInfoMap[format].second;
-          }
-          data += width * imageFormatInfoMap[format].second;
-        }
-      }();
-      break;
-    case VK_FORMAT_A2B10G10R10_SNORM_PACK32:
-    case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:
-    case VK_FORMAT_A2B10G10R10_SINT_PACK32:
-      [&]() {
-        for(uint32_t y = 0; y < height; y++)
-        {
-          char *row = (char *)data;
-          for(uint32_t x = 0; x < width; x++)
-          {
-            uint32_t v = *(uint32_t *)row;
-            file << (uint8_t((v & 0x3ff) ^ 0x200) >> 2);
-            file << (uint8_t((v >> 10 & 0x3ff) ^ 0x200) >> 2);
-            file << (uint8_t((v >> 20 & 0x3ff) ^ 0x200) >> 2);
-            row = row + imageFormatInfoMap[format].second;
-          }
-          data += width * imageFormatInfoMap[format].second;
-        }
-      }();
-      break;
-    default: break;
-  }
-  file.close();
-}
 
-void imgToBuffer(VkImage image, VkBuffer buffer, uint32_t width, uint32_t height, VkFormat format)
+  vkUnmapMemory(aux.device, mem);
+        }
+
+// imgToBuffer copies the full image to buffer tightly-packed.
+// For a depth/stencil format, the first region is depth aspect, and the second is
+// stencil aspect.
+void imgToBuffer(VkCommandBuffer cmdBuf, VkImage image, VkBuffer buffer, uint32_t width,
+                 uint32_t height, uint32_t mip, uint32_t layer, VkFormat format)
+        {
+  switch(format)
+          {
+    case VK_FORMAT_D32_SFLOAT_S8_UINT:
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+    case VK_FORMAT_D16_UNORM_S8_UINT:
+          {
+      uint32_t depthSizeInBytes = SizeOfFormat(format, VK_IMAGE_ASPECT_DEPTH_BIT);
+      VkBufferImageCopy regions[2] = {{}, {}};
+      regions[0].imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, mip, layer, 1};
+      regions[0].imageExtent = {width, height, 1};
+      regions[1].bufferOffset = (VkDeviceSize)(width * height * depthSizeInBytes);
+      regions[1].imageSubresource = {VK_IMAGE_ASPECT_STENCIL_BIT, mip, layer, 1};
+      regions[1].imageExtent = {width, height, 1};
+      vkCmdCopyImageToBuffer(cmdBuf, image, VK_IMAGE_LAYOUT_GENERAL, buffer, 2, regions);
+        }
+      break;
+    default:
 {
   VkBufferImageCopy region = {};
-  region.imageSubresource = {imageFormatInfoMap[format].first, 0, 0, 1};
+      region.imageSubresource = {kImageAspectsAndByteSize[format].first, mip, layer, 1};
   region.imageExtent = {width, height, 1};
-  vkCmdCopyImageToBuffer(aux.command_buffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, buffer, 1,
-                         &region);
+      vkCmdCopyImageToBuffer(cmdBuf, image, VK_IMAGE_LAYOUT_GENERAL, buffer, 1, &region);
 }
-
-void cleanup(RenderPassInfo *pRpInfo)
-{
-  for(const auto &entry : stagingImages)
-  {
-    // vkUnmapMemory(aux.device, entry.second);
-    vkFreeMemory(aux.device, entry.second, NULL);
-    vkDestroyImage(aux.device, entry.first, NULL);
-  }
-  for(const auto &entry : stagingBuffers)
-  {
-    vkUnmapMemory(aux.device, entry.second);
-    vkFreeMemory(aux.device, entry.second, NULL);
-    vkDestroyBuffer(aux.device, entry.first, NULL);
-  }
-  stagingBuffers.clear();
-  stagingImages.clear();
-  if(pRpInfo != NULL)
-  {
-    pRpInfo->attachments.clear();
-    pRpInfo->images.clear();
-    pRpInfo->imageCIs.clear();
+    break;
   }
 }
 
-VkImage getStagingImage(VkImageCreateInfo ci)
+VkDeviceMemory getStagingImage(VkImage &dstImage, VkImageCreateInfo ci)
 {
-  VkImage dstImage;
   vkCreateImage(aux.device, &ci, nullptr, &dstImage);
 
   VkMemoryRequirements memRequirements;
@@ -635,8 +107,11 @@ VkImage getStagingImage(VkImageCreateInfo ci)
   VkMemoryAllocateInfo memAllocInfo{};
   memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   memAllocInfo.allocationSize = memRequirements.size;
-  // Memory must be host visible to copy from
-  memAllocInfo.memoryTypeIndex =
+  memAllocInfo.memoryTypeIndex = // try allocating in CPU memory first.
+      MemoryTypeIndex(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, memRequirements.memoryTypeBits,
+                      physicalDeviceMemoryProperties);
+  if (memAllocInfo.memoryTypeIndex == -1)
+    memAllocInfo.memoryTypeIndex = // if CPU is not possible, try GPU memory
       MemoryTypeIndex(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memRequirements.memoryTypeBits,
                       physicalDeviceMemoryProperties);
   assert(memAllocInfo.memoryTypeIndex != -1);
@@ -644,15 +119,11 @@ VkImage getStagingImage(VkImageCreateInfo ci)
   vkAllocateMemory(aux.device, &memAllocInfo, nullptr, &dstImageMemory);
 
   vkBindImageMemory(aux.device, dstImage, dstImageMemory, 0);
-
-  stagingImages[dstImage] = dstImageMemory;
-
-  return dstImage;
+  return dstImageMemory;
 }
 
-VkBuffer getStagingBuffer(uint32_t width, uint32_t height, uint32_t bytes)
+VkDeviceMemory getStagingBuffer(VkBuffer &dstBuffer, uint32_t width, uint32_t height, uint32_t bytes)
 {
-  VkBuffer dstBuffer;
   VkBufferCreateInfo bufCI = {};
   bufCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   bufCI.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -674,110 +145,137 @@ VkBuffer getStagingBuffer(uint32_t width, uint32_t height, uint32_t bytes)
   VkDeviceMemory dstMemory;
   vkAllocateMemory(aux.device, &memAllocInfo, NULL, &dstMemory);
   vkBindBufferMemory(aux.device, dstBuffer, dstMemory, 0);
-  stagingBuffers[dstBuffer] = dstMemory;
-  return dstBuffer;
+  return dstMemory;
 }
 
-void copyImage(VkImage srcImage, VkImage dstImage, uint32_t width, uint32_t height, VkFormat format)
+void copyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImage dstImage,
+               VkImageSubresourceRange srcRange, VkImageSubresourceRange dstRange, uint32_t width,
+               uint32_t height, VkFormat format, bool msaa)
 {
-  VkImageCopy imageCopyRegion{};
-  imageCopyRegion.srcSubresource.aspectMask = imageFormatInfoMap[format].first;
-  imageCopyRegion.srcSubresource.layerCount = 1;
-  imageCopyRegion.dstSubresource.aspectMask = imageFormatInfoMap[format].first;
-  imageCopyRegion.dstSubresource.layerCount = 1;
-  imageCopyRegion.extent.width = width;
-  imageCopyRegion.extent.height = height;
-  imageCopyRegion.extent.depth = 1;
-  vkCmdCopyImage(aux.command_buffer, srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dstImage,
-                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &imageCopyRegion);
+  assert(sizeof(VkImageCopy) == sizeof(VkImageResolve));
+  union {
+    VkImageCopy copy; // these structures are actually identical.
+    VkImageResolve resolve;
+  } region{};
+
+  region.copy.srcSubresource.aspectMask = kImageAspectsAndByteSize[format].first;
+  region.copy.srcSubresource.baseArrayLayer = srcRange.baseArrayLayer;
+  region.copy.srcSubresource.mipLevel = srcRange.baseMipLevel;
+  region.copy.srcSubresource.layerCount = 1;
+  region.copy.dstSubresource.aspectMask = kImageAspectsAndByteSize[format].first;
+  region.copy.dstSubresource.baseArrayLayer = dstRange.baseArrayLayer;
+  region.copy.dstSubresource.mipLevel = dstRange.baseMipLevel;
+  region.copy.dstSubresource.layerCount = 1;
+  region.copy.extent.width = width;
+  region.copy.extent.height = height;
+  region.copy.extent.depth = 1;
+  if (!msaa)
+    vkCmdCopyImage(commandBuffer, srcImage, VK_IMAGE_LAYOUT_GENERAL, dstImage,
+      VK_IMAGE_LAYOUT_GENERAL, 1, &region.copy);
+  else
+    vkCmdResolveImage(commandBuffer, srcImage, VK_IMAGE_LAYOUT_GENERAL, dstImage,
+      VK_IMAGE_LAYOUT_GENERAL, 1, &region.resolve);
 }
 
-void copyFramebufferAttachments(RenderPassInfo *rpInfo)
+// copyFramebufferAttachments copies framebuffer attachments to host visible buffers,
+// so they can be saved to disk later and returns the list of ReadbackInfo structures
+// that were allocated and that store the attachments data.
+ReadbackInfos copyFramebufferAttachments(VkCommandBuffer cmdBuf, RenderPassInfo *rpInfo)
 {
-  if(presentIndex > 0)
-    return;
+  ReadbackInfos readbacks;
   for(int i = 0; i < rpInfo->attachments.size(); i++)
   {
-    VkImageCreateInfo ci = rpInfo->imageCIs[i];
-
-    if(imageFormatInfoMap.find(ci.format) == imageFormatInfoMap.end())
+    VkImageCreateInfo image_ci = rpInfo->attachments[i].image.ci;
+    VkImageViewCreateInfo view_ci = rpInfo->attachments[i].view.ci;
+    if(kImageAspectsAndByteSize.find(image_ci.format) == kImageAspectsAndByteSize.end())
     {
 #if defined(_WIN32)
-      std::string f = VkFormatToString(ci.format);
-      OutputDebugStringA(f.c_str());
-      OutputDebugStringA("\n");
+      OutputDebugStringA(std::string("Invalid format " + FormatToString(image_ci.format) + "\n").c_str());
 #endif
       continue;
     }
-    VkImage srcImage = rpInfo->images[i];
-    VkImageCreateInfo imageCreateCI{};
-    imageCreateCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageCreateCI.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateCI.format = ci.format;
-    imageCreateCI.extent.width = ci.extent.width;
-    imageCreateCI.extent.height = ci.extent.height;
-    assert(ci.extent.depth == 1);
-    imageCreateCI.extent.depth = 1;
-    imageCreateCI.arrayLayers = 1;
-    imageCreateCI.mipLevels = 1;
-    imageCreateCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageCreateCI.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageCreateCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imageCreateCI.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateCI.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    VkImage stagingImage = getStagingImage(imageCreateCI);
-    VkBuffer stagingBuffer =
-        getStagingBuffer(ci.extent.width, ci.extent.height, imageFormatInfoMap[ci.format].second);
 
-    VkCommandBufferBeginInfo cmdbufBI = VkCommandBufferBeginInfo{};
-    cmdbufBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    vkBeginCommandBuffer(aux.command_buffer, &cmdbufBI);
+    VkImage srcImage = rpInfo->attachments[i].image.res;
+    VkImageSubresourceRange view_subresource = view_ci.subresourceRange;
+    assert(view_subresource.layerCount == 1 && view_subresource.levelCount == 1);
 
-    // Transition staging image to IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL.
-    ImageLayoutTransition(aux, stagingImage, imageCreateCI, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                          VK_IMAGE_LAYOUT_UNDEFINED);
-    // Transition source image to IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL.
-    ImageLayoutTransition(aux, srcImage,
-                          VkImageSubresourceRange{GetFullAspectFromFormat(ci.format), 0, 1, 0, 1},
-                          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, rpInfo->finalLayouts[i]);
+    // Source image subresource is defined by it's view. For now assume only one layer is used.
+    uint32_t mip = view_subresource.baseMipLevel;
+    uint32_t layer = view_subresource.baseArrayLayer;
+    uint32_t mip_width = std::max<uint32_t>(image_ci.extent.width >> mip, 1);
+    uint32_t mip_height = std::max<uint32_t>(image_ci.extent.height >> mip, 1);
 
-    copyImage(srcImage, stagingImage, ci.extent.width, ci.extent.height, ci.format);
+    VkImageSubresourceRange srcRange = { FullAspectFromFormat(image_ci.format),
+      mip, 1, layer, 1};
 
-    // Transition staging image from IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL to
-    // IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL.
-    ImageLayoutTransition(aux, stagingImage, imageCreateCI, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    // Transition source image back to the original layout.
-    ImageLayoutTransition(aux, srcImage,
-                          VkImageSubresourceRange{GetFullAspectFromFormat(ci.format), 0, 1, 0, 1},
-                          rpInfo->finalLayouts[i], VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    // Transition source image to VK_IMAGE_LAYOUT_GENERAL.
+    ImageLayoutTransition(cmdBuf, srcImage, srcRange, VK_IMAGE_LAYOUT_GENERAL,
+      VK_QUEUE_FAMILY_IGNORED, rpInfo->finalLayouts[i], VK_QUEUE_FAMILY_IGNORED);
 
-    imgToBuffer(stagingImage, stagingBuffer, ci.extent.width, ci.extent.height, ci.format);
+    bool msaa = image_ci.samples != VK_SAMPLE_COUNT_1_BIT;
+    VkImage stagingImage = NULL;
+    VkDeviceMemory stagingImageMem = NULL;
+    if (msaa) { // If MSAA we'll do an image->image resolve first.
+      VkImageCreateInfo stagingCI{};
+      stagingCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+      stagingCI.imageType = VK_IMAGE_TYPE_2D;
+      stagingCI.format = image_ci.format;
+      stagingCI.extent.width = mip_width;
+      stagingCI.extent.height = mip_height;
+      stagingCI.extent.depth = 1;
+      stagingCI.arrayLayers = 1;
+      stagingCI.mipLevels = 1;
+      stagingCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+      stagingCI.samples = VK_SAMPLE_COUNT_1_BIT;
+      stagingCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+      stagingCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+      stagingCI.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+      stagingImageMem = getStagingImage(stagingImage, stagingCI);
 
-    vkEndCommandBuffer(aux.command_buffer);
+      // Transition staging image to VK_IMAGE_LAYOUT_GENERAL.
+      VkImageSubresourceRange dstRange = {FullAspectFromFormat(stagingCI.format),
+        0, 1, 0, 1};
 
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &aux.command_buffer;
-    vkQueueSubmit(aux.queue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(aux.queue);
+      ImageLayoutTransition(cmdBuf, stagingImage, dstRange,
+        VK_IMAGE_LAYOUT_GENERAL, VK_QUEUE_FAMILY_IGNORED,
+        VK_IMAGE_LAYOUT_UNDEFINED, VK_QUEUE_FAMILY_IGNORED);
 
-    std::string filename = std::to_string(renderPassCount++) + "_" +
-                           std::to_string((uint64_t)rpInfo->renderPass) + "_attachment_" +
-                           std::to_string(i) + "_" + VkFormatToString(ci.format) + ".ppm";
+      copyImage(cmdBuf, srcImage, stagingImage, srcRange, dstRange, mip_width, mip_height, stagingCI.format, msaa);
 
-    bufferToPpm(stagingBuffer, filename, ci.extent.width, ci.extent.height, ci.format);
+      // Because srcImage is VK_IMAGE_LAYOUT_GENERAL we can just keep it like this for subsequent copy.
+      // override these arguments since now we'll send the stagingImage down to imgToBuffer() function
+      srcImage = stagingImage;
+      mip = layer = 0;
+    }
+
+    VkBuffer stagingBuffer;
+    VkDeviceMemory bufMem = getStagingBuffer(stagingBuffer, mip_width, mip_height,
+      kImageAspectsAndByteSize[image_ci.format].second);
+    imgToBuffer(cmdBuf, srcImage, stagingBuffer, mip_width, mip_height, mip, layer, image_ci.format);
+
+    // Transition the real source image back to the original layout.
+    ImageLayoutTransition(cmdBuf, rpInfo->attachments[i].image.res, srcRange, rpInfo->finalLayouts[i],
+      VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_LAYOUT_GENERAL, VK_QUEUE_FAMILY_IGNORED);
+
+    ReadbackInfo readback(rpInfo->attachments[i].image.res, 
+                          stagingBuffer, stagingImage, bufMem, stagingImageMem,
+                          mip_width, mip_height, image_ci.format, i);
+    readbacks.attachments.push_back(readback);
   }
-  cleanup(rpInfo);
+
+  return readbacks;
 }
 
 void screenshot(VkImage srcImage, const char *filename)
 {
+  uint32_t sw_width = swapchainCI.imageExtent.width;
+  uint32_t sw_height = swapchainCI.imageExtent.height;
+  VkFormat sw_format = swapchainCI.imageFormat;
+
   VkImageCreateInfo imageCreateCI{};
   imageCreateCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   imageCreateCI.imageType = VK_IMAGE_TYPE_2D;
-  imageCreateCI.format = swapchainImageFormat;
+  imageCreateCI.format = sw_format;
   imageCreateCI.extent.width = sw_width;
   imageCreateCI.extent.height = sw_height;
   imageCreateCI.extent.depth = 1;
@@ -787,30 +285,23 @@ void screenshot(VkImage srcImage, const char *filename)
   imageCreateCI.samples = VK_SAMPLE_COUNT_1_BIT;
   imageCreateCI.tiling = VK_IMAGE_TILING_OPTIMAL;
   imageCreateCI.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-  VkImage dstImage = getStagingImage(imageCreateCI);
-  VkBuffer stagingBuffer =
-      getStagingBuffer(sw_width, sw_height, imageFormatInfoMap[swapchainImageFormat].second);
+  VkBuffer stagingBuffer;
+  VkDeviceMemory stagingBufferMem = getStagingBuffer(stagingBuffer, sw_width, sw_height,
+    kImageAspectsAndByteSize[sw_format].second);
 
-  VkCommandBufferBeginInfo cmdbufBI = VkCommandBufferBeginInfo{};
-  cmdbufBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  VkCommandBufferBeginInfo cmdbufBI{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
   vkBeginCommandBuffer(aux.command_buffer, &cmdbufBI);
-  ImageLayoutTransition(aux, dstImage, imageCreateCI, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        VK_IMAGE_LAYOUT_UNDEFINED);
-  ImageLayoutTransition(aux, srcImage, VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
-                        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+  {
+    VkImageSubresourceRange fullRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
-  copyImage(srcImage, dstImage, sw_width, sw_height, swapchainImageFormat);
+    ImageLayoutTransition(aux, srcImage, fullRange,
+      VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
-  // Transition staging image from IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL to
-  // IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL.
-  ImageLayoutTransition(aux, dstImage, imageCreateCI, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-  // Transition source image back to the original layout.
-  ImageLayoutTransition(aux, srcImage, VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
-                        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    imgToBuffer(aux.command_buffer, srcImage, stagingBuffer, sw_width, sw_height, 0, 0, sw_format);
 
-  imgToBuffer(dstImage, stagingBuffer, sw_width, sw_height, swapchainImageFormat);
-
+    ImageLayoutTransition(aux, srcImage, fullRange,
+      VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_GENERAL);
+  }
   vkEndCommandBuffer(aux.command_buffer);
 
   VkSubmitInfo submitInfo = {};
@@ -820,6 +311,9 @@ void screenshot(VkImage srcImage, const char *filename)
   vkQueueSubmit(aux.queue, 1, &submitInfo, VK_NULL_HANDLE);
   vkQueueWaitIdle(aux.queue);
 
-  bufferToPpm(stagingBuffer, filename, sw_width, sw_height, swapchainImageFormat);
-  cleanup(NULL);
+  bufferToPpm(stagingBuffer, stagingBufferMem, filename, sw_width, sw_height, sw_format);
+
+  // cleanup
+  vkDestroyBuffer(aux.device, stagingBuffer, NULL);
+  vkFreeMemory(aux.device, stagingBufferMem, NULL);
 }

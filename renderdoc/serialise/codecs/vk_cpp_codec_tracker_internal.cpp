@@ -213,9 +213,13 @@ void TraceTracker::CreateSamplerInternal(ExtObject *o)
 
 void TraceTracker::CreateShaderModuleInternal(ExtObject *o)
 {
-  ExtObject *ci = o->At(1);
-  ExtObject *buffer = ci->At(4);
+  ExtObject *ci = o->At("CreateInfo");
+  ExtObject *buffer = ci->At("pCode");
   buffer->data.str = GetVarFromMap(dataBlobs, "std::vector<uint8_t>", "shader", buffer->U64());
+  if (dataBlobCount.find(buffer->U64()) == dataBlobCount.end())
+    dataBlobCount[buffer->U64()] = 1;
+  else
+    dataBlobCount[buffer->U64()]++;
 }
 
 void TraceTracker::CreateSwapchainKHRInternal(ExtObject *o)
@@ -262,11 +266,20 @@ void TraceTracker::CreatePipelineCacheInternal(ExtObject *o)
   ExtObject *buffer = ci->At(4);
   buffer->data.str =
       GetVarFromMap(dataBlobs, "std::vector<uint8_t>", "pipeline_cache", buffer->U64());
+  if (dataBlobCount.find(buffer->U64()) == dataBlobCount.end())
+    dataBlobCount[buffer->U64()] = 1;
+  else
+    dataBlobCount[buffer->U64()]++;
 }
 
 void TraceTracker::FlushMappedMemoryRangesInternal(ExtObject *o)
 {
   fg.updates.memory.push_back(o);
+  uint64_t buffer = o->At(3)->U64();
+  if (dataBlobCount.find(buffer) == dataBlobCount.end())
+    dataBlobCount[buffer] = 2;
+  else
+    dataBlobCount[buffer] += 2;
 }
 
 void TraceTracker::UpdateDescriptorSetWithTemplateInternal(ExtObject *o)
@@ -536,7 +549,7 @@ void TraceTracker::AllocateCommandBuffersInternal(ExtObject *o)
 {
   uint64_t commandBufferCount = o->At("AllocateInfo")->At("commandBufferCount")->U64();
   if(commandBufferCount != 1)
-    RDCWARN("%s has AllocateInfo.commandBufferCount equal to %llu, expected '1'", o->Name(),
+    RDCWARN("%s has AllocateInfo.commandBufferCount equal to '%llu', expected '1'", o->Name(),
             commandBufferCount);
   uint64_t cmdBufferPoolID = o->At("AllocateInfo")->At("commandPool")->U64();
   uint64_t cmdBufferID = o->At("CommandBuffer")->U64();
@@ -554,6 +567,12 @@ void TraceTracker::InitialContentsInternal(ExtObject *o)
   if(o->At(0)->U64() == VkResourceType::eResDescriptorSet)
   {
     InitDescriptorSetInternal(o);
+  } else {
+    uint64_t buffer = o->At("Contents")->U64();
+    if (dataBlobCount.find(buffer) == dataBlobCount.end())
+      dataBlobCount[buffer] = 1;
+    else
+      dataBlobCount[buffer]++;
   }
 }
 

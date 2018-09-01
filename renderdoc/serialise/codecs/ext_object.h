@@ -205,6 +205,11 @@ inline ExtObject *as_ext(SDObject *sdo)
   return static_cast<ExtObject *>(sdo);
 }
 
+inline SDChunk *as_SDChunk(ExtObject *ext)
+{
+  return reinterpret_cast<SDChunk *>(ext);
+}
+
 typedef std::vector<ExtObject *> ExtObjectVec;
 typedef ExtObjectVec::iterator ExtObjectVecIter;
 

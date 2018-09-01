@@ -53,6 +53,8 @@ public:
     ID_INIT,
     ID_PRERESET,
     ID_POSTRESET,
+    ID_PREDIFF,
+    ID_DIFF,
 
     ID_COUNT,
   };
@@ -61,7 +63,7 @@ public:
 protected:
   typedef std::array<std::string, ID_COUNT> func_array;
   func_array funcs = {{"main",    "variables", "render",   "create",
-                      "release", "init",      "prereset", "postreset"}};
+                      "release", "init",      "prereset", "postreset", "prediff", "diff"}};
 
   std::string rootDirectory;
   typedef std::array<CodeFile *, ID_COUNT> file_array;
@@ -109,6 +111,8 @@ protected:
   void InitSrcBuffer(ExtObject *o, uint32_t pass);
   void InitDstBuffer(ExtObject *o, uint32_t pass);
   void InitDescSet(ExtObject *o);
+  void ImagePreDiff(ExtObject *o, uint32_t pass);
+  void ImageDiff(ExtObject *o, uint32_t pass);
   void CopyResetImage(ExtObject *o, uint32_t pass);
   void CopyResetBuffer(ExtObject *o, uint32_t pass);
   void ImageLayoutTransition(uint64_t image_id, ExtObject *subres, const char *old_layout,

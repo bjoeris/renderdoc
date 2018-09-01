@@ -23,16 +23,11 @@
  ******************************************************************************/
 #pragma once
 
-#include <assert.h>
-#include <memory.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <vulkan/vulkan.h>
-
-#include <string>
-#include <vector>
-
 #include "helper/helper.h"
-#include "sample_cpp_shim/shim_vulkan.h"
 
-void PostStageProgress(const char *stage, uint32_t i, uint32_t N);
+extern AuxVkTraceResources aux;
+
+std::string getStageStr(VkShaderStageFlagBits stage);
+void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage, const char *disassembly, size_t size);
+void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage,
+                     VkShaderStatisticsInfoAMD &statistics);

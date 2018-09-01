@@ -80,11 +80,17 @@ enum CodeGenOptBits
   // The images themselves should be initialized and/or reset.
   CODE_GEN_OPT_IMAGE_MEMORY_BIT = 0x20,
 
-  // Enable all optimizations.
-  CODE_GEN_OPT_ALL_OPTS = 0x3f,
+  // Enable diffing of buffers at end of frame
+  CODE_GEN_OPT_BUFFER_DIFF = 0x40,
+
+  // Enable diffing of images at end of frame
+  CODE_GEN_OPT_IMAGE_DIFF = 0X80,
 };
 
 typedef uint32_t CodeGenOpts;
+
+
+const CodeGenOpts CODE_GEN_OPT_DEFAULT = CODE_GEN_OPT_REORDER_MEMORY_BINDINGS_BIT | CODE_GEN_OPT_BUFFER_INIT_BIT | CODE_GEN_OPT_BUFFER_RESET_BIT | CODE_GEN_OPT_IMAGE_INIT_BIT | CODE_GEN_OPT_IMAGE_RESET_BIT | CODE_GEN_OPT_IMAGE_MEMORY_BIT;
 
 class TraceTracker
 {
@@ -93,6 +99,7 @@ private:
   // Each piece of binary data represents a shader, a pipeline cache or texture/
   // buffer data.
   VariableIDMap dataBlobs;
+  U64Map dataBlobCount;
   // Each captured Vulkan resource has a unique resource ID and this map
   // correlates this ID with the resource type and the variable name used by
   // the code gen.
@@ -332,6 +339,7 @@ private:
   void AccessAttachment(uint64_t attachment, AccessAction action,
                         VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM,
                         uint64_t baseArrayLayer = 0, uint64_t layerCount = VK_REMAINING_ARRAY_LAYERS);
+  void AccessSubpassAttachments();
   void TransitionImageLayout(uint64_t image, ExtObject *subresource, VkImageLayout oldlayout,
                              VkImageLayout newLayout, uint64_t srcQueueFamily,
                              uint64_t dstQueueFamily);
@@ -447,6 +455,7 @@ public:
 
   VariableIDMapIter DataBlobBegin() { return dataBlobs.begin(); }
   VariableIDMapIter DataBlobEnd() { return dataBlobs.end(); }
+  int64_t DecDataBlobCount(uint64_t id) { return --dataBlobCount[id]; }
   InitResourceIDMapIter InitResourceAdd(uint64_t id, ExtObject *o, bool u)
   {
     return initResources.insert(InitResourceIDMapPair(id, InitResourceDesc(o, u))).first;

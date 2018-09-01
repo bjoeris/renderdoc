@@ -136,6 +136,21 @@
     <Filter Include="Common\Serialise\Codecs\VK_CPP_Codec">
       <UniqueIdentifier>{2d76a60e-3d65-431d-85c6-0f967718ed61}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Common\Serialise\Codecs\CPP\helper">
+      <UniqueIdentifier>{491d8118-75d8-4f3c-8620-5ae806ac782e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Codecs\CPP\shader_info_shim">
+      <UniqueIdentifier>{f452818a-90d6-4db6-9a26-f4ca6c5c167e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Codecs\CPP\gold_reference_shim">
+      <UniqueIdentifier>{e4097c93-ce5c-470f-a9ad-d307c0caf6ed}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Codecs\CPP\sample_shim">
+      <UniqueIdentifier>{e2898725-586c-41c2-8687-e7507f89288a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Codecs\CPP\sample">
+      <UniqueIdentifier>{95b0407f-6f5f-4161-8af3-50c55416ae8c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="maths\camera.h">
@@ -483,10 +498,26 @@
     <ClInclude Include="serialise\codecs\vk_cpp_codec_writer.h">
       <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="serialise\codecs\sample_cpp_trace\helper.h">
-      <Filter>Common\Serialise\Codecs\CPP</Filter>
+    <ClInclude Include="serialise\codecs\helper\helper.h">
+      <Filter>Common\Serialise\Codecs\CPP\helper</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\amd_shader_info_shim\shim_vulkan.h">
+      <Filter>Common\Serialise\Codecs\CPP\shader_info_shim</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\amd_shader_info_shim\utils.h">
+      <Filter>Common\Serialise\Codecs\CPP\shader_info_shim</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\gold_reference_shim\shim_vulkan.h">
+      <Filter>Common\Serialise\Codecs\CPP\gold_reference_shim</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\gold_reference_shim\utils.h">
+      <Filter>Common\Serialise\Codecs\CPP\gold_reference_shim</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\sample_cpp_shim\shim_vulkan.h">
+      <Filter>Common\Serialise\Codecs\CPP\sample_shim</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\sample_cpp_trace\common.h">
+      <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -781,9 +812,6 @@
     <ClCompile Include="os\posix\android\android_network.cpp">
       <Filter>OS\Posix\Android</Filter>
     </ClCompile>
-    <ClCompile Include="serialise\codecs\sample_cpp_trace\main_win.cpp">
-      <Filter>Common\Serialise\Codecs\CPP</Filter>
-    </ClCompile>
     <ClCompile Include="android\android.cpp">
       <Filter>Android</Filter>
     </ClCompile>
@@ -841,12 +869,6 @@
     <ClCompile Include="3rdparty\miniz\miniz.c">
       <Filter>3rdparty\miniz</Filter>
     </ClCompile>
-    <ClCompile Include="serialise\codecs\sample_cpp_trace\main_yeti.cpp">
-      <Filter>Common\Serialise\Codecs\CPP</Filter>
-    </ClCompile>
-    <ClCompile Include="serialise\codecs\sample_cpp_trace\helper.cpp">
-      <Filter>Common\Serialise\Codecs\CPP</Filter>
-    </ClCompile>
     <ClCompile Include="serialise\codecs\vk_cpp_codec.cpp">
       <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
     </ClCompile>
@@ -874,8 +896,35 @@
     <ClCompile Include="serialise\codecs\vk_cpp_codec_writer_generic.cpp">
       <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
     </ClCompile>
-    <ClCompile Include="serialise\codecs\vk_cpp_codec_writer_template_files.cpp">
-      <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
+    <ClCompile Include="serialise\codecs\helper\helper.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\helper</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\amd_shader_info_shim\shim_vulkan.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\shader_info_shim</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\amd_shader_info_shim\utils.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\shader_info_shim</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\gold_reference_shim\format_conversion.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\gold_reference_shim</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\gold_reference_shim\shim_vulkan.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\gold_reference_shim</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\gold_reference_shim\utils.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\gold_reference_shim</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\sample_cpp_shim\shim_vulkan.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\sample_shim</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\sample_cpp_trace\main_xlib.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\sample_cpp_trace\main_win.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\sample_cpp_trace\main_yeti.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -994,8 +1043,20 @@
     <Text Include="serialise\codecs\CMakeLists.txt">
       <Filter>Common\Serialise\Codecs\CPP</Filter>
     </Text>
+    <Text Include="serialise\codecs\helper\CMakeLists.txt">
+      <Filter>Common\Serialise\Codecs\CPP\helper</Filter>
+    </Text>
+    <Text Include="serialise\codecs\amd_shader_info_shim\CMakeLists.txt">
+      <Filter>Common\Serialise\Codecs\CPP\shader_info_shim</Filter>
+    </Text>
+    <Text Include="serialise\codecs\gold_reference_shim\CMakeLists.txt">
+      <Filter>Common\Serialise\Codecs\CPP\gold_reference_shim</Filter>
+    </Text>
+    <Text Include="serialise\codecs\sample_cpp_shim\CMakeLists.txt">
+      <Filter>Common\Serialise\Codecs\CPP\sample_shim</Filter>
+    </Text>
     <Text Include="serialise\codecs\sample_cpp_trace\CMakeLists.txt">
-      <Filter>Common\Serialise\Codecs\CPP</Filter>
+      <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
     </Text>
   </ItemGroup>
 </Project>

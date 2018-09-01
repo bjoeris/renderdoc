@@ -526,7 +526,8 @@ void TraceTracker::CmdDrawIndirectAnalyze(ExtObject *o)
   // Pessimistically read/write all memory and images accessible through bound descriptor sets
   AccessMemoryInBoundDescriptorSets(bindingState.graphicsPipeline);
 
-  bindingState.graphicsPipeline.subpassHasDraw = true;
+  // Pessimistically read/write accessible through the subpass image attachments
+  AccessSubpassAttachments();
 }
 
 void TraceTracker::CmdDrawIndexedIndirectAnalyze(ExtObject *o)
@@ -561,7 +562,8 @@ void TraceTracker::CmdDrawIndexedIndirectAnalyze(ExtObject *o)
   // Pessimistically read/write all memory and images accessible through bound descriptor sets
   AccessMemoryInBoundDescriptorSets(bindingState.graphicsPipeline);
 
-  bindingState.graphicsPipeline.subpassHasDraw = true;
+  // Pessimistically read/write accessible through the subpass image attachments
+  AccessSubpassAttachments();
 }
 
 void TraceTracker::CmdDrawAnalyze(ExtObject *o)
@@ -575,7 +577,8 @@ void TraceTracker::CmdDrawAnalyze(ExtObject *o)
   // Pessimistically read/write all memory and images accessible through bound descriptor sets
   AccessMemoryInBoundDescriptorSets(bindingState.graphicsPipeline);
 
-  bindingState.graphicsPipeline.subpassHasDraw = true;
+  // Pessimistically read/write accessible through the subpass image attachments
+  AccessSubpassAttachments();
 }
 
 void TraceTracker::CmdDrawIndexedAnalyze(ExtObject *o)
@@ -602,6 +605,7 @@ void TraceTracker::CmdDrawIndexedAnalyze(ExtObject *o)
   // Pessimistically read/write all memory and images accessible through bound descriptor sets
   AccessMemoryInBoundDescriptorSets(bindingState.graphicsPipeline);
 
-  bindingState.graphicsPipeline.subpassHasDraw = true;
+  // Pessimistically read/write accessible through the subpass image attachments
+  AccessSubpassAttachments();
 }
 }    // namespace vk_cpp_codec

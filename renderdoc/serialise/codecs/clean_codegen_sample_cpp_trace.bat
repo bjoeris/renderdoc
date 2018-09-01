@@ -4,3 +4,7 @@ del sample_cpp_trace\shader_*
 del sample_cpp_trace\pipeline_cache_*
 del sample_cpp_trace\*shim_vulkan*
 del sample_cpp_trace\sample_cpp_trace*
+del sample_cpp_trace\screenshot_*
+del sample_cpp_trace\*_attachment_*
+del sample_cpp_trace\*_statistics.txt
+del sample_cpp_trace\*_disassembly.txt

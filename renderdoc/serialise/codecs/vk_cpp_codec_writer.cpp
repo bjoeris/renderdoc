@@ -8,6 +8,14 @@
 #include <utility>
 #include <vector>
 
+#include "common/common.h"
+#include "core/core.h"
+#include "driver/vulkan/vk_common.h"
+#include "driver/vulkan/vk_resources.h"
+#include "serialise/rdcfile.h"
+#include "ext_object.h"
+#include "vk_cpp_codec_state.h"
+#include "vk_cpp_codec_tracker.h"
 #include "vk_cpp_codec_writer.h"
 
 namespace vk_cpp_codec
@@ -83,7 +91,7 @@ void CodeWriter::Close()
 
     files[ID_MAIN]->PrintLn("void %s_%s() {", funcs[ID_MAIN].c_str(), funcs[i].c_str());
 
-    if(i == ID_PRERESET || i == ID_POSTRESET || i == ID_INIT)
+    if(i == ID_PRERESET || i == ID_POSTRESET || i == ID_INIT || i == ID_PREDIFF)
     {
       files[ID_MAIN]
           ->PrintLn("vkResetFences(%s, 1, &aux.fence);", tracker->GetDeviceVar())
@@ -108,7 +116,7 @@ void CodeWriter::Close()
       files[ID_MAIN]->PrintLn("%s_%d();", funcs[i].c_str(), j);
     }
 
-    if(i == ID_PRERESET || i == ID_POSTRESET || i == ID_INIT)
+    if(i == ID_PRERESET || i == ID_POSTRESET || i == ID_INIT || i == ID_PREDIFF)
     {
       files[ID_MAIN]
           ->PrintLn("")
@@ -722,7 +730,26 @@ void CodeWriter::CreatePresentFramebuffer(ExtObject *o, uint32_t pass, bool glob
 
 void CodeWriter::CreateDescriptorPool(ExtObject *o, uint32_t pass, bool global_ci)
 {
-  GenericVkCreate(o, pass, global_ci);
+  ExtObject *device = o->At(0);
+  ExtObject *ci = o->At(1);
+  ExtObject *vk_res = o->At(3);
+
+  const char *device_name = tracker->GetResourceVar(device->U64());
+  std::string res = AddVar("std::vector<VkDescriptorPool>", "VkDescriptorPoolVec", vk_res->U64());
+  const char *res_name = tracker->GetResourceVar(vk_res->Type(), vk_res->U64());
+  std::string ci_name = AddVar(ci->Type(), vk_res->U64());
+
+  files[pass]->PrintLn("{");
+  LocalVariable(ci, "", pass);
+
+  files[pass]
+    ->PrintLn("%s.resize(1);", res.c_str())
+    .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ci->Name(),
+      res_name)
+    .PrintLn("assert(result == VK_SUCCESS);")
+    .PrintLn("%s = %s;", ci_name.c_str(), ci->Name())
+    .PrintLn("%s.push_back(%s);", res.c_str(), res_name)
+    .PrintLn("}");
 }
 
 void CodeWriter::CreateCommandPool(ExtObject *o, uint32_t pass, bool global_ci)
@@ -790,6 +817,10 @@ void CodeWriter::CreateSampler(ExtObject *o, uint32_t pass, bool global_ci)
 void CodeWriter::CreateShaderModule(ExtObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
+
+  uint64_t bufferID = o->At("CreateInfo")->At("pCode")->U64();
+  if (tracker->DecDataBlobCount(bufferID) == 0)
+  files[pass]->PrintLn("%s.clear();", tracker->GetDataBlobVar(bufferID));
 }
 
 void CodeWriter::CreatePipelineLayout(ExtObject *o, uint32_t pass, bool global_ci)
@@ -800,6 +831,10 @@ void CodeWriter::CreatePipelineLayout(ExtObject *o, uint32_t pass, bool global_c
 void CodeWriter::CreatePipelineCache(ExtObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
+
+  uint64_t bufferID = o->At("CreateInfo")->At("pCode")->U64();
+  if (tracker->DecDataBlobCount(bufferID) == 0)
+    files[pass]->PrintLn("%s.clear();", tracker->GetDataBlobVar(bufferID));
 }
 
 void CodeWriter::CreateBuffer(ExtObject *o, uint32_t pass, bool global_ci)
@@ -1096,10 +1131,21 @@ void CodeWriter::AllocateDescriptorSets(ExtObject *o, uint32_t pass)
   RDCASSERT(ai->At(3)->U64() == 1);
   const char *device_name = tracker->GetResourceVar(device->U64());
   const char *ds_name = tracker->GetResourceVar(ds->Type(), ds->U64());
+  uint64_t descPool = ai->At("descriptorPool")->U64();
+  std::string pools = MakeVarName("VkDescriptorPoolVec", descPool);
+  std::string pools_ci = MakeVarName("VkDescriptorPoolCreateInfo", descPool);
   files[pass]->PrintLn("{");
   LocalVariable(ai, "", pass);
   files[pass]
       ->PrintLn("VkResult result = %s(%s, &%s, &%s);", o->Name(), device_name, ai->Name(), ds_name)
+    .PrintLn("if (result == VK_ERROR_OUT_OF_POOL_MEMORY) {")
+      // resize pool vector, allocate another pool, reset pool variable, execute allocation again
+    .PrintLn("result = vkCreateDescriptorPool(%s, &%s, NULL, &%s); // rdoc: try creating a new pool", device_name, pools_ci.c_str(), tracker->GetResourceVar(descPool))
+    .PrintLn("assert(result == VK_SUCCESS);")
+    .PrintLn("%s.descriptorPool = %s;", ai->Name(), tracker->GetResourceVar(descPool))
+    .PrintLn("%s.push_back(%s);", pools.c_str(), tracker->GetResourceVar(descPool))
+    .PrintLn("result = %s(%s, &%s, &%s); // rdoc: try allocating again", o->Name(), device_name, ai->Name(), ds_name)
+    .PrintLn("}")
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("}");
 }
@@ -1213,13 +1259,32 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
     files[pass]->PrintLn("*/");
   }
 
+  bool needDiffBuffer = false;
+
+  switch(init_res_it->second.sdobj->At(0)->U64())
+  {
+    case VkResourceType::eResDeviceMemory:
+      needDiffBuffer = tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF;
+      break;
+    case VkResourceType::eResImage:
+      needDiffBuffer = tracker->Optimizations() & CODE_GEN_OPT_IMAGE_DIFF;
+      break;
+  }
   const char *comment = "";
-  if(!tracker->ResourceNeedsReset(resourceID, true, true))
+  if(!(tracker->ResourceNeedsReset(resourceID, true, true) || needDiffBuffer))
   {
     comment = "// ";
   }
+  const char *diffComment = "";
+  if(!needDiffBuffer)
+  {
+    diffComment = "// ";
+  }
+
   std::string mem_src_name = AddVar("VkDeviceMemory", "VkDeviceMemory_src", resourceID);
   std::string buf_src_name = AddVar("VkBuffer", "VkBuffer_src", resourceID);
+  std::string mem_diff_name = AddVar("VkDeviceMemory", "VkDeviceMemory_diff", resourceID);
+  std::string buf_diff_name = AddVar("VkBuffer", "VkBuffer_diff", resourceID);
   // If a mem_remap vector hasn't been generated, it will be automatically created now, and it will
   // be empty.
   const char *mem_remap = tracker->GetMemRemapVar(resourceID);
@@ -1231,7 +1296,7 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
   std::string size = tracker->GetMemAllocInfoVar(resourceID);
   if(size == "nullptr" || size == "NULL")
   {
-    size = std::string(tracker->GetDataBlobVar(bufferID)) + ".size()";
+    size = AddVar("uint32_t", "BufferSize", bufferID);
   }
   else if(hasAliasedResources)
   {
@@ -1244,11 +1309,15 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
     size = std::string(init_size_name);
   }
 
-  files[pass]->PrintLn(
-      "%sInitializeSourceBuffer(%s, &%s, &%s, %s, buffer_%llu.data(), "
+  files[pass]->PrintLn("%s = %s.size();", size.c_str(), tracker->GetDataBlobVar(bufferID))
+    .PrintLn("%sInitializeSourceBuffer(%s, &%s, &%s, %s, buffer_%llu.data(), "
       "VkPhysicalDeviceMemoryProperties_%llu, %s);",
       comment, tracker->GetDeviceVar(), buf_src_name.c_str(), mem_src_name.c_str(), size.c_str(),
-      bufferID, tracker->PhysDevID(), mem_remap);
+      bufferID, tracker->PhysDevID(), mem_remap)
+    .PrintLn("%sInitializeDiffBuffer(%s, &%s, &%s, %s, VkPhysicalDeviceMemoryProperties_%llu);",
+      diffComment, tracker->GetDeviceVar(), buf_diff_name.c_str(), mem_diff_name.c_str(), size.c_str(), tracker->PhysDevID());
+  if (tracker->DecDataBlobCount(bufferID) == 0)
+    files[pass]->PrintLn("%s.clear();", tracker->GetDataBlobVar(bufferID));
 }
 
 void CodeWriter::InitDescSet(ExtObject *o)
@@ -1509,6 +1578,8 @@ void CodeWriter::InitialContents(ExtObject *o)
       InitSrcBuffer(o, ID_CREATE);
       CopyResetImage(o, ID_INIT);
       CopyResetImage(o, ID_PRERESET);
+      ImagePreDiff(o, ID_PREDIFF);
+      ImageDiff(o, ID_DIFF);
       break;
     case VkResourceType::eResDeviceMemory:
       InitSrcBuffer(o, ID_CREATE);
@@ -1520,6 +1591,79 @@ void CodeWriter::InitialContents(ExtObject *o)
     }
     break;
   }
+}
+
+void CodeWriter::ImagePreDiff(ExtObject *o, uint32_t pass)
+{
+  uint64_t resourceID = o->At(1)->U64();
+  const char *imageVar = tracker->GetResourceVar(resourceID);
+  InitResourceIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
+
+  bool needDiff = false;
+
+  switch(init_res_it->second.sdobj->At(0)->U64())
+  {
+    case VkResourceType::eResDeviceMemory:
+      needDiff = tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF;
+      break;
+    case VkResourceType::eResImage:
+      needDiff = tracker->Optimizations() & CODE_GEN_OPT_IMAGE_DIFF;
+      break;
+  }
+
+  const char *comment = "";
+  if(tracker->ResourceNeedsReset(resourceID, false, true) || !needDiff)
+  {
+    comment = "// ";
+  }
+
+  ImageStateMapIter imageState_it = tracker->ImageStateFind(resourceID);
+  RDCASSERT(imageState_it != tracker->ImageStateEnd());
+  ImageState &imageState(imageState_it->second);
+
+  ImageSubresourceRange range = imageState.FullRange();
+
+  for(ImageSubresourceRangeIter subres_it = range.begin(); subres_it != range.end(); subres_it++)
+  {
+    std::string aspect_str = ToStr(subres_it->aspect);
+    files[pass]->PrintLn("%sImageLayoutTransition(aux, %s, %llu, %llu, %s, %s, %s);", comment, imageVar, subres_it->level, subres_it->layer, aspect_str.c_str(), "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL", VkImageLayoutStrings[imageState.At(*subres_it).Layout()]);
+  }
+
+  files[pass]->PrintLn("%sCopyImageToBuffer(aux, %s, VkBuffer_diff_%llu, VkImageCreateInfo_%llu);", comment, imageVar, resourceID, resourceID);
+
+  for(ImageSubresourceRangeIter subres_it = range.begin(); subres_it != range.end(); subres_it++)
+  {
+    std::string aspect_str = ToStr(subres_it->aspect);
+    files[pass]->PrintLn("%sImageLayoutTransition(aux, %s, %llu, %llu, %s, %s, %s);", comment, imageVar, subres_it->level, subres_it->layer, aspect_str.c_str(), VkImageLayoutStrings[imageState.At(*subres_it).Layout()], "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL");
+  }
+}
+
+void CodeWriter::ImageDiff(ExtObject *o, uint32_t pass)
+{
+  uint64_t resourceID = o->At(1)->U64();
+  uint64_t bufferID = o->At(4)->U64();
+  const char *imageVar = tracker->GetResourceVar(resourceID);
+  InitResourceIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
+
+  bool needDiff = false;
+
+  switch(init_res_it->second.sdobj->At(0)->U64())
+  {
+    case VkResourceType::eResDeviceMemory:
+      needDiff = tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF;
+      break;
+    case VkResourceType::eResImage:
+      needDiff = tracker->Optimizations() & CODE_GEN_OPT_IMAGE_DIFF;
+      break;
+  }
+
+  const char *comment = "";
+  if(tracker->ResourceNeedsReset(resourceID, false, true) || !needDiff)
+  {
+    comment = "// ";
+  }
+
+  files[pass]->PrintLn("%sDiffDeviceMemory(aux, VkDeviceMemory_src_%llu, 0, VkDeviceMemory_diff_%llu, 0, %s, \"%s\");", comment, resourceID, resourceID, MakeVarName("BufferSize", bufferID), imageVar);
 }
 
 void CodeWriter::CopyResetImage(ExtObject *o, uint32_t pass)

@@ -213,9 +213,33 @@
     <ClInclude Include="os\win32\win32_specific.h" />
     <ClInclude Include="replay\replay_driver.h" />
     <ClInclude Include="replay\replay_controller.h" />
+    <ClInclude Include="serialise\codecs\amd_shader_info_shim\shim_vulkan.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\amd_shader_info_shim\utils.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClInclude>
     <ClInclude Include="serialise\codecs\ext_object.h" />
+    <ClInclude Include="serialise\codecs\gold_reference_shim\shim_vulkan.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\gold_reference_shim\utils.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\helper\helper.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClInclude>
     <ClInclude Include="serialise\codecs\intervals.h" />
-    <ClInclude Include="serialise\codecs\sample_cpp_trace\helper.h">
+    <ClInclude Include="serialise\codecs\sample_cpp_shim\shim_vulkan.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\sample_cpp_trace\common.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
@@ -516,12 +540,40 @@
     <ClCompile Include="replay\replay_driver.cpp" />
     <ClCompile Include="replay\replay_output.cpp" />
     <ClCompile Include="replay\replay_controller.cpp" />
+    <ClCompile Include="serialise\codecs\amd_shader_info_shim\shim_vulkan.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\amd_shader_info_shim\utils.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="serialise\codecs\chrome_json_codec.cpp" />
-    <ClCompile Include="serialise\codecs\sample_cpp_trace\helper.cpp">
+    <ClCompile Include="serialise\codecs\gold_reference_shim\format_conversion.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\gold_reference_shim\shim_vulkan.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\gold_reference_shim\utils.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\helper\helper.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\sample_cpp_shim\shim_vulkan.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="serialise\codecs\sample_cpp_trace\main_win.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\sample_cpp_trace\main_xlib.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
@@ -630,7 +682,11 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Text Include="serialise\codecs\amd_shader_info_shim\CMakeLists.txt" />
     <Text Include="serialise\codecs\CMakeLists.txt" />
+    <Text Include="serialise\codecs\gold_reference_shim\CMakeLists.txt" />
+    <Text Include="serialise\codecs\helper\CMakeLists.txt" />
+    <Text Include="serialise\codecs\sample_cpp_shim\CMakeLists.txt" />
     <Text Include="serialise\codecs\sample_cpp_trace\CMakeLists.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
