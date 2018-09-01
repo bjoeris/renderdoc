@@ -1686,7 +1686,8 @@ void CodeWriter::ImageDiff(ExtObject *o, uint32_t pass)
     comment = "// ";
   }
 
-  files[pass]->PrintLn("%sDiffDeviceMemory(aux, VkDeviceMemory_src_%llu, 0, VkDeviceMemory_diff_%llu, 0, %s, \"%s\");", comment, resourceID, resourceID, MakeVarName("BufferSize", bufferID), imageVar);
+  files[pass]->PrintLn("%sDiffDeviceMemory(aux, VkDeviceMemory_src_%llu, 0, VkDeviceMemory_diff_%llu, 0, %s, \"%s\");", comment, resourceID, resourceID, 
+    MakeVarName("BufferSize", bufferID).c_str(), imageVar);
 }
 
 void CodeWriter::CopyResetImage(ExtObject *o, uint32_t pass)
