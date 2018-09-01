@@ -1287,10 +1287,10 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
   switch(init_res_it->second.sdobj->At(0)->U64())
   {
     case VkResourceType::eResDeviceMemory:
-      needDiffBuffer = tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF;
+      needDiffBuffer = (tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF) != 0;
       break;
     case VkResourceType::eResImage:
-      needDiffBuffer = tracker->Optimizations() & CODE_GEN_OPT_IMAGE_DIFF;
+      needDiffBuffer = (tracker->Optimizations() & CODE_GEN_OPT_IMAGE_DIFF) != 0;
       break;
   }
   const char *comment = "";
@@ -1627,10 +1627,10 @@ void CodeWriter::ImagePreDiff(ExtObject *o, uint32_t pass)
   switch(init_res_it->second.sdobj->At(0)->U64())
   {
     case VkResourceType::eResDeviceMemory:
-      needDiff = tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF;
+      needDiff = (tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF) != 0;
       break;
     case VkResourceType::eResImage:
-      needDiff = tracker->Optimizations() & CODE_GEN_OPT_IMAGE_DIFF;
+      needDiff = (tracker->Optimizations() & CODE_GEN_OPT_IMAGE_DIFF) != 0;
       break;
   }
 
@@ -1673,10 +1673,10 @@ void CodeWriter::ImageDiff(ExtObject *o, uint32_t pass)
   switch(init_res_it->second.sdobj->At(0)->U64())
   {
     case VkResourceType::eResDeviceMemory:
-      needDiff = tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF;
+      needDiff = (tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF) != 0;
       break;
     case VkResourceType::eResImage:
-      needDiff = tracker->Optimizations() & CODE_GEN_OPT_IMAGE_DIFF;
+      needDiff = (tracker->Optimizations() & CODE_GEN_OPT_IMAGE_DIFF) != 0;
       break;
   }
 

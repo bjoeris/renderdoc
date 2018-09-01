@@ -515,7 +515,7 @@ void TraceTracker::AccessSubpassAttachments()
   {
     ExtObject *blendAttachmentState = blendAttachmets->At(i);
     uint64_t blendEnabled = blendAttachmentState->At("blendEnable")->U64();
-    VkColorComponentFlags colorWriteMask = blendAttachmentState->At("colorWriteMask")->U64();
+    VkColorComponentFlags colorWriteMask = (uint32_t) blendAttachmentState->At("colorWriteMask")->U64();
     AccessAction action;
     if(blendEnabled == 0)
     {
