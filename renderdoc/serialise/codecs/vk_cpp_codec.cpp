@@ -266,7 +266,7 @@ CodeGenOpts GetEnvOpts()
   {
     optimizations &= ~CODE_GEN_OPT_IMAGE_INIT_BIT;
   }
-  if (1) // OptimizationDisabled("RDOC_CODE_GEN_OPT_IMAGE_RESET")
+  if (OptimizationDisabled("RDOC_CODE_GEN_OPT_IMAGE_RESET"))
   {
     optimizations &= ~CODE_GEN_OPT_IMAGE_RESET_BIT;
   }
