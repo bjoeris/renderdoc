@@ -283,7 +283,7 @@ string LayerRegistrationPath(LayerPath path)
       const char *home = getenv("HOME");
       if(home != NULL)
         return string(home) + "/.local/share/vulkan/implicit_layer.d/renderdoc_capture.json";
-    }
+    } break;
     default: break;
   }
 
