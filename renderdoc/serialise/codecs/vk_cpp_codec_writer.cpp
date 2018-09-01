@@ -855,7 +855,7 @@ void CodeWriter::CreatePipelineCache(ExtObject *o, uint32_t pass, bool global_ci
 {
   GenericVkCreate(o, pass, global_ci);
 
-  uint64_t bufferID = o->At("CreateInfo")->At("pCode")->U64();
+  uint64_t bufferID = o->At("CreateInfo")->At("pInitialData")->U64();
   if (tracker->DecDataBlobCount(bufferID) == 0)
     files[pass]->PrintLn("%s.clear();", tracker->GetDataBlobVar(bufferID));
 }
