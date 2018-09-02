@@ -761,12 +761,15 @@ void CodeWriter::CreateDescriptorPool(ExtObject *o, uint32_t pass, bool global_c
   std::string res = AddVar("std::vector<VkDescriptorPool>", "VkDescriptorPoolVec", vk_res->U64());
   const char *res_name = tracker->GetResourceVar(vk_res->Type(), vk_res->U64());
   std::string ci_name = AddVar(ci->Type(), vk_res->U64());
+  std::string pool_vec = AddVar("std::vector<VkDescriptorPoolSize>", "VkDescriptorPoolSize", vk_res->U64());
 
   files[pass]->PrintLn("{");
   LocalVariable(ci, "", pass);
 
-  files[pass]
-    ->PrintLn("%s.resize(1);", res.c_str())
+  files[pass]->PrintLn("for (uint32_t i = 0; i < %s.poolSizeCount; i++) {", ci->Name())
+    .PrintLn("%s.push_back(%s.pPoolSizes[i]);", pool_vec.c_str(), ci->Name())
+    .PrintLn("}")
+    .PrintLn("%s.pPoolSizes = %s.data();", ci->Name(), pool_vec.c_str())
     .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ci->Name(),
       res_name)
     .PrintLn("assert(result == VK_SUCCESS);")
