@@ -173,6 +173,13 @@ void CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageC
       vkCmdCopyBufferToImage(aux.command_buffer, src, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                              count, regions.data() + offset);
     }
+  } else {
+    std::string msg = __FUNCTION__ + ": resets MSAA resource with " + 
+      std::to_string(dst_ci.samples) + " samples. Currently this is not implemented.\n";
+    printf("%s", msg.c_str());
+#if defined(_WIN32) || defined(WIN32)
+    OutputDebugStringA(msg.c_str())
+#endif
   }
 }
 void CopyResetBuffer(AuxVkTraceResources aux, VkBuffer dst, VkBuffer src, VkDeviceSize size)
@@ -251,10 +258,11 @@ void DiffDeviceMemory(AuxVkTraceResources aux, VkDeviceMemory expected,
 
   if(memcmp(expected_data, actual_data, (size_t)size) != 0)
   {
-    std::string message = name + std::string(" does not match\n");
-    printf("%s", message.c_str());
-#if defined(_WIN32)
-    OutputDebugStringA(message.c_str());
+    std::string msg = __FUNCTION__ + ": Resource " + name + 
+      std::string(" has changed by the end of the frame.\n");
+    printf("%s", msg.c_str());
+#if defined(_WIN32) || defined(WIN32)
+    OutputDebugStringA(msg.c_str());
 #endif
   }
 
