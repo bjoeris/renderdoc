@@ -1,5 +1,4 @@
 SET (THIS_PROJECT_NAME gold_reference)
-
 PROJECT(${THIS_PROJECT_NAME})
 
 ADD_LIBRARY(${THIS_PROJECT_NAME} SHARED "shim_vulkan.h" "shim_vulkan.cpp" "utils.h" "utils.cpp" "format_conversion.cpp")
