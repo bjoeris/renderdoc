@@ -81,7 +81,7 @@ IF (Vulkan_FOUND)
   MESSAGE (STATUS "Vulkan Includes           : ${Vulkan_INCLUDE_DIRS}")
   MESSAGE (STATUS "Vulkan Libraries          : ${Vulkan_LIBRARIES}")
 ELSE ()
-  MESSAGE (FATAL_ERROR "Vulkan not found!")
+  MESSAGE (FATAL_ERROR "Vulkan not found at $ENV{VULKAN_SDK}!")
 ENDIF ()
 
 ADD_LIBRARY (vulkan STATIC IMPORTED)
