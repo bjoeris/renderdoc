@@ -519,6 +519,9 @@
     <ClInclude Include="serialise\codecs\sample_cpp_trace\common.h">
       <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
     </ClInclude>
+    <ClInclude Include="serialise\codecs\helper\format_helper.h">
+      <Filter>Common\Serialise\Codecs\CPP\helper</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="maths\camera.cpp">
@@ -925,6 +928,12 @@
     </ClCompile>
     <ClCompile Include="serialise\codecs\sample_cpp_trace\main_yeti.cpp">
       <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\helper\format_size_and_aspect.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\helper</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_writer_template_files.cpp">
+      <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
