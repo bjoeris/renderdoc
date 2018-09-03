@@ -41,7 +41,7 @@
 
 #include "vulkan/vulkan.h"
 
-extern std::unordered_map<VkFormat, std::pair<VkImageAspectFlags, uint32_t>> kImageAspectsAndByteSize;
+extern std::map<VkFormat, std::pair<VkImageAspectFlags, uint32_t>> kImageAspectsAndByteSize;
 
 double             SizeOfFormat(VkFormat fmt, VkImageAspectFlagBits aspect);
 uint32_t           ChannelsInFormat(VkFormat fmt);

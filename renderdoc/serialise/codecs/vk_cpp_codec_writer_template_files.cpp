@@ -1505,7 +1505,7 @@ R"(//---------------------------------------------------------------------------
 
 #include "vulkan/vulkan.h"
 
-extern std::unordered_map<VkFormat, std::pair<VkImageAspectFlags, uint32_t>> kImageAspectsAndByteSize;
+extern std::map<VkFormat, std::pair<VkImageAspectFlags, uint32_t>> kImageAspectsAndByteSize;
 
 double             SizeOfFormat(VkFormat fmt, VkImageAspectFlagBits aspect);
 uint32_t           ChannelsInFormat(VkFormat fmt);
@@ -1537,7 +1537,7 @@ R"(//---------------------------------------------------------------------------
     VK_FORMAT_##f, std::pair<VkImageAspectFlags, uint32_t>(VK_IMAGE_ASPECT_##a##_BIT, bs) \
   }
 
-std::unordered_map<VkFormat, std::pair<VkImageAspectFlags, uint32_t>> kImageAspectsAndByteSize = {
+std::map<VkFormat, std::pair<VkImageAspectFlags, uint32_t>> kImageAspectsAndByteSize = {
     FORMAT_ASPECT_BYTE_SIZE(A8B8G8R8_USCALED_PACK32, COLOR, 4),
     FORMAT_ASPECT_BYTE_SIZE(R5G5B5A1_UNORM_PACK16, COLOR, 2),
     FORMAT_ASPECT_BYTE_SIZE(B8G8R8A8_UINT, COLOR, 4),
