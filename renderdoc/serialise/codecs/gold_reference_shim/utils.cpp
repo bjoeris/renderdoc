@@ -34,18 +34,18 @@
 
 void bufferToPpm(VkBuffer buffer, VkDeviceMemory mem, std::string filename, uint32_t width,
                  uint32_t height, VkFormat format)
-  {
+{
   void *data;
   vkMapMemory(aux.device, mem, 0, VK_WHOLE_SIZE, 0, &data);
 
   // raw data
   std::string rawFilename = filename.substr(0, filename.find_last_of("."));
   std::ofstream rawFile(rawFilename, std::ios::out | std::ios::binary);
-  rawFile.write((char *) data, width * height * kImageAspectsAndByteSize[format].second);
+  rawFile.write((char *)data, width * height * kImageAspectsAndByteSize[format].second);
   rawFile.close();
 
   switch(format)
-{
+  {
     case VK_FORMAT_D16_UNORM_S8_UINT:
     case VK_FORMAT_D24_UNORM_S8_UINT:
     case VK_FORMAT_D32_SFLOAT_S8_UINT:
@@ -72,34 +72,34 @@ void bufferToPpm(VkBuffer buffer, VkDeviceMemory mem, std::string filename, uint
     }
     break;
     default:
-{
+    {
       std::vector<uint8_t> output(width * height * 3);
       fillPPM(output.data(), data, width, height, format);
 
-  std::ofstream file(filename, std::ios::out | std::ios::binary);
-  file << "P6\n" << width << "\n" << height << "\n" << 255 << "\n";
+      std::ofstream file(filename, std::ios::out | std::ios::binary);
+      file << "P6\n" << width << "\n" << height << "\n" << 255 << "\n";
       file.write((char *)output.data(), width * height * 3);
       file.close();
-          }
-      break;
-          }
+    }
+    break;
+  }
 
   vkUnmapMemory(aux.device, mem);
-        }
+}
 
 // imgToBuffer copies the full image to buffer tightly-packed.
 // For a depth/stencil format, the first region is depth aspect, and the second is
 // stencil aspect.
 void imgToBuffer(VkCommandBuffer cmdBuf, VkImage image, VkBuffer buffer, uint32_t width,
                  uint32_t height, uint32_t mip, uint32_t layer, VkFormat format)
-        {
+{
   switch(format)
-          {
+  {
     case VK_FORMAT_D32_SFLOAT_S8_UINT:
     case VK_FORMAT_D24_UNORM_S8_UINT:
     case VK_FORMAT_D16_UNORM_S8_UINT:
-          {
-      uint32_t depthSizeInBytes = SizeOfFormat(format, VK_IMAGE_ASPECT_DEPTH_BIT);
+    {
+      double depthSizeInBytes = SizeOfFormat(format, VK_IMAGE_ASPECT_DEPTH_BIT);
       VkBufferImageCopy regions[2] = {{}, {}};
       regions[0].imageSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, mip, layer, 1};
       regions[0].imageExtent = {width, height, 1};
@@ -107,15 +107,15 @@ void imgToBuffer(VkCommandBuffer cmdBuf, VkImage image, VkBuffer buffer, uint32_
       regions[1].imageSubresource = {VK_IMAGE_ASPECT_STENCIL_BIT, mip, layer, 1};
       regions[1].imageExtent = {width, height, 1};
       vkCmdCopyImageToBuffer(cmdBuf, image, VK_IMAGE_LAYOUT_GENERAL, buffer, 2, regions);
-        }
-      break;
+    }
+    break;
     default:
-{
-  VkBufferImageCopy region = {};
+    {
+      VkBufferImageCopy region = {};
       region.imageSubresource = {kImageAspectsAndByteSize[format].first, mip, layer, 1};
-  region.imageExtent = {width, height, 1};
+      region.imageExtent = {width, height, 1};
       vkCmdCopyImageToBuffer(cmdBuf, image, VK_IMAGE_LAYOUT_GENERAL, buffer, 1, &region);
-}
+    }
     break;
   }
 }

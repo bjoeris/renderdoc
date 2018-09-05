@@ -802,8 +802,7 @@ bool isHDRFormat(VkFormat fmt) {
 }
 
 uint32_t BitsPerChannelInFormat(VkFormat fmt, VkImageAspectFlagBits aspect) {
-  return SizeOfFormat(fmt, aspect) * 8
-         / ChannelsInFormat(fmt);
+  return static_cast<uint32_t>(SizeOfFormat(fmt, aspect) * 8 / ChannelsInFormat(fmt));
 }
 
 bool IsFPFormat(VkFormat fmt) {

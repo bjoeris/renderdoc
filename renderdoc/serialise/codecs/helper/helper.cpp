@@ -49,7 +49,7 @@ void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance,
       instance, "vkCreateDebugReportCallbackEXT");
 
   VkDebugReportCallbackCreateInfoEXT ci = {VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
-                                           0, VkDebugReportFlagBitsEXT(flags), DebugCallback, NULL};
+                                           0, VkDebugReportFlagsEXT(flags), DebugCallback, NULL};
   if(CreateDebugReportCallback != NULL)
   {
     VkResult result = CreateDebugReportCallback(instance, &ci, NULL, &aux.callback);
@@ -116,7 +116,7 @@ void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImg, uint32_t arr
                            uint32_t mipLevel, VkImageAspectFlagBits aspect, VkImageLayout newLayout,
                            VkImageLayout oldLayout)
 {
-  VkImageSubresourceRange subresourceRange = {aspect, mipLevel, 1, arrayLayer, 1};
+  VkImageSubresourceRange subresourceRange = {VkImageAspectFlags(aspect), mipLevel, 1, arrayLayer, 1};
 
   ImageLayoutTransition(aux, dstImg, subresourceRange, newLayout, oldLayout);
 }
@@ -153,8 +153,9 @@ void CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageC
       FixCompressedSizes(dst_ci.format, dim, x);
         for(uint32_t m = 0; m < dst_ci.mipLevels; m++)
       {
-          VkBufferImageCopy region = {offset,    dim.width, dim.height, {aspects[j], m, a, 1},
-                                    {0, 0, 0},  dim};
+          VkBufferImageCopy region = {offset,     dim.width,
+                                      dim.height, {VkImageAspectFlags(aspects[j]), m, a, 1},
+                                      {0, 0, 0},  dim};
           offset += (uint32_t)(dim.depth * dim.width * dim.height *
                                SizeOfFormat(dst_ci.format, aspects[j]));
         dim.height = std::max<int>(dim.height / 2, 1);
@@ -174,11 +175,11 @@ void CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageC
                              count, regions.data() + offset);
     }
   } else {
-    std::string msg = __FUNCTION__ + ": resets MSAA resource with " + 
-      std::to_string(dst_ci.samples) + " samples. Currently this is not implemented.\n";
+    std::string msg = std::string(__FUNCTION__) + std::string(": resets MSAA resource with ") +
+      std::to_string(dst_ci.samples) + std::string(" samples. Currently this is not implemented.\n");
     printf("%s", msg.c_str());
 #if defined(_WIN32) || defined(WIN32)
-    OutputDebugStringA(msg.c_str())
+    OutputDebugStringA(msg.c_str());
 #endif
   }
 }
@@ -218,7 +219,7 @@ void CopyImageToBuffer(AuxVkTraceResources aux, VkImage src, VkBuffer dst, VkIma
         FixCompressedSizes(src_ci.format, dim, x);
         for (uint32_t m = 0; m < src_ci.mipLevels; m++) {
           VkBufferImageCopy region = {offset,     dim.width,
-                                      dim.height, {aspects[j], m, a, 1},
+                                      dim.height, {VkImageAspectFlags(aspects[j]), m, a, 1},
                                       {0, 0, 0},  dim};
           offset += (uint32_t) (dim.depth * dim.width * dim.height * SizeOfFormat(src_ci.format, aspects[j]));
           dim.height = std::max<int>(dim.height / 2, 1);
@@ -258,7 +259,7 @@ void DiffDeviceMemory(AuxVkTraceResources aux, VkDeviceMemory expected,
 
   if(memcmp(expected_data, actual_data, (size_t)size) != 0)
   {
-    std::string msg = __FUNCTION__ + ": Resource " + name + 
+    std::string msg = std::string(__FUNCTION__) + std::string(": Resource ") + std::string(name) +
       std::string(" has changed by the end of the frame.\n");
     printf("%s", msg.c_str());
 #if defined(_WIN32) || defined(WIN32)

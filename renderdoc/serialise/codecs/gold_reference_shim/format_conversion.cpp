@@ -36,9 +36,9 @@ float SFLOAT16ToSFLOAT32(uint32_t bits) {
   if (S > 0)
     sign = -1;
   if (E == 0 && M == 0)
-    return sign * float(0.0);
+    return sign * 0.0f;
   else if (E == 0 && M != 0)
-    return sign * float(M) / 1024.0 / 16384.0;
+    return sign * float(M) / 1024.0f / 16384.0f;
   else if (E == 31 && M == 0)
     return sign * std::numeric_limits<float>::infinity();
   else if (E == 31 && M != 0) {
@@ -47,9 +47,9 @@ float SFLOAT16ToSFLOAT32(uint32_t bits) {
 #endif
     return 0;
   } else if (E <= 15)
-    return sign * (1 + float(M) / 1024.0) / float(uint32_t(1 << (15 - E)));
+    return sign * (1 + float(M) / 1024.0f) / float(uint32_t(1 << (15 - E)));
   else
-    return sign * (1 + float(M) / 1024.0) * float(uint32_t(1 << (E - 15)));
+    return sign * (1 + float(M) / 1024.0f) * float(uint32_t(1 << (E - 15)));
 }
 
 struct half {
@@ -94,10 +94,11 @@ struct depth24 {
 struct rgb8 {
   uint8_t value[3];
 
-  rgb8(uint32_t lum) {
-    value[0] = lum;
-    value[1] = lum;
-    value[2] = lum;
+  template<typename T>
+  rgb8(const T& lum) {
+    value[0] = uint8_t(lum);
+    value[1] = uint8_t(lum);
+    value[2] = uint8_t(lum);
   }
 };
 #pragma pack(pop)
@@ -192,7 +193,7 @@ void histogramEqualization(T * data, uint32_t w, uint32_t h, uint32_t channels,
         if (!(isNormal(v) || v == 0) || v > (absMax) || v < absMin) {
           continue;
         }
-        uint32_t bin = 255 * ((v - minV[c]) / denom[c]);
+        uint32_t bin = uint32_t(255 * ((v - minV[c]) / denom[c]));
         bins[c][bin]++;
       }
     }
@@ -220,8 +221,8 @@ void histogramEqualization(T * data, uint32_t w, uint32_t h, uint32_t channels,
           if (v < absMin)
             v = minV[c];
         }
-        uint32_t bin = 255 * (v - minV[c]) / denom[c];
-        ptr[(i + j * w) * channels + c] = 255 * probability[c][bin];
+        uint32_t bin = uint32_t(255 * (v - minV[c]) / denom[c]);
+        ptr[(i + j * w) * channels + c] = IntType(255 * probability[c][bin]);
       }
     }
   }
@@ -251,7 +252,7 @@ void histogramEqualization(T * data, uint32_t w, uint32_t h, uint32_t channels,
   }
 
 bool fillPPM(void *output, void *input, uint32_t w, uint32_t h, VkFormat format, bool isStencil) {
-  unsigned char *out = (unsigned char *) output;
+  uint8_t *out = (uint8_t *) output;
   uint8_t *p = (uint8_t *) input;
   uint32_t size_in_bytes = 0;
   uint32_t channels = ChannelsInFormat(format);
@@ -261,7 +262,7 @@ bool fillPPM(void *output, void *input, uint32_t w, uint32_t h, VkFormat format,
   bool isSigned = IsSignedFormat(format);
   bool isDepth = IsDepthFormat(format);
   if (!isStencil) {
-    size_in_bytes = SizeOfFormat(format, VK_IMAGE_ASPECT_COLOR_BIT);
+    size_in_bytes = uint32_t(SizeOfFormat(format, VK_IMAGE_ASPECT_COLOR_BIT));
     if (isHDR) {
       if (isFP) {
         if (isDepth) {
@@ -278,10 +279,10 @@ bool fillPPM(void *output, void *input, uint32_t w, uint32_t h, VkFormat format,
       }
     }
   } else {
-    size_in_bytes = SizeOfFormat(format, VK_IMAGE_ASPECT_DEPTH_BIT);
+    size_in_bytes = uint32_t(SizeOfFormat(format, VK_IMAGE_ASPECT_DEPTH_BIT));
     p += size_in_bytes * w * h; // skip depth bytes
     HISTOGRAM_EQ_SWITCH_UNSIGNED(8, 1);
-    size_in_bytes = SizeOfFormat(format, VK_IMAGE_ASPECT_STENCIL_BIT);
+    size_in_bytes = uint32_t(SizeOfFormat(format, VK_IMAGE_ASPECT_STENCIL_BIT));
   }
 
 #undef HISTOGRAM_EQ_SWITCH_FP
@@ -646,7 +647,7 @@ bool fillPPM(void *output, void *input, uint32_t w, uint32_t h, VkFormat format,
         case VK_FORMAT_R16G16B16A16_SFLOAT:
         {
           for (uint32_t c = 0; c < std::min<uint32_t>(channels, 3); c++)
-            *out++ = ((uint16_t*) p)[c];
+            *out++ = ((uint16_t*) p)[c] & 0xFF;
           for (uint32_t c = channels; c < 3; c++)
             *out++ = 0;
         }
@@ -666,7 +667,7 @@ bool fillPPM(void *output, void *input, uint32_t w, uint32_t h, VkFormat format,
         case VK_FORMAT_R32G32B32A32_SFLOAT:
         {
           for (uint32_t c = 0; c < std::min<uint32_t>(channels, 3); c++)
-            *out++ = ((uint32_t*) p)[c];
+            *out++ = ((uint32_t*) p)[c] & 0xFF;
           for (uint32_t c = channels; c < 3; c++)
             *out++ = 0;
         }
@@ -686,7 +687,7 @@ bool fillPPM(void *output, void *input, uint32_t w, uint32_t h, VkFormat format,
         case VK_FORMAT_R64G64B64A64_SFLOAT:
         {
           for (uint32_t c = 0; c < std::min<uint32_t>(channels, 3); c++)
-            *out++ = ((uint64_t*) p)[c];
+            *out++ = ((uint64_t*) p)[c] & 0xFF;
           for (uint32_t c = channels; c < 3; c++)
             *out++ = 0;
         }
@@ -709,9 +710,9 @@ bool fillPPM(void *output, void *input, uint32_t w, uint32_t h, VkFormat format,
             *out++ = p[0];    // G
             *out++ = p[0];    // B
           } else {
-            *out++ = ((uint16_t *) p)[0];    // R
-            *out++ = ((uint16_t *) p)[0];    // G
-            *out++ = ((uint16_t *) p)[0];    // B
+            *out++ = ((uint16_t *) p)[0] & 0xFF;    // R
+            *out++ = ((uint16_t *) p)[0] & 0xFF;    // G
+            *out++ = ((uint16_t *) p)[0] & 0xFF;    // B
           }
         }
         break;
@@ -738,9 +739,9 @@ bool fillPPM(void *output, void *input, uint32_t w, uint32_t h, VkFormat format,
             *out++ = p[0];    // G
             *out++ = p[0];    // B
           } else {
-            *out++ = ((uint32_t *) p)[0];    // R
-            *out++ = ((uint32_t *) p)[0];    // G
-            *out++ = ((uint32_t *) p)[0];    // B
+            *out++ = ((uint32_t *) p)[0] & 0xFF;    // R
+            *out++ = ((uint32_t *) p)[0] & 0xFF;    // G
+            *out++ = ((uint32_t *) p)[0] & 0xFF;    // B
           }
         }
         break;
