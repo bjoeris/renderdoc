@@ -95,8 +95,8 @@ void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance,
                             VkPhysicalDevice physDevice, VkDevice device);
 
 void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
-  VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
-  uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQueueFamily);
+                           VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
+                           uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQueueFamily);
 
 void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dst, VkImageCreateInfo dst_ci,
                            VkImageLayout final_layout,
@@ -121,8 +121,7 @@ void InitializeDiffBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *mem
 void MakePhysicalDeviceFeaturesMatch(const VkPhysicalDeviceFeatures &available,
                                      VkPhysicalDeviceFeatures *captured_request);
 
-void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance,
-                           uint32_t flags);
+void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance, uint32_t flags);
 
 void MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,
                VkMemoryAllocateInfo &ai, MemoryRemapVec &remap, VkDevice dev);

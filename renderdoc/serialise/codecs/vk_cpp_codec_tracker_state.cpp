@@ -515,7 +515,8 @@ void TraceTracker::AccessSubpassAttachments()
   {
     ExtObject *blendAttachmentState = blendAttachmets->At(i);
     uint64_t blendEnabled = blendAttachmentState->At("blendEnable")->U64();
-    VkColorComponentFlags colorWriteMask = (uint32_t) blendAttachmentState->At("colorWriteMask")->U64();
+    VkColorComponentFlags colorWriteMask =
+        (uint32_t)blendAttachmentState->At("colorWriteMask")->U64();
     AccessAction action;
     if(blendEnabled == 0)
     {
@@ -548,14 +549,9 @@ void TraceTracker::AccessSubpassAttachments()
     {
       switch(action)
       {
-        case ACCESS_ACTION_READ_WRITE:
-          action = ACCESS_ACTION_READ;
-          break;
-        case ACCESS_ACTION_WRITE:
-          action = ACCESS_ACTION_NONE;
-          break;
-        default:
-          RDCASSERT(0);
+        case ACCESS_ACTION_READ_WRITE: action = ACCESS_ACTION_READ; break;
+        case ACCESS_ACTION_WRITE: action = ACCESS_ACTION_NONE; break;
+        default: RDCASSERT(0);
       }
     }
     if(action != ACCESS_ACTION_NONE)
@@ -651,14 +647,15 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
 
   if(bindingState.subpassIndex == bindingState.attachmentFirstUse[attachment])
   {
-    // This is the first subpass to use the attachment. This triggers the attachment's loadOp/stencilLoadOp
+    // This is the first subpass to use the attachment. This triggers the attachment's
+    // loadOp/stencilLoadOp
 
     VkFormat format = (VkFormat)att_desc->At("format")->U64();
     VkImageLayout initialLayout = (VkImageLayout)att_desc->At("initialLayout")->U64();
 
     if(!IsStencilOnlyFormat(format))
     {
-      // The attachment has a depth or color component; 
+      // The attachment has a depth or color component;
       // load behaviour for depth/color component is defined by loadOp
       VkAttachmentLoadOp loadOp = (VkAttachmentLoadOp)att_desc->At("loadOp")->U64();
       AccessAction action;
@@ -668,16 +665,17 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
         {
           action = ACCESS_ACTION_CLEAR;
         }
-      else
+        else
         {
           action = ACCESS_ACTION_WRITE;
         }
-    }
-    else
-    {
+      }
+      else
+      {
         action = ACCESS_ACTION_READ;
-    }
-      AccessImageView(view_id, initialLayout, action, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_COLOR_BIT);
+      }
+      AccessImageView(view_id, initialLayout, action,
+                      VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_COLOR_BIT);
     }
     if(IsStencilFormat(format))
     {
@@ -685,19 +683,20 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
       // load behaviour for stencil component is defined by stencilLoadOp
       VkAttachmentLoadOp stencilLoadOp = (VkAttachmentLoadOp)att_desc->At("stencilLoadOp")->U64();
       AccessAction stencilAction;
-      if(stencilLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR || stencilLoadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
-    {
-      if(bindingState.isFullRenderArea)
+      if(stencilLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR ||
+         stencilLoadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
       {
+        if(bindingState.isFullRenderArea)
+        {
           stencilAction = ACCESS_ACTION_CLEAR;
+        }
+        else
+        {
+          stencilAction = ACCESS_ACTION_WRITE;
+        }
       }
       else
       {
-          stencilAction = ACCESS_ACTION_WRITE;
-      }
-    }
-    else
-    {
         stencilAction = ACCESS_ACTION_READ;
       }
       AccessImageView(view_id, initialLayout, stencilAction, VK_IMAGE_ASPECT_STENCIL_BIT);

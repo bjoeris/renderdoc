@@ -239,7 +239,7 @@ void TraceTracker::CreateShaderModuleInternal(ExtObject *o)
   ExtObject *ci = o->At("CreateInfo");
   ExtObject *buffer = ci->At("pCode");
   buffer->data.str = GetVarFromMap(dataBlobs, "std::vector<uint8_t>", "shader", buffer->U64());
-  if (dataBlobCount.find(buffer->U64()) == dataBlobCount.end())
+  if(dataBlobCount.find(buffer->U64()) == dataBlobCount.end())
     dataBlobCount[buffer->U64()] = 1;
   else
     dataBlobCount[buffer->U64()]++;
@@ -289,7 +289,7 @@ void TraceTracker::CreatePipelineCacheInternal(ExtObject *o)
   ExtObject *buffer = ci->At(4);
   buffer->data.str =
       GetVarFromMap(dataBlobs, "std::vector<uint8_t>", "pipeline_cache", buffer->U64());
-  if (dataBlobCount.find(buffer->U64()) == dataBlobCount.end())
+  if(dataBlobCount.find(buffer->U64()) == dataBlobCount.end())
     dataBlobCount[buffer->U64()] = 1;
   else
     dataBlobCount[buffer->U64()]++;
@@ -299,7 +299,7 @@ void TraceTracker::FlushMappedMemoryRangesInternal(ExtObject *o)
 {
   fg.updates.memory.push_back(o);
   uint64_t buffer = o->At(3)->U64();
-  if (dataBlobCount.find(buffer) == dataBlobCount.end())
+  if(dataBlobCount.find(buffer) == dataBlobCount.end())
     dataBlobCount[buffer] = 2;
   else
     dataBlobCount[buffer] += 2;
@@ -590,9 +590,11 @@ void TraceTracker::InitialContentsInternal(ExtObject *o)
   if(o->At(0)->U64() == VkResourceType::eResDescriptorSet)
   {
     InitDescriptorSetInternal(o);
-  } else {
+  }
+  else
+  {
     uint64_t buffer = o->At("Contents")->U64();
-    if (dataBlobCount.find(buffer) == dataBlobCount.end())
+    if(dataBlobCount.find(buffer) == dataBlobCount.end())
       dataBlobCount[buffer] = 1;
     else
       dataBlobCount[buffer]++;

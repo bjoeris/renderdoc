@@ -36,7 +36,7 @@ const char *RDOC_ENV_VAR =
     "RDOC_GOLD_FRAME_INDEX";    // environment variable for to-be-captured frame.
 int captureFrame = 5;           // default frame index if RDOC_GOLD_FRAME_INDEX is not set.
 int presentIndex = 0;
-bool IsTargetFrame = true;      // default value doesn't matter. It's properly set in CreateInstance.
+bool IsTargetFrame = true;    // default value doesn't matter. It's properly set in CreateInstance.
 
 int renderPassCount = 0;
 AuxVkTraceResources aux;
@@ -64,7 +64,7 @@ VkResult shim_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInf
                             const VkAllocationCallbacks *pAllocator, VkImage *pImage)
 {
   VkImageCreateInfo *pCI = (VkImageCreateInfo *)pCreateInfo;
-  pCI->usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT; // we might have to read back from this image.
+  pCI->usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;    // we might have to read back from this image.
 
   PFN_vkCreateImage fn = vkCreateImage;
   VkResult r = fn(device, pCreateInfo, pAllocator, pImage);
@@ -77,9 +77,7 @@ VkResult shim_vkCreateImageView(VkDevice device, const VkImageViewCreateInfo *pC
 {
   PFN_vkCreateImageView fn = vkCreateImageView;
   VkResult r = fn(device, pCreateInfo, pAllocator, pView);
-  ImageAndView iav(pCreateInfo->image,
-    imagesMap[pCreateInfo->image],
-    *pView, *pCreateInfo);
+  ImageAndView iav(pCreateInfo->image, imagesMap[pCreateInfo->image], *pView, *pCreateInfo);
   imageAndViewMap[*pView] = iav;
   return r;
 }
@@ -101,10 +99,11 @@ VkResult shim_vkCreateRenderPass(VkDevice device, const VkRenderPassCreateInfo *
 {
   PFN_vkCreateRenderPass fn = vkCreateRenderPass;
   // Modify storeOp and stencilStoreOp to VK_ATTACHMENT_STORE_OP_STORE.
-  VkRenderPassCreateInfo* CreateInfo = const_cast<VkRenderPassCreateInfo*>(pCreateInfo);
+  VkRenderPassCreateInfo *CreateInfo = const_cast<VkRenderPassCreateInfo *>(pCreateInfo);
   for(uint32_t i = 0; i < pCreateInfo->attachmentCount; i++)
   {
-    VkAttachmentDescription* desc = const_cast<VkAttachmentDescription*>(&CreateInfo->pAttachments[i]);
+    VkAttachmentDescription *desc =
+        const_cast<VkAttachmentDescription *>(&CreateInfo->pAttachments[i]);
     desc->storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     desc->stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
   }
@@ -131,8 +130,8 @@ void shim_vkCmdBeginRenderPass(VkCommandBuffer commandBuffer,
     VkRenderPass rp = pRenderPassBegin->renderPass;
     // renderpass must be valid AND only a single renderpass can
     // be associated with current command buffer in "Begin" state.
-    assert(renderPassInfos.find(rp) != renderPassInfos.end() && 
-      cmdBufferRenderPassInfos.find(commandBuffer) == cmdBufferRenderPassInfos.end());
+    assert(renderPassInfos.find(rp) != renderPassInfos.end() &&
+           cmdBufferRenderPassInfos.find(commandBuffer) == cmdBufferRenderPassInfos.end());
     RenderPassInfo rpInfo = renderPassInfos[rp];
     VkFramebuffer fb = pRenderPassBegin->framebuffer;
     for(uint32_t i = 0; i < framebufferAttachements[fb].size(); i++)
@@ -152,7 +151,7 @@ void shim_vkCmdEndRenderPass(VkCommandBuffer commandBuffer)
   if(IsTargetFrame)
   {
     assert(cmdBufferRenderPassInfos.find(commandBuffer) != cmdBufferRenderPassInfos.end());
-    RenderPassInfo& rpInfo = cmdBufferRenderPassInfos[commandBuffer];
+    RenderPassInfo &rpInfo = cmdBufferRenderPassInfos[commandBuffer];
     // produce a readbacks structure that will store resources holding the attahcments data.
     ReadbackInfos readbacks = copyFramebufferAttachments(commandBuffer, &rpInfo);
     // current command buffer accumulates all readbacks so it can save images on queuesubmit.
@@ -176,7 +175,7 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
   {
     for(uint32_t cbIndex = 0; cbIndex < pSubmits[i].commandBufferCount; cbIndex++)
     {
-      std::vector<ReadbackInfos>& readbacks =
+      std::vector<ReadbackInfos> &readbacks =
           cmdBufferReadBackInfos[pSubmits[i].pCommandBuffers[cbIndex]];
       for(uint32_t j = 0; j < readbacks.size(); j++)
       {
@@ -186,14 +185,12 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
           ReadbackInfo info = infos.attachments[a];
           char handleStr[32];
           sprintf(handleStr, "%p", info.srcImage);
-          std::string filename = std::to_string(renderPassCount) + "_attachment_" +
-                                 std::to_string(info.index) + "_resource_" +
-                                 std::string(handleStr) + "_" + 
-                                 FormatToString(info.format) + "_" +
-                                 std::to_string(info.width) + "x" +
-                                 std::to_string(info.height) + ".ppm";
-          bufferToPpm(info.buffer, info.bufferDeviceMem, filename,
-                      info.width, info.height, info.format);
+          std::string filename =
+              std::to_string(renderPassCount) + "_attachment_" + std::to_string(info.index) +
+              "_resource_" + std::string(handleStr) + "_" + FormatToString(info.format) + "_" +
+              std::to_string(info.width) + "x" + std::to_string(info.height) + ".ppm";
+          bufferToPpm(info.buffer, info.bufferDeviceMem, filename, info.width, info.height,
+                      info.format);
           info.Clear(aux.device);
         }
         renderPassCount++;
@@ -207,14 +204,14 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
 VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 {
   PFN_vkQueuePresentKHR fn =
-    (PFN_vkQueuePresentKHR) vkGetDeviceProcAddr(aux.device, "vkQueuePresentKHR");
+      (PFN_vkQueuePresentKHR)vkGetDeviceProcAddr(aux.device, "vkQueuePresentKHR");
   if(IsTargetFrame)
   {
     // Save screenshots
     for(uint32_t i = 0; i < (*pPresentInfo).swapchainCount; i++)
     {
       VkImage srcImage =
-        swapchainImageMap[(*pPresentInfo).pSwapchains[i]][(*pPresentInfo).pImageIndices[i]];
+          swapchainImageMap[(*pPresentInfo).pSwapchains[i]][(*pPresentInfo).pImageIndices[i]];
       char filename[128];
 #if defined(__yeti__)
       sprintf(filename, "/var/game/screenshot_f%d_sw%d.ppm", presentIndex, i);
@@ -270,8 +267,8 @@ VkResult shim_vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreateInfoK
   PFN_vkCreateSwapchainKHR fn =
       (PFN_vkCreateSwapchainKHR)vkGetDeviceProcAddr(device, "vkCreateSwapchainKHR");
   swapchainCI = *pCreateInfo;
-  VkSwapchainCreateInfoKHR* pCI = const_cast<VkSwapchainCreateInfoKHR*>(pCreateInfo);
-  pCI->imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT; // we will copy from presented images.
+  VkSwapchainCreateInfoKHR *pCI = const_cast<VkSwapchainCreateInfoKHR *>(pCreateInfo);
+  pCI->imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;    // we will copy from presented images.
   VkResult r = fn(device, pCreateInfo, pAllocator, pSwapchain);
   return r;
 }
@@ -284,7 +281,8 @@ VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
   char *envVal = getenv(RDOC_ENV_VAR);
   if(envVal != NULL)
     captureFrame = atoi(envVal);
-  IsTargetFrame = presentIndex == captureFrame; // if captureFrame is '0', first frame needs to save images.
+  IsTargetFrame =
+      presentIndex == captureFrame;    // if captureFrame is '0', first frame needs to save images.
   return r;
 }
 

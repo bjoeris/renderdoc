@@ -244,13 +244,18 @@ bool TraceTracker::FilterCmdPipelineBarrier(ExtObject *o)
   for(uint64_t i = 0; i < image->Size();)
   {
     ExtObject *resource = image->At(i)->At(8);
-    if (IsPresentationResource(resource->U64())) {
+    if(IsPresentationResource(resource->U64()))
+    {
       resource->U64() = PRESENT_IMAGE_OFFSET;
       presentResources.insert(ExtObjectIDMapPair(cmd->U64(), o));
       i++;
-    } else if (!IsValidNonNullResouce(resource->U64())) {
+    }
+    else if(!IsValidNonNullResouce(resource->U64()))
+    {
       image->RemoveOne(image->At(i));
-    } else {
+    }
+    else
+    {
       i++;
     }
   }

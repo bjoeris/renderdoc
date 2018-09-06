@@ -25,13 +25,12 @@
 
 namespace vk_cpp_codec
 {
-TemplateFileDesc CodeWriter::TemplateFiles[TEMPLATE_FILE_COUNT] =
-{
-/******************************************************************************/
-/* TEMPLATE_FILE_ROOT_CMAKE                                                   */
-/******************************************************************************/
-{"", "CMakeLists.txt",
-R"(CMAKE_MINIMUM_REQUIRED (VERSION 3.9)
+TemplateFileDesc CodeWriter::TemplateFiles[TEMPLATE_FILE_COUNT] = {
+    /******************************************************************************/
+    /* TEMPLATE_FILE_ROOT_CMAKE                                                   */
+    /******************************************************************************/
+    {"", "CMakeLists.txt",
+     R"(CMAKE_MINIMUM_REQUIRED (VERSION 3.9)
 # Disable some of the default cmake build targets, keep debug and release
 SET (CMAKE_CONFIGURATION_TYPES Debug Release CACHE TYPE INTERNAL FORCE)
 
@@ -143,11 +142,11 @@ ADD_SUBDIRECTORY("${CMAKE_SOURCE_DIR}/amd_shader_info_shim"
                  "${CMAKE_BINARY_DIR}/amd_shader_info_shim")
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SAMPLE_MAIN_WIN                                              */
-/******************************************************************************/
-{"sample_cpp_trace", "main_win.cpp",
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SAMPLE_MAIN_WIN                                              */
+    /******************************************************************************/
+    {"sample_cpp_trace", "main_win.cpp",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: main_win.cpp
 //-----------------------------------------------------------------------------
@@ -339,11 +338,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 #endif    // #if _WIN32
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SAMPLE_MAIN_YETI                                             */
-/******************************************************************************/
-{"sample_cpp_trace", "main_yeti.cpp",
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SAMPLE_MAIN_YETI                                             */
+    /******************************************************************************/
+    {"sample_cpp_trace", "main_yeti.cpp",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: main_yeti.cpp
 //-----------------------------------------------------------------------------
@@ -354,16 +353,16 @@ R"(//---------------------------------------------------------------------------
 #include <yeti_c/yeti.h>
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 #include <time.h>
 #include <vulkan/vulkan.h>
 
-#include <string>
-#include <sstream>
 #include <iostream>
+#include <sstream>
+#include <string>
 
 #include "gen_main.h"
 
@@ -517,11 +516,11 @@ int main(int argc, char **argv)
 #endif    // #if defined(__yeti__)
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SAMPLE_MAIN_XLIB                                             */
-/******************************************************************************/
-{"sample_cpp_trace", "main_xlib.cpp",
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SAMPLE_MAIN_XLIB                                             */
+    /******************************************************************************/
+    {"sample_cpp_trace", "main_xlib.cpp",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: main_xlib.cpp
 //-----------------------------------------------------------------------------
@@ -529,10 +528,10 @@ R"(//---------------------------------------------------------------------------
 // capture on Linux
 #if defined(__linux__) && !defined(__yeti__)
 
+#include <X11/Xlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdexcept>
-#include <X11/Xlib.h>
 
 #include "gen_main.h"
 
@@ -610,11 +609,11 @@ int main(int argc, char **argv)
 #endif    // #if defined(__linux__) && !defined(__yeti__)
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SAMPLE_COMMON                                                */
-/******************************************************************************/
-{"sample_cpp_trace", "common.h",
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SAMPLE_COMMON                                                */
+    /******************************************************************************/
+    {"sample_cpp_trace", "common.h",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: common.h
 //-----------------------------------------------------------------------------
@@ -634,11 +633,11 @@ R"(//---------------------------------------------------------------------------
 void PostStageProgress(const char *stage, uint32_t i, uint32_t N);
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SAMPLE_CMAKE                                                 */
-/******************************************************************************/
-{"sample_cpp_trace", "CMakeLists.txt",
-R"(IF(WIN32)
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SAMPLE_CMAKE                                                 */
+    /******************************************************************************/
+    {"sample_cpp_trace", "CMakeLists.txt",
+     R"(IF(WIN32)
   SET (THIS_PROJECT_NAME sample_cpp_trace)
 ELSE ()
   SET (THIS_PROJECT_NAME sample_cpp_trace_elf)
@@ -687,11 +686,11 @@ ELSE ()
 ENDIF ()
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_HELPER_H                                                     */
-/******************************************************************************/
-{"helper", "helper.h",
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_HELPER_H                                                     */
+    /******************************************************************************/
+    {"helper", "helper.h",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: helper.h
 //-----------------------------------------------------------------------------
@@ -812,16 +811,16 @@ inline uint64_t AlignedDown(uint64_t size, uint64_t alignment)
 std::string StageProgressString(const char *stage, uint32_t i, uint32_t N);
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_HELPER_CPP                                                   */
-/******************************************************************************/
-{"helper", "helper.cpp",
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_HELPER_CPP                                                   */
+    /******************************************************************************/
+    {"helper", "helper.cpp",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: helper.cpp
 //-----------------------------------------------------------------------------
-#include "helper.h"
 #include <string>
+#include "helper.h"
 
 VkBool32 VKAPI_PTR DebugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType,
                                  uint64_t object, size_t location, int32_t messageCode,
@@ -1478,11 +1477,11 @@ std::string StageProgressString(const char *stage, uint32_t i, uint32_t N)
                      " of " + std::to_string(N));
 })")},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_HELPER_FORMAT_HELPER                                         */
-/******************************************************************************/
-{ "helper", "format_helper.h",
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_HELPER_FORMAT_HELPER                                         */
+    /******************************************************************************/
+    {"helper", "format_helper.h",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: format_helper.h
 //-----------------------------------------------------------------------------
@@ -1491,8 +1490,8 @@ R"(//---------------------------------------------------------------------------
 #include <assert.h>
 #include <math.h>
 #include <memory.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #if defined(_WIN32)
 #include <Windows.h>
 #endif
@@ -1521,11 +1520,11 @@ std::string        FormatToString(VkFormat f);
 uint32_t           MinDimensionSize(VkFormat format);
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_HELPER_FORMAT_SIZE_AND_ASPECT                                */
-/******************************************************************************/
-{ "helper", "format_size_and_aspect.cpp",
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_HELPER_FORMAT_SIZE_AND_ASPECT                                */
+    /******************************************************************************/
+    {"helper", "format_size_and_aspect.cpp",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: format_size_and_aspect.cpp
 //-----------------------------------------------------------------------------
@@ -2438,11 +2437,11 @@ bool IsDepthFormat(VkFormat fmt) {
 }
 )")},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_HELPER_CMAKE                                                 */
-/******************************************************************************/
-{"helper", "CMakeLists.txt",
-R"(SET (THIS_PROJECT_NAME helper)
+    /******************************************************************************/
+    /* TEMPLATE_FILE_HELPER_CMAKE                                                 */
+    /******************************************************************************/
+    {"helper", "CMakeLists.txt",
+     R"(SET (THIS_PROJECT_NAME helper)
 PROJECT(${THIS_PROJECT_NAME})
 
 ADD_LIBRARY(${THIS_PROJECT_NAME} STATIC "helper.h" "helper.cpp" 
@@ -2465,11 +2464,11 @@ SET_TARGET_PROPERTIES(${THIS_PROJECT_NAME} PROPERTIES
                       POSITION_INDEPENDENT_CODE ON)
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SHIM_H                                                       */
-/******************************************************************************/
-{"sample_cpp_shim", "shim_vulkan.h", 
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SHIM_H                                                       */
+    /******************************************************************************/
+    {"sample_cpp_shim", "shim_vulkan.h",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: shim_vulkan.h
 //-----------------------------------------------------------------------------
@@ -3504,19 +3503,19 @@ SHIM_VK_API void shim_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer,
 
 )")},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SHIM_CPP                                                     */
-/******************************************************************************/
-{"sample_cpp_shim", "shim_vulkan.cpp", 
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SHIM_CPP                                                     */
+    /******************************************************************************/
+    {"sample_cpp_shim", "shim_vulkan.cpp",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: shim_vulkan.cpp
 //-----------------------------------------------------------------------------
 #ifndef SHIM_VK_COMPILE_STATIC_LIB
 #define SHIM_VK_EXPORT
 #endif
-#include "shim_vulkan.h"
 #include "helper/helper.h"
+#include "shim_vulkan.h"
 
 AuxVkTraceResources aux;
 
@@ -6016,11 +6015,11 @@ void shim_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer,
 }
 )")},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SHIM_CMAKE                                                   */
-/******************************************************************************/
-{"sample_cpp_shim", "CMakeLists.txt",
-R"(SET (THIS_PROJECT_NAME sample_cpp_shim)
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SHIM_CMAKE                                                   */
+    /******************************************************************************/
+    {"sample_cpp_shim", "CMakeLists.txt",
+     R"(SET (THIS_PROJECT_NAME sample_cpp_shim)
 PROJECT(${THIS_PROJECT_NAME})
 
 ADD_LIBRARY(${THIS_PROJECT_NAME} SHARED "shim_vulkan.h" "shim_vulkan.cpp")
@@ -6046,11 +6045,11 @@ ADD_CUSTOM_COMMAND(TARGET ${THIS_PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${THIS_PROJECT_NAME}> ${WORKING_DIRECTORY_DEBUG}sample_cpp_trace)
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SHADER_INFO_SHIM_H                                           */
-/******************************************************************************/
-{"amd_shader_info_shim", "shim_vulkan.h",
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SHADER_INFO_SHIM_H                                           */
+    /******************************************************************************/
+    {"amd_shader_info_shim", "shim_vulkan.h",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: shim_vulkan.h
 //-----------------------------------------------------------------------------
@@ -7084,19 +7083,19 @@ SHIM_VK_API void shim_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer,
                                                 uint32_t marker);
 )")},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SHADER_INFO_SHIM_CPP                                         */
-/******************************************************************************/
-{"amd_shader_info_shim", "shim_vulkan.cpp", 
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SHADER_INFO_SHIM_CPP                                         */
+    /******************************************************************************/
+    {"amd_shader_info_shim", "shim_vulkan.cpp",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: amd_shader_info_shim/shim_vulkan.cpp
 //-----------------------------------------------------------------------------
 #ifndef SHIM_VK_COMPILE_STATIC_LIB
 #define SHIM_VK_EXPORT
 #endif
-#include "shim_vulkan.h"
 #include "helper/helper.h"
+#include "shim_vulkan.h"
 #include "utils.h"
 
 AuxVkTraceResources aux;
@@ -9742,11 +9741,11 @@ void shim_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer,
 }
 )")},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SHADER_INFO_UTILS_H                                          */
-/******************************************************************************/
-{"amd_shader_info_shim", "utils.h", 
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SHADER_INFO_UTILS_H                                          */
+    /******************************************************************************/
+    {"amd_shader_info_shim", "utils.h",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: amd_shader_info_shim/utils.h
 //-----------------------------------------------------------------------------
@@ -9762,11 +9761,11 @@ void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage,
                      VkShaderStatisticsInfoAMD &statistics);
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SHADER_INFO_UTILS_CPP                                        */
-/******************************************************************************/
-{"amd_shader_info_shim", "utils.cpp", 
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SHADER_INFO_UTILS_CPP                                        */
+    /******************************************************************************/
+    {"amd_shader_info_shim", "utils.cpp",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: amd_shader_info_shim/utils.cpp
 //-----------------------------------------------------------------------------
@@ -9843,11 +9842,11 @@ void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage, VkShaderStatisti
   file.close();
 })"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_SHADER_INFO_SHIM_CMAKE                                       */
-/******************************************************************************/
-{"amd_shader_info_shim", "CMakeLists.txt", 
-R"(SET (THIS_PROJECT_NAME amd_shader_info_shim)
+    /******************************************************************************/
+    /* TEMPLATE_FILE_SHADER_INFO_SHIM_CMAKE                                       */
+    /******************************************************************************/
+    {"amd_shader_info_shim", "CMakeLists.txt",
+     R"(SET (THIS_PROJECT_NAME amd_shader_info_shim)
 PROJECT(${THIS_PROJECT_NAME})
 
 ADD_LIBRARY(${THIS_PROJECT_NAME} SHARED "shim_vulkan.h" "shim_vulkan.cpp" "utils.h" "utils.cpp")
@@ -9873,11 +9872,11 @@ ADD_CUSTOM_COMMAND(TARGET ${THIS_PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${THIS_PROJECT_NAME}> ${WORKING_DIRECTORY_DEBUG}sample_cpp_trace)
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_GOLD_REFERENCE_SHIM_H                                           */
-/******************************************************************************/
-{"gold_reference_shim", "shim_vulkan.h", 
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_GOLD_REFERENCE_SHIM_H                                           */
+    /******************************************************************************/
+    {"gold_reference_shim", "shim_vulkan.h",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: gold_reference_shim/shim_vulkan.h
 //-----------------------------------------------------------------------------
@@ -10910,11 +10909,11 @@ SHIM_VK_API void shim_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer,
                                                 uint32_t marker);
 )")},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_GOLD_REFERENCE_SHIM_CPP                                         */
-/******************************************************************************/
-{"gold_reference_shim", "shim_vulkan.cpp", 
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_GOLD_REFERENCE_SHIM_CPP                                         */
+    /******************************************************************************/
+    {"gold_reference_shim", "shim_vulkan.cpp",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: gold_reference_shim/shim_vulkan.cpp
 //-----------------------------------------------------------------------------
@@ -13581,11 +13580,11 @@ void shim_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer,
 }
 )")},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_GOLD_REFERENCE_UTILS_H                                       */
-/******************************************************************************/
-{"gold_reference_shim", "utils.h", 
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_GOLD_REFERENCE_UTILS_H                                       */
+    /******************************************************************************/
+    {"gold_reference_shim", "utils.h",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: gold_reference_shim/utils.h
 //-----------------------------------------------------------------------------
@@ -13699,11 +13698,11 @@ extern VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
 extern VkSwapchainCreateInfoKHR swapchainCI;
 extern int presentIndex;)"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_GOLD_REFERENCE_UTILS_CPP                                     */
-/******************************************************************************/
-{"gold_reference_shim", "utils.cpp", 
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_GOLD_REFERENCE_UTILS_CPP                                     */
+    /******************************************************************************/
+    {"gold_reference_shim", "utils.cpp",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: gold_reference_shim/utils.cpp
 //-----------------------------------------------------------------------------
@@ -14027,11 +14026,11 @@ void screenshot(VkImage srcImage, const char *filename)
   vkFreeMemory(aux.device, stagingBufferMem, NULL);
 })"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_GOLD_REFERENCE_UTILS_CPP                                        */
-/******************************************************************************/
-{"gold_reference_shim", "format_conversion.cpp", 
-R"(//-----------------------------------------------------------------------------
+    /******************************************************************************/
+    /* TEMPLATE_FILE_GOLD_REFERENCE_UTILS_CPP                                        */
+    /******************************************************************************/
+    {"gold_reference_shim", "format_conversion.cpp",
+     R"(//-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
 // File: gold_reference_shim/format_conversion.cpp
 //-----------------------------------------------------------------------------
@@ -14769,11 +14768,11 @@ bool fillPPM(void *output, void *input, uint32_t w, uint32_t h, VkFormat format,
   return true;
 })")},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_GOLD_REFERENCE_SHIM_CMAKE                                       */
-/******************************************************************************/
-{"gold_reference_shim", "CMakeLists.txt", 
-R"(SET (THIS_PROJECT_NAME gold_reference)
+    /******************************************************************************/
+    /* TEMPLATE_FILE_GOLD_REFERENCE_SHIM_CMAKE                                       */
+    /******************************************************************************/
+    {"gold_reference_shim", "CMakeLists.txt",
+     R"(SET (THIS_PROJECT_NAME gold_reference)
 PROJECT(${THIS_PROJECT_NAME})
 
 ADD_LIBRARY(${THIS_PROJECT_NAME} SHARED "shim_vulkan.h" "shim_vulkan.cpp" "utils.h" "utils.cpp" "format_conversion.cpp")
@@ -14799,11 +14798,11 @@ ADD_CUSTOM_COMMAND(TARGET ${THIS_PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${THIS_PROJECT_NAME}> ${WORKING_DIRECTORY_DEBUG}sample_cpp_trace)
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_GEN_SCRIPT_WIN_VS                                            */
-/******************************************************************************/
-{"", "build_vs2015.bat",
-R"(rd /s /q Win_VS2015x64
+    /******************************************************************************/
+    /* TEMPLATE_FILE_GEN_SCRIPT_WIN_VS                                            */
+    /******************************************************************************/
+    {"", "build_vs2015.bat",
+     R"(rd /s /q Win_VS2015x64
 mkdir Win_VS2015x64
 rd /s /q build_x64
 mkdir build_x64\Debug
@@ -14812,11 +14811,11 @@ cmake.exe -Wno-dev -G "Visual Studio 14 2015 Win64" --build "" -H. -BWin_VS2015x
 pause
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_GEN_SCRIPT_WIN_NINJA                                         */
-/******************************************************************************/
-{"", "build_vs2015_ninja.bat",
-R"(rd /s /q Win_Ninja
+    /******************************************************************************/
+    /* TEMPLATE_FILE_GEN_SCRIPT_WIN_NINJA                                         */
+    /******************************************************************************/
+    {"", "build_vs2015_ninja.bat",
+     R"(rd /s /q Win_Ninja
 mkdir Win_Ninja
 rd /s /q build_x64
 mkdir build_x64\Debug
@@ -14829,25 +14828,25 @@ cd .. /
 pause
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_GEN_SCRIPT_YETI                                              */
-/******************************************************************************/
-{"", "build_yeti.bat",
-R"(which cmake && which ninja && rm -rf yeti_build && mkdir yeti_build && cd yeti_build && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_YETI=ON -DCMAKE_TOOLCHAIN_FILE="$YETI_SDK_PATH/cmake/yeti.cmake" .. && ninja && echo "Build complete" 
+    /******************************************************************************/
+    /* TEMPLATE_FILE_GEN_SCRIPT_YETI                                              */
+    /******************************************************************************/
+    {"", "build_yeti.bat",
+     R"(which cmake && which ninja && rm -rf yeti_build && mkdir yeti_build && cd yeti_build && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_YETI=ON -DCMAKE_TOOLCHAIN_FILE="$YETI_SDK_PATH/cmake/yeti.cmake" .. && ninja && echo "Build complete" 
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_GEN_SCRIPT_LINUX                                             */
-/******************************************************************************/
-{"", "build_xlib.bat",
-R"(which cmake && which ninja && export CC=clang && export CXX=clang++ && rm -rf linux_build && mkdir linux_build && cd linux_build && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release .. && ninja && echo "Build complete"
+    /******************************************************************************/
+    /* TEMPLATE_FILE_GEN_SCRIPT_LINUX                                             */
+    /******************************************************************************/
+    {"", "build_xlib.bat",
+     R"(which cmake && which ninja && export CC=clang && export CXX=clang++ && rm -rf linux_build && mkdir linux_build && cd linux_build && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release .. && ninja && echo "Build complete"
 )"},
 
-/******************************************************************************/
-/* TEMPLATE_FILE_VS_USER_TEMPLATE                                             */
-/******************************************************************************/
-{"", "Template.user", 
-R"(<?xml version="1.0" encoding="utf-8"?>
+    /******************************************************************************/
+    /* TEMPLATE_FILE_VS_USER_TEMPLATE                                             */
+    /******************************************************************************/
+    {"", "Template.user",
+     R"(<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|@USERFILE_PLATFORM@'">
     <LocalDebuggerCommandArguments></LocalDebuggerCommandArguments>
@@ -14862,7 +14861,6 @@ R"(<?xml version="1.0" encoding="utf-8"?>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
 </Project>
-)"}
-};  // CodeWriter::TemplateFiles
+)"}};    // CodeWriter::TemplateFiles
 
-} // namespace vk_cpp_codec
+}    // namespace vk_cpp_codec

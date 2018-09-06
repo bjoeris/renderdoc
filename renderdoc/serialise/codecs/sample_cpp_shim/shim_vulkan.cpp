@@ -1191,8 +1191,9 @@ VkResult shim_vkGetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkD
                                             uint32_t *pPropertyCount,
                                             VkDisplayModePropertiesKHR *pProperties)
 {
-  static PFN_vkGetDisplayModePropertiesKHR fn = (PFN_vkGetDisplayModePropertiesKHR)vkGetInstanceProcAddr(
-      aux.instance, "vkGetDisplayModePropertiesKHR");
+  static PFN_vkGetDisplayModePropertiesKHR fn =
+      (PFN_vkGetDisplayModePropertiesKHR)vkGetInstanceProcAddr(aux.instance,
+                                                               "vkGetDisplayModePropertiesKHR");
   VkResult r = fn(physicalDevice, display, pPropertyCount, pProperties);
   return r;
 }
@@ -1223,8 +1224,9 @@ VkResult shim_vkCreateDisplayPlaneSurfaceKHR(VkInstance instance,
                                              const VkAllocationCallbacks *pAllocator,
                                              VkSurfaceKHR *pSurface)
 {
-  static PFN_vkCreateDisplayPlaneSurfaceKHR fn = (PFN_vkCreateDisplayPlaneSurfaceKHR)vkGetInstanceProcAddr(
-      instance, "vkCreateDisplayPlaneSurfaceKHR");
+  static PFN_vkCreateDisplayPlaneSurfaceKHR fn =
+      (PFN_vkCreateDisplayPlaneSurfaceKHR)vkGetInstanceProcAddr(instance,
+                                                                "vkCreateDisplayPlaneSurfaceKHR");
   VkResult r = fn(instance, pCreateInfo, pAllocator, pSurface);
   return r;
 }
@@ -1345,8 +1347,9 @@ VkResult shim_vkCreateDebugReportCallbackEXT(VkInstance instance,
                                              const VkAllocationCallbacks *pAllocator,
                                              VkDebugReportCallbackEXT *pCallback)
 {
-  static PFN_vkCreateDebugReportCallbackEXT fn = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
-      instance, "vkCreateDebugReportCallbackEXT");
+  static PFN_vkCreateDebugReportCallbackEXT fn =
+      (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(instance,
+                                                                "vkCreateDebugReportCallbackEXT");
   VkResult r = fn(instance, pCreateInfo, pAllocator, pCallback);
   return r;
 }
@@ -1354,8 +1357,9 @@ VkResult shim_vkCreateDebugReportCallbackEXT(VkInstance instance,
 void shim_vkDestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback,
                                           const VkAllocationCallbacks *pAllocator)
 {
-  static PFN_vkDestroyDebugReportCallbackEXT fn = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
-      instance, "vkDestroyDebugReportCallbackEXT");
+  static PFN_vkDestroyDebugReportCallbackEXT fn =
+      (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(instance,
+                                                                 "vkDestroyDebugReportCallbackEXT");
   fn(instance, callback, pAllocator);
   return;
 }
@@ -1374,8 +1378,9 @@ void shim_vkDebugReportMessageEXT(VkInstance instance, VkDebugReportFlagsEXT fla
 VkResult shim_vkDebugMarkerSetObjectNameEXT(VkDevice device,
                                             const VkDebugMarkerObjectNameInfoEXT *pNameInfo)
 {
-  static PFN_vkDebugMarkerSetObjectNameEXT fn = (PFN_vkDebugMarkerSetObjectNameEXT)vkGetDeviceProcAddr(
-      device, "vkDebugMarkerSetObjectNameEXT");
+  static PFN_vkDebugMarkerSetObjectNameEXT fn =
+      (PFN_vkDebugMarkerSetObjectNameEXT)vkGetDeviceProcAddr(device,
+                                                             "vkDebugMarkerSetObjectNameEXT");
   VkResult r = fn(device, pNameInfo);
   return r;
 }
@@ -1445,8 +1450,9 @@ void shim_vkCmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuff
                                            VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
                                            uint32_t stride)
 {
-  static PFN_vkCmdDrawIndexedIndirectCountAMD fn = (PFN_vkCmdDrawIndexedIndirectCountAMD)vkGetDeviceProcAddr(
-      aux.device, "vkCmdDrawIndexedIndirectCountAMD");
+  static PFN_vkCmdDrawIndexedIndirectCountAMD fn =
+      (PFN_vkCmdDrawIndexedIndirectCountAMD)vkGetDeviceProcAddr(aux.device,
+                                                                "vkCmdDrawIndexedIndirectCountAMD");
   fn(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
   return;
 }
@@ -1463,8 +1469,9 @@ void shim_vkCmdProcessCommandsNVX(VkCommandBuffer commandBuffer,
 void shim_vkCmdReserveSpaceForCommandsNVX(VkCommandBuffer commandBuffer,
                                           const VkCmdReserveSpaceForCommandsInfoNVX *pReserveSpaceInfo)
 {
-  static PFN_vkCmdReserveSpaceForCommandsNVX fn = (PFN_vkCmdReserveSpaceForCommandsNVX)vkGetDeviceProcAddr(
-      aux.device, "vkCmdReserveSpaceForCommandsNVX");
+  static PFN_vkCmdReserveSpaceForCommandsNVX fn =
+      (PFN_vkCmdReserveSpaceForCommandsNVX)vkGetDeviceProcAddr(aux.device,
+                                                               "vkCmdReserveSpaceForCommandsNVX");
   fn(commandBuffer, pReserveSpaceInfo);
   return;
 }
@@ -1546,8 +1553,9 @@ void shim_vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX(
 void shim_vkGetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
                                        VkPhysicalDeviceFeatures2 *pFeatures)
 {
-  static PFN_vkGetPhysicalDeviceFeatures2 fn = (PFN_vkGetPhysicalDeviceFeatures2)vkGetInstanceProcAddr(
-      aux.instance, "vkGetPhysicalDeviceFeatures2");
+  static PFN_vkGetPhysicalDeviceFeatures2 fn =
+      (PFN_vkGetPhysicalDeviceFeatures2)vkGetInstanceProcAddr(aux.instance,
+                                                              "vkGetPhysicalDeviceFeatures2");
   fn(physicalDevice, pFeatures);
   return;
 }
@@ -1555,8 +1563,9 @@ void shim_vkGetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice,
 void shim_vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice,
                                           VkPhysicalDeviceFeatures2 *pFeatures)
 {
-  static PFN_vkGetPhysicalDeviceFeatures2KHR fn = (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(
-      aux.instance, "vkGetPhysicalDeviceFeatures2KHR");
+  static PFN_vkGetPhysicalDeviceFeatures2KHR fn =
+      (PFN_vkGetPhysicalDeviceFeatures2KHR)vkGetInstanceProcAddr(aux.instance,
+                                                                 "vkGetPhysicalDeviceFeatures2KHR");
   fn(physicalDevice, pFeatures);
   return;
 }
@@ -1564,8 +1573,9 @@ void shim_vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice,
 void shim_vkGetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
                                          VkPhysicalDeviceProperties2 *pProperties)
 {
-  static PFN_vkGetPhysicalDeviceProperties2 fn = (PFN_vkGetPhysicalDeviceProperties2)vkGetInstanceProcAddr(
-      aux.instance, "vkGetPhysicalDeviceProperties2");
+  static PFN_vkGetPhysicalDeviceProperties2 fn =
+      (PFN_vkGetPhysicalDeviceProperties2)vkGetInstanceProcAddr(aux.instance,
+                                                                "vkGetPhysicalDeviceProperties2");
   fn(physicalDevice, pProperties);
   return;
 }
@@ -1738,7 +1748,8 @@ void shim_vkGetPhysicalDeviceExternalBufferPropertiesKHR(
 
 VkResult shim_vkGetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo, int *pFd)
 {
-  static PFN_vkGetMemoryFdKHR fn = (PFN_vkGetMemoryFdKHR)vkGetDeviceProcAddr(device, "vkGetMemoryFdKHR");
+  static PFN_vkGetMemoryFdKHR fn =
+      (PFN_vkGetMemoryFdKHR)vkGetDeviceProcAddr(device, "vkGetMemoryFdKHR");
   VkResult r = fn(device, pGetFdInfo, pFd);
   return r;
 }
@@ -1818,7 +1829,8 @@ void shim_vkGetPhysicalDeviceExternalFencePropertiesKHR(
 
 VkResult shim_vkGetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR *pGetFdInfo, int *pFd)
 {
-  static PFN_vkGetFenceFdKHR fn = (PFN_vkGetFenceFdKHR)vkGetDeviceProcAddr(device, "vkGetFenceFdKHR");
+  static PFN_vkGetFenceFdKHR fn =
+      (PFN_vkGetFenceFdKHR)vkGetDeviceProcAddr(device, "vkGetFenceFdKHR");
   VkResult r = fn(device, pGetFdInfo, pFd);
   return r;
 }
@@ -1891,8 +1903,9 @@ VkResult shim_vkEnumeratePhysicalDeviceGroups(
     VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,
     VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties)
 {
-  static PFN_vkEnumeratePhysicalDeviceGroups fn = (PFN_vkEnumeratePhysicalDeviceGroups)vkGetInstanceProcAddr(
-      instance, "vkEnumeratePhysicalDeviceGroups");
+  static PFN_vkEnumeratePhysicalDeviceGroups fn =
+      (PFN_vkEnumeratePhysicalDeviceGroups)vkGetInstanceProcAddr(instance,
+                                                                 "vkEnumeratePhysicalDeviceGroups");
   VkResult r = fn(instance, pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
   return r;
 }
@@ -2047,8 +2060,9 @@ VkResult shim_vkCreateDescriptorUpdateTemplate(VkDevice device,
                                                const VkAllocationCallbacks *pAllocator,
                                                VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate)
 {
-  static PFN_vkCreateDescriptorUpdateTemplate fn = (PFN_vkCreateDescriptorUpdateTemplate)vkGetDeviceProcAddr(
-      device, "vkCreateDescriptorUpdateTemplate");
+  static PFN_vkCreateDescriptorUpdateTemplate fn =
+      (PFN_vkCreateDescriptorUpdateTemplate)vkGetDeviceProcAddr(device,
+                                                                "vkCreateDescriptorUpdateTemplate");
   VkResult r = fn(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
   return r;
 }
@@ -2140,8 +2154,9 @@ VkResult shim_vkGetSwapchainStatusKHR(VkDevice device, VkSwapchainKHR swapchain)
 VkResult shim_vkGetRefreshCycleDurationGOOGLE(VkDevice device, VkSwapchainKHR swapchain,
                                               VkRefreshCycleDurationGOOGLE *pDisplayTimingProperties)
 {
-  static PFN_vkGetRefreshCycleDurationGOOGLE fn = (PFN_vkGetRefreshCycleDurationGOOGLE)vkGetDeviceProcAddr(
-      device, "vkGetRefreshCycleDurationGOOGLE");
+  static PFN_vkGetRefreshCycleDurationGOOGLE fn =
+      (PFN_vkGetRefreshCycleDurationGOOGLE)vkGetDeviceProcAddr(device,
+                                                               "vkGetRefreshCycleDurationGOOGLE");
   VkResult r = fn(device, swapchain, pDisplayTimingProperties);
   return r;
 }
@@ -2224,8 +2239,9 @@ void shim_vkGetBufferMemoryRequirements2(VkDevice device,
                                          const VkBufferMemoryRequirementsInfo2 *pInfo,
                                          VkMemoryRequirements2 *pMemoryRequirements)
 {
-  static PFN_vkGetBufferMemoryRequirements2 fn = (PFN_vkGetBufferMemoryRequirements2)vkGetDeviceProcAddr(
-      device, "vkGetBufferMemoryRequirements2");
+  static PFN_vkGetBufferMemoryRequirements2 fn =
+      (PFN_vkGetBufferMemoryRequirements2)vkGetDeviceProcAddr(device,
+                                                              "vkGetBufferMemoryRequirements2");
   fn(device, pInfo, pMemoryRequirements);
   return;
 }
@@ -2244,8 +2260,9 @@ void shim_vkGetBufferMemoryRequirements2KHR(VkDevice device,
 void shim_vkGetImageMemoryRequirements2(VkDevice device, const VkImageMemoryRequirementsInfo2 *pInfo,
                                         VkMemoryRequirements2 *pMemoryRequirements)
 {
-  static PFN_vkGetImageMemoryRequirements2 fn = (PFN_vkGetImageMemoryRequirements2)vkGetDeviceProcAddr(
-      device, "vkGetImageMemoryRequirements2");
+  static PFN_vkGetImageMemoryRequirements2 fn =
+      (PFN_vkGetImageMemoryRequirements2)vkGetDeviceProcAddr(device,
+                                                             "vkGetImageMemoryRequirements2");
   fn(device, pInfo, pMemoryRequirements);
   return;
 }
@@ -2254,8 +2271,9 @@ void shim_vkGetImageMemoryRequirements2KHR(VkDevice device,
                                            const VkImageMemoryRequirementsInfo2 *pInfo,
                                            VkMemoryRequirements2 *pMemoryRequirements)
 {
-  static PFN_vkGetImageMemoryRequirements2KHR fn = (PFN_vkGetImageMemoryRequirements2KHR)vkGetDeviceProcAddr(
-      device, "vkGetImageMemoryRequirements2KHR");
+  static PFN_vkGetImageMemoryRequirements2KHR fn =
+      (PFN_vkGetImageMemoryRequirements2KHR)vkGetDeviceProcAddr(device,
+                                                                "vkGetImageMemoryRequirements2KHR");
   fn(device, pInfo, pMemoryRequirements);
   return;
 }
@@ -2289,8 +2307,9 @@ VkResult shim_vkCreateSamplerYcbcrConversion(VkDevice device,
                                              const VkAllocationCallbacks *pAllocator,
                                              VkSamplerYcbcrConversion *pYcbcrConversion)
 {
-  static PFN_vkCreateSamplerYcbcrConversion fn = (PFN_vkCreateSamplerYcbcrConversion)vkGetDeviceProcAddr(
-      device, "vkCreateSamplerYcbcrConversion");
+  static PFN_vkCreateSamplerYcbcrConversion fn =
+      (PFN_vkCreateSamplerYcbcrConversion)vkGetDeviceProcAddr(device,
+                                                              "vkCreateSamplerYcbcrConversion");
   VkResult r = fn(device, pCreateInfo, pAllocator, pYcbcrConversion);
   return r;
 }
@@ -2310,8 +2329,9 @@ VkResult shim_vkCreateSamplerYcbcrConversionKHR(VkDevice device,
 void shim_vkDestroySamplerYcbcrConversion(VkDevice device, VkSamplerYcbcrConversion ycbcrConversion,
                                           const VkAllocationCallbacks *pAllocator)
 {
-  static PFN_vkDestroySamplerYcbcrConversion fn = (PFN_vkDestroySamplerYcbcrConversion)vkGetDeviceProcAddr(
-      device, "vkDestroySamplerYcbcrConversion");
+  static PFN_vkDestroySamplerYcbcrConversion fn =
+      (PFN_vkDestroySamplerYcbcrConversion)vkGetDeviceProcAddr(device,
+                                                               "vkDestroySamplerYcbcrConversion");
   fn(device, ycbcrConversion, pAllocator);
   return;
 }
@@ -2377,8 +2397,9 @@ void shim_vkGetDescriptorSetLayoutSupport(VkDevice device,
                                           const VkDescriptorSetLayoutCreateInfo *pCreateInfo,
                                           VkDescriptorSetLayoutSupport *pSupport)
 {
-  static PFN_vkGetDescriptorSetLayoutSupport fn = (PFN_vkGetDescriptorSetLayoutSupport)vkGetDeviceProcAddr(
-      device, "vkGetDescriptorSetLayoutSupport");
+  static PFN_vkGetDescriptorSetLayoutSupport fn =
+      (PFN_vkGetDescriptorSetLayoutSupport)vkGetDeviceProcAddr(device,
+                                                               "vkGetDescriptorSetLayoutSupport");
   fn(device, pCreateInfo, pSupport);
   return;
 }
@@ -2407,8 +2428,9 @@ VkResult shim_vkGetShaderInfoAMD(VkDevice device, VkPipeline pipeline,
 VkResult shim_vkSetDebugUtilsObjectNameEXT(VkDevice device,
                                            const VkDebugUtilsObjectNameInfoEXT *pNameInfo)
 {
-  static PFN_vkSetDebugUtilsObjectNameEXT fn = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(
-      aux.instance, "vkSetDebugUtilsObjectNameEXT");
+  static PFN_vkSetDebugUtilsObjectNameEXT fn =
+      (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(aux.instance,
+                                                              "vkSetDebugUtilsObjectNameEXT");
   VkResult r = fn(device, pNameInfo);
   return r;
 }
@@ -2424,24 +2446,27 @@ VkResult shim_vkSetDebugUtilsObjectTagEXT(VkDevice device,
 
 void shim_vkQueueBeginDebugUtilsLabelEXT(VkQueue queue, const VkDebugUtilsLabelEXT *pLabelInfo)
 {
-  static PFN_vkQueueBeginDebugUtilsLabelEXT fn = (PFN_vkQueueBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(
-      aux.instance, "vkQueueBeginDebugUtilsLabelEXT");
+  static PFN_vkQueueBeginDebugUtilsLabelEXT fn =
+      (PFN_vkQueueBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(aux.instance,
+                                                                "vkQueueBeginDebugUtilsLabelEXT");
   fn(queue, pLabelInfo);
   return;
 }
 
 void shim_vkQueueEndDebugUtilsLabelEXT(VkQueue queue)
 {
-  static PFN_vkQueueEndDebugUtilsLabelEXT fn = (PFN_vkQueueEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(
-      aux.instance, "vkQueueEndDebugUtilsLabelEXT");
+  static PFN_vkQueueEndDebugUtilsLabelEXT fn =
+      (PFN_vkQueueEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(aux.instance,
+                                                              "vkQueueEndDebugUtilsLabelEXT");
   fn(queue);
   return;
 }
 
 void shim_vkQueueInsertDebugUtilsLabelEXT(VkQueue queue, const VkDebugUtilsLabelEXT *pLabelInfo)
 {
-  static PFN_vkQueueInsertDebugUtilsLabelEXT fn = (PFN_vkQueueInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(
-      aux.instance, "vkQueueInsertDebugUtilsLabelEXT");
+  static PFN_vkQueueInsertDebugUtilsLabelEXT fn =
+      (PFN_vkQueueInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(aux.instance,
+                                                                 "vkQueueInsertDebugUtilsLabelEXT");
   fn(queue, pLabelInfo);
   return;
 }
@@ -2449,8 +2474,9 @@ void shim_vkQueueInsertDebugUtilsLabelEXT(VkQueue queue, const VkDebugUtilsLabel
 void shim_vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer commandBuffer,
                                        const VkDebugUtilsLabelEXT *pLabelInfo)
 {
-  static PFN_vkCmdBeginDebugUtilsLabelEXT fn = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(
-      aux.instance, "vkCmdBeginDebugUtilsLabelEXT");
+  static PFN_vkCmdBeginDebugUtilsLabelEXT fn =
+      (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(aux.instance,
+                                                              "vkCmdBeginDebugUtilsLabelEXT");
   fn(commandBuffer, pLabelInfo);
   return;
 }
@@ -2466,8 +2492,9 @@ void shim_vkCmdEndDebugUtilsLabelEXT(VkCommandBuffer commandBuffer)
 void shim_vkCmdInsertDebugUtilsLabelEXT(VkCommandBuffer commandBuffer,
                                         const VkDebugUtilsLabelEXT *pLabelInfo)
 {
-  static PFN_vkCmdInsertDebugUtilsLabelEXT fn = (PFN_vkCmdInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(
-      aux.instance, "vkCmdInsertDebugUtilsLabelEXT");
+  static PFN_vkCmdInsertDebugUtilsLabelEXT fn =
+      (PFN_vkCmdInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(aux.instance,
+                                                               "vkCmdInsertDebugUtilsLabelEXT");
   fn(commandBuffer, pLabelInfo);
   return;
 }
@@ -2477,8 +2504,9 @@ VkResult shim_vkCreateDebugUtilsMessengerEXT(VkInstance instance,
                                              const VkAllocationCallbacks *pAllocator,
                                              VkDebugUtilsMessengerEXT *pMessenger)
 {
-  static PFN_vkCreateDebugUtilsMessengerEXT fn = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-      instance, "vkCreateDebugUtilsMessengerEXT");
+  static PFN_vkCreateDebugUtilsMessengerEXT fn =
+      (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance,
+                                                                "vkCreateDebugUtilsMessengerEXT");
   VkResult r = fn(instance, pCreateInfo, pAllocator, pMessenger);
   return r;
 }
@@ -2486,8 +2514,9 @@ VkResult shim_vkCreateDebugUtilsMessengerEXT(VkInstance instance,
 void shim_vkDestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT messenger,
                                           const VkAllocationCallbacks *pAllocator)
 {
-  static PFN_vkDestroyDebugUtilsMessengerEXT fn = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-      instance, "vkDestroyDebugUtilsMessengerEXT");
+  static PFN_vkDestroyDebugUtilsMessengerEXT fn =
+      (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance,
+                                                                 "vkDestroyDebugUtilsMessengerEXT");
   fn(instance, messenger, pAllocator);
   return;
 }
@@ -2497,8 +2526,9 @@ void shim_vkSubmitDebugUtilsMessageEXT(VkInstance instance,
                                        VkDebugUtilsMessageTypeFlagsEXT messageTypes,
                                        const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData)
 {
-  static PFN_vkSubmitDebugUtilsMessageEXT fn = (PFN_vkSubmitDebugUtilsMessageEXT)vkGetInstanceProcAddr(
-      instance, "vkSubmitDebugUtilsMessageEXT");
+  static PFN_vkSubmitDebugUtilsMessageEXT fn =
+      (PFN_vkSubmitDebugUtilsMessageEXT)vkGetInstanceProcAddr(instance,
+                                                              "vkSubmitDebugUtilsMessageEXT");
   fn(instance, messageSeverity, messageTypes, pCallbackData);
   return;
 }

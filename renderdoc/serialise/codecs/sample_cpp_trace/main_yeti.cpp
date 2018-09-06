@@ -34,20 +34,21 @@
 #include <yeti_c/yeti.h>
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 #include <time.h>
 #include <vulkan/vulkan.h>
 
-#include <string>
-#include <sstream>
 #include <iostream>
+#include <sstream>
+#include <string>
 
 #include "gen_main.h"
 
-void PostStageProgress(const char *stage, uint32_t i, uint32_t N) {
+void PostStageProgress(const char *stage, uint32_t i, uint32_t N)
+{
   fprintf(stdout, "%s\n", StageProgressString(stage, i, N).c_str());
 }
 

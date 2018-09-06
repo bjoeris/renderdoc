@@ -671,18 +671,23 @@ VkResult shim_vkCreateRenderPass(VkDevice device, const VkRenderPassCreateInfo *
 {
   PFN_vkCreateRenderPass fn = vkCreateRenderPass;
 
-  VkRenderPassCreateInfo* pCI = (VkRenderPassCreateInfo*) pCreateInfo;
+  VkRenderPassCreateInfo *pCI = (VkRenderPassCreateInfo *)pCreateInfo;
 
-  for (int i = 0; i < pCI->dependencyCount; i++) {
-    VkSubpassDependency * dep = (VkSubpassDependency *) (pCI->pDependencies + i);
-    if ((pCI->pDependencies[i].dstAccessMask & 0x400) != 0 &&
-      (pCI->pDependencies[i].dstStageMask & 0x300) == 0) {
-      dep->dstStageMask |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  for(int i = 0; i < pCI->dependencyCount; i++)
+  {
+    VkSubpassDependency *dep = (VkSubpassDependency *)(pCI->pDependencies + i);
+    if((pCI->pDependencies[i].dstAccessMask & 0x400) != 0 &&
+       (pCI->pDependencies[i].dstStageMask & 0x300) == 0)
+    {
+      dep->dstStageMask |=
+          VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     }
 
-    if ((pCI->pDependencies[i].srcAccessMask & 0x400) != 0 &&
-      (pCI->pDependencies[i].srcStageMask & 0x300) == 0) {
-      dep->srcStageMask |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    if((pCI->pDependencies[i].srcAccessMask & 0x400) != 0 &&
+       (pCI->pDependencies[i].srcStageMask & 0x300) == 0)
+    {
+      dep->srcStageMask |=
+          VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     }
   }
 

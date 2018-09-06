@@ -33,22 +33,27 @@
 
 // Utility structure that associates VkImageView with parent VkImage
 // and their corresponding CreateInfo structures.
-struct ImageAndView {
-  struct ImageAndCI {
+struct ImageAndView
+{
+  struct ImageAndCI
+  {
     VkImage res;
     VkImageCreateInfo ci;
   } image;
 
-  struct ImageViewAndCI {
+  struct ImageViewAndCI
+  {
     VkImageView res;
     VkImageViewCreateInfo ci;
   } view;
 
-  ImageAndView() {
+  ImageAndView()
+  {
     memset(&image, 0, sizeof(image));
     memset(&view, 0, sizeof(view));
   }
-  ImageAndView(VkImage i, VkImageCreateInfo ici, VkImageView v, VkImageViewCreateInfo vci) {
+  ImageAndView(VkImage i, VkImageCreateInfo ici, VkImageView v, VkImageViewCreateInfo vci)
+  {
     image.res = i;
     image.ci = ici;
     view.res = v;
@@ -79,22 +84,29 @@ struct ReadbackInfo
   VkFormat format = VK_FORMAT_UNDEFINED;
   int index = -1;
 
-  ReadbackInfo(VkImage src, VkBuffer b, VkImage i,
-    VkDeviceMemory bMem, VkDeviceMemory iMem,
-    uint32_t w, uint32_t h, VkFormat f,
-    int a) : srcImage(src),
-    buffer(b), image(i), bufferDeviceMem(bMem),
-    imageDeviceMem(iMem), width(w), height(h),
-    format(f), index(a) {}
+  ReadbackInfo(VkImage src, VkBuffer b, VkImage i, VkDeviceMemory bMem, VkDeviceMemory iMem,
+               uint32_t w, uint32_t h, VkFormat f, int a)
+      : srcImage(src),
+        buffer(b),
+        image(i),
+        bufferDeviceMem(bMem),
+        imageDeviceMem(iMem),
+        width(w),
+        height(h),
+        format(f),
+        index(a)
+  {
+  }
 
-  void Clear(VkDevice device) {
-    if (image)
+  void Clear(VkDevice device)
+  {
+    if(image)
       vkDestroyImage(device, image, NULL);
-    if (imageDeviceMem)
+    if(imageDeviceMem)
       vkFreeMemory(device, imageDeviceMem, NULL);
-    if (buffer)
+    if(buffer)
       vkDestroyBuffer(device, buffer, NULL);
-    if (bufferDeviceMem)
+    if(bufferDeviceMem)
       vkFreeMemory(device, bufferDeviceMem, NULL);
     width = height = 0;
     srcImage = NULL;
@@ -107,7 +119,8 @@ struct ReadbackInfo
   }
 };
 
-struct ReadbackInfos {
+struct ReadbackInfos
+{
   std::vector<ReadbackInfo> attachments;
 };
 
@@ -115,8 +128,8 @@ VkDeviceMemory getStagingImage(VkImage &image, VkImageCreateInfo ci);
 VkDeviceMemory getStagingBuffer(VkBuffer &buffer, uint32_t width, uint32_t height, uint32_t bytes);
 
 void copyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImage dstImage,
-  VkImageSubresourceRange srcRange, VkImageSubresourceRange dstRange, uint32_t width,
-  uint32_t height, VkFormat format, bool msaa);
+               VkImageSubresourceRange srcRange, VkImageSubresourceRange dstRange, uint32_t width,
+               uint32_t height, VkFormat format, bool msaa);
 void imgToBuffer(VkCommandBuffer commandBuffer, VkImage image, VkBuffer buffer, uint32_t width,
                  uint32_t height, uint32_t mip, uint32_t layer, VkFormat format);
 bool fillPPM(void *buffer, void *input, uint32_t w, uint32_t h, VkFormat format,

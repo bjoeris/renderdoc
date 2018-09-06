@@ -82,43 +82,45 @@ VkResult shim_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCrea
 }
 
 VkResult shim_vkCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache,
-  uint32_t createInfoCount,
-  const VkComputePipelineCreateInfo *pCreateInfos,
-  const VkAllocationCallbacks *pAllocator,
-  VkPipeline *pPipelines) {
+                                       uint32_t createInfoCount,
+                                       const VkComputePipelineCreateInfo *pCreateInfos,
+                                       const VkAllocationCallbacks *pAllocator,
+                                       VkPipeline *pPipelines)
+{
   static PFN_vkCreateComputePipelines fn = vkCreateComputePipelines;
   VkResult r = fn(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
 
   // Get shader info.
   PFN_vkGetShaderInfoAMD pfnGetShaderInfoAMD =
-    (PFN_vkGetShaderInfoAMD) vkGetDeviceProcAddr(device, "vkGetShaderInfoAMD");
+      (PFN_vkGetShaderInfoAMD)vkGetDeviceProcAddr(device, "vkGetShaderInfoAMD");
 
-  if (pfnGetShaderInfoAMD == NULL)
+  if(pfnGetShaderInfoAMD == NULL)
     return r;
 
   VkShaderStatisticsInfoAMD statistics = {};
   size_t dataSize;
 
-  for (uint32_t i = 0; i < createInfoCount; i++) {
+  for(uint32_t i = 0; i < createInfoCount; i++)
+  {
     VkShaderStageFlagBits shaderStage = pCreateInfos[i].stage.stage;
     VkPipeline p = pPipelines[i];
 
     dataSize = sizeof(statistics);
     // Print statistics data.
     r = pfnGetShaderInfoAMD(device, p, shaderStage, VK_SHADER_INFO_TYPE_STATISTICS_AMD, &dataSize,
-      &statistics);
+                            &statistics);
     assert(r == VK_SUCCESS);
     printShaderInfo(p, shaderStage, statistics);
 
     // Print disassembly data.
     r = pfnGetShaderInfoAMD(device, p, shaderStage, VK_SHADER_INFO_TYPE_DISASSEMBLY_AMD, &dataSize,
-      NULL);
+                            NULL);
     assert(r == VK_SUCCESS);
     std::vector<uint8_t> disassembly(dataSize);
     r = pfnGetShaderInfoAMD(device, p, shaderStage, VK_SHADER_INFO_TYPE_DISASSEMBLY_AMD, &dataSize,
-      disassembly.data());
+                            disassembly.data());
     assert(r == VK_SUCCESS);
-    printShaderInfo(p, shaderStage, (char *) disassembly.data(), disassembly.size());
+    printShaderInfo(p, shaderStage, (char *)disassembly.data(), disassembly.size());
   }
 
   return r;
@@ -139,35 +141,36 @@ VkResult shim_vkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelin
   PFN_vkGetShaderInfoAMD pfnGetShaderInfoAMD =
       (PFN_vkGetShaderInfoAMD)vkGetDeviceProcAddr(device, "vkGetShaderInfoAMD");
 
-  if (pfnGetShaderInfoAMD == NULL)
+  if(pfnGetShaderInfoAMD == NULL)
     return r;
 
   VkShaderStatisticsInfoAMD statistics = {};
   size_t dataSize;
 
   for(uint32_t i = 0; i < createInfoCount; i++)
-  { 
+  {
     std::vector<VkShaderStageFlagBits> shaderStages;
-    for (uint32_t s = 0; s < pCreateInfos[i].stageCount; s++)
+    for(uint32_t s = 0; s < pCreateInfos[i].stageCount; s++)
       shaderStages.push_back(pCreateInfos[i].pStages[s].stage);
     VkPipeline p = pPipelines[i];
-    for (uint32_t s = 0; s < shaderStages.size(); s++) {
+    for(uint32_t s = 0; s < shaderStages.size(); s++)
+    {
       dataSize = sizeof(statistics);
       // Print statistics data.
-      r = pfnGetShaderInfoAMD(device, p, shaderStages[s], VK_SHADER_INFO_TYPE_STATISTICS_AMD, &dataSize,
-        &statistics);
+      r = pfnGetShaderInfoAMD(device, p, shaderStages[s], VK_SHADER_INFO_TYPE_STATISTICS_AMD,
+                              &dataSize, &statistics);
       assert(r == VK_SUCCESS);
       printShaderInfo(p, shaderStages[s], statistics);
 
       // Print disassembly data.
-      r = pfnGetShaderInfoAMD(device, p, shaderStages[s], VK_SHADER_INFO_TYPE_DISASSEMBLY_AMD, &dataSize,
-        NULL);
+      r = pfnGetShaderInfoAMD(device, p, shaderStages[s], VK_SHADER_INFO_TYPE_DISASSEMBLY_AMD,
+                              &dataSize, NULL);
       assert(r == VK_SUCCESS);
       std::vector<uint8_t> disassembly(dataSize);
-      r = pfnGetShaderInfoAMD(device, p, shaderStages[s], VK_SHADER_INFO_TYPE_DISASSEMBLY_AMD, &dataSize,
-        disassembly.data());
+      r = pfnGetShaderInfoAMD(device, p, shaderStages[s], VK_SHADER_INFO_TYPE_DISASSEMBLY_AMD,
+                              &dataSize, disassembly.data());
       assert(r == VK_SUCCESS);
-      printShaderInfo(p, shaderStages[s], (char *) disassembly.data(), disassembly.size());
+      printShaderInfo(p, shaderStages[s], (char *)disassembly.data(), disassembly.size());
     }
   }
 

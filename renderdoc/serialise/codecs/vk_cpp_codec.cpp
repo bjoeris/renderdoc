@@ -60,8 +60,8 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
 #endif
 
 #ifndef CODE_VULKAN_CASE
-#define CODE_VULKAN_CASE(func, ext, pass)                               \
-  {                                                                     \
+#define CODE_VULKAN_CASE(func, ext, pass)                             \
+  {                                                                   \
     case(uint32_t)VulkanChunk::vk##func: code.func(ext, pass); break; \
   }
 #endif
@@ -289,7 +289,7 @@ CodeGenOpts GetEnvOpts()
   {
     optimizations &= ~CODE_GEN_OPT_IMAGE_INIT_BIT;
   }
-  if (OptimizationDisabled("RDOC_CODE_GEN_OPT_IMAGE_RESET"))
+  if(OptimizationDisabled("RDOC_CODE_GEN_OPT_IMAGE_RESET"))
   {
     optimizations &= ~CODE_GEN_OPT_IMAGE_RESET_BIT;
   }

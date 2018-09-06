@@ -79,16 +79,18 @@ void CodeWriter::Open()
     files[ID_VAR]->PrintLnH("#include \"sample_cpp_shim/shim_vulkan.h\"");
   }
 
-  for (uint32_t i = 0; i < TEMPLATE_FILE_COUNT; i++) {
-    TemplateFileDesc & desc = TemplateFiles[i];
+  for(uint32_t i = 0; i < TEMPLATE_FILE_COUNT; i++)
+  {
+    TemplateFileDesc &desc = TemplateFiles[i];
     WriteTemplateFile(desc.subdir, desc.file, desc.str.c_str());
   }
 }
 
-void CodeWriter::WriteTemplateFile(std::string subdir, std::string file, const char* str) {
+void CodeWriter::WriteTemplateFile(std::string subdir, std::string file, const char *str)
+{
   std::string path = rootDirectory;
-  if (!subdir.empty())
-    path+="/" + subdir;
+  if(!subdir.empty())
+    path += "/" + subdir;
   std::string filepath = path + "/" + file;
   FileIO::CreateParentDirectory(filepath);
 
@@ -155,9 +157,11 @@ void CodeWriter::Close()
   files[ID_VAR] = NULL;
 }
 
-void CodeWriter::PrintReadBuffers(StructuredBufferList &buffers) {
-  for (size_t i = 0; i < buffers.size(); i++) {
-    if (buffers[i]->size() == 0)
+void CodeWriter::PrintReadBuffers(StructuredBufferList &buffers)
+{
+  for(size_t i = 0; i < buffers.size(); i++)
+  {
+    if(buffers[i]->size() == 0)
       continue;
 
     const char *name = tracker->GetDataBlobVar(i);
@@ -761,21 +765,23 @@ void CodeWriter::CreateDescriptorPool(ExtObject *o, uint32_t pass, bool global_c
   std::string res = AddVar("std::vector<VkDescriptorPool>", "VkDescriptorPoolVec", vk_res->U64());
   const char *res_name = tracker->GetResourceVar(vk_res->Type(), vk_res->U64());
   std::string ci_name = AddVar(ci->Type(), vk_res->U64());
-  std::string pool_vec = AddVar("std::vector<VkDescriptorPoolSize>", "VkDescriptorPoolSize", vk_res->U64());
+  std::string pool_vec =
+      AddVar("std::vector<VkDescriptorPoolSize>", "VkDescriptorPoolSize", vk_res->U64());
 
   files[pass]->PrintLn("{");
   LocalVariable(ci, "", pass);
 
-  files[pass]->PrintLn("for (uint32_t i = 0; i < %s.poolSizeCount; i++) {", ci->Name())
-    .PrintLn("%s.push_back(%s.pPoolSizes[i]);", pool_vec.c_str(), ci->Name())
-    .PrintLn("}")
-    .PrintLn("%s.pPoolSizes = %s.data();", ci->Name(), pool_vec.c_str())
-    .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ci->Name(),
-      res_name)
-    .PrintLn("assert(result == VK_SUCCESS);")
-    .PrintLn("%s = %s;", ci_name.c_str(), ci->Name())
-    .PrintLn("%s.push_back(%s);", res.c_str(), res_name)
-    .PrintLn("}");
+  files[pass]
+      ->PrintLn("for (uint32_t i = 0; i < %s.poolSizeCount; i++) {", ci->Name())
+      .PrintLn("%s.push_back(%s.pPoolSizes[i]);", pool_vec.c_str(), ci->Name())
+      .PrintLn("}")
+      .PrintLn("%s.pPoolSizes = %s.data();", ci->Name(), pool_vec.c_str())
+      .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ci->Name(),
+               res_name)
+      .PrintLn("assert(result == VK_SUCCESS);")
+      .PrintLn("%s = %s;", ci_name.c_str(), ci->Name())
+      .PrintLn("%s.push_back(%s);", res.c_str(), res_name)
+      .PrintLn("}");
 }
 
 void CodeWriter::CreateCommandPool(ExtObject *o, uint32_t pass, bool global_ci)
@@ -845,8 +851,8 @@ void CodeWriter::CreateShaderModule(ExtObject *o, uint32_t pass, bool global_ci)
   GenericVkCreate(o, pass, global_ci);
 
   uint64_t bufferID = o->At("CreateInfo")->At("pCode")->U64();
-  if (tracker->DecDataBlobCount(bufferID) == 0)
-  files[pass]->PrintLn("%s.clear();", tracker->GetDataBlobVar(bufferID));
+  if(tracker->DecDataBlobCount(bufferID) == 0)
+    files[pass]->PrintLn("%s.clear();", tracker->GetDataBlobVar(bufferID));
 }
 
 void CodeWriter::CreatePipelineLayout(ExtObject *o, uint32_t pass, bool global_ci)
@@ -859,7 +865,7 @@ void CodeWriter::CreatePipelineCache(ExtObject *o, uint32_t pass, bool global_ci
   GenericVkCreate(o, pass, global_ci);
 
   uint64_t bufferID = o->At("CreateInfo")->At("pInitialData")->U64();
-  if (tracker->DecDataBlobCount(bufferID) == 0)
+  if(tracker->DecDataBlobCount(bufferID) == 0)
     files[pass]->PrintLn("%s.clear();", tracker->GetDataBlobVar(bufferID));
 }
 
@@ -1544,7 +1550,7 @@ void CodeWriter::InitialLayouts(ExtObject *o, uint32_t pass)
       bool needsResourceInit = tracker->ResourceNeedsReset(image_id, true, false);
 
       // I assume that INIT and RESET are mutually exclusive.
-      if ((tracker->Optimizations() & CODE_GEN_OPT_IMAGE_RESET_BIT) != 0)
+      if((tracker->Optimizations() & CODE_GEN_OPT_IMAGE_RESET_BIT) != 0)
         RDCASSERT(!(needsResourceInit && needsResourceReset));
 
       ExtObject *subres = imageRegionState->At("subresourceRange");

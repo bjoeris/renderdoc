@@ -57,7 +57,8 @@ Window appWindow;
 
 #define RDOC_WINDOW_TITLE "RenderDoc Frame Loop"
 
-void PostStageProgress(const char *stage, uint32_t i, uint32_t N) {
+void PostStageProgress(const char *stage, uint32_t i, uint32_t N)
+{
   XStoreName(appDisplay, appWindow, StageProgressString(stage, i, N).c_str());
 }
 

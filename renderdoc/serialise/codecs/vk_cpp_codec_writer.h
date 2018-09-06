@@ -38,8 +38,8 @@
 #include "driver/vulkan/vk_common.h"
 #include "driver/vulkan/vk_resources.h"
 #include "serialise/rdcfile.h"
-#include "vk_cpp_codec_file.h"
 #include "ext_object.h"
+#include "vk_cpp_codec_file.h"
 #include "vk_cpp_codec_state.h"
 #include "vk_cpp_codec_tracker.h"
 
@@ -47,7 +47,8 @@ namespace vk_cpp_codec
 {
 class TraceTracker;
 
-enum TemplateFileID {
+enum TemplateFileID
+{
   TEMPLATE_FILE_ROOT_CMAKE,
   TEMPLATE_FILE_SAMPLE_MAIN_WIN,
   TEMPLATE_FILE_SAMPLE_MAIN_YETI,
@@ -81,7 +82,8 @@ enum TemplateFileID {
   TEMPLATE_FILE_COUNT,
 };
 
-struct TemplateFileDesc {
+struct TemplateFileDesc
+{
   std::string subdir;
   std::string file;
   std::string str;
@@ -113,8 +115,8 @@ public:
 
 protected:
   typedef std::array<std::string, ID_COUNT> func_array;
-  func_array funcs = {{"main",    "variables", "render",   "create",
-                      "release", "init",      "prereset", "postreset", "prediff", "diff"}};
+  func_array funcs = {{"main", "variables", "render", "create", "release", "init", "prereset",
+                       "postreset", "prediff", "diff"}};
 
   std::string rootDirectory;
   typedef std::array<CodeFile *, ID_COUNT> file_array;
@@ -126,7 +128,7 @@ protected:
   // Once you create a code project you get all the files you need.
   void Open();
 
-  void WriteTemplateFile(std::string subdir, std::string file, const char * str);
+  void WriteTemplateFile(std::string subdir, std::string file, const char *str);
 
   const uint32_t kLinearizeMemory = 0;
 

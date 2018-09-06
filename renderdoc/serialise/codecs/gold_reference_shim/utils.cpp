@@ -130,13 +130,13 @@ VkDeviceMemory getStagingImage(VkImage &dstImage, VkImageCreateInfo ci)
   VkMemoryAllocateInfo memAllocInfo{};
   memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   memAllocInfo.allocationSize = memRequirements.size;
-  memAllocInfo.memoryTypeIndex = // try allocating in CPU memory first.
+  memAllocInfo.memoryTypeIndex =    // try allocating in CPU memory first.
       MemoryTypeIndex(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, memRequirements.memoryTypeBits,
                       physicalDeviceMemoryProperties);
-  if (memAllocInfo.memoryTypeIndex == -1)
-    memAllocInfo.memoryTypeIndex = // if CPU is not possible, try GPU memory
-      MemoryTypeIndex(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memRequirements.memoryTypeBits,
-                      physicalDeviceMemoryProperties);
+  if(memAllocInfo.memoryTypeIndex == -1)
+    memAllocInfo.memoryTypeIndex =    // if CPU is not possible, try GPU memory
+        MemoryTypeIndex(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memRequirements.memoryTypeBits,
+                        physicalDeviceMemoryProperties);
   assert(memAllocInfo.memoryTypeIndex != -1);
   VkDeviceMemory dstImageMemory;
   vkAllocateMemory(aux.device, &memAllocInfo, nullptr, &dstImageMemory);
@@ -176,8 +176,9 @@ void copyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImage dstImage
                uint32_t height, VkFormat format, bool msaa)
 {
   assert(sizeof(VkImageCopy) == sizeof(VkImageResolve));
-  union {
-    VkImageCopy copy; // these structures are actually identical.
+  union
+  {
+    VkImageCopy copy;    // these structures are actually identical.
     VkImageResolve resolve;
   } region{};
 
@@ -192,12 +193,12 @@ void copyImage(VkCommandBuffer commandBuffer, VkImage srcImage, VkImage dstImage
   region.copy.extent.width = width;
   region.copy.extent.height = height;
   region.copy.extent.depth = 1;
-  if (!msaa)
+  if(!msaa)
     vkCmdCopyImage(commandBuffer, srcImage, VK_IMAGE_LAYOUT_GENERAL, dstImage,
-      VK_IMAGE_LAYOUT_GENERAL, 1, &region.copy);
+                   VK_IMAGE_LAYOUT_GENERAL, 1, &region.copy);
   else
     vkCmdResolveImage(commandBuffer, srcImage, VK_IMAGE_LAYOUT_GENERAL, dstImage,
-      VK_IMAGE_LAYOUT_GENERAL, 1, &region.resolve);
+                      VK_IMAGE_LAYOUT_GENERAL, 1, &region.resolve);
 }
 
 // copyFramebufferAttachments copies framebuffer attachments to host visible buffers,
@@ -213,7 +214,8 @@ ReadbackInfos copyFramebufferAttachments(VkCommandBuffer cmdBuf, RenderPassInfo 
     if(kImageAspectsAndByteSize.find(image_ci.format) == kImageAspectsAndByteSize.end())
     {
 #if defined(_WIN32)
-      OutputDebugStringA(std::string("Invalid format " + FormatToString(image_ci.format) + "\n").c_str());
+      OutputDebugStringA(
+          std::string("Invalid format " + FormatToString(image_ci.format) + "\n").c_str());
 #endif
       continue;
     }
@@ -228,17 +230,17 @@ ReadbackInfos copyFramebufferAttachments(VkCommandBuffer cmdBuf, RenderPassInfo 
     uint32_t mip_width = std::max<uint32_t>(image_ci.extent.width >> mip, 1);
     uint32_t mip_height = std::max<uint32_t>(image_ci.extent.height >> mip, 1);
 
-    VkImageSubresourceRange srcRange = { FullAspectFromFormat(image_ci.format),
-      mip, 1, layer, 1};
+    VkImageSubresourceRange srcRange = {FullAspectFromFormat(image_ci.format), mip, 1, layer, 1};
 
     // Transition source image to VK_IMAGE_LAYOUT_GENERAL.
     ImageLayoutTransition(cmdBuf, srcImage, srcRange, VK_IMAGE_LAYOUT_GENERAL,
-      VK_QUEUE_FAMILY_IGNORED, rpInfo->finalLayouts[i], VK_QUEUE_FAMILY_IGNORED);
+                          VK_QUEUE_FAMILY_IGNORED, rpInfo->finalLayouts[i], VK_QUEUE_FAMILY_IGNORED);
 
     bool msaa = image_ci.samples != VK_SAMPLE_COUNT_1_BIT;
     VkImage stagingImage = NULL;
     VkDeviceMemory stagingImageMem = NULL;
-    if (msaa) { // If MSAA we'll do an image->image resolve first.
+    if(msaa)
+    {    // If MSAA we'll do an image->image resolve first.
       VkImageCreateInfo stagingCI{};
       stagingCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
       stagingCI.imageType = VK_IMAGE_TYPE_2D;
@@ -256,33 +258,34 @@ ReadbackInfos copyFramebufferAttachments(VkCommandBuffer cmdBuf, RenderPassInfo 
       stagingImageMem = getStagingImage(stagingImage, stagingCI);
 
       // Transition staging image to VK_IMAGE_LAYOUT_GENERAL.
-      VkImageSubresourceRange dstRange = {FullAspectFromFormat(stagingCI.format),
-        0, 1, 0, 1};
+      VkImageSubresourceRange dstRange = {FullAspectFromFormat(stagingCI.format), 0, 1, 0, 1};
 
-      ImageLayoutTransition(cmdBuf, stagingImage, dstRange,
-        VK_IMAGE_LAYOUT_GENERAL, VK_QUEUE_FAMILY_IGNORED,
-        VK_IMAGE_LAYOUT_UNDEFINED, VK_QUEUE_FAMILY_IGNORED);
+      ImageLayoutTransition(cmdBuf, stagingImage, dstRange, VK_IMAGE_LAYOUT_GENERAL,
+                            VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_LAYOUT_UNDEFINED,
+                            VK_QUEUE_FAMILY_IGNORED);
 
-      copyImage(cmdBuf, srcImage, stagingImage, srcRange, dstRange, mip_width, mip_height, stagingCI.format, msaa);
+      copyImage(cmdBuf, srcImage, stagingImage, srcRange, dstRange, mip_width, mip_height,
+                stagingCI.format, msaa);
 
-      // Because srcImage is VK_IMAGE_LAYOUT_GENERAL we can just keep it like this for subsequent copy.
-      // override these arguments since now we'll send the stagingImage down to imgToBuffer() function
+      // Because srcImage is VK_IMAGE_LAYOUT_GENERAL we can just keep it like this for subsequent
+      // copy.
+      // override these arguments since now we'll send the stagingImage down to imgToBuffer()
+      // function
       srcImage = stagingImage;
       mip = layer = 0;
     }
 
     VkBuffer stagingBuffer;
     VkDeviceMemory bufMem = getStagingBuffer(stagingBuffer, mip_width, mip_height,
-      kImageAspectsAndByteSize[image_ci.format].second);
+                                             kImageAspectsAndByteSize[image_ci.format].second);
     imgToBuffer(cmdBuf, srcImage, stagingBuffer, mip_width, mip_height, mip, layer, image_ci.format);
 
     // Transition the real source image back to the original layout.
     ImageLayoutTransition(cmdBuf, rpInfo->attachments[i].image.res, srcRange, rpInfo->finalLayouts[i],
-      VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_LAYOUT_GENERAL, VK_QUEUE_FAMILY_IGNORED);
+                          VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_LAYOUT_GENERAL, VK_QUEUE_FAMILY_IGNORED);
 
-    ReadbackInfo readback(rpInfo->attachments[i].image.res, 
-                          stagingBuffer, stagingImage, bufMem, stagingImageMem,
-                          mip_width, mip_height, image_ci.format, i);
+    ReadbackInfo readback(rpInfo->attachments[i].image.res, stagingBuffer, stagingImage, bufMem,
+                          stagingImageMem, mip_width, mip_height, image_ci.format, i);
     readbacks.attachments.push_back(readback);
   }
 
@@ -310,20 +313,20 @@ void screenshot(VkImage srcImage, const char *filename)
   imageCreateCI.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   VkBuffer stagingBuffer;
   VkDeviceMemory stagingBufferMem = getStagingBuffer(stagingBuffer, sw_width, sw_height,
-    kImageAspectsAndByteSize[sw_format].second);
+                                                     kImageAspectsAndByteSize[sw_format].second);
 
   VkCommandBufferBeginInfo cmdbufBI{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
   vkBeginCommandBuffer(aux.command_buffer, &cmdbufBI);
   {
     VkImageSubresourceRange fullRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
-    ImageLayoutTransition(aux, srcImage, fullRange,
-      VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+    ImageLayoutTransition(aux, srcImage, fullRange, VK_IMAGE_LAYOUT_GENERAL,
+                          VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     imgToBuffer(aux.command_buffer, srcImage, stagingBuffer, sw_width, sw_height, 0, 0, sw_format);
 
-    ImageLayoutTransition(aux, srcImage, fullRange,
-      VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_GENERAL);
+    ImageLayoutTransition(aux, srcImage, fullRange, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                          VK_IMAGE_LAYOUT_GENERAL);
   }
   vkEndCommandBuffer(aux.command_buffer);
 
