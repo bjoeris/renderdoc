@@ -1909,7 +1909,13 @@ void CodeWriter::FlushMappedMemoryRanges(ExtObject *o, uint32_t pass)
 
   MemAllocWithResourcesMapIter it = tracker->MemAllocFind(memory->U64());
 
+  // fetch allocation size
+  uint64_t allocationSize = it->second.allocateSDObj->At("AllocateInfo")->At("allocationSize")->U64();
+  // if region.size == -1 replace with allocation size - region.offset
   RDCASSERT(!regions->IsArray());
+  uint64_t& map_size = regions->At("size")->U64();
+  if (map_size == VK_WHOLE_SIZE)
+    map_size = allocationSize - regions->At("offset")->U64();
   LocalVariable(regions, "", pass);
 
   // TODO(akharlamov) calculate real map range based on existing map range, captured reqs and
