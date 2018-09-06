@@ -76,7 +76,7 @@ struct ExtObject : public SDObject
   const char *Name() { return name.c_str(); }
   const char *Str() { return data.str.c_str(); }
   uint64_t &U64() { return data.basic.u; }
-  uint64_t I64() { return data.basic.i; }
+  int64_t I64() { return data.basic.i; }
   double D64()
   {
     if(isnan(data.basic.d))
