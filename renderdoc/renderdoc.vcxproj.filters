@@ -151,6 +151,9 @@
     <Filter Include="Common\Serialise\Codecs\CPP\sample">
       <UniqueIdentifier>{95b0407f-6f5f-4161-8af3-50c55416ae8c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Common\Serialise\Codecs\CPP\rdoc_auto_capture">
+      <UniqueIdentifier>{10d4d65b-73c6-4b2e-af3a-b3daef5622c9}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="maths\camera.h">
@@ -521,6 +524,12 @@
     </ClInclude>
     <ClInclude Include="serialise\codecs\helper\format_helper.h">
       <Filter>Common\Serialise\Codecs\CPP\helper</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\rdoc_auto_capture_shim\shim_vulkan.h">
+      <Filter>Common\Serialise\Codecs\CPP\rdoc_auto_capture</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\rdoc_auto_capture_shim\renderdoc_app.h">
+      <Filter>Common\Serialise\Codecs\CPP\rdoc_auto_capture</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -935,6 +944,9 @@
     <ClCompile Include="serialise\codecs\vk_cpp_codec_writer_template_files.cpp">
       <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
     </ClCompile>
+    <ClCompile Include="serialise\codecs\rdoc_auto_capture_shim\shim_vulkan.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\rdoc_auto_capture</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="os\win32\comexport.def">
@@ -1066,6 +1078,9 @@
     </Text>
     <Text Include="serialise\codecs\sample_cpp_trace\CMakeLists.txt">
       <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
+    </Text>
+    <Text Include="serialise\codecs\rdoc_auto_capture_shim\CMakeLists.txt">
+      <Filter>Common\Serialise\Codecs\CPP\rdoc_auto_capture</Filter>
     </Text>
   </ItemGroup>
 </Project>

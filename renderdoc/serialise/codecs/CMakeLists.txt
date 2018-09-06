@@ -107,3 +107,5 @@ ADD_SUBDIRECTORY("${CMAKE_SOURCE_DIR}/gold_reference_shim"
                  "${CMAKE_BINARY_DIR}/gold_reference_shim")
 ADD_SUBDIRECTORY("${CMAKE_SOURCE_DIR}/amd_shader_info_shim"
                  "${CMAKE_BINARY_DIR}/amd_shader_info_shim")
+ADD_SUBDIRECTORY("${CMAKE_SOURCE_DIR}/rdoc_auto_capture_shim"
+                 "${CMAKE_BINARY_DIR}/rdoc_auto_capture_shim")

@@ -239,6 +239,12 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
     <ClInclude Include="serialise\codecs\intervals.h" />
+    <ClInclude Include="serialise\codecs\rdoc_auto_capture_shim\renderdoc_app.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\rdoc_auto_capture_shim\shim_vulkan.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+    </ClInclude>
     <ClInclude Include="serialise\codecs\sample_cpp_shim\shim_vulkan.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
@@ -573,6 +579,9 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="serialise\codecs\rdoc_auto_capture_shim\shim_vulkan.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="serialise\codecs\sample_cpp_shim\shim_vulkan.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
@@ -694,6 +703,7 @@
     <Text Include="serialise\codecs\CMakeLists.txt" />
     <Text Include="serialise\codecs\gold_reference_shim\CMakeLists.txt" />
     <Text Include="serialise\codecs\helper\CMakeLists.txt" />
+    <Text Include="serialise\codecs\rdoc_auto_capture_shim\CMakeLists.txt" />
     <Text Include="serialise\codecs\sample_cpp_shim\CMakeLists.txt" />
     <Text Include="serialise\codecs\sample_cpp_trace\CMakeLists.txt" />
   </ItemGroup>
