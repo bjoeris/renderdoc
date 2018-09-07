@@ -22,6 +22,7 @@
  * THE SOFTWARE.
  ******************************************************************************/
 #include <assert.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -203,7 +204,7 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
   // 1. Resources requiring reset before every frame
   // 2. Resources requiring initialization, but no reset between frames
   // 3. Resources requiring neither reset nor initialization.
-  for(size_t resource_idx = 0; resource_idx < order.size(); resource_idx++)
+  for(uint32_t resource_idx = 0; resource_idx < order.size(); resource_idx++)
   {
     const BoundResource &abr = alloc_it->second.boundResources[order[resource_idx]];
     if(tracker->Optimizations() & CODE_GEN_OPT_REORDER_MEMORY_BINDINGS_BIT)
@@ -262,9 +263,10 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
       files[pass]
           ->PrintLn("%s[%u].replay.offset = %s;", mem_remap, resource_idx, mem_bind_offset)
           .PrintLn("%s[%u].replay.size = %s.size;", mem_remap, resource_idx, abr.requirement->Name())
-          .PrintLn("%s[%u].capture.offset = %llu;", mem_remap, resource_idx, abr.offset->U64())
-          .PrintLn("%s[%u].capture.size = VkMemoryRequirements_captured_%llu.size;", mem_remap,
-                   resource_idx, abr.resource->U64());
+          .PrintLn("%s[%u].capture.offset = %s;", mem_remap, resource_idx,
+                   abr.offset->ValueStr().c_str())
+          .PrintLn("%s[%u].capture.size = VkMemoryRequirements_captured_%" PRIu64 ".size;",
+                   mem_remap, resource_idx, abr.resource->U64());
     }
   }
   switch(reset)
@@ -315,11 +317,12 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
 
     if(alloc_it->second.HasAliasedResources())
     {
-      files[pass]->PrintLn("// Memory allocation %llu has aliased resources", memory->U64());
+      files[pass]->PrintLn("// Memory allocation %" PRIu64 " has aliased resources", memory->U64());
     }
     else
     {
-      files[pass]->PrintLn("// Memory allocation %llu doesn't have aliased resources", memory->U64());
+      files[pass]->PrintLn("// Memory allocation %" PRIu64 " doesn't have aliased resources",
+                           memory->U64());
     }
 
     // Default values for memory_size and memory_bits
@@ -332,7 +335,8 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
          // We are not going to fill the Remap vector if there are aliased resources.
       if(!alloc_it->second.HasAliasedResources())
       {
-        files[pass]->PrintLn("%s.resize(%llu);", mem_remap, alloc_it->second.BoundResourceCount());
+        files[pass]->PrintLn("%s.resize(%u);", mem_remap,
+                             (uint32_t)alloc_it->second.BoundResourceCount());
       }
       RemapMemAlloc(pass, alloc_it);
     }
@@ -342,7 +346,7 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
     // default value (~0) or correctly set.
     if(alloc_it->second.BoundResourceCount() == 0 || alloc_it->second.HasAliasedResources())
     {
-      files[pass]->PrintLn("memory_size = %llu; // rdoc: reset size to capture value",
+      files[pass]->PrintLn("memory_size = %" PRIu64 "; // rdoc: reset size to capture value",
                            ai->At(2)->U64());
     }
 
@@ -350,11 +354,13 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
         ->PrintLn("%s.%s = memory_size;", ai->Name(), ai->At(2)->Name())
         .PrintLn("assert(memory_bits != 0);")
         .PrintLn(
-            "%s.%s = CompatibleMemoryTypeIndex(%llu, "
-            "VkPhysicalDeviceMemoryProperties_captured_%llu, "
-            "VkPhysicalDeviceMemoryProperties_%llu, "
+            "%s.%s = CompatibleMemoryTypeIndex(%s, "
+            "VkPhysicalDeviceMemoryProperties_captured_%" PRIu64
+            ", "
+            "VkPhysicalDeviceMemoryProperties_%" PRIu64
+            ", "
             "memory_bits);",
-            ai->Name(), ai->At(3)->Name(), ai->At(3)->U64(), tracker->PhysDevID(),
+            ai->Name(), ai->At(3)->Name(), ai->At(3)->ValueStr().c_str(), tracker->PhysDevID(),
             tracker->PhysDevID())
         .PrintLn("%s = %s;", ai_name, ai->Name())
         .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ai->Name(),
@@ -396,21 +402,23 @@ void CodeWriter::EarlyBindResourceMemory(uint32_t pass)
 
       files[pass]
           ->PrintLn("{")
-          .PrintLn("VkResult result = CheckMemoryAllocationCompatibility(%lld, %s, %s, %s);", memType,
-                   phys_dev_mem_props_captured.c_str(), phys_dev_mem_props.c_str(), object_mem_reqs)
+          .PrintLn("VkResult result = CheckMemoryAllocationCompatibility(%" PRId64 ", %s, %s, %s);",
+                   memType, phys_dev_mem_props_captured.c_str(), phys_dev_mem_props.c_str(),
+                   object_mem_reqs)
           .PrintLn("assert(result == VK_SUCCESS);");
 
       if(alloc_it->second.HasAliasedResources())
       {
-        files[pass]->PrintLn("result = %s(%s, %s, %s, %llu);", o->Name(), device_name, object_name,
-                             memory_name, offset->U64());
+        files[pass]->PrintLn("result = %s(%s, %s, %s, %s);", o->Name(), device_name, object_name,
+                             memory_name, offset->ValueStr().c_str());
       }
       else
       {
         files[pass]
-            ->PrintLn("%s = %llu;", captured_bind_offset.c_str(), offset->U64())
-            .PrintLn("result = %s(%s, %s, %s, %s /* rdoc:value %llu */);", o->Name(), device_name,
-                     object_name, memory_name, replayed_bind_offset.c_str(), offset->U64());
+            ->PrintLn("%s = %s;", captured_bind_offset.c_str(), offset->ValueStr().c_str())
+            .PrintLn("result = %s(%s, %s, %s, %s /* rdoc:value %" PRIu64 " */);", o->Name(),
+                     device_name, object_name, memory_name, replayed_bind_offset.c_str(),
+                     offset->U64());
       }
       files[pass]->PrintLn("assert(result == VK_SUCCESS);").PrintLn("}");
     }
@@ -439,13 +447,14 @@ void CodeWriter::BindResourceMemory(ExtObject *o, uint32_t pass)
 
   files[pass]
       ->PrintLn("{")
-      .PrintLn("VkResult result = CheckMemoryAllocationCompatibility(%lld, %s, %s, %s);", memType,
-               phys_dev_mem_props_captured.c_str(), phys_dev_mem_props.c_str(), object_mem_reqs)
+      .PrintLn("VkResult result = CheckMemoryAllocationCompatibility(%" PRId64 ", %s, %s, %s);",
+               memType, phys_dev_mem_props_captured.c_str(), phys_dev_mem_props.c_str(),
+               object_mem_reqs)
       .PrintLn("assert(result == VK_SUCCESS);");
 
   files[pass]
-      ->PrintLn("result = %s(%s, %s, %s, %llu);", o->Name(), device_name, object_name, memory_name,
-                offset->U64())
+      ->PrintLn("result = %s(%s, %s, %s, %s);", o->Name(), device_name, object_name, memory_name,
+                offset->ValueStr().c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("}");
 }
@@ -453,8 +462,8 @@ void CodeWriter::BindResourceMemory(ExtObject *o, uint32_t pass)
 void CodeWriter::Resolution(uint32_t pass)
 {
   files[pass]
-      ->PrintLn("unsigned int resolutionWidth = %llu;", tracker->SwapchainWidth())
-      .PrintLn("unsigned int resolutionHeight = %llu;", tracker->SwapchainHeight())
+      ->PrintLn("unsigned int resolutionWidth = %" PRIu64 ";", tracker->SwapchainWidth())
+      .PrintLn("unsigned int resolutionHeight = %" PRIu64 ";", tracker->SwapchainHeight())
       .PrintLnH("extern int frameLoops;")
       .PrintLnH("extern unsigned int resolutionWidth;")
       .PrintLnH("extern unsigned int resolutionHeight;")
@@ -499,9 +508,9 @@ void CodeWriter::EnumeratePhysicalDevices(ExtObject *o, uint32_t pass)
       .PrintLn("r = vkEnumeratePhysicalDevices(%s, &phys_device_count, phys_devices.data());",
                instance_name)
       .PrintLn("assert(r == VK_SUCCESS);")
-      .PrintLn("if (phys_devices.size() > %llu) {", o->At(1)->U64())
-      .PrintLn("%s = phys_devices[%llu]; // trace used %llu", phys_device_name, o->At(1)->U64(),
-               o->At(1)->U64());
+      .PrintLn("if (phys_devices.size() > %s) {", o->At(1)->ValueStr().c_str())
+      .PrintLn("%s = phys_devices[%s]; // trace used %" PRIu64, phys_device_name,
+               o->At(1)->ValueStr().c_str(), o->At(1)->U64());
 
   // Print device properties that were captured in comments.
   ExtObject *phys_dev_props = o->At(4);
@@ -626,11 +635,11 @@ void CodeWriter::CreateInstance(ExtObject *o, uint32_t pass, bool global_ci)
   {
     files[pass]
         ->PrintLn("#if defined(_WIN32)")
-        .PrintLn("%s[%lld] = \"VK_KHR_win32_surface\";", extensions->Name(), enables_surface)
+        .PrintLn("%s[%" PRId64 "] = \"VK_KHR_win32_surface\";", extensions->Name(), enables_surface)
         .PrintLn("#elif defined(__yeti__)")
-        .PrintLn("%s[%lld] = \"VK_GOOGLE_yeti_surface\";", extensions->Name(), enables_surface)
+        .PrintLn("%s[%" PRId64 "] = \"VK_GOOGLE_yeti_surface\";", extensions->Name(), enables_surface)
         .PrintLn("#elif defined(__linux__)")
-        .PrintLn("%s[%lld] = \"VK_KHR_xlib_surface\";", extensions->Name(), enables_surface)
+        .PrintLn("%s[%" PRId64 "] = \"VK_KHR_xlib_surface\";", extensions->Name(), enables_surface)
         .PrintLn("#endif");
   }
 
@@ -639,10 +648,10 @@ void CodeWriter::CreateInstance(ExtObject *o, uint32_t pass, bool global_ci)
       .PrintLn("/* sType */ VK_STRUCTURE_TYPE_APPLICATION_INFO,")
       .PrintLn("/* pNext */ NULL,")
       .PrintLn("/* pApplicationName */ \"%s\",", init_params->At(0)->Str())
-      .PrintLn("/* applicationVersion */ %llu,", init_params->At(2)->U64())
+      .PrintLn("/* applicationVersion */ %" PRIu64 ",", init_params->At(2)->U64())
       .PrintLn("/* pEngineName */ \"%s\",", init_params->At(1)->Str())
-      .PrintLn("/* engineVersion */ %llu,", init_params->At(3)->U64())
-      .PrintLn("/* apiVersion */ %llu,", VK_API_VERSION_1_1)
+      .PrintLn("/* engineVersion */ %" PRIu64 ",", init_params->At(3)->U64())
+      .PrintLn("/* apiVersion */ %d,", VK_API_VERSION_1_1)
       .PrintLn("};")
       .PrintLn("VkInstanceCreateInfo InstanceCreateInfo = {")
       .PrintLn("/* sType */ VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,")
@@ -651,20 +660,20 @@ void CodeWriter::CreateInstance(ExtObject *o, uint32_t pass, bool global_ci)
       .PrintLn("/* pApplicationInfo */ &ApplicationInfo,");
   if(enables_vl)
   {    // if VL were not added by RenderDoc code gen, generate as is.
-    files[pass]->PrintLn("/* enabledLayerCount */ %llu,", layers->Size());
+    files[pass]->PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->Size());
   }
   else
   {    // otherwise include VL in debug builds only.
     files[pass]
         ->PrintLn("#if defined(_DEBUG) || defined(DEBUG)")
-        .PrintLn("/* enabledLayerCount */ %llu,", layers->Size())
+        .PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->Size())
         .PrintLn("#else")
-        .PrintLn("/* enabledLayerCount */ %llu,", layers->Size() - 1)
+        .PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->Size() - 1)
         .PrintLn("#endif");
   }
   files[pass]
       ->PrintLn("/* ppEnabledLayerNames */ %s,", layers->Size() > 0 ? layers->Name() : "NULL")
-      .PrintLn("/* enabledExtensionCount */ %llu,", extensions->Size())
+      .PrintLn("/* enabledExtensionCount */ %" PRIu64 ",", extensions->Size())
       .PrintLn("/* ppEnabledExtensionNames */ %s", extensions->Name())
       .PrintLn("};")
       .PrintLn("VkResult r = %svkCreateInstance(&InstanceCreateInfo, NULL, &%s);", shimPrefix,
@@ -888,7 +897,8 @@ void CodeWriter::CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci)
   files[pass]
       ->PrintLn("{")
       .PrintLn("#if defined(WIN32)")
-      .PrintLn("VkWin32SurfaceCreateInfoKHR VkWin32SurfaceCreateInfoKHR_%llu = {", swapchain->U64())
+      .PrintLn("VkWin32SurfaceCreateInfoKHR VkWin32SurfaceCreateInfoKHR_%" PRIu64 " = {",
+               swapchain->U64())
       .PrintLn("/* sType = */ VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,")
       .PrintLn("/* pNext = */ NULL,")
       .PrintLn("/* flags = */ VkWin32SurfaceCreateFlagsKHR(0),")
@@ -897,11 +907,11 @@ void CodeWriter::CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci)
       .PrintLn("};")
       .PrintLn(
           "VkResult result = vkCreateWin32SurfaceKHR("
-          "%s, &VkWin32SurfaceCreateInfoKHR_%llu, NULL, &%s);",
+          "%s, &VkWin32SurfaceCreateInfoKHR_%" PRIu64 ", NULL, &%s);",
           instance_name, swapchain->U64(), surface.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("#elif defined(__yeti__)")
-      .PrintLn("VkYetiSurfaceCreateInfoGOOGLE VkYetiSurfaceCreateInfoGOOGLE_%llu = {",
+      .PrintLn("VkYetiSurfaceCreateInfoGOOGLE VkYetiSurfaceCreateInfoGOOGLE_%" PRIu64 " = {",
                swapchain->U64())
       .PrintLn("  /* sType = */ VK_STRUCTURE_TYPE_YETI_SURFACE_CREATE_INFO_GOOGLE,")
       .PrintLn("  /* pNext = */ NULL,")
@@ -909,21 +919,22 @@ void CodeWriter::CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci)
       .PrintLn("};")
       .PrintLn(
           "VkResult result = vkCreateYetiSurfaceGOOGLE("
-          "%s, &VkYetiSurfaceCreateInfoGOOGLE_%llu, NULL, &%s);",
+          "%s, &VkYetiSurfaceCreateInfoGOOGLE_%" PRIu64 ", NULL, &%s);",
           instance_name, swapchain->U64(), surface.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("#elif defined(__linux__)")
-      .PrintLn("VkXlibSurfaceCreateInfoKHR VkXlibSurfaceCreateInfoKHR_%llu = {", swapchain->U64())
+      .PrintLn("VkXlibSurfaceCreateInfoKHR VkXlibSurfaceCreateInfoKHR_%" PRIu64 " = {",
+               swapchain->U64())
       .PrintLn("/* sType = */ VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,")
       .PrintLn("/* pNext = */ NULL,")
       .PrintLn("/* VkXlibSurfaceCreateFlagsKHR = */ 0,")
       .PrintLn("/* Display */ appDisplay,")
       .PrintLn("/* Window */ appWindow")
       .PrintLn("};")
-      .PrintLn(
-          "VkResult result = vkCreateXlibSurfaceKHR(%s, &VkXlibSurfaceCreateInfoKHR_%llu, NULL, "
-          "&%s);",
-          instance_name, swapchain->U64(), surface.c_str())
+      .PrintLn("VkResult result = vkCreateXlibSurfaceKHR(%s, &VkXlibSurfaceCreateInfoKHR_%" PRIu64
+               ", NULL, "
+               "&%s);",
+               instance_name, swapchain->U64(), surface.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("#endif");
 
@@ -932,8 +943,9 @@ void CodeWriter::CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci)
   for(uint64_t i = 0; i < tracker->QueueFamilyCount(); i++)
   {
     files[pass]
-        ->PrintLn("if (%s.size() > %llu) {", supported_bool.c_str(), i)
-        .PrintLn("result = %svkGetPhysicalDeviceSurfaceSupportKHR(%s, %llu, %s, &%s[%llu]);",
+        ->PrintLn("if (%s.size() > %" PRIu64 ") {", supported_bool.c_str(), i)
+        .PrintLn("result = %svkGetPhysicalDeviceSurfaceSupportKHR(%s, %" PRIu64 ", %s, &%s[%" PRIu64
+                 "]);",
                  shimPrefix, phys_dev_name, i, surface.c_str(), supported_bool.c_str(), i)
         .PrintLn("assert(result == VK_SUCCESS);")
         .PrintLn("}");
@@ -996,7 +1008,7 @@ void CodeWriter::CreateDevice(ExtObject *o, uint32_t pass, bool global_ci)
   files[pass]->PrintLn("{");
   LocalVariable(ci, "", pass);
   files[pass]
-      ->PrintLn("MakePhysicalDeviceFeaturesMatch(VkPhysicalDeviceFeatures_%llu, %s);",
+      ->PrintLn("MakePhysicalDeviceFeaturesMatch(VkPhysicalDeviceFeatures_%" PRIu64 ", %s);",
                 tracker->PhysDevID(), ci->At(9)->Name())
       .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ci->Name(),
                vk_res_name)
@@ -1051,8 +1063,8 @@ void CodeWriter::GetDeviceQueue(ExtObject *o, uint32_t pass)
   const char *queue_name = tracker->GetResourceVar(queue->Type(), queue->U64());
   files[pass]
       ->PrintLn("{")
-      .PrintLn("%s(%s, %llu, %llu, &%s);", o->Name(), device_name, family->U64(), index->U64(),
-               queue_name)
+      .PrintLn("%s(%s, %" PRIu64 ", %" PRIu64 ", &%s);", o->Name(), device_name, family->U64(),
+               index->U64(), queue_name)
       .PrintLn("}");
 }
 
@@ -1102,7 +1114,7 @@ void CodeWriter::AllocateCommandBuffers(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   LocalVariable(ai, "", pass);
   files[pass]
-      ->PrintLn("std::vector<VkCommandBuffer> cmds(%llu);", ai->At(4)->U64())
+      ->PrintLn("std::vector<VkCommandBuffer> cmds(%" PRIu64 ");", ai->At(4)->U64())
       .PrintLn("VkResult result = %s(%s, &%s, cmds.data());", o->Name(), device_name, ai->Name())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("%s = cmds[0];", cmd_buffer_name)
@@ -1123,12 +1135,15 @@ void CodeWriter::AllocateMemory(ExtObject *o, uint32_t pass)
   LocalVariable(ai, "", pass);
 
   files[pass]
-      ->PrintLn(
-          "%s.%s = CompatibleMemoryTypeIndex(%llu, "
-          "VkPhysicalDeviceMemoryProperties_captured_%llu, "
-          "VkPhysicalDeviceMemoryProperties_%llu, "
-          "0xFFFFFFFF);",
-          ai->Name(), ai->At(3)->Name(), ai->At(3)->U64(), tracker->PhysDevID(), tracker->PhysDevID())
+      ->PrintLn("%s.%s = CompatibleMemoryTypeIndex(%" PRIu64
+                ", "
+                "VkPhysicalDeviceMemoryProperties_captured_%" PRIu64
+                ", "
+                "VkPhysicalDeviceMemoryProperties_%" PRIu64
+                ", "
+                "0xFFFFFFFF);",
+                ai->Name(), ai->At(3)->Name(), ai->At(3)->U64(), tracker->PhysDevID(),
+                tracker->PhysDevID())
       .PrintLn("%s = %s;", ai_name, ai->Name())
       .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ai->Name(),
                memory_name)
@@ -1155,14 +1170,17 @@ void CodeWriter::AllocateDescriptorSets(ExtObject *o, uint32_t pass)
   LocalVariable(ai, "", pass);
   files[pass]
       ->PrintLn("VkResult result = %s(%s, &%s, &%s);", o->Name(), device_name, ai->Name(), ds_name)
-    .PrintLn("if (result == VK_ERROR_OUT_OF_POOL_MEMORY) {")
+      .PrintLn("if (result == VK_ERROR_OUT_OF_POOL_MEMORY) {")
       // resize pool vector, allocate another pool, reset pool variable, execute allocation again
-    .PrintLn("result = vkCreateDescriptorPool(%s, &%s, NULL, &%s); // rdoc: try creating a new pool", device_name, pools_ci.c_str(), tracker->GetResourceVar(descPool))
-    .PrintLn("assert(result == VK_SUCCESS);")
-    .PrintLn("%s.descriptorPool = %s;", ai->Name(), tracker->GetResourceVar(descPool))
-    .PrintLn("%s.push_back(%s);", pools.c_str(), tracker->GetResourceVar(descPool))
-    .PrintLn("result = %s(%s, &%s, &%s); // rdoc: try allocating again", o->Name(), device_name, ai->Name(), ds_name)
-    .PrintLn("}")
+      .PrintLn(
+          "result = vkCreateDescriptorPool(%s, &%s, NULL, &%s); // rdoc: try creating a new pool",
+          device_name, pools_ci.c_str(), tracker->GetResourceVar(descPool))
+      .PrintLn("assert(result == VK_SUCCESS);")
+      .PrintLn("%s.descriptorPool = %s;", ai->Name(), tracker->GetResourceVar(descPool))
+      .PrintLn("%s.push_back(%s);", pools.c_str(), tracker->GetResourceVar(descPool))
+      .PrintLn("result = %s(%s, &%s, &%s); // rdoc: try allocating again", o->Name(), device_name,
+               ai->Name(), ds_name)
+      .PrintLn("}")
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("}");
 }
@@ -1265,11 +1283,11 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
   ImageStateMapIter img_it = tracker->ImageStateFind(resourceID);
   if(img_it != tracker->ImageStateEnd())
   {
-    files[pass]->PrintLn("/* Image %llu Usage:", resourceID);
+    files[pass]->PrintLn("/* Image %" PRIu64 " Usage:", resourceID);
     for(ImageSubresourceStateMapIter sub_it = img_it->second.begin();
         sub_it != img_it->second.end(); sub_it++)
     {
-      files[pass]->PrintLn("    (%s, %llu, %llu): %s",
+      files[pass]->PrintLn("    (%s, %" PRIu64 ", %" PRIu64 "): %s",
                            imageAspectFlagBitNames[sub_it->first.aspect].c_str(), sub_it->first.level,
                            sub_it->first.layer, stateNames[sub_it->second.AccessState()].c_str());
     }
@@ -1326,14 +1344,18 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
     size = std::string(init_size_name);
   }
 
-  files[pass]->PrintLn("%s = %s.size();", size.c_str(), tracker->GetDataBlobVar(bufferID))
-    .PrintLn("%sInitializeSourceBuffer(%s, &%s, &%s, %s, buffer_%llu.data(), "
-      "VkPhysicalDeviceMemoryProperties_%llu, %s);",
-      comment, tracker->GetDeviceVar(), buf_src_name.c_str(), mem_src_name.c_str(), size.c_str(),
-      bufferID, tracker->PhysDevID(), mem_remap)
-    .PrintLn("%sInitializeDiffBuffer(%s, &%s, &%s, %s, VkPhysicalDeviceMemoryProperties_%llu);",
-      diffComment, tracker->GetDeviceVar(), buf_diff_name.c_str(), mem_diff_name.c_str(), size.c_str(), tracker->PhysDevID());
-  if (tracker->DecDataBlobCount(bufferID) == 0)
+  files[pass]
+      ->PrintLn("%s = %s.size();", size.c_str(), tracker->GetDataBlobVar(bufferID))
+      .PrintLn("%sInitializeSourceBuffer(%s, &%s, &%s, %s, buffer_%" PRIu64
+               ".data(), "
+               "VkPhysicalDeviceMemoryProperties_%" PRIu64 ", %s);",
+               comment, tracker->GetDeviceVar(), buf_src_name.c_str(), mem_src_name.c_str(),
+               size.c_str(), bufferID, tracker->PhysDevID(), mem_remap)
+      .PrintLn("%sInitializeDiffBuffer(%s, &%s, &%s, %s, VkPhysicalDeviceMemoryProperties_%" PRIu64
+               ");",
+               diffComment, tracker->GetDeviceVar(), buf_diff_name.c_str(), mem_diff_name.c_str(),
+               size.c_str(), tracker->PhysDevID());
+  if(tracker->DecDataBlobCount(bufferID) == 0)
     files[pass]->PrintLn("%s.clear();", tracker->GetDataBlobVar(bufferID));
 }
 
@@ -1394,8 +1416,8 @@ void CodeWriter::InitDescSet(ExtObject *o)
             ->PrintLn("%s %s_%u = {", srcObj->Type(), srcObj->Type(), j)
             .PrintLn("/* %s = */ %s,", srcObj->At(0)->Name(),
                      tracker->GetResourceVar(srcObj->At(0)->U64()))
-            .PrintLn("/* %s = */ %llu,", srcObj->At(1)->Name(), srcObj->At(1)->U64())
-            .PrintLn("/* %s = */ %llu,", srcObj->At(2)->Name(), srcObj->At(2)->U64())
+            .PrintLn("/* %s = */ %s,", srcObj->At(1)->Name(), srcObj->At(1)->ValueStr().c_str())
+            .PrintLn("/* %s = */ %s,", srcObj->At(2)->Name(), srcObj->At(2)->ValueStr().c_str())
             .PrintLn("};");
         info.buffer_info = "&" + std::string(srcObj->Type()) + "_" + std::to_string(j);
       }
@@ -1435,8 +1457,8 @@ void CodeWriter::InitDescSet(ExtObject *o)
   {
     if(!writeDescriptorSets[p].empty())
     {
-      files[passes[p]]->PrintLn("VkWriteDescriptorSet VkWriteDescriptorSet_temp[%llu] = {",
-                                writeDescriptorSets[p].size());
+      files[passes[p]]->PrintLn("VkWriteDescriptorSet VkWriteDescriptorSet_temp[%u] = {",
+                                (uint32_t)writeDescriptorSets[p].size());
 
       for(uint32_t i = 0; i < writeDescriptorSets[p].size(); i++)
       {
@@ -1447,7 +1469,7 @@ void CodeWriter::InitDescSet(ExtObject *o)
             .PrintLn("/* dstSet = */ %s,", tracker->GetResourceVar(descriptorSetID))
             .PrintLn("/* dstBinding = */ %u,", writeDescriptorSets[p][i].binding)
             .PrintLn("/* dstArrayElement = */ %u,", writeDescriptorSets[p][i].element)
-            .PrintLn("/* descriptorCount = */ %llu,", 1)
+            .PrintLn("/* descriptorCount = */ %d,", 1)
             .PrintLn("/* descriptorType = */ %s,", writeDescriptorSets[p][i].typeStr.c_str())
             .PrintLn("/* pImageInfo = */ %s,", writeDescriptorSets[p][i].image_info.c_str())
             .PrintLn("/* pBufferInfo = */ %s,", writeDescriptorSets[p][i].buffer_info.c_str())
@@ -1456,19 +1478,19 @@ void CodeWriter::InitDescSet(ExtObject *o)
       }
       files[passes[p]]
           ->PrintLn("};")
-          .PrintLn("vkUpdateDescriptorSets(%s, %llu, %s, 0, NULL);", tracker->GetDeviceVar(),
-                   writeDescriptorSets[p].size(), "VkWriteDescriptorSet_temp")
+          .PrintLn("vkUpdateDescriptorSets(%s, %u, %s, 0, NULL);", tracker->GetDeviceVar(),
+                   (uint32_t)writeDescriptorSets[p].size(), "VkWriteDescriptorSet_temp")
           .PrintLn("}");
     }
     else
     {
-      RDCWARN(
-          "No valid update for descriptor set (%llu)"
-          "with NumBindings (%llu) and Bindings.Size() (%llu)",
-          descriptorSetID, o->At(3)->U64(), o->At(2)->U64());
-      files[passes[p]]->PrintLn(
-          "// No valid descriptor sets, with NumBindings (%llu) and Bindings.Size() (%llu)",
-          o->At(3)->U64(), o->At(2)->U64());
+      RDCWARN("No valid update for descriptor set (%" PRIu64
+              ")"
+              "with NumBindings (%" PRIu64 ") and Bindings.Size() (%" PRIu64 ")",
+              descriptorSetID, o->At(3)->U64(), o->At(2)->U64());
+      files[passes[p]]->PrintLn("// No valid descriptor sets, with NumBindings (%" PRIu64
+                                ") and Bindings.Size() (%" PRIu64 ")",
+                                o->At(3)->U64(), o->At(2)->U64());
       files[passes[p]]->PrintLn("}");
     }
   }
@@ -1643,15 +1665,23 @@ void CodeWriter::ImagePreDiff(ExtObject *o, uint32_t pass)
   for(ImageSubresourceRangeIter subres_it = range.begin(); subres_it != range.end(); subres_it++)
   {
     std::string aspect_str = ToStr(subres_it->aspect);
-    files[pass]->PrintLn("%sImageLayoutTransition(aux, %s, %llu, %llu, %s, %s, %s);", comment, imageVar, subres_it->level, subres_it->layer, aspect_str.c_str(), "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL", VkImageLayoutStrings[imageState.At(*subres_it).Layout()]);
+    files[pass]->PrintLn("%sImageLayoutTransition(aux, %s, %" PRIu64 ", %" PRIu64 ", %s, %s, %s);",
+                         comment, imageVar, subres_it->level, subres_it->layer, aspect_str.c_str(),
+                         "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL",
+                         VkImageLayoutStrings[imageState.At(*subres_it).Layout()]);
   }
 
-  files[pass]->PrintLn("%sCopyImageToBuffer(aux, %s, VkBuffer_diff_%llu, VkImageCreateInfo_%llu);", comment, imageVar, resourceID, resourceID);
+  files[pass]->PrintLn("%sCopyImageToBuffer(aux, %s, VkBuffer_diff_%" PRIu64
+                       ", VkImageCreateInfo_%" PRIu64 ");",
+                       comment, imageVar, resourceID, resourceID);
 
   for(ImageSubresourceRangeIter subres_it = range.begin(); subres_it != range.end(); subres_it++)
   {
     std::string aspect_str = ToStr(subres_it->aspect);
-    files[pass]->PrintLn("%sImageLayoutTransition(aux, %s, %llu, %llu, %s, %s, %s);", comment, imageVar, subres_it->level, subres_it->layer, aspect_str.c_str(), VkImageLayoutStrings[imageState.At(*subres_it).Layout()], "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL");
+    files[pass]->PrintLn("%sImageLayoutTransition(aux, %s, %" PRIu64 ", %" PRIu64 ", %s, %s, %s);",
+                         comment, imageVar, subres_it->level, subres_it->layer, aspect_str.c_str(),
+                         VkImageLayoutStrings[imageState.At(*subres_it).Layout()],
+                         "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL");
   }
 }
 
@@ -1680,8 +1710,10 @@ void CodeWriter::ImageDiff(ExtObject *o, uint32_t pass)
     comment = "// ";
   }
 
-  files[pass]->PrintLn("%sDiffDeviceMemory(aux, VkDeviceMemory_src_%llu, 0, VkDeviceMemory_diff_%llu, 0, %s, \"%s\");", comment, resourceID, resourceID, 
-    MakeVarName("BufferSize", bufferID).c_str(), imageVar);
+  files[pass]->PrintLn("%sDiffDeviceMemory(aux, VkDeviceMemory_src_%" PRIu64
+                       ", 0, VkDeviceMemory_diff_%" PRIu64 ", 0, %s, \"%s\");",
+                       comment, resourceID, resourceID, MakeVarName("BufferSize", bufferID).c_str(),
+                       imageVar);
 }
 
 void CodeWriter::CopyResetImage(ExtObject *o, uint32_t pass)
@@ -1695,9 +1727,9 @@ void CodeWriter::CopyResetImage(ExtObject *o, uint32_t pass)
     comment = "// ";
   }
 
-  files[pass]->PrintLn("%sCopyResetImage(aux, %s, VkBuffer_src_%llu, VkImageCreateInfo_%llu);",
-                       comment, tracker->GetResourceVar(o->At(1)->U64()), o->At(1)->U64(),
-                       o->At(1)->U64());
+  files[pass]->PrintLn(
+      "%sCopyResetImage(aux, %s, VkBuffer_src_%" PRIu64 ", VkImageCreateInfo_%" PRIu64 ");",
+      comment, tracker->GetResourceVar(o->At(1)->U64()), o->At(1)->U64(), o->At(1)->U64());
 }
 void CodeWriter::CopyResetBuffer(ExtObject *o, uint32_t pass)
 {
@@ -1719,8 +1751,9 @@ void CodeWriter::CopyResetBuffer(ExtObject *o, uint32_t pass)
   {
     reset_size_name = tracker->GetMemResetSizeVar(o->At(1)->U64());
   }
-  files[pass]->PrintLn("%sCopyResetBuffer(aux, VkBuffer_dst_%llu, VkBuffer_src_%llu, %s);", comment,
-                       o->At(1)->U64(), o->At(1)->U64(), reset_size_name);
+  files[pass]->PrintLn("%sCopyResetBuffer(aux, VkBuffer_dst_%" PRIu64 ", VkBuffer_src_%" PRIu64
+                       ", %s);",
+                       comment, o->At(1)->U64(), o->At(1)->U64(), reset_size_name);
 }
 
 void CodeWriter::AcquireNextImage(ExtObject *o, uint32_t pass)
@@ -1750,9 +1783,9 @@ void CodeWriter::WaitForFences(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   LocalVariable(o->At(2), "", pass);
   files[pass]
-      ->PrintLn("// %s(%s, %llu, %s, %llu, %llu);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->U64(), o->At(2)->Name(),
-                o->At(3)->U64(), o->At(4)->U64())
+      ->PrintLn("// %s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                o->At(1)->ValueStr().c_str(), o->At(2)->Name(), o->At(3)->ValueStr().c_str(),
+                o->At(4)->ValueStr().c_str())
       .PrintLn("}");
 }
 
@@ -1767,8 +1800,8 @@ void CodeWriter::ResetFences(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   LocalVariable(o->At(2), "", pass);
   files[pass]
-      ->PrintLn("// %s(%s, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->U64(), o->At(2)->Name())
+      ->PrintLn("// %s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                o->At(1)->ValueStr().c_str(), o->At(2)->Name())
       .PrintLn("}");
 }
 
@@ -1791,8 +1824,9 @@ void CodeWriter::QueueSubmit(ExtObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
   LocalVariable(o->At(2), "", pass);
-  files[pass]->PrintLn("%s(%s, %llu, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       o->At(1)->U64(), o->At(2)->Name(), tracker->GetResourceVar(o->At(3)->U64()));
+  files[pass]->PrintLn("%s(%s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                       o->At(1)->ValueStr().c_str(), o->At(2)->Name(),
+                       tracker->GetResourceVar(o->At(3)->U64()));
 
   if(tracker->IsValidNonNullResouce(o->At(3)->U64()))
   {
@@ -1829,7 +1863,7 @@ void CodeWriter::EndFramePresent(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   if(semaphore_count > 0)
   {
-    files[pass]->PrintLn("VkSemaphore pWaitSemaphore[%llu] = {", semaphore_count);
+    files[pass]->PrintLn("VkSemaphore pWaitSemaphore[%" PRIu64 "] = {", semaphore_count);
     for(U64MapIter it = tracker->SignalSemaphoreBegin(); it != tracker->SignalSemaphoreEnd(); it++)
       if(it->second > 0)
         files[pass]->PrintLn("%s,", tracker->GetResourceVar(it->first));
@@ -1842,7 +1876,7 @@ void CodeWriter::EndFramePresent(ExtObject *o, uint32_t pass)
       ->PrintLn("VkPresentInfoKHR PresentInfo = {")
       .PrintLn("VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,")
       .PrintLn("NULL,")
-      .PrintLn("%llu, pWaitSemaphore,", semaphore_count)
+      .PrintLn("%" PRIu64 ", pWaitSemaphore,", semaphore_count)
       .PrintLn("1, &%s,", tracker->GetSwapchainVar())
       .PrintLn("&acquired_frame,")
       .PrintLn("NULL")
@@ -1856,7 +1890,7 @@ void CodeWriter::EndFramePresent(ExtObject *o, uint32_t pass)
 void CodeWriter::EndFrameWaitIdle(ExtObject *o, uint32_t pass)
 {
   for(U64MapIter it = tracker->SubmittedQueuesBegin(); it != tracker->SubmittedQueuesEnd(); it++)
-    files[pass]->PrintLn("vkQueueWaitIdle(VkQueue_%llu);", it->second);
+    files[pass]->PrintLn("vkQueueWaitIdle(VkQueue_%" PRIu64 ");", it->second);
 }
 
 void CodeWriter::FlushMappedMemoryRanges(ExtObject *o, uint32_t pass)
@@ -1891,7 +1925,7 @@ void CodeWriter::FlushMappedMemoryRanges(ExtObject *o, uint32_t pass)
             "map the whole thing, but only copy the right subregions later",
             tracker->GetResourceVar(device->U64()), tracker->GetResourceVar(memory->U64()))
         .PrintLn("assert(result == VK_SUCCESS);")
-        .PrintLn("%s(aux, data, buffer_%llu.data(), %s, %s, %s, %s);", map_update_func,
+        .PrintLn("%s(aux, data, buffer_%" PRIu64 ".data(), %s, %s, %s, %s);", map_update_func,
                  buffer->U64(), regions->Name(), tracker->GetMemAllocInfoVar(memory->U64()),
                  tracker->GetMemRemapVar(memory->U64()), tracker->GetResourceVar(device->U64()))
         .PrintLn("assert(result == VK_SUCCESS);")
@@ -1907,8 +1941,9 @@ void CodeWriter::UpdateDescriptorSets(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(2), "", pass);
   LocalVariable(o->At(4), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %llu, %s, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->U64(), o->At(2)->Name(), o->At(3)->U64(), o->At(4)->Name())
+      ->PrintLn("%s(%s, %" PRIu64 ", %s, %" PRIu64 ", %s);", o->Name(),
+                tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->U64(), o->At(2)->Name(),
+                o->At(3)->U64(), o->At(4)->Name())
       .PrintLn("}");
 }
 
@@ -1918,7 +1953,7 @@ void CodeWriter::UpdateDescriptorSetWithTemplate(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(3), "", pass);
 
   files[pass]
-      ->PrintLn("%s(%s, %llu, %s, %llu, %s); // UpdateDescriptorSetWithTemplate",
+      ->PrintLn("%s(%s, %" PRIu64 ", %s, %" PRIu64 ", %s); // UpdateDescriptorSetWithTemplate",
                 "vkUpdateDescriptorSets", tracker->GetResourceVar(o->At(0)->U64()),
                 o->At(3)->Size(), o->At(3)->Name(), 0, "NULL")
       .PrintLn("}");
@@ -1993,8 +2028,9 @@ void CodeWriter::UpdateDescriptorSetWithTemplate(ExtObject *o, uint32_t pass)
       if(info != NULL)
       {
         files[pass]->PrintLn(
-            "memcpy(Data.data() + %llu /*rdoc:offset*/ + %llu /*rdoc:stride*/"
-            ", &%s_%llu[%llu], sizeof(%s_%llu[%llu]));",
+            "memcpy(Data.data() + %" PRIu64 " /*rdoc:offset*/ + %" PRIu64
+            " /*rdoc:stride*/"
+            ", &%s_%" PRIu64 "[%" PRIu64 "], sizeof(%s_%" PRIu64 "[%" PRIu64 "]));",
             due_offset->U64(), due_stride->U64() * j, info->Name(), i, j, info->Name(), i, j);
       }
     }
@@ -2035,7 +2071,7 @@ void CodeWriter::CmdExecuteCommands(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   LocalVariable(o->At(2), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+      ->PrintLn("%s(%s, %" PRIu64 ", %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
                 o->At(1)->U64(), o->At(2)->Name())
       .PrintLn("}");
 }
@@ -2061,10 +2097,11 @@ void CodeWriter::CmdBindDescriptorSets(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(5), "", pass);
   LocalVariable(o->At(7), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %llu, %llu, %s, %llu, %s);", o->Name(),
+      ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s, %s);", o->Name(),
                 tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->ValueStr().c_str(),
-                tracker->GetResourceVar(o->At(2)->U64()), o->At(3)->U64(), o->At(4)->U64(),
-                o->At(5)->Name(), o->At(6)->U64(), o->At(7)->Name())
+                tracker->GetResourceVar(o->At(2)->U64()), o->At(3)->ValueStr().c_str(),
+                o->At(4)->ValueStr().c_str(), o->At(5)->Name(), o->At(6)->ValueStr().c_str(),
+                o->At(7)->Name())
       .PrintLn("}");
 }
 
@@ -2080,30 +2117,32 @@ void CodeWriter::CmdBindVertexBuffers(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(3), "", pass);
   LocalVariable(o->At(4), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %llu, %llu, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->U64(), o->At(2)->U64(), o->At(3)->Name(), o->At(4)->Name())
+      ->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                o->At(1)->ValueStr().c_str(), o->At(2)->ValueStr().c_str(), o->At(3)->Name(),
+                o->At(4)->Name())
       .PrintLn("}");
 }
 
 void CodeWriter::CmdBindIndexBuffer(ExtObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %s, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->U64(),
+  files[pass]->PrintLn("%s(%s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                       tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->ValueStr().c_str(),
                        o->At(3)->ValueStr().c_str());
 }
 
 void CodeWriter::CmdDraw(ExtObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %llu, %llu, %llu, %llu);", o->Name(),
-                       tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->U64(), o->At(2)->U64(),
-                       o->At(3)->U64(), o->At(4)->U64());
+  files[pass]->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                       o->At(1)->ValueStr().c_str(), o->At(2)->ValueStr().c_str(),
+                       o->At(3)->ValueStr().c_str(), o->At(4)->ValueStr().c_str());
 }
 
 void CodeWriter::CmdDrawIndexed(ExtObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %llu, %llu, %llu, %lld, %llu);", o->Name(),
-                       tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->U64(), o->At(2)->U64(),
-                       o->At(3)->U64(), o->At(4)->I64(), o->At(4)->U64());
+  files[pass]->PrintLn("%s(%s, %s, %s, %s, %s, %s);", o->Name(),
+                       tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->ValueStr().c_str(),
+                       o->At(2)->ValueStr().c_str(), o->At(3)->ValueStr().c_str(),
+                       o->At(4)->ValueStr().c_str(), o->At(4)->ValueStr().c_str());
 }
 
 void CodeWriter::CmdDrawIndirect(ExtObject *o, uint32_t pass)
@@ -2118,15 +2157,15 @@ void CodeWriter::CmdDrawIndexedIndirect(ExtObject *o, uint32_t pass)
 
 void CodeWriter::CmdDispatch(ExtObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %llu, %llu, %llu);", o->Name(),
-                       tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->U64(), o->At(2)->U64(),
-                       o->At(3)->U64());
+  files[pass]->PrintLn("%s(%s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                       o->At(1)->ValueStr().c_str(), o->At(2)->ValueStr().c_str(),
+                       o->At(3)->ValueStr().c_str());
 }
 
 void CodeWriter::CmdDispatchIndirect(ExtObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %s, %llu);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->U64());
+  files[pass]->PrintLn("%s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                       tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->ValueStr().c_str());
 }
 
 void CodeWriter::CmdSetEvent(ExtObject *o, uint32_t pass)
@@ -2147,10 +2186,11 @@ void CodeWriter::CmdWaitEvents(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(8), "", pass);
   LocalVariable(o->At(10), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %llu, %s, %s, %s, %llu, %s, %llu, %s, %llu, %s);", o->Name(),
+      ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", o->Name(),
                 tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->U64(), o->At(2)->Name(),
-                o->At(3)->Str(), o->At(4)->Str(), o->At(5)->U64(), o->At(6)->Name(),
-                o->At(7)->U64(), o->At(8)->Name(), o->At(9)->U64(), o->At(10)->Name())
+                o->At(3)->Str(), o->At(4)->Str(), o->At(5)->ValueStr().c_str(), o->At(6)->Name(),
+                o->At(7)->ValueStr().c_str(), o->At(8)->Name(), o->At(9)->ValueStr().c_str(),
+                o->At(10)->Name())
       .PrintLn("}");
 }
 
@@ -2161,19 +2201,20 @@ void CodeWriter::CmdPipelineBarrier(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(7), "", pass);
   LocalVariable(o->At(9), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %s, %llu, %s, %llu, %s, %llu, %s);", o->Name(),
+      ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", o->Name(),
                 tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Str(), o->At(2)->Str(),
-                o->At(3)->Str(), o->At(4)->U64(), o->At(5)->Name(), o->At(6)->U64(),
-                o->At(7)->Name(), o->At(8)->U64(), o->At(9)->Name())
+                o->At(3)->Str(), o->At(4)->ValueStr().c_str(), o->At(5)->Name(),
+                o->At(6)->ValueStr().c_str(), o->At(7)->Name(), o->At(8)->ValueStr().c_str(),
+                o->At(9)->Name())
       .PrintLn("}");
 }
 
 void CodeWriter::CmdPushConstants(ExtObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %s, %s, %llu, %llu, (const void*) buffer_%llu.data());", o->Name(),
-                       tracker->GetResourceVar(o->At(0)->U64()),
-                       tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str(), o->At(3)->U64(),
-                       o->At(4)->U64(), o->At(5)->U64());
+  files[pass]->PrintLn("%s(%s, %s, %s, %s, %s, (const void*) buffer_%" PRIu64 ".data());",
+                       o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                       tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str(),
+                       o->At(3)->ValueStr().c_str(), o->At(4)->ValueStr().c_str(), o->At(5)->U64());
 }
 
 void CodeWriter::CmdSetDepthBias(ExtObject *o, uint32_t pass)
@@ -2214,9 +2255,9 @@ void CodeWriter::CmdCopyBuffer(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   LocalVariable(o->At(4), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+      ->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
                 tracker->GetResourceVar(o->At(1)->U64()), tracker->GetResourceVar(o->At(2)->U64()),
-                o->At(3)->U64(), o->At(4)->Name())
+                o->At(3)->ValueStr().c_str(), o->At(4)->Name())
       .PrintLn("}");
 }
 
@@ -2224,9 +2265,9 @@ void CodeWriter::CmdUpdateBuffer(ExtObject *o, uint32_t pass)
 {
   files[pass]
       ->PrintLn("{")
-      .PrintLn("%s(%s, %s, %llu, %llu, (const void* )buffer_%llu.data());", o->Name(),
+      .PrintLn("%s(%s, %s, %s, %s, (const void* )buffer_%" PRIu64 ".data());", o->Name(),
                tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
-               o->At(2)->U64(), o->At(3)->U64(), o->At(4)->U64())
+               o->At(2)->ValueStr().c_str(), o->At(3)->ValueStr().c_str(), o->At(4)->U64())
       .PrintLn("}");
 }
 
@@ -2234,9 +2275,9 @@ void CodeWriter::CmdFillBuffer(ExtObject *o, uint32_t pass)
 {
   files[pass]
       ->PrintLn("{")
-      .PrintLn("%s(%s, %s, %llu, %llu, %llu);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-               tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->U64(), o->At(3)->U64(),
-               o->At(4)->U64())
+      .PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+               tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->ValueStr().c_str(),
+               o->At(3)->ValueStr().c_str(), o->At(4)->ValueStr().c_str())
       .PrintLn("}");
 }
 
@@ -2246,9 +2287,10 @@ void CodeWriter::CmdCopyImage(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(6), "", pass);
   const char *dst_image = tracker->GetResourceVar(o->At(3)->U64());
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %s, %s, %llu, %s);", o->Name(),
+      ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s);", o->Name(),
                 tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
-                o->At(2)->Str(), dst_image, o->At(4)->Str(), o->At(5)->U64(), o->At(6)->Name())
+                o->At(2)->Str(), dst_image, o->At(4)->Str(), o->At(5)->ValueStr().c_str(),
+                o->At(6)->Name())
       .PrintLn("}");
 }
 
@@ -2258,10 +2300,10 @@ void CodeWriter::CmdBlitImage(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(6), "", pass);
   const char *dst_image = tracker->GetResourceVar(o->At(3)->U64());
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %s, %s, %llu, %s, %s);", o->Name(),
+      ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s, %s);", o->Name(),
                 tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
-                o->At(2)->Str(), dst_image, o->At(4)->Str(), o->At(5)->U64(), o->At(6)->Name(),
-                o->At(7)->Str())
+                o->At(2)->Str(), dst_image, o->At(4)->Str(), o->At(5)->ValueStr().c_str(),
+                o->At(6)->Name(), o->At(7)->Str())
       .PrintLn("}");
 }
 
@@ -2271,9 +2313,10 @@ void CodeWriter::CmdResolveImage(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(6), "", pass);
   const char *dst_image = tracker->GetResourceVar(o->At(3)->U64());
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %s, %s, %llu, %s);", o->Name(),
+      ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s);", o->Name(),
                 tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
-                o->At(2)->Str(), dst_image, o->At(4)->Str(), o->At(5)->U64(), o->At(6)->Name())
+                o->At(2)->Str(), dst_image, o->At(4)->Str(), o->At(5)->ValueStr().c_str(),
+                o->At(6)->Name())
       .PrintLn("}");
 }
 
@@ -2291,9 +2334,9 @@ void CodeWriter::CmdCopyBufferToImage(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   LocalVariable(o->At(5), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %s, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+      ->PrintLn("%s(%s, %s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
                 tracker->GetResourceVar(o->At(1)->U64()), tracker->GetResourceVar(o->At(2)->U64()),
-                o->At(3)->Str(), o->At(4)->U64(), o->At(5)->Name())
+                o->At(3)->Str(), o->At(4)->ValueStr().c_str(), o->At(5)->Name())
       .PrintLn("}");
 }
 
@@ -2302,9 +2345,10 @@ void CodeWriter::CmdCopyImageToBuffer(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   LocalVariable(o->At(5), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %s, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+      ->PrintLn("%s(%s, %s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
                 tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str(),
-                tracker->GetResourceVar(o->At(3)->U64()), o->At(4)->U64(), o->At(5)->Name())
+                tracker->GetResourceVar(o->At(3)->U64()), o->At(4)->ValueStr().c_str(),
+                o->At(5)->Name())
       .PrintLn("}");
 }
 
@@ -2314,8 +2358,9 @@ void CodeWriter::CmdClearAttachments(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(2), "", pass);
   LocalVariable(o->At(4), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %llu, %s, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->U64(), o->At(2)->Name(), o->At(3)->U64(), o->At(4)->Name())
+      ->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                o->At(1)->ValueStr().c_str(), o->At(2)->Name(), o->At(3)->ValueStr().c_str(),
+                o->At(4)->Name())
       .PrintLn("}");
 }
 
@@ -2326,9 +2371,9 @@ void CodeWriter::CmdClearDepthStencilImage(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(3), "", pass);
   LocalVariable(o->At(5), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, &%s, %llu, %s);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
-                o->At(2)->Str(), o->At(3)->Name(), o->At(4)->U64(), o->At(5)->Name())
+      ->PrintLn("%s(%s, %s, %s, &%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str(), o->At(3)->Name(),
+                o->At(4)->ValueStr().c_str(), o->At(5)->Name())
       .PrintLn("}");
 }
 
@@ -2338,9 +2383,9 @@ void CodeWriter::CmdClearColorImage(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(3), "", pass);
   LocalVariable(o->At(5), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, &%s, %llu, %s);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
-                o->At(2)->Str(), o->At(3)->Name(), o->At(4)->U64(), o->At(5)->Name())
+      ->PrintLn("%s(%s, %s, %s, &%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
+                tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str(), o->At(3)->Name(),
+                o->At(4)->ValueStr().c_str(), o->At(5)->Name())
       .PrintLn("}");
 }
 
