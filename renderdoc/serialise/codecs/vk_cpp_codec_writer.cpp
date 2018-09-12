@@ -1335,9 +1335,11 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
   const char *init_size_name = tracker->GetMemInitSizeVar(resourceID);
 
   std::string size = tracker->GetMemAllocInfoVar(resourceID);
+  std::string buffer_size = AddVar("uint64_t", "BufferSize", bufferID);
   if(size == "nullptr" || size == "NULL")
   {
-    size = AddVar("uint32_t", "BufferSize", bufferID);
+    size = tracker->GetDataBlobVar(bufferID) + std::string(".size()");
+    RDCASSERT(0);    // TODO(akharlamov) when does this happen?
   }
   else if(hasAliasedResources)
   {
@@ -1351,7 +1353,7 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
   }
 
   files[pass]
-      ->PrintLn("%s = %s.size();", size.c_str(), tracker->GetDataBlobVar(bufferID))
+      ->PrintLn("%s = %s;", buffer_size.c_str(), size.c_str())
       .PrintLn("%sInitializeSourceBuffer(%s, &%s, &%s, %s, buffer_%" PRIu64
                ".data(), "
                "VkPhysicalDeviceMemoryProperties_%" PRIu64 ", %s);",
@@ -1913,8 +1915,8 @@ void CodeWriter::FlushMappedMemoryRanges(ExtObject *o, uint32_t pass)
   uint64_t allocationSize = it->second.allocateSDObj->At("AllocateInfo")->At("allocationSize")->U64();
   // if region.size == -1 replace with allocation size - region.offset
   RDCASSERT(!regions->IsArray());
-  uint64_t& map_size = regions->At("size")->U64();
-  if (map_size == VK_WHOLE_SIZE)
+  uint64_t &map_size = regions->At("size")->U64();
+  if(map_size == VK_WHOLE_SIZE)
     map_size = allocationSize - regions->At("offset")->U64();
   LocalVariable(regions, "", pass);
 
