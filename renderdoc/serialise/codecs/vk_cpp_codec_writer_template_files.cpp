@@ -1057,8 +1057,8 @@ void DiffDeviceMemory(AuxVkTraceResources aux, VkDeviceMemory expected,
 
   if(memcmp(expected_data, actual_data, (size_t)size) != 0)
   {
-    std::string msg = std::string(__FUNCTION__) + std::string(": Resource ") + std::string(name) +
-      std::string(" has changed by the end of the frame.\n");
+    std::string msg = std::string(__FUNCTION__) + std::string(": Resource ")
+        + std::string(name) + std::string(" has changed by the end of the frame.\n");
     printf("%s", msg.c_str());
 #if defined(_WIN32) || defined(WIN32)
     OutputDebugStringA(msg.c_str());
