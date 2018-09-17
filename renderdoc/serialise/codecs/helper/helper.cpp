@@ -680,6 +680,32 @@ void MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMapp
   }
 }
 
+bool IsExtEnabled(const char *const *extList, uint32_t count, const char *ext)
+{
+  for(uint32_t i = 0; i < count; i++)
+  {
+    if(strcmp(extList[i], ext) == 0)
+      return true;
+  }
+  return false;
+}
+
+bool IsExtSupported(VkPhysicalDevice physicalDevice, const char *ext)
+{
+  uint32_t extensionCount;
+  vkEnumerateDeviceExtensionProperties(physicalDevice, NULL, &extensionCount, NULL);
+  std::vector<VkExtensionProperties> extensions(extensionCount);
+  vkEnumerateDeviceExtensionProperties(physicalDevice, NULL, &extensionCount, extensions.data());
+  for(auto extension : extensions)
+  {
+    if(strcmp(extension.extensionName, ext) == 0)
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::string StageProgressString(const char *stage, uint32_t i, uint32_t N)
 {
   return std::string("RenderDoc Frame Loop: " + std::string(stage) + " part " + std::to_string(i) +

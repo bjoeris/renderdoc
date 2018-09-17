@@ -136,4 +136,7 @@ inline uint64_t AlignedDown(uint64_t size, uint64_t alignment)
   return (uint64_t(size / alignment)) * alignment;
 }
 
+bool IsExtEnabled(const char *const *extList, uint32_t count, const char *ext);
+bool IsExtSupported(VkPhysicalDevice physicalDevice, const char *ext);
+
 std::string StageProgressString(const char *stage, uint32_t i, uint32_t N);

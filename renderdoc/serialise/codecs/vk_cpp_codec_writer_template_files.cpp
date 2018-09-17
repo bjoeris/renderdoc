@@ -808,6 +808,9 @@ inline uint64_t AlignedDown(uint64_t size, uint64_t alignment)
   return (uint64_t(size / alignment)) * alignment;
 }
 
+bool IsExtEnabled(const char *const *extList, uint32_t count, const char *ext);
+bool IsExtSupported(VkPhysicalDevice physicalDevice, const char *ext);
+
 std::string StageProgressString(const char *stage, uint32_t i, uint32_t N);
 )"},
 
@@ -866,7 +869,7 @@ VkPresentModeKHR GetCompatiblePresentMode(VkPresentModeKHR captured,
 }
 
 void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
-  VkImageSubresourceRange subresourceRange, VkImageLayout newLayout, 
+  VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
                            uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQueueFamily)
 {
   uint32_t all_access =
@@ -1469,6 +1472,32 @@ void MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMapp
     VkResult result = vkFlushMappedMemoryRanges(dev, (uint32_t)ranges.size(), ranges.data());
     assert(result == VK_SUCCESS);
   }
+}
+
+bool IsExtEnabled(const char *const *extList, uint32_t count, const char *ext)
+{
+  for(uint32_t i = 0; i < count; i++)
+  {
+    if(strcmp(extList[i], ext) == 0)
+      return true;
+  }
+  return false;
+}
+
+bool IsExtSupported(VkPhysicalDevice physicalDevice, const char *ext)
+{
+  uint32_t extensionCount;
+  vkEnumerateDeviceExtensionProperties(physicalDevice, NULL, &extensionCount, NULL);
+  std::vector<VkExtensionProperties> extensions(extensionCount);
+  vkEnumerateDeviceExtensionProperties(physicalDevice, NULL, &extensionCount, extensions.data());
+  for(auto extension : extensions)
+  {
+    if(strcmp(extension.extensionName, ext) == 0)
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 std::string StageProgressString(const char *stage, uint32_t i, uint32_t N)
@@ -2140,7 +2169,7 @@ uint32_t ChannelsInFormat(VkFormat fmt) {
       case VK_FORMAT_R8_SSCALED:
       case VK_FORMAT_R8_UINT:
       case VK_FORMAT_R8_SINT:
-      case VK_FORMAT_R8_SRGB: 
+      case VK_FORMAT_R8_SRGB:
       case VK_FORMAT_R16_UNORM:
       case VK_FORMAT_R16_SNORM:
       case VK_FORMAT_R16_USCALED:
@@ -2428,7 +2457,7 @@ uint32_t MinDimensionSize(VkFormat format) {
 }
 
 bool IsDepthFormat(VkFormat fmt) {
-  return 
+  return
     (fmt == VK_FORMAT_D16_UNORM ||
      fmt == VK_FORMAT_D16_UNORM_S8_UINT ||
      fmt == VK_FORMAT_D24_UNORM_S8_UINT ||
@@ -2444,7 +2473,7 @@ bool IsDepthFormat(VkFormat fmt) {
      R"(SET (THIS_PROJECT_NAME helper)
 PROJECT(${THIS_PROJECT_NAME})
 
-ADD_LIBRARY(${THIS_PROJECT_NAME} STATIC "helper.h" "helper.cpp" 
+ADD_LIBRARY(${THIS_PROJECT_NAME} STATIC "helper.h" "helper.cpp"
              format_helper.h format_size_and_aspect.cpp)
 
 TARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME}
@@ -7216,7 +7245,7 @@ VkResult shim_vkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelin
   size_t dataSize;
 
   for(uint32_t i = 0; i < createInfoCount; i++)
-  { 
+  {
     std::vector<VkShaderStageFlagBits> shaderStages;
     for (uint32_t s = 0; s < pCreateInfos[i].stageCount; s++)
       shaderStages.push_back(pCreateInfos[i].pStages[s].stage);
@@ -11027,7 +11056,7 @@ void shim_vkCmdBeginRenderPass(VkCommandBuffer commandBuffer,
     VkRenderPass rp = pRenderPassBegin->renderPass;
     // renderpass must be valid AND only a single renderpass can
     // be associated with current command buffer in "Begin" state.
-    assert(renderPassInfos.find(rp) != renderPassInfos.end() && 
+    assert(renderPassInfos.find(rp) != renderPassInfos.end() &&
       cmdBufferRenderPassInfos.find(commandBuffer) == cmdBufferRenderPassInfos.end());
     RenderPassInfo rpInfo = renderPassInfos[rp];
     VkFramebuffer fb = pRenderPassBegin->framebuffer;
@@ -11084,7 +11113,7 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
           sprintf(handleStr, "%p", info.srcImage);
           std::string filename = std::to_string(renderPassCount) + "_attachment_" +
                                  std::to_string(info.index) + "_resource_" +
-                                 std::string(handleStr) + "_" + 
+                                 std::string(handleStr) + "_" +
                                  FormatToString(info.format) + "_" +
                                  std::to_string(info.width) + "x" +
                                  std::to_string(info.height) + ".ppm";
@@ -13965,7 +13994,7 @@ ReadbackInfos copyFramebufferAttachments(VkCommandBuffer cmdBuf, RenderPassInfo 
     ImageLayoutTransition(cmdBuf, rpInfo->attachments[i].image.res, srcRange, rpInfo->finalLayouts[i],
       VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_LAYOUT_GENERAL, VK_QUEUE_FAMILY_IGNORED);
 
-    ReadbackInfo readback(rpInfo->attachments[i].image.res, 
+    ReadbackInfo readback(rpInfo->attachments[i].image.res,
                           stagingBuffer, stagingImage, bufMem, stagingImageMem,
                           mip_width, mip_height, image_ci.format, i);
     readbacks.attachments.push_back(readback);
@@ -14832,7 +14861,7 @@ pause
     /* TEMPLATE_FILE_GEN_SCRIPT_YETI                                              */
     /******************************************************************************/
     {"", "build_yeti.bat",
-     R"(which cmake && which ninja && rm -rf yeti_build && mkdir yeti_build && cd yeti_build && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_YETI=ON -DCMAKE_TOOLCHAIN_FILE="$YETI_SDK_PATH/cmake/yeti.cmake" .. && ninja && echo "Build complete" 
+     R"(which cmake && which ninja && rm -rf yeti_build && mkdir yeti_build && cd yeti_build && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_YETI=ON -DCMAKE_TOOLCHAIN_FILE="$YETI_SDK_PATH/cmake/yeti.cmake" .. && ninja && echo "Build complete"
 )"},
 
     /******************************************************************************/
