@@ -23,9 +23,7 @@
  ******************************************************************************/
 //-----------------------------------------------------------------------------
 // Generated with RenderDoc CPP Code Generator
-//
 // File: main_yeti.cpp
-//
 //-----------------------------------------------------------------------------
 // Defines the entry point that initializes and runs the serialized frame
 // capture on Yeti
@@ -34,21 +32,29 @@
 #include <yeti_c/yeti.h>
 
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <time.h>
 #include <vulkan/vulkan.h>
 
-#include <iostream>
-#include <sstream>
 #include <string>
+#include <sstream>
+#include <iostream>
 
 #include "gen_main.h"
 
-void PostStageProgress(const char *stage, uint32_t i, uint32_t N)
-{
+int frameLoops = -1;
+double accumTimeWithReset = 0;
+double accumTime = 0;
+double avgTimeWithReset = 0;
+double avgTime = 0;
+double avgFPSWithReset = 0;
+double avgFPS = 0;
+uint64_t frames = 0;
+
+void PostStageProgress(const char *stage, uint32_t i, uint32_t N) {
   fprintf(stdout, "%s\n", StageProgressString(stage, i, N).c_str());
 }
 
@@ -62,27 +68,49 @@ void CreateResources()
   main_init();
 }
 
-//-----------------------------------------------------------------------------
-// ReleaseResources
-//-----------------------------------------------------------------------------
 void ReleaseResources()
 {
   main_release();
 }
 
-//-----------------------------------------------------------------------------
-// Render
-//-----------------------------------------------------------------------------
+static inline double GetTimestampMilliseconds() {
+  struct timespec now = {};
+  clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+  double nanoseconds = (now.tv_sec * 1000000000.0) + now.tv_nsec;
+  double microseconds = nanoseconds / 1000.0;
+  return microseconds / 1000.0;
+}
+
 void Render()
 {
+  double ts_pre_reset = GetTimestampMilliseconds();
   main_prereset();
+  double ts_start = GetTimestampMilliseconds();
   main_render();
   main_postreset();
+  double ts_end = GetTimestampMilliseconds();
+  double frame_time = ts_end - ts_start;
+  double frame_time_with_reset = ts_end - ts_pre_reset;
+
+  frames++;
+
+  accumTimeWithReset += frame_time_with_reset;
+  accumTime += frame_time;
+  avgTimeWithReset = accumTimeWithReset / frames;
+  avgTime = accumTime / frames;
+  avgFPSWithReset = 1000.0 / avgTimeWithReset;
+  avgFPS = 1000.0 / avgTime;
+
+  if (frames % 100 == 0) {
+    char str[256];
+    sprintf(str, "%s Avg Time [%f / %f] Avg FPS [%f /%f]\n", "RenderDoc Frame Loop", avgTimeWithReset,
+      avgTime, avgFPSWithReset, avgFPS);
+    fprintf(stdout, "%s", str);
+  }
 }
 
 const uint64_t kMicrosecondsPerFrame = 16666L;
 
-// struct appData: Global application data
 static struct
 {
   // Yeti
@@ -93,16 +121,6 @@ static struct
   // General
   bool quit;
 } app_data = {0};
-
-// ClockNowMicroSeconds(): Return current time in microseconds
-static inline uint64_t ClockNowMicroSeconds()
-{
-  struct timespec now = {};
-  clock_gettime(CLOCK_MONOTONIC_RAW, &now);
-  uint64_t nanoseconds = (now.tv_sec * 1000000000LL) + now.tv_nsec;
-  uint64_t microseconds = nanoseconds / 1000LL;
-  return microseconds;
-}
 
 // HandleStreamStarted(): Client connected handler
 static void HandleStreamStarted(void *user_data)
@@ -170,7 +188,6 @@ static void Finalize()
   YetiShutDown();
 }
 
-// main(): Program entry point
 int main(int argc, char **argv)
 {
   Initialize();
@@ -178,25 +195,10 @@ int main(int argc, char **argv)
   // Wait until user closes the window, then exit
   while(!app_data.quit)
   {
-    fprintf(stdout, "main loop\n");
-
-    // uint64_t whenToResume = ClockNowMicroSeconds() + kMicrosecondsPerFrame;
-
     while(YetiEventQueueProcessEvent(app_data.event_queue, 0))
     {
     }    // empty loop
-
-    fprintf(stdout, "main loop pre-render\n");
     Render();
-    fprintf(stdout, "main loop post-render\n");
-
-    //// Sleep for 1/60 second (one frame)
-    // uint64_t timeLeft = whenToResume - ClockNowMicroSeconds();
-    // if (timeLeft > 0) {
-    //  struct timespec sleepTime = {};
-    //  sleepTime.tv_nsec         = timeLeft * 1000LL;
-    //  nanosleep(&sleepTime, NULL);
-    //}
   }
 
   Finalize();
