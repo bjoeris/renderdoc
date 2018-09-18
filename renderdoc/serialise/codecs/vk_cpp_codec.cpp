@@ -173,6 +173,10 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
         CODE_VULKAN_CASE(CmdDispatchIndirect, ext, pass);
         CODE_VULKAN_CASE(CmdPipelineBarrier, ext, pass);
         CODE_VULKAN_CASE(EndCommandBuffer, ext, pass);
+        CODE_VULKAN_CASE(CmdDebugMarkerBeginEXT, ext, pass);
+        CODE_VULKAN_CASE(CmdDebugMarkerInsertEXT, ext, pass);
+        CODE_VULKAN_CASE(CmdDebugMarkerEndEXT, ext, pass);
+        CODE_VULKAN_CASE(DebugMarkerSetObjectNameEXT, ext, pass);
 
       // akharlamov: memory allocation, buffer and image creation and binding happens right after
       // device was created.
@@ -225,10 +229,6 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
       case(uint32_t)VulkanChunk::vkCmdBeginQuery:
       case(uint32_t)VulkanChunk::vkCmdEndQuery:
       case(uint32_t)VulkanChunk::vkCmdResetQueryPool:
-      case(uint32_t)VulkanChunk::vkCmdDebugMarkerBeginEXT:
-      case(uint32_t)VulkanChunk::vkCmdDebugMarkerInsertEXT:
-      case(uint32_t)VulkanChunk::vkCmdDebugMarkerEndEXT:
-      case(uint32_t)VulkanChunk::vkDebugMarkerSetObjectNameEXT:
       case(uint32_t)VulkanChunk::vkRegisterDeviceEventEXT:
       case(uint32_t)VulkanChunk::vkRegisterDisplayEventEXT:
       case(uint32_t)VulkanChunk::SetShaderDebugPath:

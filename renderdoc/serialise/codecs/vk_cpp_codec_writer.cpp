@@ -1013,6 +1013,24 @@ void CodeWriter::CreateDevice(ExtObject *o, uint32_t pass, bool global_ci)
 
   files[pass]->PrintLn("{");
   LocalVariable(ci, "", pass);
+  AddNamedVar("bool", "isDebugMarkerEXTEnabled");
+  files[pass]
+      ->PrintLn("isDebugMarkerEXTEnabled = false;")
+      .PrintLn(
+          "if (IsExtEnabled(%s.ppEnabledExtensionNames, %s.enabledExtensionCount, \"%s\") && "
+          "!IsExtSupported(%s, \"%s\")){",
+          ci->Name(), ci->Name(), VK_EXT_DEBUG_MARKER_EXTENSION_NAME, device_name,
+          VK_EXT_DEBUG_MARKER_EXTENSION_NAME)
+      .PrintLn("%s.enabledExtensionCount -= 1;", ci->Name())
+      .PrintLn("}")
+      .PrintLn(
+          "else if (IsExtEnabled(%s.ppEnabledExtensionNames, %s.enabledExtensionCount, \"%s\") && "
+          "IsExtSupported(%s, \"%s\")){",
+          ci->Name(), ci->Name(), VK_EXT_DEBUG_MARKER_EXTENSION_NAME, device_name,
+          VK_EXT_DEBUG_MARKER_EXTENSION_NAME)
+      .PrintLn("isDebugMarkerEXTEnabled = true;")
+      .PrintLn("}");
+
   files[pass]
       ->PrintLn("MakePhysicalDeviceFeaturesMatch(VkPhysicalDeviceFeatures_%" PRIu64 ", %s);",
                 tracker->PhysDevID(), ci->At(9)->Name())
@@ -2403,4 +2421,40 @@ void CodeWriter::CmdClearColorImage(ExtObject *o, uint32_t pass)
       .PrintLn("}");
 }
 
+void CodeWriter::CmdDebugMarkerBeginEXT(ExtObject *o, uint32_t pass)
+{
+  files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
+  LocalVariable(o->At(1), "", pass);
+  files[pass]
+      ->PrintLn("%s(%s, &%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
+      .PrintLn("}");
+}
+
+void CodeWriter::CmdDebugMarkerInsertEXT(ExtObject *o, uint32_t pass)
+{
+  files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
+  LocalVariable(o->At(1), "", pass);
+  files[pass]
+      ->PrintLn("%s(%s, &%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
+      .PrintLn("}");
+}
+
+void CodeWriter::CmdDebugMarkerEndEXT(ExtObject *o, uint32_t pass)
+{
+  files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
+  files[pass]
+      ->PrintLn("%s(%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()))
+      .PrintLn("}");
+}
+
+void CodeWriter::DebugMarkerSetObjectNameEXT(ExtObject *o, uint32_t pass)
+{
+  files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
+  LocalVariable(o->At(1), "", pass);
+  files[pass]
+      ->PrintLn("VkResult result = %s(%s, &%s);", o->Name(),
+                tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
+      .PrintLn("assert(result == VK_SUCCESS);")
+      .PrintLn("}");
+}
 }    // namespace vk_cpp_codec

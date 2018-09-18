@@ -33,6 +33,7 @@ VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkInstance *pInstance)
 {
   VkResult r = vkCreateInstance(pCreateInfo, pAllocator, pInstance);
+  assert(r == VK_SUCCESS);
   aux.instance = *pInstance;
   return r;
 }
@@ -41,6 +42,7 @@ VkResult shim_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCrea
                              const VkAllocationCallbacks *pAllocator, VkDevice *pDevice)
 {
   VkResult r = vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
+  assert(r == VK_SUCCESS);
   InitializeAuxResources(&aux, aux.instance, physicalDevice, *pDevice);
   return r;
 }

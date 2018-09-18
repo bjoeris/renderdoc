@@ -334,7 +334,10 @@ public:
   void CmdClearAttachments(ExtObject *o, uint32_t pass);
   void CmdClearDepthStencilImage(ExtObject *o, uint32_t pass);
   void CmdClearColorImage(ExtObject *o, uint32_t pass);
-
+  void CmdDebugMarkerBeginEXT(ExtObject *o, uint32_t pass);
+  void CmdDebugMarkerInsertEXT(ExtObject *o, uint32_t pass);
+  void CmdDebugMarkerEndEXT(ExtObject *o, uint32_t pass);
+  void DebugMarkerSetObjectNameEXT(ExtObject *o, uint32_t pass);
   void EndFramePresent(ExtObject *o, uint32_t pass);
   void EndFrameWaitIdle(ExtObject *o, uint32_t pass);
   void InitialContents(ExtObject *o);
