@@ -236,7 +236,7 @@ public:
   // std::vector<VkDevice> VkDevice_1;
   std::string AddVar(const char *type, const char *name, uint64_t id)
   {
-    std::string full_name = std::string(name) + std::string("_") + std::to_string(id);
+    std::string full_name = MakeVarName(name, id);
     return AddNamedVar(type, full_name.c_str());
   }
 
