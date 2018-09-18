@@ -62,7 +62,11 @@ struct Variable
 {
   std::string type = "";
   std::string name = "";
-  Variable(const char *t, const char *n) : type(t), name(n) {}
+  // this only makes sense for Vulkan resource variables
+  // as this maps to VkDebugReportObjectTypeEXT
+  std::string debugType;
+  Variable(const char *t, const char *n, std::string dt = "")
+    : type(t), name(n), debugType(dt) {}
 };
 
 // The 'VariableIDMap' type correlates an SDObject ID with a variable name used
@@ -230,7 +234,8 @@ private:
 
   CodeGenOpts optimizations;
 
-  const char *GetVarFromMap(VariableIDMap &m, uint64_t id, const char *type, const char *full_name);
+  std::string GetVkDebugObjectFromString(const char * type);
+  const char *GetVarFromMap(VariableIDMap &m, uint64_t id, const char *type, const char *full_name, std::string dt = "");
   const char *GetVarFromMap(VariableIDMap &m, const char *type, const char *name, uint64_t id);
   const char *GetVarFromMap(VariableIDMap &m, uint64_t id, std::string map_name);
   void TrackVarInMap(VariableIDMap &m, const char *type, const char *name, uint64_t id);

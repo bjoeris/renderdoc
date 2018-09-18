@@ -62,15 +62,79 @@ const char *VkImageLayoutStrings[15] = {
 #define TT_VK_CALL_ANALYZE_SWITCH(call, arg) \
   case(uint32_t)VulkanChunk::vk##call: call##Analyze(arg); break;
 
+std::string TraceTracker::GetVkDebugObjectFromString(const char * type) {
+  if (strstr(type, "VkInstance") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_INSTANCE_EXT";
+  if (strstr(type, "VkPhysicalDevice") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_PHYSICAL_DEVICE_EXT";
+  if (strstr(type, "VkDevice") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_EXT";
+  if (strstr(type, "VkQueue") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_QUEUE_EXT";
+  if (strstr(type, "VkSemaphore") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_SEMAPHORE_EXT";
+  if (strstr(type, "VkCommandBuffer") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_BUFFER_EXT";
+  if (strstr(type, "VkFence") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_FENCE_EXT";
+  if (strstr(type, "VkDeviceMemory") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_MEMORY_EXT";
+  // VkBufferView and VkImageView are checked ahead of VkBuffer and VkImage.
+  if (strstr(type, "VkBufferView") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_VIEW_EXT";
+  if (strstr(type, "VkImageView") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_VIEW_EXT";
+  if (strstr(type, "VkBuffer") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT";
+  if (strstr(type, "VkImage") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT";
+  if (strstr(type, "VkEvent") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_EVENT_EXT";
+  if (strstr(type, "VkQueryPool") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_QUERY_POOL_EXT";
+  if (strstr(type, "VkShaderModule") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT";
+  if (strstr(type, "VkPipelineCache") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_CACHE_EXT";
+  if (strstr(type, "VkPipelineLayout") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_LAYOUT_EXT";
+  if (strstr(type, "VkRenderPass") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT";
+  if (strstr(type, "VkPipeline") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT";
+  if (strstr(type, "VkDescriptorSetLayout") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT_EXT";
+  if (strstr(type, "VkSampler") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT";
+  if (strstr(type, "VkDescriptorPool") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_POOL_EXT";
+  if (strstr(type, "VkDescriptorSet") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_EXT";
+  if (strstr(type, "VkFramebuffer") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT";
+  if (strstr(type, "VkCommandPool") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_POOL_EXT";
+  if (strstr(type, "VkSurface") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_SURFACE_KHR_EXT";
+  if (strstr(type, "VkSwapchainKHR") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_SWAPCHAIN_KHR_EXT";
+  if (strstr(type, "VkDebugCallbackEXT") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT_EXT";
+  if (strstr(type, "VkDescriptorUpdateTemplate") != NULL)
+    return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT";
+
+  return "VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT";
+}
+
 const char *TraceTracker::GetVarFromMap(VariableIDMap &m, uint64_t id, const char *type,
-                                        const char *name)
+                                        const char *name, std::string dt)
 {
   VariableIDMapIter it = m.find(id);
   if(it != m.end())
     return it->second.name.c_str();
   // If resource id isn't found that means it wasn't declared in variable file
   // either, so print that variable out.
-  it = m.insert(VariableIDMapPair(id, Variable(type, name))).first;
+  it = m.insert(VariableIDMapPair(id, Variable(type, name, dt))).first;
   code->AddNamedVar(type, name);
   return it->second.name.c_str();
 }
@@ -78,8 +142,9 @@ const char *TraceTracker::GetVarFromMap(VariableIDMap &m, uint64_t id, const cha
 const char *TraceTracker::GetVarFromMap(VariableIDMap &m, const char *type, const char *name,
                                         uint64_t id)
 {
+std::string dt = GetVkDebugObjectFromString(type);
   std::string full_name = std::string(name) + std::string("_") + std::to_string(id);
-  return GetVarFromMap(m, id, type, full_name.c_str());
+  return GetVarFromMap(m, id, type, full_name.c_str(), dt);
 }
 
 const char *TraceTracker::GetVarFromMap(VariableIDMap &m, uint64_t id, std::string map_name)

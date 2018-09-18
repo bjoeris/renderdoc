@@ -708,6 +708,7 @@ ENDIF ()
 #include <vector>
 
 #include "vulkan/vulkan.h"
+
 #include "format_helper.h"
 
 #define var_to_string(s) #s
@@ -767,8 +768,8 @@ void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance,
                             VkPhysicalDevice physDevice, VkDevice device);
 
 void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
-  VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
-  uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQueueFamily);
+                           VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
+                           uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQueueFamily);
 
 void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dst, VkImageCreateInfo dst_ci,
                            VkImageLayout final_layout,
@@ -793,8 +794,7 @@ void InitializeDiffBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *mem
 void MakePhysicalDeviceFeaturesMatch(const VkPhysicalDeviceFeatures &available,
                                      VkPhysicalDeviceFeatures *captured_request);
 
-void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance,
-                           uint32_t flags);
+void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance, uint32_t flags);
 
 void MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,
                VkMemoryAllocateInfo &ai, MemoryRemapVec &remap, VkDevice dev);
@@ -803,6 +803,7 @@ inline uint64_t AlignedSize(uint64_t size, uint64_t alignment)
 {
   return ((size / alignment) + ((size % alignment) > 0 ? 1 : 0)) * alignment;
 }
+
 inline uint64_t AlignedDown(uint64_t size, uint64_t alignment)
 {
   return (uint64_t(size / alignment)) * alignment;
@@ -812,6 +813,12 @@ bool IsExtEnabled(const char *const *extList, uint32_t count, const char *ext);
 bool IsExtSupported(VkPhysicalDevice physicalDevice, const char *ext);
 
 std::string StageProgressString(const char *stage, uint32_t i, uint32_t N);
+
+extern PFN_vkDebugMarkerSetObjectTagEXT vkDebugMarkerSetObjectTag;
+extern PFN_vkDebugMarkerSetObjectNameEXT vkDebugMarkerSetObjectName;
+extern PFN_vkCmdDebugMarkerBeginEXT vkCmdDebugMarkerBegin;
+extern PFN_vkCmdDebugMarkerEndEXT vkCmdDebugMarkerEnd;
+extern PFN_vkCmdDebugMarkerInsertEXT vkCmdDebugMarkerInsert;
 )"},
 
     /******************************************************************************/
@@ -822,8 +829,8 @@ std::string StageProgressString(const char *stage, uint32_t i, uint32_t N);
 // Generated with RenderDoc CPP Code Generator
 // File: helper.cpp
 //-----------------------------------------------------------------------------
-#include <string>
 #include "helper.h"
+#include <string>
 
 VkBool32 VKAPI_PTR DebugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType,
                                  uint64_t object, size_t location, int32_t messageCode,
@@ -842,8 +849,7 @@ VkBool32 VKAPI_PTR DebugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjec
   return VK_FALSE;
 }
 
-void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance,
-                           uint32_t flags)
+void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance, uint32_t flags)
 {
   PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallback = VK_NULL_HANDLE;
   CreateDebugReportCallback = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
@@ -859,7 +865,8 @@ void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance,
 }
 
 VkPresentModeKHR GetCompatiblePresentMode(VkPresentModeKHR captured,
-  std::vector<VkPresentModeKHR> present) {
+                                          std::vector<VkPresentModeKHR> present)
+{
   for(uint32_t i = 0; i < present.size(); i++)
     if(present[i] == captured)
       return captured;
@@ -869,17 +876,17 @@ VkPresentModeKHR GetCompatiblePresentMode(VkPresentModeKHR captured,
 }
 
 void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
-  VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
+                           VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
                            uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQueueFamily)
 {
   uint32_t all_access =
-    VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
-    VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT |
-    VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
-    VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-    VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_HOST_READ_BIT |
-    VK_ACCESS_HOST_WRITE_BIT;
+      VK_ACCESS_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
+      VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT |
+      VK_ACCESS_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT |
+      VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+      VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+      VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_HOST_READ_BIT |
+      VK_ACCESS_HOST_WRITE_BIT;
 
   VkImageMemoryBarrier imgBarrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
                                      NULL,
@@ -893,7 +900,7 @@ void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
                                      subresourceRange};
 
   vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
+                       VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
 }
 
 void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImage,
@@ -907,8 +914,8 @@ void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImage,
 void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImage, VkImageCreateInfo dstCI,
                            VkImageLayout newLayout, VkImageLayout oldLayout)
 {
-  VkImageSubresourceRange subresourceRange = {FullAspectFromFormat(dstCI.format), 0,
-                                              VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
+  VkImageSubresourceRange subresourceRange = {
+      FullAspectFromFormat(dstCI.format), 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
 
   ImageLayoutTransition(aux, dstImage, subresourceRange, newLayout, oldLayout);
 }
@@ -947,23 +954,23 @@ void CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageC
     uint32_t offset = 0;
     for(uint32_t j = 0; j < aspects.size(); j++)
     {
-    for(uint32_t a = 0; a < dst_ci.arrayLayers; a++)
-    {
-      VkExtent3D dim = dst_ci.extent;
-      uint32_t x = 0;
-      FixCompressedSizes(dst_ci.format, dim, x);
-        for(uint32_t m = 0; m < dst_ci.mipLevels; m++)
+      for(uint32_t a = 0; a < dst_ci.arrayLayers; a++)
       {
+        VkExtent3D dim = dst_ci.extent;
+        uint32_t x = 0;
+        FixCompressedSizes(dst_ci.format, dim, x);
+        for(uint32_t m = 0; m < dst_ci.mipLevels; m++)
+        {
           VkBufferImageCopy region = {offset,     dim.width,
                                       dim.height, {VkImageAspectFlags(aspects[j]), m, a, 1},
                                       {0, 0, 0},  dim};
           offset += (uint32_t)(dim.depth * dim.width * dim.height *
                                SizeOfFormat(dst_ci.format, aspects[j]));
-        dim.height = std::max<int>(dim.height / 2, 1);
-        dim.width = std::max<int>(dim.width / 2, 1);
-        dim.depth = std::max<int>(dim.depth / 2, 1);
-        FixCompressedSizes(dst_ci.format, dim, offset);
-        regions.push_back(region);
+          dim.height = std::max<int>(dim.height / 2, 1);
+          dim.width = std::max<int>(dim.width / 2, 1);
+          dim.depth = std::max<int>(dim.depth / 2, 1);
+          FixCompressedSizes(dst_ci.format, dim, offset);
+          regions.push_back(region);
         }    // mip
       }      // array
     }        // aspect
@@ -975,9 +982,12 @@ void CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageC
       vkCmdCopyBufferToImage(aux.command_buffer, src, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                              count, regions.data() + offset);
     }
-  } else {
+  }
+  else
+  {
     std::string msg = std::string(__FUNCTION__) + std::string(": resets MSAA resource with ") +
-      std::to_string(dst_ci.samples) + std::string(" samples. Currently this is not implemented.\n");
+                      std::to_string(dst_ci.samples) +
+                      std::string(" samples. Currently this is not implemented.\n");
     printf("%s", msg.c_str());
 #if defined(_WIN32) || defined(WIN32)
     OutputDebugStringA(msg.c_str());
@@ -998,31 +1008,35 @@ void CopyImageToBuffer(AuxVkTraceResources aux, VkImage src, VkBuffer dst, VkIma
   {
     VkImageAspectFlags aspect = FullAspectFromFormat(src_ci.format);
     VkImageAspectFlags color_depth_stencil =
-      VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+        VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
     assert(((aspect & color_depth_stencil) != 0) &&
-      ((aspect & (~color_depth_stencil)) ==
-        0));    // only color, depth or stencil aspects are allowed
+           ((aspect & (~color_depth_stencil)) ==
+            0));    // only color, depth or stencil aspects are allowed
 
     std::vector<VkImageAspectFlagBits> aspects;
-    if (aspect & VK_IMAGE_ASPECT_COLOR_BIT)
+    if(aspect & VK_IMAGE_ASPECT_COLOR_BIT)
       aspects.push_back(VK_IMAGE_ASPECT_COLOR_BIT);
-    if (aspect & VK_IMAGE_ASPECT_DEPTH_BIT)
+    if(aspect & VK_IMAGE_ASPECT_DEPTH_BIT)
       aspects.push_back(VK_IMAGE_ASPECT_DEPTH_BIT);
-    if (aspect & VK_IMAGE_ASPECT_STENCIL_BIT)
+    if(aspect & VK_IMAGE_ASPECT_STENCIL_BIT)
       aspects.push_back(VK_IMAGE_ASPECT_STENCIL_BIT);
 
     std::vector<VkBufferImageCopy> regions;
     uint32_t offset = 0;
-    for (uint32_t j = 0; j < aspects.size(); j++) {
-      for (uint32_t a = 0; a < src_ci.arrayLayers; a++) {
+    for(uint32_t j = 0; j < aspects.size(); j++)
+    {
+      for(uint32_t a = 0; a < src_ci.arrayLayers; a++)
+      {
         VkExtent3D dim = src_ci.extent;
         uint32_t x = 0;
         FixCompressedSizes(src_ci.format, dim, x);
-        for (uint32_t m = 0; m < src_ci.mipLevels; m++) {
+        for(uint32_t m = 0; m < src_ci.mipLevels; m++)
+        {
           VkBufferImageCopy region = {offset,     dim.width,
                                       dim.height, {VkImageAspectFlags(aspects[j]), m, a, 1},
                                       {0, 0, 0},  dim};
-          offset += (uint32_t) (dim.depth * dim.width * dim.height * SizeOfFormat(src_ci.format, aspects[j]));
+          offset += (uint32_t)(dim.depth * dim.width * dim.height *
+                               SizeOfFormat(src_ci.format, aspects[j]));
           dim.height = std::max<int>(dim.height / 2, 1);
           dim.width = std::max<int>(dim.width / 2, 1);
           dim.depth = std::max<int>(dim.depth / 2, 1);
@@ -1060,8 +1074,8 @@ void DiffDeviceMemory(AuxVkTraceResources aux, VkDeviceMemory expected,
 
   if(memcmp(expected_data, actual_data, (size_t)size) != 0)
   {
-    std::string msg = std::string(__FUNCTION__) + std::string(": Resource ")
-        + std::string(name) + std::string(" has changed by the end of the frame.\n");
+    std::string msg = std::string(__FUNCTION__) + std::string(": Resource ") + std::string(name) +
+                      std::string(" has changed by the end of the frame.\n");
     printf("%s", msg.c_str());
 #if defined(_WIN32) || defined(WIN32)
     OutputDebugStringA(msg.c_str());
@@ -1201,7 +1215,7 @@ void InitializeSourceBuffer(VkDevice device, VkBuffer *src_buffer, VkDeviceMemor
 
   vkUnmapMemory(device, *src_memory);
 }
-
+)" + std::string(R"(
 void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance,
                             VkPhysicalDevice physDevice, VkDevice device)
 {
@@ -1231,8 +1245,16 @@ void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance,
 
   VkSemaphoreCreateInfo semaphore_ci = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, NULL, 0};
   result = vkCreateSemaphore(device, &semaphore_ci, NULL, &aux->semaphore);
+
+  if (IsExtSupported(aux->physDevice, "VK_EXT_debug_marker")) {
+    vkDebugMarkerSetObjectTag = (PFN_vkDebugMarkerSetObjectTagEXT) vkGetInstanceProcAddr(instance, "vkDebugMarkerSetObjectTagEXT");
+    vkDebugMarkerSetObjectName = (PFN_vkDebugMarkerSetObjectNameEXT) vkGetInstanceProcAddr(instance, "vkDebugMarkerSetObjectNameEXT");
+    vkCmdDebugMarkerBegin = (PFN_vkCmdDebugMarkerBeginEXT) vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerBeginEXT");
+    vkCmdDebugMarkerEnd = (PFN_vkCmdDebugMarkerEndEXT) vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerEndEXT");
+    vkCmdDebugMarkerInsert = (PFN_vkCmdDebugMarkerInsertEXT) vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerInsertEXT");
+  }
 }
-)" + std::string(R"(
+
 int32_t MemoryTypeIndex(VkMemoryPropertyFlags mask, uint32_t bits,
                         VkPhysicalDeviceMemoryProperties memory_props)
 {
@@ -1504,7 +1526,14 @@ std::string StageProgressString(const char *stage, uint32_t i, uint32_t N)
 {
   return std::string("RenderDoc Frame Loop: " + std::string(stage) + " part " + std::to_string(i) +
                      " of " + std::to_string(N));
-})")},
+}
+
+PFN_vkDebugMarkerSetObjectTagEXT vkDebugMarkerSetObjectTag;
+PFN_vkDebugMarkerSetObjectNameEXT vkDebugMarkerSetObjectName;
+PFN_vkCmdDebugMarkerBeginEXT vkCmdDebugMarkerBegin;
+PFN_vkCmdDebugMarkerEndEXT vkCmdDebugMarkerEnd;
+PFN_vkCmdDebugMarkerInsertEXT vkCmdDebugMarkerInsert;
+)")},
 
     /******************************************************************************/
     /* TEMPLATE_FILE_HELPER_FORMAT_HELPER                                         */
@@ -1548,6 +1577,7 @@ uint32_t           FixCompressedSizes(VkFormat fmt, VkExtent3D &dim, uint32_t &o
 std::string        FormatToString(VkFormat f);
 uint32_t           MinDimensionSize(VkFormat format);
 )"},
+
 
     /******************************************************************************/
     /* TEMPLATE_FILE_HELPER_FORMAT_SIZE_AND_ASPECT                                */

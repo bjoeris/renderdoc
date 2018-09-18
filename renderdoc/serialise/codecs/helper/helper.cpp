@@ -24,6 +24,12 @@
 #include "helper.h"
 #include <string>
 
+PFN_vkDebugMarkerSetObjectTagEXT vkDebugMarkerSetObjectTag;
+PFN_vkDebugMarkerSetObjectNameEXT vkDebugMarkerSetObjectName;
+PFN_vkCmdDebugMarkerBeginEXT vkCmdDebugMarkerBegin;
+PFN_vkCmdDebugMarkerEndEXT vkCmdDebugMarkerEnd;
+PFN_vkCmdDebugMarkerInsertEXT vkCmdDebugMarkerInsert;
+
 VkBool32 VKAPI_PTR DebugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType,
                                  uint64_t object, size_t location, int32_t messageCode,
                                  const char *pLayerPrefix, const char *pMessage, void *pUserData)
@@ -437,6 +443,14 @@ void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance,
 
   VkSemaphoreCreateInfo semaphore_ci = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, NULL, 0};
   result = vkCreateSemaphore(device, &semaphore_ci, NULL, &aux->semaphore);
+
+  if (IsExtSupported(aux->physDevice, "VK_EXT_debug_marker")) {
+    vkDebugMarkerSetObjectTag = (PFN_vkDebugMarkerSetObjectTagEXT) vkGetInstanceProcAddr(instance, "vkDebugMarkerSetObjectTagEXT");
+    vkDebugMarkerSetObjectName = (PFN_vkDebugMarkerSetObjectNameEXT) vkGetInstanceProcAddr(instance, "vkDebugMarkerSetObjectNameEXT");
+    vkCmdDebugMarkerBegin = (PFN_vkCmdDebugMarkerBeginEXT) vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerBeginEXT");
+    vkCmdDebugMarkerEnd = (PFN_vkCmdDebugMarkerEndEXT) vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerEndEXT");
+    vkCmdDebugMarkerInsert = (PFN_vkCmdDebugMarkerInsertEXT) vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerInsertEXT");
+  }
 }
 
 int32_t MemoryTypeIndex(VkMemoryPropertyFlags mask, uint32_t bits,

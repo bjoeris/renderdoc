@@ -70,6 +70,12 @@ struct MemoryRemap
 
 typedef std::vector<MemoryRemap> MemoryRemapVec;
 
+extern PFN_vkDebugMarkerSetObjectTagEXT vkDebugMarkerSetObjectTag;
+extern PFN_vkDebugMarkerSetObjectNameEXT vkDebugMarkerSetObjectName;
+extern PFN_vkCmdDebugMarkerBeginEXT vkCmdDebugMarkerBegin;
+extern PFN_vkCmdDebugMarkerEndEXT vkCmdDebugMarkerEnd;
+extern PFN_vkCmdDebugMarkerInsertEXT vkCmdDebugMarkerInsert;
+
 VkPresentModeKHR GetCompatiblePresentMode(VkPresentModeKHR captured,
                                           std::vector<VkPresentModeKHR> present);
 

@@ -2426,7 +2426,7 @@ void CodeWriter::CmdDebugMarkerBeginEXT(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
   LocalVariable(o->At(1), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, &%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
+      ->PrintLn("vkCmdDebugMarkerBegin(%s, &%s);", tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
       .PrintLn("}");
 }
 
@@ -2435,7 +2435,7 @@ void CodeWriter::CmdDebugMarkerInsertEXT(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
   LocalVariable(o->At(1), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, &%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
+      ->PrintLn("vkCmdDebugMarkerInsert(%s, &%s);", tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
       .PrintLn("}");
 }
 
@@ -2443,18 +2443,26 @@ void CodeWriter::CmdDebugMarkerEndEXT(ExtObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
   files[pass]
-      ->PrintLn("%s(%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()))
+      ->PrintLn("vkCmdDebugMarkerEnd(%s);", tracker->GetResourceVar(o->At(0)->U64()))
       .PrintLn("}");
 }
 
 void CodeWriter::DebugMarkerSetObjectNameEXT(ExtObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
-  LocalVariable(o->At(1), "", pass);
-  files[pass]
-      ->PrintLn("VkResult result = %s(%s, &%s);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
-      .PrintLn("assert(result == VK_SUCCESS);")
-      .PrintLn("}");
+  files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {")
+    .PrintLn("VkDebugMarkerObjectNameInfoEXT ObjectNI = {")
+    .PrintLn("/* sType = */ VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT,")
+    .PrintLn("/* pNext = */ NULL,")
+    .PrintLn("/* objectType = */ %s,",
+      tracker->GetResourceVarIt(o->At("Object")->U64())->second.debugType.c_str())
+    .PrintLn("/* object = */ (uint64_t) %s,", 
+      tracker->GetResourceVar(o->At("Object")->U64()))
+    .PrintLn("/* pObjectName = */ %s,", 
+      o->At("ObjectName")->ValueStr().c_str())
+    .PrintLn("};")
+    .PrintLn("VkResult result = vkDebugMarkerSetObjectName(%s, &%s);",
+              tracker->GetDeviceVar(), "ObjectNI")
+    .PrintLn("assert(result == VK_SUCCESS);")
+    .PrintLn("}");
 }
 }    // namespace vk_cpp_codec
