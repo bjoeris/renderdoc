@@ -367,8 +367,8 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
             ai->Name(), ai->At(3)->Name(), ai->At(3)->ValueStr().c_str(), tracker->PhysDevID(),
             tracker->PhysDevID())
         .PrintLn("%s = %s;", ai_name, ai->Name())
-        .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ai->Name(),
-                 memory_name)
+        .PrintLn("VkResult result = %s%s(%s, &%s, NULL, &%s);", 
+          shimPrefix, o->Name(), device_name, ai->Name(), memory_name)
         .PrintLn("assert(result == VK_SUCCESS);")
         .PrintLn("}");
   }
@@ -1935,15 +1935,15 @@ void CodeWriter::FlushMappedMemoryRanges(ExtObject *o, uint32_t pass)
     files[pass]
         ->PrintLn("uint8_t* data = NULL;")
         .PrintLn(
-            "VkResult result = vkMapMemory(%s, %s, 0, VK_WHOLE_SIZE, 0, (void** ) &data); // RDOC: "
-            "map the whole thing, but only copy the right subregions later",
+            "VkResult result = %svkMapMemory(%s, %s, 0, VK_WHOLE_SIZE, 0, (void** ) &data); // RDOC: "
+            "map the whole thing, but only copy the right subregions later", shimPrefix,
             tracker->GetResourceVar(device->U64()), tracker->GetResourceVar(memory->U64()))
         .PrintLn("assert(result == VK_SUCCESS);")
         .PrintLn("%s(aux, data, buffer_%" PRIu64 ".data(), %s, %s, %s, %s);", map_update_func,
                  buffer->U64(), regions->Name(), tracker->GetMemAllocInfoVar(memory->U64()),
                  tracker->GetMemRemapVar(memory->U64()), tracker->GetResourceVar(device->U64()))
         .PrintLn("assert(result == VK_SUCCESS);")
-        .PrintLn("vkUnmapMemory(%s, %s);", tracker->GetResourceVar(device->U64()),
+        .PrintLn("%svkUnmapMemory(%s, %s);", shimPrefix, tracker->GetResourceVar(device->U64()),
                  tracker->GetResourceVar(memory->U64()));
   }
   files[pass]->PrintLn("}");
