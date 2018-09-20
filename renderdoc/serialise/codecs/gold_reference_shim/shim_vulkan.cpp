@@ -168,6 +168,7 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
 {
   PFN_vkQueueSubmit fn = vkQueueSubmit;
   VkResult r = fn(queue, submitCount, pSubmits, fence);
+#ifdef SAVE_RENDERPASS_BUFFERS
   if(!IsTargetFrame)
     return r;
   vkQueueWaitIdle(queue);
@@ -198,6 +199,7 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
       cmdBufferReadBackInfos.erase(pSubmits[i].pCommandBuffers[cbIndex]);
     }
   }
+#endif    // SAVE_RENDERPASS_BUFFERS
   return r;
 }
 
