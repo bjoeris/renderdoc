@@ -47,53 +47,18 @@ namespace vk_cpp_codec
 {
 class TraceTracker;
 
-enum TemplateFileID
-{
-  TEMPLATE_FILE_ROOT_CMAKE,
-  TEMPLATE_FILE_SAMPLE_MAIN_WIN,
-  TEMPLATE_FILE_SAMPLE_MAIN_YETI,
-  TEMPLATE_FILE_SAMPLE_MAIN_XLIB,
-  TEMPLATE_FILE_SAMPLE_COMMON,
-  TEMPLATE_FILE_SAMPLE_CMAKE,
-  TEMPLATE_FILE_HELPER_H,
-  TEMPLATE_FILE_HELPER_CPP,
-  TEMPLATE_FILE_HELPER_FORMAT_HELPER,
-  TEMPLATE_FILE_HELPER_FORMAT_SIZE_AND_ASPECT,
-  TEMPLATE_FILE_HELPER_CMAKE,
-  TEMPLATE_FILE_SHIM_H,
-  TEMPLATE_FILE_SHIM_CPP,
-  TEMPLATE_FILE_SHIM_CMAKE,
-  TEMPLATE_FILE_SHADER_INFO_SHIM_H,
-  TEMPLATE_FILE_SHADER_INFO_SHIM_CPP,
-  TEMPLATE_FILE_SHADER_INFO_UTILS_H,
-  TEMPLATE_FILE_SHADER_INFO_UTILS_CPP,
-  TEMPLATE_FILE_SHADER_INFO_SHIM_CMAKE,
-  TEMPLATE_FILE_GOLD_REFERENCE_SHIM_H,
-  TEMPLATE_FILE_GOLD_REFERENCE_SHIM_CPP,
-  TEMPLATE_FILE_GOLD_REFERENCE_UTILS_H,
-  TEMPLATE_FILE_GOLD_REFERENCE_UTILS_CPP,
-  TEMPLATE_FILE_GOLD_REFERENCE_FORMAT_CONVERSION,
-  TEMPLATE_FILE_GOLD_REFERENCE_SHIM_CMAKE,
-  TEMPLATE_FILE_GEN_SCRIPT_WIN_VS,
-  TEMPLATE_FILE_GEN_SCRIPT_WIN_NINJA,
-  TEMPLATE_FILE_GEN_SCRIPT_YETI,
-  TEMPLATE_FILE_GEN_SCRIPT_LINUX,
-  TEMPLATE_FILE_VS_USER_TEMPLATE,
-  TEMPLATE_FILE_COUNT,
-};
-
 struct TemplateFileDesc
 {
-  std::string subdir;
-  std::string file;
-  std::string str;
+  const char* filename;
+  size_t size;
+  const char* contents;
 };
 
 class CodeWriter
 {
   friend TraceTracker;
 
-  static TemplateFileDesc TemplateFiles[TEMPLATE_FILE_COUNT];
+  static TemplateFileDesc TemplateFiles[];
 
 public:
   enum IDs
@@ -128,7 +93,7 @@ protected:
   // Once you create a code project you get all the files you need.
   void Open();
 
-  void WriteTemplateFile(std::string subdir, std::string file, const char *str);
+  void WriteTemplateFile(const char *file, const char *contents, size_t size);
 
   const uint32_t kLinearizeMemory = 0;
 

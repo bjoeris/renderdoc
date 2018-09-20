@@ -79,23 +79,21 @@ void CodeWriter::Open()
     files[ID_VAR]->PrintLnH("#include \"sample_cpp_shim/shim_vulkan.h\"");
   }
 
-  for(uint32_t i = 0; i < TEMPLATE_FILE_COUNT; i++)
-  {
-    TemplateFileDesc &desc = TemplateFiles[i];
-    WriteTemplateFile(desc.subdir, desc.file, desc.str.c_str());
-  }
+  for (const TemplateFileDesc* desc = TemplateFiles; desc->filename; desc++)
+    WriteTemplateFile(desc->filename, desc->contents, desc->size);
 }
 
-void CodeWriter::WriteTemplateFile(std::string subdir, std::string file, const char *str)
+void CodeWriter::WriteTemplateFile(const char *file, const char *contents, size_t size)
 {
   std::string path = rootDirectory;
-  if(!subdir.empty())
-    path += "/" + subdir;
-  std::string filepath = path + "/" + file;
-  FileIO::CreateParentDirectory(filepath);
+  path.append("/");
+  path.append(file);
+  FileIO::CreateParentDirectory(path);
 
-  FILE *templateFile = FileIO::fopen(filepath.c_str(), "wt");
-  fprintf(templateFile, "%s", str);
+  FILE *templateFile = FileIO::fopen(path.c_str(), "wb");
+  if (size == std::string::npos)
+    size = strlen(contents);
+  FileIO::fwrite(contents, 1, size, templateFile);
   fclose(templateFile);
 }
 
