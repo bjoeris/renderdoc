@@ -217,7 +217,7 @@ struct ThumbCommand : public Command
     parser.add<string>("out", 'o', "The output filename to save the file to", true, "filename.jpg");
     parser.add<string>("format", 'f',
                        "The format of the output file. If empty, detected from filename", false, "",
-                       cmdline::oneof<string>("jpg", "png", "bmp", "tga"));
+                       cmdline::oneof<string>("jpg", "png", "bmp", "tga", "ppm"));
     parser.add<uint32_t>(
         "max-size", 's',
         "The maximum dimension of the thumbnail. Default is 0, which is unlimited.", false, 0);
@@ -262,6 +262,10 @@ struct ThumbCommand : public Command
     {
       type = FileType::BMP;
     }
+    else if(format == "ppm")
+    {
+      type = FileType::PPM;
+    }
     else
     {
       const char *dot = strrchr(outfile.c_str(), '.');
@@ -274,6 +278,8 @@ struct ThumbCommand : public Command
         type = FileType::BMP;
       else if(dot != NULL && strstr(dot, "jpg"))
         type = FileType::JPG;
+      else if(dot != NULL && strstr(dot, "ppm"))
+        type = FileType::PPM;
       else
         std::cerr << "Couldn't guess format from '" << outfile << "', defaulting to jpg."
                   << std::endl;

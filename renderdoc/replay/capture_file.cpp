@@ -633,6 +633,15 @@ Thumbnail CaptureFile::GetThumbnail(FileType type, uint32_t maxsize)
         encodedBytes.assign(thumbpixels, thumbpixels + (thumbwidth * thumbheight * 3));
         break;
       }
+      case FileType::PPM:
+      {
+        std::string data =
+            "P6\n" + std::to_string(thumbwidth) + "\n" + std::to_string(thumbheight) + "\n255\n";
+        encodedBytes.insert(encodedBytes.end(), data.begin(), data.end());
+        encodedBytes.insert(encodedBytes.end(), thumbpixels,
+                            thumbpixels + (thumbwidth * thumbheight * 3));
+        break;
+      }
       case FileType::JPG:
       {
         int len = thumbwidth * thumbheight * 3;

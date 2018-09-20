@@ -1013,6 +1013,10 @@ DOCUMENT(R"(The format of an image file
 .. data:: RAW
 
   Raw data, just the bytes of the image tightly packed with no metadata or compression/encoding
+
+.. data:: PPM
+
+  A PPM file
 )");
 enum class FileType : uint32_t
 {
@@ -1025,6 +1029,7 @@ enum class FileType : uint32_t
   HDR,
   EXR,
   Raw,
+  PPM,
   Count,
 };
 
