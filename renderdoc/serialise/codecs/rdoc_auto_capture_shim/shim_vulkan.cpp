@@ -38,7 +38,6 @@ AuxVkTraceResources aux;
 #if defined(_WIN32) || defined(WIN32)
 #include <Windows.h>
 #elif defined(__linux__)
-#include <log.h>
 #include <dlfcn.h>
 #endif
 
