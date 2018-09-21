@@ -49,6 +49,8 @@ AuxVkTraceResources aux;
 
 #include "renderdoc_app.h"
 
+bool ShimShouldQuitNow() { return false; }
+
 typedef struct Versions {
   union {
     // APIs 1_0_x are actually equal to 1_1_0

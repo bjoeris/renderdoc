@@ -199,6 +199,8 @@ int main(int argc, char **argv)
     {
     }    // empty loop
     Render();
+    if(main_should_quit_now())
+      break;
   }
 
   Finalize();

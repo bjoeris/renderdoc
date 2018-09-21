@@ -74,7 +74,8 @@ void CodeWriter::Open()
   {
     files[ID_MAIN]->PrintLnH("void %s_%s();", funcs[ID_MAIN].c_str(), funcs[i].c_str());
   }
-  if(strlen(shimPrefix) != 0)
+  files[ID_MAIN]->PrintLnH("bool main_should_quit_now();");
+  if(*shimPrefix)
   {
     files[ID_VAR]->PrintLnH("#include \"sample_cpp_shim/shim_vulkan.h\"");
   }
@@ -147,6 +148,21 @@ void CodeWriter::Close()
     files[ID_MAIN]->PrintLn("}");
     delete files[i];
     files[i] = NULL;
+  }
+
+  if (files[ID_MAIN])
+  {
+    files[ID_MAIN]->PrintLn("bool main_should_quit_now() {");
+    // If we are using shims, call into the shim to check if the main message loop should quit now.
+    if (*shimPrefix)
+    {
+      files[ID_MAIN]->PrintLn("return ShimShouldQuitNow();");
+    }
+    else
+    {
+      files[ID_MAIN]->PrintLn("return false;");
+    }
+    files[ID_MAIN]->PrintLn("}");
   }
 
   delete files[ID_MAIN];

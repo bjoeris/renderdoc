@@ -39,6 +39,7 @@ int presentIndex = 0;
 bool IsTargetFrame = true;    // default value doesn't matter. It's properly set in CreateInstance.
 
 int renderPassCount = 0;
+bool quitNow = false;
 AuxVkTraceResources aux;
 VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
 VkSwapchainCreateInfoKHR swapchainCI;
@@ -49,6 +50,8 @@ std::map<VkImage, VkImageCreateInfo> imagesMap;
 std::map<VkRenderPass, RenderPassInfo> renderPassInfos;
 std::map<VkCommandBuffer, RenderPassInfo> cmdBufferRenderPassInfos;
 std::map<VkCommandBuffer, std::vector<ReadbackInfos>> cmdBufferReadBackInfos;
+
+bool ShimShouldQuitNow() { return quitNow; }
 
 /************************* shimmed functions *******************************/
 void shim_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
@@ -222,6 +225,7 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
 #endif
       screenshot(srcImage, filename);
     }
+    quitNow = true;
   }
 
   IsTargetFrame = (++presentIndex == captureFrame);

@@ -173,7 +173,7 @@ int main(int argc, char **argv)
     {
       // TODO
       // ProcessMessages(quit);
-      if(quit)
+      if(quit || main_should_quit_now())
       {
         break;
       }

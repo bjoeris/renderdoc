@@ -17,6 +17,8 @@
 #endif
 #include "vulkan/vulkan.h"
 
+SHIM_VK_API bool ShimShouldQuitNow();
+
 SHIM_VK_API VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                            const VkAllocationCallbacks *pAllocator,
                                            VkInstance *pInstance);

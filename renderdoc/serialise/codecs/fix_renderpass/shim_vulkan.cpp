@@ -6,6 +6,8 @@
 
 AuxVkTraceResources aux;
 
+bool ShimShouldQuitNow() { return false; }
+
 VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkInstance *pInstance)
 {

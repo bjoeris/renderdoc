@@ -32,6 +32,8 @@ AuxVkTraceResources aux;
 int presentIndex = 0;
 bool extAvailable = false;
 
+bool ShimShouldQuitNow() { return false; }
+
 /************************* shimmed functions *******************************/
 VkResult shim_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
                              const VkAllocationCallbacks *pAllocator, VkDevice *pDevice)

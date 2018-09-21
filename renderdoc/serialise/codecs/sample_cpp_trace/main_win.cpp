@@ -294,7 +294,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     while(frameLoops == -1 || repeatIteration < frameLoops)
     {
       ProcessMessages(quit);
-      if(quit)
+      if(quit || main_should_quit_now())
       {
         break;
       }
