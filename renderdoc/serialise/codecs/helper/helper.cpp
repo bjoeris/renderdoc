@@ -451,6 +451,13 @@ void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance,
     vkCmdDebugMarkerEnd = (PFN_vkCmdDebugMarkerEndEXT) vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerEndEXT");
     vkCmdDebugMarkerInsert = (PFN_vkCmdDebugMarkerInsertEXT) vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerInsertEXT");
   }
+
+  uint32_t queueFamilyPropertyCount;
+  vkGetPhysicalDeviceQueueFamilyProperties(aux->physDevice, &queueFamilyPropertyCount, NULL);
+  assert(queueFamilyPropertyCount != 0);
+  aux->queueFamilyProperties.resize(queueFamilyPropertyCount);
+  vkGetPhysicalDeviceQueueFamilyProperties(aux->physDevice, &queueFamilyPropertyCount,
+    aux->queueFamilyProperties.data());
 }
 
 int32_t MemoryTypeIndex(VkMemoryPropertyFlags mask, uint32_t bits,

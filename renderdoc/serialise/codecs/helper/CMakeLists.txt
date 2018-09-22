@@ -2,7 +2,7 @@ SET (THIS_PROJECT_NAME helper)
 PROJECT(${THIS_PROJECT_NAME})
 
 ADD_LIBRARY(${THIS_PROJECT_NAME} STATIC "helper.h" "helper.cpp"
-            format_helper.h format_size_and_aspect.cpp)
+             format_helper.h format_size_and_aspect.cpp)
 
 TARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME}
     PRIVATE UNICODE _UNICODE)
