@@ -1,0 +1,1 @@
+C:\python_27_amd64\files\python.exe embed_files.py vk_cpp_codec_writer_template_files.cpp . CMakeLists.txt Template.user build_*.bat build_*.sh amd_shader_info_shim/* gold_reference_shim/* helper/* sample_cpp_shim/* sample_cpp_trace/* rdoc_auto_capture_shim/* timestamp_profiling_shim/*

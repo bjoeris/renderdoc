@@ -44,8 +44,10 @@ const char fileData_1[] =
   "\"${CMAKE_SOURCE_DIR}/helper\"\r\n                 \"${CMAKE_BINARY_DIR}/helper\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_D"
   "IR}/sample_cpp_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/sample_cpp_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_D"
   "IR}/gold_reference_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/gold_reference_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_"
-  "SOURCE_DIR}/amd_shader_info_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/amd_shader_info_shim\")\r\nADD_SUBDIRECTORY("
-  "\"${CMAKE_SOURCE_DIR}/rdoc_auto_capture_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/rdoc_auto_capture_shim\")\r\n";
+  "SOURCE_DIR}/timestamp_profiling_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/timestamp_profiling_shim\")\r\nADD_SUBDI"
+  "RECTORY(\"${CMAKE_SOURCE_DIR}/amd_shader_info_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/amd_shader_info_shim\")\r\n"
+  "ADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/rdoc_auto_capture_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/rdoc_auto_captu"
+  "re_shim\")\r\n";
 const char fileData_2[] =
   "\xef\xbb\xbf<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Project ToolsVersion=\"4.0\" xmlns=\"http://schemas.microsoft."
   "com/developer/msbuild/2003\">\r\n  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|@USERFILE_PLATFORM@'"
@@ -9214,13 +9216,13 @@ const char fileData_19[] =
   " physicalDeviceMemoryProperties;\r\nextern VkSwapchainCreateInfoKHR swapchainCI;\r\nextern int presentIndex;";
 const char fileData_20[] =
   "SET (THIS_PROJECT_NAME helper)\r\nPROJECT(${THIS_PROJECT_NAME})\r\n\r\nADD_LIBRARY(${THIS_PROJECT_NAME} STATIC \"helper.h"
-  "\" \"helper.cpp\"\r\n            format_helper.h format_size_and_aspect.cpp)\r\n\r\nTARGET_COMPILE_DEFINITIONS(${THIS_PRO"
-  "JECT_NAME}\r\n    PRIVATE UNICODE _UNICODE)\r\nIF (NOT WIN32)\r\n    TARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME}\r\n "
-  "       PRIVATE HELPER_COMPILE_STATIC_LIB)\r\nENDIF ()\r\n\r\nTARGET_LINK_LIBRARIES(${THIS_PROJECT_NAME} vulkan)\r\n\r\nSE"
-  "T_TARGET_PROPERTIES(${THIS_PROJECT_NAME} PROPERTIES\r\n                      OUTPUT_NAME ${THIS_PROJECT_NAME}\r\n        "
-  "              ARCHIVE_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      RUNTIME_O"
-  "UTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      LIBRARY_OUTPUT_DIRECTORY \"${LIB"
-  "RARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      POSITION_INDEPENDENT_CODE ON)\r\n";
+  "\" \"helper.cpp\"\r\n             format_helper.h format_size_and_aspect.cpp)\r\n\r\nTARGET_COMPILE_DEFINITIONS(${THIS_PR"
+  "OJECT_NAME}\r\n    PRIVATE UNICODE _UNICODE)\r\nIF (NOT WIN32)\r\n    TARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME}\r\n"
+  "        PRIVATE HELPER_COMPILE_STATIC_LIB)\r\nENDIF ()\r\n\r\nTARGET_LINK_LIBRARIES(${THIS_PROJECT_NAME} vulkan)\r\n\r\nS"
+  "ET_TARGET_PROPERTIES(${THIS_PROJECT_NAME} PROPERTIES\r\n                      OUTPUT_NAME ${THIS_PROJECT_NAME}\r\n       "
+  "               ARCHIVE_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      RUNTIME_"
+  "OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      LIBRARY_OUTPUT_DIRECTORY \"${LI"
+  "BRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      POSITION_INDEPENDENT_CODE ON)\r\n";
 const char fileData_21[] =
   "/******************************************************************************\r\n* The MIT License (MIT)\r\n*\r\n* Copy"
   "right (c) 2018 Google LLC\r\n*\r\n* Permission is hereby granted, free of charge, to any person obtaining a copy\r\n* of "
@@ -9236,13 +9238,14 @@ const char fileData_21[] =
   "************/\r\n#pragma once\r\n\r\n#include <assert.h>\r\n#include <math.h>\r\n#include <memory.h>\r\n#include <stdint."
   "h>\r\n#include <stdio.h>\r\n#if defined(_WIN32)\r\n#include <Windows.h>\r\n#endif\r\n\r\n#include <algorithm>\r\n#include"
   " <map>\r\n#include <string>\r\n#include <unordered_map>\r\n#include <vector>\r\n\r\n#include \"vulkan/vulkan.h\"\r\n\r\ne"
-  "xtern std::map<VkFormat, std::pair<VkImageAspectFlags, uint32_t>> kImageAspectsAndByteSize;\r\n\r\ndouble SizeOfFormat(Vk"
-  "Format fmt, VkImageAspectFlagBits aspect);\r\nuint32_t ChannelsInFormat(VkFormat fmt);\r\nbool isHDRFormat(VkFormat fmt);"
-  "\r\nbool IsFPFormat(VkFormat fmt);\r\nbool IsSignedFormat(VkFormat fmt);\r\nbool IsDepthFormat(VkFormat fmt);\r\nuint32_t"
-  " BitsPerChannelInFormat(VkFormat fmt,\r\n                                VkImageAspectFlagBits aspect = VK_IMAGE_ASPECT_C"
-  "OLOR_BIT);\r\nVkImageAspectFlags FullAspectFromFormat(VkFormat fmt);\r\nVkImageAspectFlags AspectFromFormat(VkFormat fmt)"
-  ";\r\nuint32_t FixCompressedSizes(VkFormat fmt, VkExtent3D &dim, uint32_t &offset);\r\nstd::string FormatToString(VkFormat"
-  " f);\r\nuint32_t MinDimensionSize(VkFormat format);";
+  "xtern std::map<VkFormat, std::pair<VkImageAspectFlags, uint32_t>> kImageAspectsAndByteSize;\r\n\r\ndouble             Siz"
+  "eOfFormat(VkFormat fmt, VkImageAspectFlagBits aspect);\r\nuint32_t           ChannelsInFormat(VkFormat fmt);\r\nbool     "
+  "          isHDRFormat(VkFormat fmt);\r\nbool               IsFPFormat(VkFormat fmt);\r\nbool               IsSignedFormat"
+  "(VkFormat fmt);\r\nbool               IsDepthFormat(VkFormat fmt);\r\nuint32_t           BitsPerChannelInFormat(VkFormat "
+  "fmt, VkImageAspectFlagBits aspect = VK_IMAGE_ASPECT_COLOR_BIT);\r\nVkImageAspectFlags FullAspectFromFormat(VkFormat fmt);"
+  "\r\nVkImageAspectFlags AspectFromFormat(VkFormat fmt);\r\nuint32_t           FixCompressedSizes(VkFormat fmt, VkExtent3D "
+  "&dim, uint32_t &offset);\r\nstd::string        FormatToString(VkFormat f);\r\nuint32_t           MinDimensionSize(VkForma"
+  "t format);\r\n";
 const char fileData_22[] =
   "/******************************************************************************\r\n* The MIT License (MIT)\r\n*\r\n* Copy"
   "right (c) 2018 Google LLC\r\n*\r\n* Permission is hereby granted, free of charge, to any person obtaining a copy\r\n* of "
@@ -9324,265 +9327,268 @@ const char fileData_22[] =
   "M_S8_UINT, std::pair<VkImageAspectFlags, uint32_t>(\r\n                                      VK_IMAGE_ASPECT_DEPTH_BIT | "
   "VK_IMAGE_ASPECT_STENCIL_BIT, 4)},\r\n    {VK_FORMAT_D32_SFLOAT_S8_UINT, std::pair<VkImageAspectFlags, uint32_t>(\r\n     "
   "                                  VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, 5)},\r\n};\r\n\r\nstd::string "
-  "FormatToString(VkFormat f)\r\n{\r\n#define RETURN_VK_FORMAT_STRING(x) \\\r\n  case VK_FORMAT_##x: return std::string(var_"
-  "to_string(x));\r\n\r\n  switch(f)\r\n  {\r\n    RETURN_VK_FORMAT_STRING(UNDEFINED);\r\n    RETURN_VK_FORMAT_STRING(R4G4_U"
-  "NORM_PACK8);\r\n    RETURN_VK_FORMAT_STRING(R4G4B4A4_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING(B4G4R4A4_UNORM_PACK16)"
-  ";\r\n    RETURN_VK_FORMAT_STRING(R5G6B5_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING(B5G6R5_UNORM_PACK16);\r\n    RETURN"
-  "_VK_FORMAT_STRING(R5G5B5A1_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING(B5G5R5A1_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_"
-  "STRING(A1R5G5B5_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING(R8_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R8_SNORM);\r\n   "
-  " RETURN_VK_FORMAT_STRING(R8_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R8_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(R8_UINT)"
-  ";\r\n    RETURN_VK_FORMAT_STRING(R8_SINT);\r\n    RETURN_VK_FORMAT_STRING(R8_SRGB);\r\n    RETURN_VK_FORMAT_STRING(R8G8_U"
-  "NORM);\r\n    RETURN_VK_FORMAT_STRING(R8G8_SNORM);\r\n    RETURN_VK_FORMAT_STRING(R8G8_USCALED);\r\n    RETURN_VK_FORMAT_"
-  "STRING(R8G8_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(R8G8_UINT);\r\n    RETURN_VK_FORMAT_STRING(R8G8_SINT);\r\n    RETURN"
-  "_VK_FORMAT_STRING(R8G8_SRGB);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8_SNORM);"
-  "\r\n    RETURN_VK_FORMAT_STRING(R8G8B8_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8_SSCALED);\r\n    RETURN_VK_FORMAT_"
-  "STRING(R8G8B8_UINT);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8_SINT);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8_SRGB);\r\n    RET"
-  "URN_VK_FORMAT_STRING(B8G8R8_UNORM);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8_SNORM);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8_U"
-  "SCALED);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8_UINT);\r\n    RETURN_VK_FO"
-  "RMAT_STRING(B8G8R8_SINT);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8_SRGB);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8A8_UNORM);\r\n"
-  "    RETURN_VK_FORMAT_STRING(R8G8B8A8_SNORM);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8A8_USCALED);\r\n    RETURN_VK_FORMAT_ST"
-  "RING(R8G8B8A8_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8A8_UINT);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8A8_SINT);\r\n"
-  "    RETURN_VK_FORMAT_STRING(R8G8B8A8_SRGB);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8A8_UNORM);\r\n    RETURN_VK_FORMAT_STRIN"
-  "G(B8G8R8A8_SNORM);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8A8_USCALED);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8A8_SSCALED);\r\n"
-  "    RETURN_VK_FORMAT_STRING(B8G8R8A8_UINT);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8A8_SINT);\r\n    RETURN_VK_FORMAT_STRING"
-  "(B8G8R8A8_SRGB);\r\n    RETURN_VK_FORMAT_STRING(A8B8G8R8_UNORM_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A8B8G8R8_SNORM_PAC"
-  "K32);\r\n    RETURN_VK_FORMAT_STRING(A8B8G8R8_USCALED_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A8B8G8R8_SSCALED_PACK32);\r"
-  "\n    RETURN_VK_FORMAT_STRING(A8B8G8R8_UINT_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A8B8G8R8_SINT_PACK32);\r\n    RETURN_"
-  "VK_FORMAT_STRING(A8B8G8R8_SRGB_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2R10G10B10_UNORM_PACK32);\r\n    RETURN_VK_FORMAT"
-  "_STRING(A2R10G10B10_SNORM_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2R10G10B10_USCALED_PACK32);\r\n    RETURN_VK_FORMAT_ST"
-  "RING(A2R10G10B10_SSCALED_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2R10G10B10_UINT_PACK32);\r\n    RETURN_VK_FORMAT_STRING"
-  "(A2R10G10B10_SINT_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10G10R10_UNORM_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10"
-  "G10R10_SNORM_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10G10R10_USCALED_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10G10"
-  "R10_SSCALED_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10G10R10_UINT_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10G10R10_"
-  "SINT_PACK32);\r\n    RETURN_VK_FORMAT_STRING(R16_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R16_SNORM);\r\n    RETURN_VK_FORM"
-  "AT_STRING(R16_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R16_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(R16_UINT);\r\n    RET"
-  "URN_VK_FORMAT_STRING(R16_SINT);\r\n    RETURN_VK_FORMAT_STRING(R16_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R16G16_UNORM);"
-  "\r\n    RETURN_VK_FORMAT_STRING(R16G16_SNORM);\r\n    RETURN_VK_FORMAT_STRING(R16G16_USCALED);\r\n    RETURN_VK_FORMAT_ST"
-  "RING(R16G16_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(R16G16_UINT);\r\n    RETURN_VK_FORMAT_STRING(R16G16_SINT);\r\n    RE"
-  "TURN_VK_FORMAT_STRING(R16G16_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R16"
-  "G16B16_SNORM);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16_SSCALED);\r\n "
-  "   RETURN_VK_FORMAT_STRING(R16G16B16_UINT);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16_SINT);\r\n    RETURN_VK_FORMAT_STRIN"
-  "G(R16G16B16_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16A16_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16A16_SNOR"
-  "M);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16A16_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16A16_SSCALED);\r\n    RE"
-  "TURN_VK_FORMAT_STRING(R16G16B16A16_UINT);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16A16_SINT);\r\n    RETURN_VK_FORMAT_STRI"
-  "NG(R16G16B16A16_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R32_UINT);\r\n    RETURN_VK_FORMAT_STRING(R32_SINT);\r\n    RETUR"
-  "N_VK_FORMAT_STRING(R32_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R32G32_UINT);\r\n    RETURN_VK_FORMAT_STRING(R32G32_SINT);"
-  "\r\n    RETURN_VK_FORMAT_STRING(R32G32_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R32G32B32_UINT);\r\n    RETURN_VK_FORMAT_S"
-  "TRING(R32G32B32_SINT);\r\n    RETURN_VK_FORMAT_STRING(R32G32B32_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R32G32B32A32_UINT"
-  ");\r\n    RETURN_VK_FORMAT_STRING(R32G32B32A32_SINT);\r\n    RETURN_VK_FORMAT_STRING(R32G32B32A32_SFLOAT);\r\n    RETURN_"
-  "VK_FORMAT_STRING(R64_UINT);\r\n    RETURN_VK_FORMAT_STRING(R64_SINT);\r\n    RETURN_VK_FORMAT_STRING(R64_SFLOAT);\r\n    "
-  "RETURN_VK_FORMAT_STRING(R64G64_UINT);\r\n    RETURN_VK_FORMAT_STRING(R64G64_SINT);\r\n    RETURN_VK_FORMAT_STRING(R64G64_"
-  "SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R64G64B64_UINT);\r\n    RETURN_VK_FORMAT_STRING(R64G64B64_SINT);\r\n    RETURN_VK"
-  "_FORMAT_STRING(R64G64B64_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R64G64B64A64_UINT);\r\n    RETURN_VK_FORMAT_STRING(R64G6"
-  "4B64A64_SINT);\r\n    RETURN_VK_FORMAT_STRING(R64G64B64A64_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(B10G11R11_UFLOAT_PACK3"
-  "2);\r\n    RETURN_VK_FORMAT_STRING(E5B9G9R9_UFLOAT_PACK32);\r\n    RETURN_VK_FORMAT_STRING(D16_UNORM);\r\n    RETURN_VK_F"
-  "ORMAT_STRING(X8_D24_UNORM_PACK32);\r\n    RETURN_VK_FORMAT_STRING(D32_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(S8_UINT);\r"
-  "\n    RETURN_VK_FORMAT_STRING(D16_UNORM_S8_UINT);\r\n    RETURN_VK_FORMAT_STRING(D24_UNORM_S8_UINT);\r\n    RETURN_VK_FOR"
-  "MAT_STRING(D32_SFLOAT_S8_UINT);\r\n    RETURN_VK_FORMAT_STRING(BC1_RGB_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC1_R"
-  "GB_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC1_RGBA_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC1_RGBA_SRGB_BLOCK)"
-  ";\r\n    RETURN_VK_FORMAT_STRING(BC2_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC2_SRGB_BLOCK);\r\n    RETURN_VK_FORMA"
-  "T_STRING(BC3_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC3_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC4_UNORM_BLOCK"
-  ");\r\n    RETURN_VK_FORMAT_STRING(BC4_SNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC5_UNORM_BLOCK);\r\n    RETURN_VK_FOR"
-  "MAT_STRING(BC5_SNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC6H_UFLOAT_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC6H_SFLOA"
-  "T_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC7_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC7_SRGB_BLOCK);\r\n    RETURN_"
-  "VK_FORMAT_STRING(ETC2_R8G8B8_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8_SRGB_BLOCK);\r\n    RETURN_VK_FORMA"
-  "T_STRING(ETC2_R8G8B8A1_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8A1_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_ST"
-  "RING(ETC2_R8G8B8A8_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8A8_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING"
-  "(EAC_R11_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(EAC_R11_SNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(EAC_R11G11_UNO"
-  "RM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(EAC_R11G11_SNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_4x4_UNORM_BLOCK);\r"
-  "\n    RETURN_VK_FORMAT_STRING(ASTC_4x4_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_5x4_UNORM_BLOCK);\r\n    RETURN_V"
-  "K_FORMAT_STRING(ASTC_5x4_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_5x5_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRIN"
-  "G(ASTC_5x5_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_6x5_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_6x5_SRG"
-  "B_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_6x6_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_6x6_SRGB_BLOCK);\r\n "
-  "   RETURN_VK_FORMAT_STRING(ASTC_8x5_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_8x5_SRGB_BLOCK);\r\n    RETURN_VK_F"
-  "ORMAT_STRING(ASTC_8x6_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_8x6_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(A"
-  "STC_8x8_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_8x8_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_10x5_UNORM"
-  "_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_10x5_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_10x6_UNORM_BLOCK);\r\n"
-  "    RETURN_VK_FORMAT_STRING(ASTC_10x6_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_10x8_UNORM_BLOCK);\r\n    RETURN_V"
-  "K_FORMAT_STRING(ASTC_10x8_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_10x10_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_ST"
-  "RING(ASTC_10x10_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_12x10_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_"
-  "12x10_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_12x12_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_12x12_SRGB"
-  "_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(G8B8G8R8_422_UNORM);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8G8_422_UNORM);\r\n    R"
-  "ETURN_VK_FORMAT_STRING(G8_B8_R8_3PLANE_420_UNORM);\r\n    RETURN_VK_FORMAT_STRING(G8_B8R8_2PLANE_420_UNORM);\r\n    RETUR"
-  "N_VK_FORMAT_STRING(G8_B8_R8_3PLANE_422_UNORM);\r\n    RETURN_VK_FORMAT_STRING(G8_B8R8_2PLANE_422_UNORM);\r\n    RETURN_VK"
-  "_FORMAT_STRING(G8_B8_R8_3PLANE_444_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R10X6_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_ST"
-  "RING(R10X6G10X6_UNORM_2PACK16);\r\n    RETURN_VK_FORMAT_STRING(R10X6G10X6B10X6A10X6_UNORM_4PACK16);\r\n    RETURN_VK_FORM"
-  "AT_STRING(G10X6B10X6G10X6R10X6_422_UNORM_4PACK16);\r\n    RETURN_VK_FORMAT_STRING(B10X6G10X6R10X6G10X6_422_UNORM_4PACK16)"
-  ";\r\n    RETURN_VK_FORMAT_STRING(G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G10X6_B10X6R"
-  "10X6_2PLANE_420_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16);\r\n    RETURN"
-  "_VK_FORMAT_STRING(G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G10X6_B10X6_R10X6_3PLANE_444"
-  "_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(R12X4_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING(R12X4G12X4_UNORM_2PAC"
-  "K16);\r\n    RETURN_VK_FORMAT_STRING(R12X4G12X4B12X4A12X4_UNORM_4PACK16);\r\n    RETURN_VK_FORMAT_STRING(G12X4B12X4G12X4R"
-  "12X4_422_UNORM_4PACK16);\r\n    RETURN_VK_FORMAT_STRING(B12X4G12X4R12X4G12X4_422_UNORM_4PACK16);\r\n    RETURN_VK_FORMAT_"
-  "STRING(G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G12X4_B12X4R12X4_2PLANE_420_UNORM_3PAC"
-  "K16);\r\n    RETURN_VK_FORMAT_STRING(G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G12X4_B1"
-  "2X4R12X4_2PLANE_422_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16);\r\n    RE"
-  "TURN_VK_FORMAT_STRING(G16B16G16R16_422_UNORM);\r\n    RETURN_VK_FORMAT_STRING(B16G16R16G16_422_UNORM);\r\n    RETURN_VK_F"
-  "ORMAT_STRING(G16_B16_R16_3PLANE_420_UNORM);\r\n    RETURN_VK_FORMAT_STRING(G16_B16R16_2PLANE_420_UNORM);\r\n    RETURN_VK"
-  "_FORMAT_STRING(G16_B16_R16_3PLANE_422_UNORM);\r\n    RETURN_VK_FORMAT_STRING(G16_B16R16_2PLANE_422_UNORM);\r\n    RETURN_"
-  "VK_FORMAT_STRING(G16_B16_R16_3PLANE_444_UNORM);\r\n    RETURN_VK_FORMAT_STRING(PVRTC1_2BPP_UNORM_BLOCK_IMG);\r\n    RETUR"
-  "N_VK_FORMAT_STRING(PVRTC1_4BPP_UNORM_BLOCK_IMG);\r\n    RETURN_VK_FORMAT_STRING(PVRTC2_2BPP_UNORM_BLOCK_IMG);\r\n    RETU"
-  "RN_VK_FORMAT_STRING(PVRTC2_4BPP_UNORM_BLOCK_IMG);\r\n    RETURN_VK_FORMAT_STRING(PVRTC1_2BPP_SRGB_BLOCK_IMG);\r\n    RETU"
-  "RN_VK_FORMAT_STRING(PVRTC1_4BPP_SRGB_BLOCK_IMG);\r\n    RETURN_VK_FORMAT_STRING(PVRTC2_2BPP_SRGB_BLOCK_IMG);\r\n    RETUR"
-  "N_VK_FORMAT_STRING(PVRTC2_4BPP_SRGB_BLOCK_IMG);\r\n\r\n    default: assert(0);\r\n  }\r\n\r\n  return \"ERROR\";\r\n}\r\n"
-  "\r\nuint32_t FixCompressedSizes(VkFormat fmt, VkExtent3D &dim, uint32_t &offset)\r\n{\r\n  switch(fmt)\r\n  {\r\n    case"
-  " VK_FORMAT_BC1_RGB_UNORM_BLOCK:\r\n    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:\r\n    case VK_FORMAT_BC1_RGB_SRGB_BLOCK:\r\n"
-  "    case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:\r\n    case VK_FORMAT_BC2_SRGB_BLOCK:\r\n    case VK_FORMAT_BC2_UNORM_BLOCK:\r\n "
-  "   case VK_FORMAT_BC3_SRGB_BLOCK:\r\n    case VK_FORMAT_BC3_UNORM_BLOCK:\r\n    case VK_FORMAT_BC4_SNORM_BLOCK:\r\n    ca"
-  "se VK_FORMAT_BC4_UNORM_BLOCK:\r\n    case VK_FORMAT_BC5_SNORM_BLOCK:\r\n    case VK_FORMAT_BC5_UNORM_BLOCK:\r\n    case V"
-  "K_FORMAT_BC6H_SFLOAT_BLOCK:\r\n    case VK_FORMAT_BC6H_UFLOAT_BLOCK:\r\n    case VK_FORMAT_BC7_SRGB_BLOCK:\r\n    case VK"
-  "_FORMAT_BC7_UNORM_BLOCK:\r\n      dim.width = (uint32_t)AlignedSize(dim.width, 4);\r\n      dim.height = (uint32_t)Aligne"
-  "dSize(dim.height, 4);\r\n      dim.depth = (uint32_t)AlignedSize(dim.depth, 1);\r\n      offset = (uint32_t)AlignedSize(o"
-  "ffset, 4);\r\n      return 1;\r\n\r\n    default: break;\r\n  }\r\n\r\n  offset = (uint32_t)AlignedSize(offset, 4);\r\n  "
-  "return 0;\r\n}\r\n\r\ndouble SizeOfFormat(VkFormat fmt, VkImageAspectFlagBits aspect)\r\n{\r\n  if(aspect == VK_IMAGE_ASP"
-  "ECT_STENCIL_BIT)\r\n  {\r\n    switch(fmt)\r\n    {\r\n      case VK_FORMAT_D32_SFLOAT_S8_UINT:\r\n      case VK_FORMAT_D"
-  "24_UNORM_S8_UINT:\r\n      case VK_FORMAT_D16_UNORM_S8_UINT: return 1.0;\r\n      default: assert(0);\r\n    }\r\n  }\r\n"
-  "  else if(aspect == VK_IMAGE_ASPECT_COLOR_BIT || aspect == VK_IMAGE_ASPECT_DEPTH_BIT)\r\n  {\r\n    switch(fmt)\r\n    {\r"
-  "\n      case VK_FORMAT_R4G4_UNORM_PACK8:\r\n      case VK_FORMAT_R8_UNORM:\r\n      case VK_FORMAT_R8_SNORM:\r\n      cas"
-  "e VK_FORMAT_R8_USCALED:\r\n      case VK_FORMAT_R8_SSCALED:\r\n      case VK_FORMAT_R8_UINT:\r\n      case VK_FORMAT_R8_S"
-  "INT:\r\n      case VK_FORMAT_R8_SRGB: return 1.0;\r\n\r\n      case VK_FORMAT_R4G4B4A4_UNORM_PACK16:\r\n      case VK_FOR"
-  "MAT_B4G4R4A4_UNORM_PACK16:\r\n      case VK_FORMAT_R5G6B5_UNORM_PACK16:\r\n      case VK_FORMAT_B5G6R5_UNORM_PACK16:\r\n "
-  "     case VK_FORMAT_R5G5B5A1_UNORM_PACK16:\r\n      case VK_FORMAT_B5G5R5A1_UNORM_PACK16:\r\n      case VK_FORMAT_A1R5G5B"
-  "5_UNORM_PACK16:\r\n      case VK_FORMAT_R8G8_UNORM:\r\n      case VK_FORMAT_R8G8_SNORM:\r\n      case VK_FORMAT_R8G8_USCA"
-  "LED:\r\n      case VK_FORMAT_R8G8_SSCALED:\r\n      case VK_FORMAT_R8G8_UINT:\r\n      case VK_FORMAT_R8G8_SINT:\r\n     "
-  " case VK_FORMAT_R8G8_SRGB:\r\n      case VK_FORMAT_R16_UNORM:\r\n      case VK_FORMAT_R16_SNORM:\r\n      case VK_FORMAT_"
-  "R16_USCALED:\r\n      case VK_FORMAT_R16_SSCALED:\r\n      case VK_FORMAT_R16_UINT:\r\n      case VK_FORMAT_R16_SINT:\r\n"
-  "      case VK_FORMAT_R16_SFLOAT:\r\n      case VK_FORMAT_D16_UNORM:\r\n      case VK_FORMAT_D16_UNORM_S8_UINT: return 2.0"
-  ";\r\n\r\n      case VK_FORMAT_R8G8B8_UNORM:\r\n      case VK_FORMAT_R8G8B8_SNORM:\r\n      case VK_FORMAT_R8G8B8_USCALED:"
-  "\r\n      case VK_FORMAT_R8G8B8_SSCALED:\r\n      case VK_FORMAT_R8G8B8_UINT:\r\n      case VK_FORMAT_R8G8B8_SINT:\r\n   "
-  "   case VK_FORMAT_R8G8B8_SRGB:\r\n      case VK_FORMAT_B8G8R8_UNORM:\r\n      case VK_FORMAT_B8G8R8_SNORM:\r\n      case "
-  "VK_FORMAT_B8G8R8_USCALED:\r\n      case VK_FORMAT_B8G8R8_SSCALED:\r\n      case VK_FORMAT_B8G8R8_UINT:\r\n      case VK_F"
-  "ORMAT_B8G8R8_SINT:\r\n      case VK_FORMAT_B8G8R8_SRGB:\r\n      case VK_FORMAT_D24_UNORM_S8_UINT: return 3.0;\r\n\r\n   "
-  "   case VK_FORMAT_R8G8B8A8_UNORM:\r\n      case VK_FORMAT_R8G8B8A8_SNORM:\r\n      case VK_FORMAT_R8G8B8A8_USCALED:\r\n  "
-  "    case VK_FORMAT_R8G8B8A8_SSCALED:\r\n      case VK_FORMAT_R8G8B8A8_UINT:\r\n      case VK_FORMAT_R8G8B8A8_SINT:\r\n   "
-  "   case VK_FORMAT_R8G8B8A8_SRGB:\r\n      case VK_FORMAT_B8G8R8A8_UNORM:\r\n      case VK_FORMAT_B8G8R8A8_SNORM:\r\n     "
-  " case VK_FORMAT_B8G8R8A8_USCALED:\r\n      case VK_FORMAT_B8G8R8A8_SSCALED:\r\n      case VK_FORMAT_B8G8R8A8_UINT:\r\n   "
-  "   case VK_FORMAT_B8G8R8A8_SINT:\r\n      case VK_FORMAT_B8G8R8A8_SRGB:\r\n      case VK_FORMAT_A8B8G8R8_UNORM_PACK32:\r\n"
-  "      case VK_FORMAT_A8B8G8R8_SNORM_PACK32:\r\n      case VK_FORMAT_A8B8G8R8_USCALED_PACK32:\r\n      case VK_FORMAT_A8B8"
-  "G8R8_SSCALED_PACK32:\r\n      case VK_FORMAT_A8B8G8R8_UINT_PACK32:\r\n      case VK_FORMAT_A8B8G8R8_SINT_PACK32:\r\n     "
-  " case VK_FORMAT_A8B8G8R8_SRGB_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_UNORM_PACK32:\r\n      case VK_FORMAT_A2R10G10B"
-  "10_SNORM_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_USCALED_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_SSCALED_PACK32:\r"
-  "\n      case VK_FORMAT_A2R10G10B10_UINT_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_SINT_PACK32:\r\n      case VK_FORMAT_"
-  "A2B10G10R10_UNORM_PACK32:\r\n      case VK_FORMAT_A2B10G10R10_SNORM_PACK32:\r\n      case VK_FORMAT_A2B10G10R10_USCALED_P"
-  "ACK32:\r\n      case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:\r\n      case VK_FORMAT_A2B10G10R10_UINT_PACK32:\r\n      case"
-  " VK_FORMAT_A2B10G10R10_SINT_PACK32:\r\n      case VK_FORMAT_R16G16_UNORM:\r\n      case VK_FORMAT_R16G16_SNORM:\r\n      "
-  "case VK_FORMAT_R16G16_USCALED:\r\n      case VK_FORMAT_R16G16_SSCALED:\r\n      case VK_FORMAT_R16G16_UINT:\r\n      case"
-  " VK_FORMAT_R16G16_SINT:\r\n      case VK_FORMAT_R16G16_SFLOAT:\r\n      case VK_FORMAT_R32_UINT:\r\n      case VK_FORMAT_"
-  "R32_SINT:\r\n      case VK_FORMAT_R32_SFLOAT:\r\n      case VK_FORMAT_B10G11R11_UFLOAT_PACK32:\r\n      case VK_FORMAT_E5"
-  "B9G9R9_UFLOAT_PACK32:\r\n      case VK_FORMAT_D32_SFLOAT:\r\n      case VK_FORMAT_D32_SFLOAT_S8_UINT: return 4.0;\r\n\r\n"
-  "      case VK_FORMAT_R16G16B16_UNORM:\r\n      case VK_FORMAT_R16G16B16_SNORM:\r\n      case VK_FORMAT_R16G16B16_USCALED:"
-  "\r\n      case VK_FORMAT_R16G16B16_SSCALED:\r\n      case VK_FORMAT_R16G16B16_UINT:\r\n      case VK_FORMAT_R16G16B16_SIN"
-  "T:\r\n      case VK_FORMAT_R16G16B16_SFLOAT: return 6.0f;\r\n\r\n      case VK_FORMAT_R16G16B16A16_UNORM:\r\n      case V"
-  "K_FORMAT_R16G16B16A16_SNORM:\r\n      case VK_FORMAT_R16G16B16A16_USCALED:\r\n      case VK_FORMAT_R16G16B16A16_SSCALED:\r"
-  "\n      case VK_FORMAT_R16G16B16A16_UINT:\r\n      case VK_FORMAT_R16G16B16A16_SINT:\r\n      case VK_FORMAT_R16G16B16A16"
-  "_SFLOAT:\r\n      case VK_FORMAT_R32G32_UINT:\r\n      case VK_FORMAT_R32G32_SINT:\r\n      case VK_FORMAT_R32G32_SFLOAT:"
-  "\r\n      case VK_FORMAT_R64_UINT:\r\n      case VK_FORMAT_R64_SINT:\r\n      case VK_FORMAT_R64_SFLOAT: return 8.0;\r\n\r"
-  "\n      case VK_FORMAT_R32G32B32_UINT:\r\n      case VK_FORMAT_R32G32B32_SINT:\r\n      case VK_FORMAT_R32G32B32_SFLOAT: "
-  "return 12.0;\r\n\r\n      case VK_FORMAT_R32G32B32A32_UINT:\r\n      case VK_FORMAT_R32G32B32A32_SINT:\r\n      case VK_F"
-  "ORMAT_R32G32B32A32_SFLOAT:\r\n      case VK_FORMAT_R64G64_UINT:\r\n      case VK_FORMAT_R64G64_SINT:\r\n      case VK_FOR"
-  "MAT_R64G64_SFLOAT: return 16.0;\r\n\r\n      case VK_FORMAT_R64G64B64_UINT:\r\n      case VK_FORMAT_R64G64B64_SINT:\r\n  "
-  "    case VK_FORMAT_R64G64B64_SFLOAT: return 24.0;\r\n\r\n      case VK_FORMAT_R64G64B64A64_UINT:\r\n      case VK_FORMAT_"
-  "R64G64B64A64_SINT:\r\n      case VK_FORMAT_R64G64B64A64_SFLOAT: return 32.0;\r\n\r\n      case VK_FORMAT_BC2_SRGB_BLOCK:\r"
-  "\n      case VK_FORMAT_BC2_UNORM_BLOCK:\r\n      case VK_FORMAT_BC3_SRGB_BLOCK:\r\n      case VK_FORMAT_BC3_UNORM_BLOCK:\r"
-  "\n      case VK_FORMAT_BC5_SNORM_BLOCK:\r\n      case VK_FORMAT_BC5_UNORM_BLOCK:\r\n      case VK_FORMAT_BC6H_SFLOAT_BLOC"
-  "K:\r\n      case VK_FORMAT_BC6H_UFLOAT_BLOCK:\r\n      case VK_FORMAT_BC7_SRGB_BLOCK:\r\n      case VK_FORMAT_BC7_UNORM_B"
-  "LOCK: return 1.0;\r\n\r\n      case VK_FORMAT_BC1_RGB_UNORM_BLOCK:\r\n      case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:\r\n     "
-  " case VK_FORMAT_BC1_RGB_SRGB_BLOCK:\r\n      case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:\r\n      case VK_FORMAT_BC4_SNORM_BLOCK:"
-  "\r\n      case VK_FORMAT_BC4_UNORM_BLOCK: return 0.5;\r\n\r\n      default: assert(0);\r\n    }\r\n  }\r\n  return 0.0;\r"
-  "\n}\r\n\r\nuint32_t ChannelsInFormat(VkFormat fmt)\r\n{\r\n  switch(fmt)\r\n  {\r\n    case VK_FORMAT_R8_UNORM:\r\n    ca"
-  "se VK_FORMAT_R8_SNORM:\r\n    case VK_FORMAT_R8_USCALED:\r\n    case VK_FORMAT_R8_SSCALED:\r\n    case VK_FORMAT_R8_UINT:"
-  "\r\n    case VK_FORMAT_R8_SINT:\r\n    case VK_FORMAT_R8_SRGB:\r\n    case VK_FORMAT_R16_UNORM:\r\n    case VK_FORMAT_R16"
-  "_SNORM:\r\n    case VK_FORMAT_R16_USCALED:\r\n    case VK_FORMAT_R16_SSCALED:\r\n    case VK_FORMAT_R16_UINT:\r\n    case"
-  " VK_FORMAT_R16_SINT:\r\n    case VK_FORMAT_R16_SFLOAT:\r\n    case VK_FORMAT_D16_UNORM:\r\n    case VK_FORMAT_D16_UNORM_S"
-  "8_UINT:\r\n    case VK_FORMAT_D24_UNORM_S8_UINT:\r\n    case VK_FORMAT_R32_UINT:\r\n    case VK_FORMAT_R32_SINT:\r\n    c"
-  "ase VK_FORMAT_R32_SFLOAT:\r\n    case VK_FORMAT_D32_SFLOAT:\r\n    case VK_FORMAT_D32_SFLOAT_S8_UINT:\r\n    case VK_FORM"
-  "AT_R64_UINT:\r\n    case VK_FORMAT_R64_SINT:\r\n    case VK_FORMAT_R64_SFLOAT: return 1;\r\n\r\n    case VK_FORMAT_R4G4_U"
-  "NORM_PACK8:\r\n    case VK_FORMAT_R8G8_UNORM:\r\n    case VK_FORMAT_R8G8_SNORM:\r\n    case VK_FORMAT_R8G8_USCALED:\r\n  "
-  "  case VK_FORMAT_R8G8_SSCALED:\r\n    case VK_FORMAT_R8G8_UINT:\r\n    case VK_FORMAT_R8G8_SINT:\r\n    case VK_FORMAT_R8"
-  "G8_SRGB:\r\n    case VK_FORMAT_R16G16_UNORM:\r\n    case VK_FORMAT_R16G16_SNORM:\r\n    case VK_FORMAT_R16G16_USCALED:\r\n"
-  "    case VK_FORMAT_R16G16_SSCALED:\r\n    case VK_FORMAT_R16G16_UINT:\r\n    case VK_FORMAT_R16G16_SINT:\r\n    case VK_F"
-  "ORMAT_R16G16_SFLOAT:\r\n    case VK_FORMAT_R32G32_UINT:\r\n    case VK_FORMAT_R32G32_SINT:\r\n    case VK_FORMAT_R32G32_S"
-  "FLOAT:\r\n    case VK_FORMAT_R64G64_UINT:\r\n    case VK_FORMAT_R64G64_SINT:\r\n    case VK_FORMAT_R64G64_SFLOAT: return "
-  "2;\r\n\r\n    case VK_FORMAT_R5G6B5_UNORM_PACK16:\r\n    case VK_FORMAT_B5G6R5_UNORM_PACK16:\r\n    case VK_FORMAT_R8G8B8"
-  "_UNORM:\r\n    case VK_FORMAT_R8G8B8_SNORM:\r\n    case VK_FORMAT_R8G8B8_USCALED:\r\n    case VK_FORMAT_R8G8B8_SSCALED:\r"
-  "\n    case VK_FORMAT_R8G8B8_UINT:\r\n    case VK_FORMAT_R8G8B8_SINT:\r\n    case VK_FORMAT_R8G8B8_SRGB:\r\n    case VK_FO"
-  "RMAT_B8G8R8_UNORM:\r\n    case VK_FORMAT_B8G8R8_SNORM:\r\n    case VK_FORMAT_B8G8R8_USCALED:\r\n    case VK_FORMAT_B8G8R8"
-  "_SSCALED:\r\n    case VK_FORMAT_B8G8R8_UINT:\r\n    case VK_FORMAT_B8G8R8_SINT:\r\n    case VK_FORMAT_B8G8R8_SRGB:\r\n   "
-  " case VK_FORMAT_B10G11R11_UFLOAT_PACK32:\r\n    case VK_FORMAT_R16G16B16_UNORM:\r\n    case VK_FORMAT_R16G16B16_SNORM:\r\n"
-  "    case VK_FORMAT_R16G16B16_USCALED:\r\n    case VK_FORMAT_R16G16B16_SSCALED:\r\n    case VK_FORMAT_R16G16B16_UINT:\r\n "
-  "   case VK_FORMAT_R16G16B16_SINT:\r\n    case VK_FORMAT_R16G16B16_SFLOAT:\r\n    case VK_FORMAT_R32G32B32_UINT:\r\n    ca"
-  "se VK_FORMAT_R32G32B32_SINT:\r\n    case VK_FORMAT_R32G32B32_SFLOAT:\r\n    case VK_FORMAT_R64G64B64_UINT:\r\n    case VK"
-  "_FORMAT_R64G64B64_SINT:\r\n    case VK_FORMAT_R64G64B64_SFLOAT: return 3;\r\n\r\n    case VK_FORMAT_R4G4B4A4_UNORM_PACK16"
-  ":\r\n    case VK_FORMAT_B4G4R4A4_UNORM_PACK16:\r\n    case VK_FORMAT_R5G5B5A1_UNORM_PACK16:\r\n    case VK_FORMAT_B5G5R5A"
-  "1_UNORM_PACK16:\r\n    case VK_FORMAT_A1R5G5B5_UNORM_PACK16:\r\n    case VK_FORMAT_R8G8B8A8_UNORM:\r\n    case VK_FORMAT_"
-  "R8G8B8A8_SNORM:\r\n    case VK_FORMAT_R8G8B8A8_USCALED:\r\n    case VK_FORMAT_R8G8B8A8_SSCALED:\r\n    case VK_FORMAT_R8G"
-  "8B8A8_UINT:\r\n    case VK_FORMAT_R8G8B8A8_SINT:\r\n    case VK_FORMAT_R8G8B8A8_SRGB:\r\n    case VK_FORMAT_B8G8R8A8_UNOR"
-  "M:\r\n    case VK_FORMAT_B8G8R8A8_SNORM:\r\n    case VK_FORMAT_B8G8R8A8_USCALED:\r\n    case VK_FORMAT_B8G8R8A8_SSCALED:\r"
-  "\n    case VK_FORMAT_B8G8R8A8_UINT:\r\n    case VK_FORMAT_B8G8R8A8_SINT:\r\n    case VK_FORMAT_B8G8R8A8_SRGB:\r\n    case"
-  " VK_FORMAT_A8B8G8R8_UNORM_PACK32:\r\n    case VK_FORMAT_A8B8G8R8_SNORM_PACK32:\r\n    case VK_FORMAT_A8B8G8R8_USCALED_PAC"
-  "K32:\r\n    case VK_FORMAT_A8B8G8R8_SSCALED_PACK32:\r\n    case VK_FORMAT_A8B8G8R8_UINT_PACK32:\r\n    case VK_FORMAT_A8B"
-  "8G8R8_SINT_PACK32:\r\n    case VK_FORMAT_A8B8G8R8_SRGB_PACK32:\r\n    case VK_FORMAT_A2R10G10B10_UNORM_PACK32:\r\n    cas"
-  "e VK_FORMAT_A2R10G10B10_SNORM_PACK32:\r\n    case VK_FORMAT_A2R10G10B10_USCALED_PACK32:\r\n    case VK_FORMAT_A2R10G10B10"
-  "_SSCALED_PACK32:\r\n    case VK_FORMAT_A2R10G10B10_UINT_PACK32:\r\n    case VK_FORMAT_A2R10G10B10_SINT_PACK32:\r\n    cas"
-  "e VK_FORMAT_A2B10G10R10_UNORM_PACK32:\r\n    case VK_FORMAT_A2B10G10R10_SNORM_PACK32:\r\n    case VK_FORMAT_A2B10G10R10_U"
-  "SCALED_PACK32:\r\n    case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:\r\n    case VK_FORMAT_A2B10G10R10_UINT_PACK32:\r\n    ca"
-  "se VK_FORMAT_A2B10G10R10_SINT_PACK32:\r\n    case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32:\r\n    case VK_FORMAT_R16G16B16A16_UN"
-  "ORM:\r\n    case VK_FORMAT_R16G16B16A16_SNORM:\r\n    case VK_FORMAT_R16G16B16A16_USCALED:\r\n    case VK_FORMAT_R16G16B1"
-  "6A16_SSCALED:\r\n    case VK_FORMAT_R16G16B16A16_UINT:\r\n    case VK_FORMAT_R16G16B16A16_SINT:\r\n    case VK_FORMAT_R16"
-  "G16B16A16_SFLOAT:\r\n    case VK_FORMAT_R32G32B32A32_UINT:\r\n    case VK_FORMAT_R32G32B32A32_SINT:\r\n    case VK_FORMAT"
-  "_R32G32B32A32_SFLOAT:\r\n    case VK_FORMAT_R64G64B64A64_UINT:\r\n    case VK_FORMAT_R64G64B64A64_SINT:\r\n    case VK_FO"
-  "RMAT_R64G64B64A64_SFLOAT: return 4;\r\n\r\n    default: assert(0);\r\n  }\r\n  return 0;\r\n}\r\n\r\nbool isHDRFormat(VkF"
-  "ormat fmt)\r\n{\r\n  switch(fmt)\r\n  {\r\n    case VK_FORMAT_R16_UINT:\r\n    case VK_FORMAT_R16_SINT:\r\n    case VK_FO"
-  "RMAT_R16_SFLOAT:\r\n    case VK_FORMAT_D16_UNORM:\r\n    case VK_FORMAT_D16_UNORM_S8_UINT:\r\n    case VK_FORMAT_D24_UNOR"
-  "M_S8_UINT:\r\n    case VK_FORMAT_R32_UINT:\r\n    case VK_FORMAT_R32_SINT:\r\n    case VK_FORMAT_R32_SFLOAT:\r\n    case "
-  "VK_FORMAT_D32_SFLOAT:\r\n    case VK_FORMAT_D32_SFLOAT_S8_UINT:\r\n    case VK_FORMAT_R64_UINT:\r\n    case VK_FORMAT_R64"
-  "_SINT:\r\n    case VK_FORMAT_R64_SFLOAT:\r\n    case VK_FORMAT_R16G16_UINT:\r\n    case VK_FORMAT_R16G16_SINT:\r\n    cas"
-  "e VK_FORMAT_R16G16_SFLOAT:\r\n    case VK_FORMAT_R32G32_UINT:\r\n    case VK_FORMAT_R32G32_SINT:\r\n    case VK_FORMAT_R3"
-  "2G32_SFLOAT:\r\n    case VK_FORMAT_R64G64_UINT:\r\n    case VK_FORMAT_R64G64_SINT:\r\n    case VK_FORMAT_R64G64_SFLOAT:\r"
-  "\n    case VK_FORMAT_R16G16B16_UINT:\r\n    case VK_FORMAT_R16G16B16_SINT:\r\n    case VK_FORMAT_R16G16B16_SFLOAT:\r\n   "
-  " case VK_FORMAT_R32G32B32_UINT:\r\n    case VK_FORMAT_R32G32B32_SINT:\r\n    case VK_FORMAT_R32G32B32_SFLOAT:\r\n    case"
-  " VK_FORMAT_R64G64B64_UINT:\r\n    case VK_FORMAT_R64G64B64_SINT:\r\n    case VK_FORMAT_R64G64B64_SFLOAT:\r\n    case VK_F"
-  "ORMAT_R16G16B16A16_UINT:\r\n    case VK_FORMAT_R16G16B16A16_SINT:\r\n    case VK_FORMAT_R16G16B16A16_SFLOAT:\r\n    case "
-  "VK_FORMAT_R32G32B32A32_UINT:\r\n    case VK_FORMAT_R32G32B32A32_SINT:\r\n    case VK_FORMAT_R32G32B32A32_SFLOAT:\r\n    c"
-  "ase VK_FORMAT_R64G64B64A64_UINT:\r\n    case VK_FORMAT_R64G64B64A64_SINT:\r\n    case VK_FORMAT_R64G64B64A64_SFLOAT: retu"
-  "rn true;\r\n\r\n    default: return false;\r\n  }\r\n  return false;\r\n}\r\n\r\nuint32_t BitsPerChannelInFormat(VkFormat"
-  " fmt, VkImageAspectFlagBits aspect)\r\n{\r\n  return static_cast<uint32_t>(SizeOfFormat(fmt, aspect) * 8 / ChannelsInForm"
-  "at(fmt));\r\n}\r\n\r\nbool IsFPFormat(VkFormat fmt)\r\n{\r\n  switch(fmt)\r\n  {\r\n    case VK_FORMAT_R16_SFLOAT:\r\n   "
-  " case VK_FORMAT_R32_SFLOAT:\r\n    case VK_FORMAT_D32_SFLOAT:\r\n    case VK_FORMAT_D32_SFLOAT_S8_UINT:\r\n    case VK_FO"
-  "RMAT_R64_SFLOAT:\r\n    case VK_FORMAT_R16G16_SFLOAT:\r\n    case VK_FORMAT_R32G32_SFLOAT:\r\n    case VK_FORMAT_R64G64_S"
-  "FLOAT:\r\n    case VK_FORMAT_R16G16B16_SFLOAT:\r\n    case VK_FORMAT_R32G32B32_SFLOAT:\r\n    case VK_FORMAT_R64G64B64_SF"
-  "LOAT:\r\n    case VK_FORMAT_R16G16B16A16_SFLOAT:\r\n    case VK_FORMAT_R32G32B32A32_SFLOAT:\r\n    case VK_FORMAT_R64G64B"
-  "64A64_SFLOAT: return true;\r\n    default: return false;\r\n  }\r\n  return false;\r\n}\r\n\r\nbool IsSignedFormat(VkForm"
-  "at fmt)\r\n{\r\n  switch(fmt)\r\n  {\r\n    case VK_FORMAT_R8_SNORM:\r\n    case VK_FORMAT_R8_SSCALED:\r\n    case VK_FOR"
-  "MAT_R8_SINT:\r\n    case VK_FORMAT_R8G8_SNORM:\r\n    case VK_FORMAT_R8G8_SSCALED:\r\n    case VK_FORMAT_R8G8_SINT:\r\n  "
-  "  case VK_FORMAT_R8G8B8_SNORM:\r\n    case VK_FORMAT_R8G8B8_SSCALED:\r\n    case VK_FORMAT_R8G8B8_SINT:\r\n    case VK_FO"
-  "RMAT_R8G8B8A8_SNORM:\r\n    case VK_FORMAT_R8G8B8A8_SSCALED:\r\n    case VK_FORMAT_R8G8B8A8_SINT:\r\n    case VK_FORMAT_B"
-  "8G8R8_SNORM:\r\n    case VK_FORMAT_B8G8R8_SSCALED:\r\n    case VK_FORMAT_B8G8R8_SINT:\r\n    case VK_FORMAT_B8G8R8A8_SNOR"
-  "M:\r\n    case VK_FORMAT_B8G8R8A8_SSCALED:\r\n    case VK_FORMAT_B8G8R8A8_SINT:\r\n    case VK_FORMAT_R16_SINT:\r\n    ca"
-  "se VK_FORMAT_R16_SFLOAT:\r\n    case VK_FORMAT_R32_SINT:\r\n    case VK_FORMAT_R32_SFLOAT:\r\n    case VK_FORMAT_D32_SFLO"
-  "AT:\r\n    case VK_FORMAT_D32_SFLOAT_S8_UINT:\r\n    case VK_FORMAT_R64_SINT:\r\n    case VK_FORMAT_R64_SFLOAT:\r\n    ca"
-  "se VK_FORMAT_R16G16_SINT:\r\n    case VK_FORMAT_R16G16_SFLOAT:\r\n    case VK_FORMAT_R32G32_SINT:\r\n    case VK_FORMAT_R"
-  "32G32_SFLOAT:\r\n    case VK_FORMAT_R64G64_SINT:\r\n    case VK_FORMAT_R64G64_SFLOAT:\r\n    case VK_FORMAT_R16G16B16_SIN"
-  "T:\r\n    case VK_FORMAT_R16G16B16_SFLOAT:\r\n    case VK_FORMAT_R32G32B32_SINT:\r\n    case VK_FORMAT_R32G32B32_SFLOAT:\r"
-  "\n    case VK_FORMAT_R64G64B64_SINT:\r\n    case VK_FORMAT_R64G64B64_SFLOAT:\r\n    case VK_FORMAT_R16G16B16A16_SINT:\r\n"
-  "    case VK_FORMAT_R16G16B16A16_SFLOAT:\r\n    case VK_FORMAT_R32G32B32A32_SINT:\r\n    case VK_FORMAT_R32G32B32A32_SFLOA"
-  "T:\r\n    case VK_FORMAT_R64G64B64A64_SINT:\r\n    case VK_FORMAT_R64G64B64A64_SFLOAT: return true;\r\n    default: retur"
-  "n false;\r\n  }\r\n  return false;\r\n}\r\n\r\nuint32_t MinDimensionSize(VkFormat format)\r\n{\r\n  switch(format)\r\n  {"
-  "\r\n    case VK_FORMAT_BC1_RGB_UNORM_BLOCK:\r\n    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:\r\n    case VK_FORMAT_BC1_RGB_SRG"
-  "B_BLOCK:\r\n    case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:\r\n    case VK_FORMAT_BC2_SRGB_BLOCK:\r\n    case VK_FORMAT_BC2_UNORM"
-  "_BLOCK:\r\n    case VK_FORMAT_BC3_SRGB_BLOCK:\r\n    case VK_FORMAT_BC3_UNORM_BLOCK:\r\n    case VK_FORMAT_BC4_SNORM_BLOC"
-  "K:\r\n    case VK_FORMAT_BC4_UNORM_BLOCK:\r\n    case VK_FORMAT_BC5_SNORM_BLOCK:\r\n    case VK_FORMAT_BC5_UNORM_BLOCK:\r"
-  "\n    case VK_FORMAT_BC6H_SFLOAT_BLOCK:\r\n    case VK_FORMAT_BC6H_UFLOAT_BLOCK:\r\n    case VK_FORMAT_BC7_SRGB_BLOCK:\r\n"
-  "    case VK_FORMAT_BC7_UNORM_BLOCK: return 4;\r\n\r\n    default: return 1;\r\n  }\r\n}\r\n\r\nbool IsDepthFormat(VkForma"
-  "t fmt)\r\n{\r\n  return (fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_D16_UNORM_S8_UINT ||\r\n          fmt == VK_FORMA"
-  "T_D24_UNORM_S8_UINT || fmt == VK_FORMAT_D32_SFLOAT ||\r\n          fmt == VK_FORMAT_D32_SFLOAT_S8_UINT);\r\n}\r\nVkImageA"
-  "spectFlags FullAspectFromFormat(VkFormat fmt)\r\n{\r\n  if(fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_D32_SFLOAT)\r\n"
-  "    return VK_IMAGE_ASPECT_DEPTH_BIT;\r\n  else if(fmt == VK_FORMAT_D16_UNORM_S8_UINT || fmt == VK_FORMAT_D24_UNORM_S8_UI"
-  "NT ||\r\n          fmt == VK_FORMAT_D32_SFLOAT_S8_UINT)\r\n    return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL"
-  "_BIT;\r\n  else    //  TODO(akharlamov): this is actually incorrect but OK for now\r\n    return VK_IMAGE_ASPECT_COLOR_BI"
-  "T;\r\n}\r\n\r\nVkImageAspectFlags AspectFromFormat(VkFormat fmt)\r\n{\r\n  if(fmt == VK_FORMAT_D16_UNORM || fmt == VK_FOR"
-  "MAT_D32_SFLOAT || fmt == VK_FORMAT_D16_UNORM_S8_UINT ||\r\n     fmt == VK_FORMAT_D24_UNORM_S8_UINT || fmt == VK_FORMAT_D3"
-  "2_SFLOAT_S8_UINT)\r\n    return VK_IMAGE_ASPECT_DEPTH_BIT;\r\n  else\r\n    return VK_IMAGE_ASPECT_COLOR_BIT;\r\n}";
+  "FormatToString(VkFormat f) {\r\n#define RETURN_VK_FORMAT_STRING(x) \\\r\n  case VK_FORMAT_##x: return std::string(var_to_"
+  "string(x));\r\n\r\n  switch (f) {\r\n    RETURN_VK_FORMAT_STRING(UNDEFINED);\r\n    RETURN_VK_FORMAT_STRING(R4G4_UNORM_PA"
+  "CK8);\r\n    RETURN_VK_FORMAT_STRING(R4G4B4A4_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING(B4G4R4A4_UNORM_PACK16);\r\n  "
+  "  RETURN_VK_FORMAT_STRING(R5G6B5_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING(B5G6R5_UNORM_PACK16);\r\n    RETURN_VK_FOR"
+  "MAT_STRING(R5G5B5A1_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING(B5G5R5A1_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING("
+  "A1R5G5B5_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING(R8_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R8_SNORM);\r\n    RETURN"
+  "_VK_FORMAT_STRING(R8_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R8_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(R8_UINT);\r\n  "
+  "  RETURN_VK_FORMAT_STRING(R8_SINT);\r\n    RETURN_VK_FORMAT_STRING(R8_SRGB);\r\n    RETURN_VK_FORMAT_STRING(R8G8_UNORM);\r"
+  "\n    RETURN_VK_FORMAT_STRING(R8G8_SNORM);\r\n    RETURN_VK_FORMAT_STRING(R8G8_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R"
+  "8G8_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(R8G8_UINT);\r\n    RETURN_VK_FORMAT_STRING(R8G8_SINT);\r\n    RETURN_VK_FORM"
+  "AT_STRING(R8G8_SRGB);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8_SNORM);\r\n    "
+  "RETURN_VK_FORMAT_STRING(R8G8B8_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(R"
+  "8G8B8_UINT);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8_SINT);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8_SRGB);\r\n    RETURN_VK_F"
+  "ORMAT_STRING(B8G8R8_UNORM);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8_SNORM);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8_USCALED);"
+  "\r\n    RETURN_VK_FORMAT_STRING(B8G8R8_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8_UINT);\r\n    RETURN_VK_FORMAT_STR"
+  "ING(B8G8R8_SINT);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8_SRGB);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8A8_UNORM);\r\n    RET"
+  "URN_VK_FORMAT_STRING(R8G8B8A8_SNORM);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8A8_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R8"
+  "G8B8A8_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8A8_UINT);\r\n    RETURN_VK_FORMAT_STRING(R8G8B8A8_SINT);\r\n    RET"
+  "URN_VK_FORMAT_STRING(R8G8B8A8_SRGB);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8A8_UNORM);\r\n    RETURN_VK_FORMAT_STRING(B8G8R"
+  "8A8_SNORM);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8A8_USCALED);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8A8_SSCALED);\r\n    RE"
+  "TURN_VK_FORMAT_STRING(B8G8R8A8_UINT);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8A8_SINT);\r\n    RETURN_VK_FORMAT_STRING(B8G8R"
+  "8A8_SRGB);\r\n    RETURN_VK_FORMAT_STRING(A8B8G8R8_UNORM_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A8B8G8R8_SNORM_PACK32);\r"
+  "\n    RETURN_VK_FORMAT_STRING(A8B8G8R8_USCALED_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A8B8G8R8_SSCALED_PACK32);\r\n    R"
+  "ETURN_VK_FORMAT_STRING(A8B8G8R8_UINT_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A8B8G8R8_SINT_PACK32);\r\n    RETURN_VK_FORM"
+  "AT_STRING(A8B8G8R8_SRGB_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2R10G10B10_UNORM_PACK32);\r\n    RETURN_VK_FORMAT_STRING"
+  "(A2R10G10B10_SNORM_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2R10G10B10_USCALED_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2"
+  "R10G10B10_SSCALED_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2R10G10B10_UINT_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2R10G"
+  "10B10_SINT_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10G10R10_UNORM_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10G10R10_"
+  "SNORM_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10G10R10_USCALED_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10G10R10_SSC"
+  "ALED_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10G10R10_UINT_PACK32);\r\n    RETURN_VK_FORMAT_STRING(A2B10G10R10_SINT_PA"
+  "CK32);\r\n    RETURN_VK_FORMAT_STRING(R16_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R16_SNORM);\r\n    RETURN_VK_FORMAT_STRI"
+  "NG(R16_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R16_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(R16_UINT);\r\n    RETURN_VK_"
+  "FORMAT_STRING(R16_SINT);\r\n    RETURN_VK_FORMAT_STRING(R16_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R16G16_UNORM);\r\n   "
+  " RETURN_VK_FORMAT_STRING(R16G16_SNORM);\r\n    RETURN_VK_FORMAT_STRING(R16G16_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R1"
+  "6G16_SSCALED);\r\n    RETURN_VK_FORMAT_STRING(R16G16_UINT);\r\n    RETURN_VK_FORMAT_STRING(R16G16_SINT);\r\n    RETURN_VK"
+  "_FORMAT_STRING(R16G16_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16_"
+  "SNORM);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16_SSCALED);\r\n    RETU"
+  "RN_VK_FORMAT_STRING(R16G16B16_UINT);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16_SINT);\r\n    RETURN_VK_FORMAT_STRING(R16G1"
+  "6B16_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16A16_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16A16_SNORM);\r\n"
+  "    RETURN_VK_FORMAT_STRING(R16G16B16A16_USCALED);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16A16_SSCALED);\r\n    RETURN_VK"
+  "_FORMAT_STRING(R16G16B16A16_UINT);\r\n    RETURN_VK_FORMAT_STRING(R16G16B16A16_SINT);\r\n    RETURN_VK_FORMAT_STRING(R16G"
+  "16B16A16_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R32_UINT);\r\n    RETURN_VK_FORMAT_STRING(R32_SINT);\r\n    RETURN_VK_FO"
+  "RMAT_STRING(R32_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R32G32_UINT);\r\n    RETURN_VK_FORMAT_STRING(R32G32_SINT);\r\n   "
+  " RETURN_VK_FORMAT_STRING(R32G32_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R32G32B32_UINT);\r\n    RETURN_VK_FORMAT_STRING(R"
+  "32G32B32_SINT);\r\n    RETURN_VK_FORMAT_STRING(R32G32B32_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R32G32B32A32_UINT);\r\n "
+  "   RETURN_VK_FORMAT_STRING(R32G32B32A32_SINT);\r\n    RETURN_VK_FORMAT_STRING(R32G32B32A32_SFLOAT);\r\n    RETURN_VK_FORM"
+  "AT_STRING(R64_UINT);\r\n    RETURN_VK_FORMAT_STRING(R64_SINT);\r\n    RETURN_VK_FORMAT_STRING(R64_SFLOAT);\r\n    RETURN_"
+  "VK_FORMAT_STRING(R64G64_UINT);\r\n    RETURN_VK_FORMAT_STRING(R64G64_SINT);\r\n    RETURN_VK_FORMAT_STRING(R64G64_SFLOAT)"
+  ";\r\n    RETURN_VK_FORMAT_STRING(R64G64B64_UINT);\r\n    RETURN_VK_FORMAT_STRING(R64G64B64_SINT);\r\n    RETURN_VK_FORMAT"
+  "_STRING(R64G64B64_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(R64G64B64A64_UINT);\r\n    RETURN_VK_FORMAT_STRING(R64G64B64A64"
+  "_SINT);\r\n    RETURN_VK_FORMAT_STRING(R64G64B64A64_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(B10G11R11_UFLOAT_PACK32);\r\n"
+  "    RETURN_VK_FORMAT_STRING(E5B9G9R9_UFLOAT_PACK32);\r\n    RETURN_VK_FORMAT_STRING(D16_UNORM);\r\n    RETURN_VK_FORMAT_S"
+  "TRING(X8_D24_UNORM_PACK32);\r\n    RETURN_VK_FORMAT_STRING(D32_SFLOAT);\r\n    RETURN_VK_FORMAT_STRING(S8_UINT);\r\n    R"
+  "ETURN_VK_FORMAT_STRING(D16_UNORM_S8_UINT);\r\n    RETURN_VK_FORMAT_STRING(D24_UNORM_S8_UINT);\r\n    RETURN_VK_FORMAT_STR"
+  "ING(D32_SFLOAT_S8_UINT);\r\n    RETURN_VK_FORMAT_STRING(BC1_RGB_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC1_RGB_SRGB"
+  "_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC1_RGBA_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC1_RGBA_SRGB_BLOCK);\r\n  "
+  "  RETURN_VK_FORMAT_STRING(BC2_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC2_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRIN"
+  "G(BC3_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC3_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC4_UNORM_BLOCK);\r\n "
+  "   RETURN_VK_FORMAT_STRING(BC4_SNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC5_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STR"
+  "ING(BC5_SNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC6H_UFLOAT_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC6H_SFLOAT_BLOCK"
+  ");\r\n    RETURN_VK_FORMAT_STRING(BC7_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(BC7_SRGB_BLOCK);\r\n    RETURN_VK_FORM"
+  "AT_STRING(ETC2_R8G8B8_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRIN"
+  "G(ETC2_R8G8B8A1_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8A1_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ET"
+  "C2_R8G8B8A8_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ETC2_R8G8B8A8_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(EAC_R1"
+  "1_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(EAC_R11_SNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(EAC_R11G11_UNORM_BLOC"
+  "K);\r\n    RETURN_VK_FORMAT_STRING(EAC_R11G11_SNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_4x4_UNORM_BLOCK);\r\n    "
+  "RETURN_VK_FORMAT_STRING(ASTC_4x4_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_5x4_UNORM_BLOCK);\r\n    RETURN_VK_FORM"
+  "AT_STRING(ASTC_5x4_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_5x5_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC"
+  "_5x5_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_6x5_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_6x5_SRGB_BLOC"
+  "K);\r\n    RETURN_VK_FORMAT_STRING(ASTC_6x6_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_6x6_SRGB_BLOCK);\r\n    RET"
+  "URN_VK_FORMAT_STRING(ASTC_8x5_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_8x5_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_"
+  "STRING(ASTC_8x6_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_8x6_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_8x"
+  "8_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_8x8_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_10x5_UNORM_BLOCK"
+  ");\r\n    RETURN_VK_FORMAT_STRING(ASTC_10x5_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_10x6_UNORM_BLOCK);\r\n    RE"
+  "TURN_VK_FORMAT_STRING(ASTC_10x6_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_10x8_UNORM_BLOCK);\r\n    RETURN_VK_FORM"
+  "AT_STRING(ASTC_10x8_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_10x10_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(A"
+  "STC_10x10_SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_12x10_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_12x10_"
+  "SRGB_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_12x12_UNORM_BLOCK);\r\n    RETURN_VK_FORMAT_STRING(ASTC_12x12_SRGB_BLOCK"
+  ");\r\n    RETURN_VK_FORMAT_STRING(G8B8G8R8_422_UNORM);\r\n    RETURN_VK_FORMAT_STRING(B8G8R8G8_422_UNORM);\r\n    RETURN_"
+  "VK_FORMAT_STRING(G8_B8_R8_3PLANE_420_UNORM);\r\n    RETURN_VK_FORMAT_STRING(G8_B8R8_2PLANE_420_UNORM);\r\n    RETURN_VK_F"
+  "ORMAT_STRING(G8_B8_R8_3PLANE_422_UNORM);\r\n    RETURN_VK_FORMAT_STRING(G8_B8R8_2PLANE_422_UNORM);\r\n    RETURN_VK_FORMA"
+  "T_STRING(G8_B8_R8_3PLANE_444_UNORM);\r\n    RETURN_VK_FORMAT_STRING(R10X6_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING(R"
+  "10X6G10X6_UNORM_2PACK16);\r\n    RETURN_VK_FORMAT_STRING(R10X6G10X6B10X6A10X6_UNORM_4PACK16);\r\n    RETURN_VK_FORMAT_STR"
+  "ING(G10X6B10X6G10X6R10X6_422_UNORM_4PACK16);\r\n    RETURN_VK_FORMAT_STRING(B10X6G10X6R10X6G10X6_422_UNORM_4PACK16);\r\n "
+  "   RETURN_VK_FORMAT_STRING(G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G10X6_B10X6R10X6_2"
+  "PLANE_420_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16);\r\n    RETURN_VK_FO"
+  "RMAT_STRING(G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G10X6_B10X6_R10X6_3PLANE_444_UNORM"
+  "_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(R12X4_UNORM_PACK16);\r\n    RETURN_VK_FORMAT_STRING(R12X4G12X4_UNORM_2PACK16);\r"
+  "\n    RETURN_VK_FORMAT_STRING(R12X4G12X4B12X4A12X4_UNORM_4PACK16);\r\n    RETURN_VK_FORMAT_STRING(G12X4B12X4G12X4R12X4_42"
+  "2_UNORM_4PACK16);\r\n    RETURN_VK_FORMAT_STRING(B12X4G12X4R12X4G12X4_422_UNORM_4PACK16);\r\n    RETURN_VK_FORMAT_STRING("
+  "G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16);\r"
+  "\n    RETURN_VK_FORMAT_STRING(G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G12X4_B12X4R12X"
+  "4_2PLANE_422_UNORM_3PACK16);\r\n    RETURN_VK_FORMAT_STRING(G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16);\r\n    RETURN_VK"
+  "_FORMAT_STRING(G16B16G16R16_422_UNORM);\r\n    RETURN_VK_FORMAT_STRING(B16G16R16G16_422_UNORM);\r\n    RETURN_VK_FORMAT_S"
+  "TRING(G16_B16_R16_3PLANE_420_UNORM);\r\n    RETURN_VK_FORMAT_STRING(G16_B16R16_2PLANE_420_UNORM);\r\n    RETURN_VK_FORMAT"
+  "_STRING(G16_B16_R16_3PLANE_422_UNORM);\r\n    RETURN_VK_FORMAT_STRING(G16_B16R16_2PLANE_422_UNORM);\r\n    RETURN_VK_FORM"
+  "AT_STRING(G16_B16_R16_3PLANE_444_UNORM);\r\n    RETURN_VK_FORMAT_STRING(PVRTC1_2BPP_UNORM_BLOCK_IMG);\r\n    RETURN_VK_FO"
+  "RMAT_STRING(PVRTC1_4BPP_UNORM_BLOCK_IMG);\r\n    RETURN_VK_FORMAT_STRING(PVRTC2_2BPP_UNORM_BLOCK_IMG);\r\n    RETURN_VK_F"
+  "ORMAT_STRING(PVRTC2_4BPP_UNORM_BLOCK_IMG);\r\n    RETURN_VK_FORMAT_STRING(PVRTC1_2BPP_SRGB_BLOCK_IMG);\r\n    RETURN_VK_F"
+  "ORMAT_STRING(PVRTC1_4BPP_SRGB_BLOCK_IMG);\r\n    RETURN_VK_FORMAT_STRING(PVRTC2_2BPP_SRGB_BLOCK_IMG);\r\n    RETURN_VK_FO"
+  "RMAT_STRING(PVRTC2_4BPP_SRGB_BLOCK_IMG);\r\n\r\n    default: assert(0);\r\n  }\r\n\r\n  return \"ERROR\";\r\n}\r\n\r\nuin"
+  "t32_t FixCompressedSizes(VkFormat fmt, VkExtent3D &dim, uint32_t &offset) {\r\n  switch (fmt) {\r\n    case VK_FORMAT_BC1"
+  "_RGB_UNORM_BLOCK:\r\n    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:\r\n    case VK_FORMAT_BC1_RGB_SRGB_BLOCK:\r\n    case VK_FO"
+  "RMAT_BC1_RGBA_SRGB_BLOCK:\r\n    case VK_FORMAT_BC2_SRGB_BLOCK:\r\n    case VK_FORMAT_BC2_UNORM_BLOCK:\r\n    case VK_FOR"
+  "MAT_BC3_SRGB_BLOCK:\r\n    case VK_FORMAT_BC3_UNORM_BLOCK:\r\n    case VK_FORMAT_BC4_SNORM_BLOCK:\r\n    case VK_FORMAT_B"
+  "C4_UNORM_BLOCK:\r\n    case VK_FORMAT_BC5_SNORM_BLOCK:\r\n    case VK_FORMAT_BC5_UNORM_BLOCK:\r\n    case VK_FORMAT_BC6H_"
+  "SFLOAT_BLOCK:\r\n    case VK_FORMAT_BC6H_UFLOAT_BLOCK:\r\n    case VK_FORMAT_BC7_SRGB_BLOCK:\r\n    case VK_FORMAT_BC7_UN"
+  "ORM_BLOCK:\r\n    dim.width = (uint32_t) AlignedSize(dim.width, 4);\r\n    dim.height = (uint32_t) AlignedSize(dim.height"
+  ", 4);\r\n    dim.depth = (uint32_t) AlignedSize(dim.depth, 1);\r\n    offset = (uint32_t) AlignedSize(offset, 4);\r\n    "
+  "return 1;\r\n  }\r\n\r\n  offset = (uint32_t) AlignedSize(offset, 4);\r\n  return 0;\r\n}\r\n\r\nVkImageAspectFlags FullA"
+  "spectFromFormat(VkFormat fmt) {\r\n  if (fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_D32_SFLOAT)\r\n    return VK_IMAG"
+  "E_ASPECT_DEPTH_BIT;\r\n  else if (fmt == VK_FORMAT_D16_UNORM_S8_UINT || fmt == VK_FORMAT_D24_UNORM_S8_UINT ||\r\n    fmt "
+  "== VK_FORMAT_D32_SFLOAT_S8_UINT)\r\n    return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;\r\n  else    //  "
+  "TODO(akharlamov): this is actually incorrect but OK for now\r\n    return VK_IMAGE_ASPECT_COLOR_BIT;\r\n}\r\n\r\nVkImageA"
+  "spectFlags AspectFromFormat(VkFormat fmt) {\r\n  if (fmt == VK_FORMAT_D16_UNORM || fmt == VK_FORMAT_D32_SFLOAT || fmt == "
+  "VK_FORMAT_D16_UNORM_S8_UINT ||\r\n    fmt == VK_FORMAT_D24_UNORM_S8_UINT || fmt == VK_FORMAT_D32_SFLOAT_S8_UINT)\r\n    r"
+  "eturn VK_IMAGE_ASPECT_DEPTH_BIT;\r\n  else\r\n    return VK_IMAGE_ASPECT_COLOR_BIT;\r\n}\r\ndouble SizeOfFormat(VkFormat "
+  "fmt, VkImageAspectFlagBits aspect) {\r\n  if (aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {\r\n    switch (fmt) {\r\n      cas"
+  "e VK_FORMAT_D32_SFLOAT_S8_UINT:\r\n      case VK_FORMAT_D24_UNORM_S8_UINT:\r\n      case VK_FORMAT_D16_UNORM_S8_UINT: ret"
+  "urn 1.0;\r\n      default: assert(0);\r\n    }\r\n  } else if (aspect == VK_IMAGE_ASPECT_COLOR_BIT || aspect == VK_IMAGE_"
+  "ASPECT_DEPTH_BIT) {\r\n    switch (fmt) {\r\n      case VK_FORMAT_R4G4_UNORM_PACK8:\r\n      case VK_FORMAT_R8_UNORM:\r\n"
+  "      case VK_FORMAT_R8_SNORM:\r\n      case VK_FORMAT_R8_USCALED:\r\n      case VK_FORMAT_R8_SSCALED:\r\n      case VK_F"
+  "ORMAT_R8_UINT:\r\n      case VK_FORMAT_R8_SINT:\r\n      case VK_FORMAT_R8_SRGB: return 1.0;\r\n\r\n      case VK_FORMAT_"
+  "R4G4B4A4_UNORM_PACK16:\r\n      case VK_FORMAT_B4G4R4A4_UNORM_PACK16:\r\n      case VK_FORMAT_R5G6B5_UNORM_PACK16:\r\n   "
+  "   case VK_FORMAT_B5G6R5_UNORM_PACK16:\r\n      case VK_FORMAT_R5G5B5A1_UNORM_PACK16:\r\n      case VK_FORMAT_B5G5R5A1_UN"
+  "ORM_PACK16:\r\n      case VK_FORMAT_A1R5G5B5_UNORM_PACK16:\r\n      case VK_FORMAT_R8G8_UNORM:\r\n      case VK_FORMAT_R8"
+  "G8_SNORM:\r\n      case VK_FORMAT_R8G8_USCALED:\r\n      case VK_FORMAT_R8G8_SSCALED:\r\n      case VK_FORMAT_R8G8_UINT:\r"
+  "\n      case VK_FORMAT_R8G8_SINT:\r\n      case VK_FORMAT_R8G8_SRGB:\r\n      case VK_FORMAT_R16_UNORM:\r\n      case VK_"
+  "FORMAT_R16_SNORM:\r\n      case VK_FORMAT_R16_USCALED:\r\n      case VK_FORMAT_R16_SSCALED:\r\n      case VK_FORMAT_R16_U"
+  "INT:\r\n      case VK_FORMAT_R16_SINT:\r\n      case VK_FORMAT_R16_SFLOAT:\r\n      case VK_FORMAT_D16_UNORM:\r\n      ca"
+  "se VK_FORMAT_D16_UNORM_S8_UINT: return 2.0;\r\n\r\n      case VK_FORMAT_R8G8B8_UNORM:\r\n      case VK_FORMAT_R8G8B8_SNOR"
+  "M:\r\n      case VK_FORMAT_R8G8B8_USCALED:\r\n      case VK_FORMAT_R8G8B8_SSCALED:\r\n      case VK_FORMAT_R8G8B8_UINT:\r"
+  "\n      case VK_FORMAT_R8G8B8_SINT:\r\n      case VK_FORMAT_R8G8B8_SRGB:\r\n      case VK_FORMAT_B8G8R8_UNORM:\r\n      c"
+  "ase VK_FORMAT_B8G8R8_SNORM:\r\n      case VK_FORMAT_B8G8R8_USCALED:\r\n      case VK_FORMAT_B8G8R8_SSCALED:\r\n      case"
+  " VK_FORMAT_B8G8R8_UINT:\r\n      case VK_FORMAT_B8G8R8_SINT:\r\n      case VK_FORMAT_B8G8R8_SRGB:\r\n      case VK_FORMAT"
+  "_D24_UNORM_S8_UINT: return 3.0;\r\n\r\n      case VK_FORMAT_R8G8B8A8_UNORM:\r\n      case VK_FORMAT_R8G8B8A8_SNORM:\r\n  "
+  "    case VK_FORMAT_R8G8B8A8_USCALED:\r\n      case VK_FORMAT_R8G8B8A8_SSCALED:\r\n      case VK_FORMAT_R8G8B8A8_UINT:\r\n"
+  "      case VK_FORMAT_R8G8B8A8_SINT:\r\n      case VK_FORMAT_R8G8B8A8_SRGB:\r\n      case VK_FORMAT_B8G8R8A8_UNORM:\r\n   "
+  "   case VK_FORMAT_B8G8R8A8_SNORM:\r\n      case VK_FORMAT_B8G8R8A8_USCALED:\r\n      case VK_FORMAT_B8G8R8A8_SSCALED:\r\n"
+  "      case VK_FORMAT_B8G8R8A8_UINT:\r\n      case VK_FORMAT_B8G8R8A8_SINT:\r\n      case VK_FORMAT_B8G8R8A8_SRGB:\r\n    "
+  "  case VK_FORMAT_A8B8G8R8_UNORM_PACK32:\r\n      case VK_FORMAT_A8B8G8R8_SNORM_PACK32:\r\n      case VK_FORMAT_A8B8G8R8_U"
+  "SCALED_PACK32:\r\n      case VK_FORMAT_A8B8G8R8_SSCALED_PACK32:\r\n      case VK_FORMAT_A8B8G8R8_UINT_PACK32:\r\n      ca"
+  "se VK_FORMAT_A8B8G8R8_SINT_PACK32:\r\n      case VK_FORMAT_A8B8G8R8_SRGB_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_UNOR"
+  "M_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_SNORM_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_USCALED_PACK32:\r\n      "
+  "case VK_FORMAT_A2R10G10B10_SSCALED_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_UINT_PACK32:\r\n      case VK_FORMAT_A2R10"
+  "G10B10_SINT_PACK32:\r\n      case VK_FORMAT_A2B10G10R10_UNORM_PACK32:\r\n      case VK_FORMAT_A2B10G10R10_SNORM_PACK32:\r"
+  "\n      case VK_FORMAT_A2B10G10R10_USCALED_PACK32:\r\n      case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:\r\n      case VK_F"
+  "ORMAT_A2B10G10R10_UINT_PACK32:\r\n      case VK_FORMAT_A2B10G10R10_SINT_PACK32:\r\n      case VK_FORMAT_R16G16_UNORM:\r\n"
+  "      case VK_FORMAT_R16G16_SNORM:\r\n      case VK_FORMAT_R16G16_USCALED:\r\n      case VK_FORMAT_R16G16_SSCALED:\r\n   "
+  "   case VK_FORMAT_R16G16_UINT:\r\n      case VK_FORMAT_R16G16_SINT:\r\n      case VK_FORMAT_R16G16_SFLOAT:\r\n      case "
+  "VK_FORMAT_R32_UINT:\r\n      case VK_FORMAT_R32_SINT:\r\n      case VK_FORMAT_R32_SFLOAT:\r\n      case VK_FORMAT_B10G11R"
+  "11_UFLOAT_PACK32:\r\n      case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32:\r\n      case VK_FORMAT_D32_SFLOAT:\r\n      case VK_FO"
+  "RMAT_D32_SFLOAT_S8_UINT: return 4.0;\r\n\r\n      case VK_FORMAT_R16G16B16_UNORM:\r\n      case VK_FORMAT_R16G16B16_SNORM"
+  ":\r\n      case VK_FORMAT_R16G16B16_USCALED:\r\n      case VK_FORMAT_R16G16B16_SSCALED:\r\n      case VK_FORMAT_R16G16B16"
+  "_UINT:\r\n      case VK_FORMAT_R16G16B16_SINT:\r\n      case VK_FORMAT_R16G16B16_SFLOAT:\r\n      return 6.0f;\r\n\r\n   "
+  "   case VK_FORMAT_R16G16B16A16_UNORM:\r\n      case VK_FORMAT_R16G16B16A16_SNORM:\r\n      case VK_FORMAT_R16G16B16A16_US"
+  "CALED:\r\n      case VK_FORMAT_R16G16B16A16_SSCALED:\r\n      case VK_FORMAT_R16G16B16A16_UINT:\r\n      case VK_FORMAT_R"
+  "16G16B16A16_SINT:\r\n      case VK_FORMAT_R16G16B16A16_SFLOAT:\r\n      case VK_FORMAT_R32G32_UINT:\r\n      case VK_FORM"
+  "AT_R32G32_SINT:\r\n      case VK_FORMAT_R32G32_SFLOAT:\r\n      case VK_FORMAT_R64_UINT:\r\n      case VK_FORMAT_R64_SINT"
+  ":\r\n      case VK_FORMAT_R64_SFLOAT: return 8.0;\r\n\r\n      case VK_FORMAT_R32G32B32_UINT:\r\n      case VK_FORMAT_R32"
+  "G32B32_SINT:\r\n      case VK_FORMAT_R32G32B32_SFLOAT:\r\n\r\n      return 12.0;\r\n\r\n      case VK_FORMAT_R32G32B32A32"
+  "_UINT:\r\n      case VK_FORMAT_R32G32B32A32_SINT:\r\n      case VK_FORMAT_R32G32B32A32_SFLOAT:\r\n      case VK_FORMAT_R6"
+  "4G64_UINT:\r\n      case VK_FORMAT_R64G64_SINT:\r\n      case VK_FORMAT_R64G64_SFLOAT: return 16.0;\r\n\r\n      case VK_"
+  "FORMAT_R64G64B64_UINT:\r\n      case VK_FORMAT_R64G64B64_SINT:\r\n      case VK_FORMAT_R64G64B64_SFLOAT:\r\n      return "
+  "24.0;\r\n\r\n      case VK_FORMAT_R64G64B64A64_UINT:\r\n      case VK_FORMAT_R64G64B64A64_SINT:\r\n      case VK_FORMAT_R"
+  "64G64B64A64_SFLOAT:\r\n      return 32.0;\r\n\r\n      case VK_FORMAT_BC2_SRGB_BLOCK:\r\n      case VK_FORMAT_BC2_UNORM_B"
+  "LOCK:\r\n      case VK_FORMAT_BC3_SRGB_BLOCK:\r\n      case VK_FORMAT_BC3_UNORM_BLOCK:\r\n      case VK_FORMAT_BC5_SNORM_"
+  "BLOCK:\r\n      case VK_FORMAT_BC5_UNORM_BLOCK:\r\n      case VK_FORMAT_BC6H_SFLOAT_BLOCK:\r\n      case VK_FORMAT_BC6H_U"
+  "FLOAT_BLOCK:\r\n      case VK_FORMAT_BC7_SRGB_BLOCK:\r\n      case VK_FORMAT_BC7_UNORM_BLOCK: return 1.0;\r\n\r\n      ca"
+  "se VK_FORMAT_BC1_RGB_UNORM_BLOCK:\r\n      case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:\r\n      case VK_FORMAT_BC1_RGB_SRGB_BLOC"
+  "K:\r\n      case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:\r\n      case VK_FORMAT_BC4_SNORM_BLOCK:\r\n      case VK_FORMAT_BC4_UNOR"
+  "M_BLOCK: return 0.5;\r\n\r\n      default: assert(0);\r\n    }\r\n  }\r\n  return 0.0;\r\n}\r\n\r\nuint32_t ChannelsInFor"
+  "mat(VkFormat fmt) {\r\n    switch (fmt) {\r\n\r\n      case VK_FORMAT_R8_UNORM:\r\n      case VK_FORMAT_R8_SNORM:\r\n    "
+  "  case VK_FORMAT_R8_USCALED:\r\n      case VK_FORMAT_R8_SSCALED:\r\n      case VK_FORMAT_R8_UINT:\r\n      case VK_FORMAT"
+  "_R8_SINT:\r\n      case VK_FORMAT_R8_SRGB:\r\n      case VK_FORMAT_R16_UNORM:\r\n      case VK_FORMAT_R16_SNORM:\r\n     "
+  " case VK_FORMAT_R16_USCALED:\r\n      case VK_FORMAT_R16_SSCALED:\r\n      case VK_FORMAT_R16_UINT:\r\n      case VK_FORM"
+  "AT_R16_SINT:\r\n      case VK_FORMAT_R16_SFLOAT:\r\n      case VK_FORMAT_D16_UNORM:\r\n      case VK_FORMAT_D16_UNORM_S8_"
+  "UINT:\r\n      case VK_FORMAT_D24_UNORM_S8_UINT:\r\n      case VK_FORMAT_R32_UINT:\r\n      case VK_FORMAT_R32_SINT:\r\n "
+  "     case VK_FORMAT_R32_SFLOAT:\r\n      case VK_FORMAT_D32_SFLOAT:\r\n      case VK_FORMAT_D32_SFLOAT_S8_UINT:\r\n      "
+  "case VK_FORMAT_R64_UINT:\r\n      case VK_FORMAT_R64_SINT:\r\n      case VK_FORMAT_R64_SFLOAT:\r\n      return 1;\r\n\r\n"
+  "      case VK_FORMAT_R4G4_UNORM_PACK8:\r\n      case VK_FORMAT_R8G8_UNORM:\r\n      case VK_FORMAT_R8G8_SNORM:\r\n      c"
+  "ase VK_FORMAT_R8G8_USCALED:\r\n      case VK_FORMAT_R8G8_SSCALED:\r\n      case VK_FORMAT_R8G8_UINT:\r\n      case VK_FOR"
+  "MAT_R8G8_SINT:\r\n      case VK_FORMAT_R8G8_SRGB:\r\n      case VK_FORMAT_R16G16_UNORM:\r\n      case VK_FORMAT_R16G16_SN"
+  "ORM:\r\n      case VK_FORMAT_R16G16_USCALED:\r\n      case VK_FORMAT_R16G16_SSCALED:\r\n      case VK_FORMAT_R16G16_UINT:"
+  "\r\n      case VK_FORMAT_R16G16_SINT:\r\n      case VK_FORMAT_R16G16_SFLOAT:\r\n      case VK_FORMAT_R32G32_UINT:\r\n    "
+  "  case VK_FORMAT_R32G32_SINT:\r\n      case VK_FORMAT_R32G32_SFLOAT:\r\n      case VK_FORMAT_R64G64_UINT:\r\n      case V"
+  "K_FORMAT_R64G64_SINT:\r\n      case VK_FORMAT_R64G64_SFLOAT:\r\n      return 2;\r\n\r\n      case VK_FORMAT_R5G6B5_UNORM_"
+  "PACK16:\r\n      case VK_FORMAT_B5G6R5_UNORM_PACK16:\r\n      case VK_FORMAT_R8G8B8_UNORM:\r\n      case VK_FORMAT_R8G8B8"
+  "_SNORM:\r\n      case VK_FORMAT_R8G8B8_USCALED:\r\n      case VK_FORMAT_R8G8B8_SSCALED:\r\n      case VK_FORMAT_R8G8B8_UI"
+  "NT:\r\n      case VK_FORMAT_R8G8B8_SINT:\r\n      case VK_FORMAT_R8G8B8_SRGB:\r\n      case VK_FORMAT_B8G8R8_UNORM:\r\n  "
+  "    case VK_FORMAT_B8G8R8_SNORM:\r\n      case VK_FORMAT_B8G8R8_USCALED:\r\n      case VK_FORMAT_B8G8R8_SSCALED:\r\n     "
+  " case VK_FORMAT_B8G8R8_UINT:\r\n      case VK_FORMAT_B8G8R8_SINT:\r\n      case VK_FORMAT_B8G8R8_SRGB:\r\n      case VK_F"
+  "ORMAT_B10G11R11_UFLOAT_PACK32:\r\n      case VK_FORMAT_R16G16B16_UNORM:\r\n      case VK_FORMAT_R16G16B16_SNORM:\r\n     "
+  " case VK_FORMAT_R16G16B16_USCALED:\r\n      case VK_FORMAT_R16G16B16_SSCALED:\r\n      case VK_FORMAT_R16G16B16_UINT:\r\n"
+  "      case VK_FORMAT_R16G16B16_SINT:\r\n      case VK_FORMAT_R16G16B16_SFLOAT:\r\n      case VK_FORMAT_R32G32B32_UINT:\r\n"
+  "      case VK_FORMAT_R32G32B32_SINT:\r\n      case VK_FORMAT_R32G32B32_SFLOAT:\r\n      case VK_FORMAT_R64G64B64_UINT:\r\n"
+  "      case VK_FORMAT_R64G64B64_SINT:\r\n      case VK_FORMAT_R64G64B64_SFLOAT:\r\n      return 3;\r\n\r\n      case VK_FO"
+  "RMAT_R4G4B4A4_UNORM_PACK16:\r\n      case VK_FORMAT_B4G4R4A4_UNORM_PACK16:\r\n      case VK_FORMAT_R5G5B5A1_UNORM_PACK16:"
+  "\r\n      case VK_FORMAT_B5G5R5A1_UNORM_PACK16:\r\n      case VK_FORMAT_A1R5G5B5_UNORM_PACK16:\r\n      case VK_FORMAT_R8"
+  "G8B8A8_UNORM:\r\n      case VK_FORMAT_R8G8B8A8_SNORM:\r\n      case VK_FORMAT_R8G8B8A8_USCALED:\r\n      case VK_FORMAT_R"
+  "8G8B8A8_SSCALED:\r\n      case VK_FORMAT_R8G8B8A8_UINT:\r\n      case VK_FORMAT_R8G8B8A8_SINT:\r\n      case VK_FORMAT_R8"
+  "G8B8A8_SRGB:\r\n      case VK_FORMAT_B8G8R8A8_UNORM:\r\n      case VK_FORMAT_B8G8R8A8_SNORM:\r\n      case VK_FORMAT_B8G8"
+  "R8A8_USCALED:\r\n      case VK_FORMAT_B8G8R8A8_SSCALED:\r\n      case VK_FORMAT_B8G8R8A8_UINT:\r\n      case VK_FORMAT_B8"
+  "G8R8A8_SINT:\r\n      case VK_FORMAT_B8G8R8A8_SRGB:\r\n      case VK_FORMAT_A8B8G8R8_UNORM_PACK32:\r\n      case VK_FORMA"
+  "T_A8B8G8R8_SNORM_PACK32:\r\n      case VK_FORMAT_A8B8G8R8_USCALED_PACK32:\r\n      case VK_FORMAT_A8B8G8R8_SSCALED_PACK32"
+  ":\r\n      case VK_FORMAT_A8B8G8R8_UINT_PACK32:\r\n      case VK_FORMAT_A8B8G8R8_SINT_PACK32:\r\n      case VK_FORMAT_A8B"
+  "8G8R8_SRGB_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_UNORM_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_SNORM_PACK32:\r\n"
+  "      case VK_FORMAT_A2R10G10B10_USCALED_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_SSCALED_PACK32:\r\n      case VK_FOR"
+  "MAT_A2R10G10B10_UINT_PACK32:\r\n      case VK_FORMAT_A2R10G10B10_SINT_PACK32:\r\n      case VK_FORMAT_A2B10G10R10_UNORM_P"
+  "ACK32:\r\n      case VK_FORMAT_A2B10G10R10_SNORM_PACK32:\r\n      case VK_FORMAT_A2B10G10R10_USCALED_PACK32:\r\n      cas"
+  "e VK_FORMAT_A2B10G10R10_SSCALED_PACK32:\r\n      case VK_FORMAT_A2B10G10R10_UINT_PACK32:\r\n      case VK_FORMAT_A2B10G10"
+  "R10_SINT_PACK32:\r\n      case VK_FORMAT_E5B9G9R9_UFLOAT_PACK32:\r\n      case VK_FORMAT_R16G16B16A16_UNORM:\r\n      cas"
+  "e VK_FORMAT_R16G16B16A16_SNORM:\r\n      case VK_FORMAT_R16G16B16A16_USCALED:\r\n      case VK_FORMAT_R16G16B16A16_SSCALE"
+  "D:\r\n      case VK_FORMAT_R16G16B16A16_UINT:\r\n      case VK_FORMAT_R16G16B16A16_SINT:\r\n      case VK_FORMAT_R16G16B1"
+  "6A16_SFLOAT:\r\n      case VK_FORMAT_R32G32B32A32_UINT:\r\n      case VK_FORMAT_R32G32B32A32_SINT:\r\n      case VK_FORMA"
+  "T_R32G32B32A32_SFLOAT:\r\n      case VK_FORMAT_R64G64B64A64_UINT:\r\n      case VK_FORMAT_R64G64B64A64_SINT:\r\n      cas"
+  "e VK_FORMAT_R64G64B64A64_SFLOAT:\r\n      return 4;\r\n\r\n      default: assert(0);\r\n    }\r\n  return 0;\r\n}\r\n\r\n"
+  "bool isHDRFormat(VkFormat fmt) {\r\n  switch (fmt) {\r\n    case VK_FORMAT_R16_UINT:\r\n    case VK_FORMAT_R16_SINT:\r\n "
+  "   case VK_FORMAT_R16_SFLOAT:\r\n    case VK_FORMAT_D16_UNORM:\r\n    case VK_FORMAT_D16_UNORM_S8_UINT:\r\n    case VK_FO"
+  "RMAT_D24_UNORM_S8_UINT:\r\n    case VK_FORMAT_R32_UINT:\r\n    case VK_FORMAT_R32_SINT:\r\n    case VK_FORMAT_R32_SFLOAT:"
+  "\r\n    case VK_FORMAT_D32_SFLOAT:\r\n    case VK_FORMAT_D32_SFLOAT_S8_UINT:\r\n    case VK_FORMAT_R64_UINT:\r\n    case "
+  "VK_FORMAT_R64_SINT:\r\n    case VK_FORMAT_R64_SFLOAT:\r\n    case VK_FORMAT_R16G16_UINT:\r\n    case VK_FORMAT_R16G16_SIN"
+  "T:\r\n    case VK_FORMAT_R16G16_SFLOAT:\r\n    case VK_FORMAT_R32G32_UINT:\r\n    case VK_FORMAT_R32G32_SINT:\r\n    case"
+  " VK_FORMAT_R32G32_SFLOAT:\r\n    case VK_FORMAT_R64G64_UINT:\r\n    case VK_FORMAT_R64G64_SINT:\r\n    case VK_FORMAT_R64"
+  "G64_SFLOAT:\r\n    case VK_FORMAT_R16G16B16_UINT:\r\n    case VK_FORMAT_R16G16B16_SINT:\r\n    case VK_FORMAT_R16G16B16_S"
+  "FLOAT:\r\n    case VK_FORMAT_R32G32B32_UINT:\r\n    case VK_FORMAT_R32G32B32_SINT:\r\n    case VK_FORMAT_R32G32B32_SFLOAT"
+  ":\r\n    case VK_FORMAT_R64G64B64_UINT:\r\n    case VK_FORMAT_R64G64B64_SINT:\r\n    case VK_FORMAT_R64G64B64_SFLOAT:\r\n"
+  "    case VK_FORMAT_R16G16B16A16_UINT:\r\n    case VK_FORMAT_R16G16B16A16_SINT:\r\n    case VK_FORMAT_R16G16B16A16_SFLOAT:"
+  "\r\n    case VK_FORMAT_R32G32B32A32_UINT:\r\n    case VK_FORMAT_R32G32B32A32_SINT:\r\n    case VK_FORMAT_R32G32B32A32_SFL"
+  "OAT:\r\n    case VK_FORMAT_R64G64B64A64_UINT:\r\n    case VK_FORMAT_R64G64B64A64_SINT:\r\n    case VK_FORMAT_R64G64B64A64"
+  "_SFLOAT:\r\n    return true;\r\n\r\n    default: return false;\r\n  }\r\n  return false;\r\n}\r\n\r\nuint32_t BitsPerChan"
+  "nelInFormat(VkFormat fmt, VkImageAspectFlagBits aspect) {\r\n  return static_cast<uint32_t>(SizeOfFormat(fmt, aspect) * 8"
+  " / ChannelsInFormat(fmt));\r\n}\r\n\r\nbool IsFPFormat(VkFormat fmt) {\r\n  switch (fmt) {\r\n    case VK_FORMAT_R16_SFLO"
+  "AT:\r\n    case VK_FORMAT_R32_SFLOAT:\r\n    case VK_FORMAT_D32_SFLOAT:\r\n    case VK_FORMAT_D32_SFLOAT_S8_UINT:\r\n    "
+  "case VK_FORMAT_R64_SFLOAT:\r\n    case VK_FORMAT_R16G16_SFLOAT:\r\n    case VK_FORMAT_R32G32_SFLOAT:\r\n    case VK_FORMA"
+  "T_R64G64_SFLOAT:\r\n    case VK_FORMAT_R16G16B16_SFLOAT:\r\n    case VK_FORMAT_R32G32B32_SFLOAT:\r\n    case VK_FORMAT_R6"
+  "4G64B64_SFLOAT:\r\n    case VK_FORMAT_R16G16B16A16_SFLOAT:\r\n    case VK_FORMAT_R32G32B32A32_SFLOAT:\r\n    case VK_FORM"
+  "AT_R64G64B64A64_SFLOAT:\r\n    return true;\r\n    default: return false;\r\n  }\r\n  return false;\r\n}\r\n\r\nbool IsSi"
+  "gnedFormat(VkFormat fmt) {\r\n  switch (fmt) {\r\n    case VK_FORMAT_R8_SNORM:\r\n    case VK_FORMAT_R8_SSCALED:\r\n    c"
+  "ase VK_FORMAT_R8_SINT:\r\n    case VK_FORMAT_R8G8_SNORM:\r\n    case VK_FORMAT_R8G8_SSCALED:\r\n    case VK_FORMAT_R8G8_S"
+  "INT:\r\n    case VK_FORMAT_R8G8B8_SNORM:\r\n    case VK_FORMAT_R8G8B8_SSCALED:\r\n    case VK_FORMAT_R8G8B8_SINT:\r\n    "
+  "case VK_FORMAT_R8G8B8A8_SNORM:\r\n    case VK_FORMAT_R8G8B8A8_SSCALED:\r\n    case VK_FORMAT_R8G8B8A8_SINT:\r\n    case V"
+  "K_FORMAT_B8G8R8_SNORM:\r\n    case VK_FORMAT_B8G8R8_SSCALED:\r\n    case VK_FORMAT_B8G8R8_SINT:\r\n    case VK_FORMAT_B8G"
+  "8R8A8_SNORM:\r\n    case VK_FORMAT_B8G8R8A8_SSCALED:\r\n    case VK_FORMAT_B8G8R8A8_SINT:\r\n    case VK_FORMAT_R16_SINT:"
+  "\r\n    case VK_FORMAT_R16_SFLOAT:\r\n    case VK_FORMAT_R32_SINT:\r\n    case VK_FORMAT_R32_SFLOAT:\r\n    case VK_FORMA"
+  "T_D32_SFLOAT:\r\n    case VK_FORMAT_D32_SFLOAT_S8_UINT:\r\n    case VK_FORMAT_R64_SINT:\r\n    case VK_FORMAT_R64_SFLOAT:"
+  "\r\n    case VK_FORMAT_R16G16_SINT:\r\n    case VK_FORMAT_R16G16_SFLOAT:\r\n    case VK_FORMAT_R32G32_SINT:\r\n    case V"
+  "K_FORMAT_R32G32_SFLOAT:\r\n    case VK_FORMAT_R64G64_SINT:\r\n    case VK_FORMAT_R64G64_SFLOAT:\r\n    case VK_FORMAT_R16"
+  "G16B16_SINT:\r\n    case VK_FORMAT_R16G16B16_SFLOAT:\r\n    case VK_FORMAT_R32G32B32_SINT:\r\n    case VK_FORMAT_R32G32B3"
+  "2_SFLOAT:\r\n    case VK_FORMAT_R64G64B64_SINT:\r\n    case VK_FORMAT_R64G64B64_SFLOAT:\r\n    case VK_FORMAT_R16G16B16A1"
+  "6_SINT:\r\n    case VK_FORMAT_R16G16B16A16_SFLOAT:\r\n    case VK_FORMAT_R32G32B32A32_SINT:\r\n    case VK_FORMAT_R32G32B"
+  "32A32_SFLOAT:\r\n    case VK_FORMAT_R64G64B64A64_SINT:\r\n    case VK_FORMAT_R64G64B64A64_SFLOAT:\r\n    return true;\r\n"
+  "    default: return false;\r\n  }\r\n  return false;\r\n}\r\n\r\nuint32_t MinDimensionSize(VkFormat format) {\r\n  switch"
+  " (format) {\r\n    case VK_FORMAT_BC1_RGB_UNORM_BLOCK:\r\n    case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:\r\n    case VK_FORMAT_"
+  "BC1_RGB_SRGB_BLOCK:\r\n    case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:\r\n    case VK_FORMAT_BC2_SRGB_BLOCK:\r\n    case VK_FORMA"
+  "T_BC2_UNORM_BLOCK:\r\n    case VK_FORMAT_BC3_SRGB_BLOCK:\r\n    case VK_FORMAT_BC3_UNORM_BLOCK:\r\n    case VK_FORMAT_BC4"
+  "_SNORM_BLOCK:\r\n    case VK_FORMAT_BC4_UNORM_BLOCK:\r\n    case VK_FORMAT_BC5_SNORM_BLOCK:\r\n    case VK_FORMAT_BC5_UNO"
+  "RM_BLOCK:\r\n    case VK_FORMAT_BC6H_SFLOAT_BLOCK:\r\n    case VK_FORMAT_BC6H_UFLOAT_BLOCK:\r\n    case VK_FORMAT_BC7_SRG"
+  "B_BLOCK:\r\n    case VK_FORMAT_BC7_UNORM_BLOCK:\r\n    return 4;\r\n\r\n    default: return 1;\r\n  }\r\n}\r\n\r\nbool Is"
+  "DepthFormat(VkFormat fmt) {\r\n  return\r\n    (fmt == VK_FORMAT_D16_UNORM ||\r\n     fmt == VK_FORMAT_D16_UNORM_S8_UINT "
+  "||\r\n     fmt == VK_FORMAT_D24_UNORM_S8_UINT ||\r\n     fmt == VK_FORMAT_D32_SFLOAT ||\r\n     fmt == VK_FORMAT_D32_SFLO"
+  "AT_S8_UINT);\r\n}\r\n";
 const char fileData_23[] =
   "/******************************************************************************\r\n * The MIT License (MIT)\r\n *\r\n * C"
   "opyright (c) 2018 Google LLC\r\n *\r\n * Permission is hereby granted, free of charge, to any person obtaining a copy\r\n"
@@ -9747,125 +9753,128 @@ const char fileData_23[] =
   "DebugMarkerSetObjectNameEXT) vkGetInstanceProcAddr(instance, \"vkDebugMarkerSetObjectNameEXT\");\r\n    vkCmdDebugMarkerB"
   "egin = (PFN_vkCmdDebugMarkerBeginEXT) vkGetInstanceProcAddr(instance, \"vkCmdDebugMarkerBeginEXT\");\r\n    vkCmdDebugMar"
   "kerEnd = (PFN_vkCmdDebugMarkerEndEXT) vkGetInstanceProcAddr(instance, \"vkCmdDebugMarkerEndEXT\");\r\n    vkCmdDebugMarke"
-  "rInsert = (PFN_vkCmdDebugMarkerInsertEXT) vkGetInstanceProcAddr(instance, \"vkCmdDebugMarkerInsertEXT\");\r\n  }\r\n}\r\n"
-  "\r\nint32_t MemoryTypeIndex(VkMemoryPropertyFlags mask, uint32_t bits,\r\n                        VkPhysicalDeviceMemoryP"
-  "roperties memory_props)\r\n{\r\n  for(uint32_t i = 0; i < memory_props.memoryTypeCount; ++i)\r\n  {\r\n    if((bits & 1) "
-  "== 1)\r\n    {\r\n      // Type is available, does it match user properties?\r\n      if((memory_props.memoryTypes[i].pro"
-  "pertyFlags & mask) == mask)\r\n      {\r\n        return i;\r\n      }\r\n    }\r\n    bits = bits >> 1;\r\n  }\r\n  retu"
-  "rn -1;\r\n}\r\n\r\nuint32_t CompatibleMemoryTypeIndex(uint32_t type, const VkPhysicalDeviceMemoryProperties &captured,\r\n"
-  "                                   const VkPhysicalDeviceMemoryProperties &present, uint32_t bits)\r\n{\r\n  // When the "
-  "application was captured this is the property flag that was\r\n  // picked as compatible. Try to find the closest match.\r"
-  "\n  // This if fairly conservative and here is an example where this might fail:\r\n  // Let System A, where the trace is"
-  " captured, has all the memory marked as\r\n  // DEVICE_LOCAL_BIT | HOST_VISIBLE_BIT (for example UMA devices).\r\n  // Th"
-  "e application requests a memory allocation with just a\r\n  // HOST_VISIBLE_BIT but gets a memory type index that points "
-  "to\r\n  // HOST_VISIBLE_BIT | DEVICE_LOCAL_BIT. On System B, memory is split into:\r\n  // 1. HOST_VISIBLE 2. DEVICE_LOCA"
-  "L and 3. HOST_VISIBLE | DEVICE_LOCAL.\r\n  // Since the captured memory type was HOST_VISIBLE | DEVICE_LOCAL on replay\r\n"
-  "  // the 3rd memory segment will get selected.\r\n  VkMemoryType mem_type = captured.memoryTypes[type];\r\n  VkMemoryProp"
-  "ertyFlags propertyFlag = mem_type.propertyFlags;\r\n\r\n  // All memory types are approved with 0xFFFFFFFF bits\r\n  retu"
-  "rn MemoryTypeIndex(propertyFlag, bits, present);\r\n}\r\n\r\nVkResult CheckMemoryAllocationCompatibility(uint32_t type,\r"
-  "\n                                            const VkPhysicalDeviceMemoryProperties &captured,\r\n                      "
-  "                      const VkPhysicalDeviceMemoryProperties &present,\r\n                                            con"
-  "st VkMemoryRequirements &requirements)\r\n{\r\n  VkMemoryType mem_type = captured.memoryTypes[type];\r\n  VkMemoryPropert"
-  "yFlags propertyFlag = mem_type.propertyFlags;\r\n\r\n  uint32_t compat_type =\r\n      CompatibleMemoryTypeIndex(type, ca"
-  "ptured, present, requirements.memoryTypeBits);\r\n\r\n  uint32_t current = MemoryTypeIndex(propertyFlag, requirements.mem"
-  "oryTypeBits, present);\r\n\r\n  return (compat_type == current ? VK_SUCCESS : VK_ERROR_VALIDATION_FAILED_EXT);\r\n}\r\n\r"
-  "\nvoid ReadBuffer(const char *name, std::vector<uint8_t> &buf)\r\n{\r\n  FILE *f = fopen(name, \"rb\");\r\n  if(f == NULL"
-  ")\r\n  {\r\n    return;\r\n  }\r\n\r\n  fseek(f, 0, SEEK_END);\r\n  uint64_t length = ftell(f);\r\n  buf.resize(length);\r"
-  "\n  rewind(f);\r\n\r\n  uint64_t result = fread(buf.data(), 1, length, f);\r\n  fclose(f);\r\n  assert(result <= length);"
-  "\r\n}\r\n\r\n#define ReportMismatchedFeature(x, y)                                                             \\\r\n  if"
-  "(x > y)                                                                                       \\\r\n  {                  "
-  "                                                                             \\\r\n    fprintf(stdout, \"%s (%d) doesn't "
-  "match %s (%d)\\n\", var_to_string(x), x, var_to_string(y), y); \\\r\n    x = y;                                          "
-  "                                              \\\r\n  }\r\n\r\nvoid MakePhysicalDeviceFeaturesMatch(const VkPhysicalDevic"
-  "eFeatures &available,\r\n                                     VkPhysicalDeviceFeatures *captured_request)\r\n{\r\n  Repor"
-  "tMismatchedFeature(captured_request->robustBufferAccess, available.robustBufferAccess);\r\n  ReportMismatchedFeature(capt"
-  "ured_request->fullDrawIndexUint32, available.fullDrawIndexUint32);\r\n  ReportMismatchedFeature(captured_request->imageCu"
-  "beArray, available.imageCubeArray);\r\n  ReportMismatchedFeature(captured_request->independentBlend, available.independen"
-  "tBlend);\r\n  ReportMismatchedFeature(captured_request->geometryShader, available.geometryShader);\r\n  ReportMismatchedF"
-  "eature(captured_request->tessellationShader, available.tessellationShader);\r\n  ReportMismatchedFeature(captured_request"
-  "->sampleRateShading, available.sampleRateShading);\r\n  ReportMismatchedFeature(captured_request->dualSrcBlend, available"
-  ".dualSrcBlend);\r\n  ReportMismatchedFeature(captured_request->logicOp, available.logicOp);\r\n  ReportMismatchedFeature("
-  "captured_request->multiDrawIndirect, available.multiDrawIndirect);\r\n  ReportMismatchedFeature(captured_request->drawInd"
-  "irectFirstInstance,\r\n                          available.drawIndirectFirstInstance);\r\n  ReportMismatchedFeature(captu"
-  "red_request->depthClamp, available.depthClamp);\r\n  ReportMismatchedFeature(captured_request->depthBiasClamp, available."
-  "depthBiasClamp);\r\n  ReportMismatchedFeature(captured_request->fillModeNonSolid, available.fillModeNonSolid);\r\n  Repor"
-  "tMismatchedFeature(captured_request->depthBounds, available.depthBounds);\r\n  ReportMismatchedFeature(captured_request->"
-  "wideLines, available.wideLines);\r\n  ReportMismatchedFeature(captured_request->largePoints, available.largePoints);\r\n "
-  " ReportMismatchedFeature(captured_request->alphaToOne, available.alphaToOne);\r\n  ReportMismatchedFeature(captured_reque"
-  "st->multiViewport, available.multiViewport);\r\n  ReportMismatchedFeature(captured_request->samplerAnisotropy, available."
-  "samplerAnisotropy);\r\n  ReportMismatchedFeature(captured_request->textureCompressionETC2, available.textureCompressionET"
-  "C2);\r\n  ReportMismatchedFeature(captured_request->textureCompressionASTC_LDR,\r\n                          available.te"
-  "xtureCompressionASTC_LDR);\r\n  ReportMismatchedFeature(captured_request->textureCompressionBC, available.textureCompress"
-  "ionBC);\r\n  ReportMismatchedFeature(captured_request->occlusionQueryPrecise, available.occlusionQueryPrecise);\r\n  Repo"
-  "rtMismatchedFeature(captured_request->pipelineStatisticsQuery,\r\n                          available.pipelineStatisticsQ"
-  "uery);\r\n  ReportMismatchedFeature(captured_request->vertexPipelineStoresAndAtomics,\r\n                          availa"
-  "ble.vertexPipelineStoresAndAtomics);\r\n  ReportMismatchedFeature(captured_request->fragmentStoresAndAtomics,\r\n        "
-  "                  available.fragmentStoresAndAtomics);\r\n  ReportMismatchedFeature(captured_request->shaderTessellationA"
-  "ndGeometryPointSize,\r\n                          available.shaderTessellationAndGeometryPointSize);\r\n  ReportMismatche"
-  "dFeature(captured_request->shaderImageGatherExtended,\r\n                          available.shaderImageGatherExtended);\r"
-  "\n  ReportMismatchedFeature(captured_request->shaderStorageImageExtendedFormats,\r\n                          available.s"
-  "haderStorageImageExtendedFormats);\r\n  ReportMismatchedFeature(captured_request->shaderStorageImageMultisample,\r\n     "
-  "                     available.shaderStorageImageMultisample);\r\n  ReportMismatchedFeature(captured_request->shaderStora"
-  "geImageReadWithoutFormat,\r\n                          available.shaderStorageImageReadWithoutFormat);\r\n  ReportMismatc"
-  "hedFeature(captured_request->shaderStorageImageWriteWithoutFormat,\r\n                          available.shaderStorageIm"
-  "ageWriteWithoutFormat);\r\n  ReportMismatchedFeature(captured_request->shaderUniformBufferArrayDynamicIndexing,\r\n      "
-  "                    available.shaderUniformBufferArrayDynamicIndexing);\r\n  ReportMismatchedFeature(captured_request->sh"
-  "aderSampledImageArrayDynamicIndexing,\r\n                          available.shaderSampledImageArrayDynamicIndexing);\r\n"
-  "  ReportMismatchedFeature(captured_request->shaderStorageBufferArrayDynamicIndexing,\r\n                          availab"
-  "le.shaderStorageBufferArrayDynamicIndexing);\r\n  ReportMismatchedFeature(captured_request->shaderStorageImageArrayDynami"
-  "cIndexing,\r\n                          available.shaderStorageImageArrayDynamicIndexing);\r\n  ReportMismatchedFeature(c"
-  "aptured_request->shaderClipDistance, available.shaderClipDistance);\r\n  ReportMismatchedFeature(captured_request->shader"
-  "CullDistance, available.shaderCullDistance);\r\n  ReportMismatchedFeature(captured_request->shaderFloat64, available.shad"
-  "erFloat64);\r\n  ReportMismatchedFeature(captured_request->shaderInt64, available.shaderInt64);\r\n  ReportMismatchedFeat"
-  "ure(captured_request->shaderInt16, available.shaderInt16);\r\n  ReportMismatchedFeature(captured_request->shaderResourceR"
-  "esidency,\r\n                          available.shaderResourceResidency);\r\n  ReportMismatchedFeature(captured_request-"
-  ">shaderResourceMinLod, available.shaderResourceMinLod);\r\n  ReportMismatchedFeature(captured_request->sparseBinding, ava"
-  "ilable.sparseBinding);\r\n  ReportMismatchedFeature(captured_request->sparseResidencyBuffer, available.sparseResidencyBuf"
-  "fer);\r\n  ReportMismatchedFeature(captured_request->sparseResidencyImage2D, available.sparseResidencyImage2D);\r\n  Repo"
-  "rtMismatchedFeature(captured_request->sparseResidencyImage3D, available.sparseResidencyImage3D);\r\n  ReportMismatchedFea"
-  "ture(captured_request->sparseResidency2Samples,\r\n                          available.sparseResidency2Samples);\r\n  Rep"
-  "ortMismatchedFeature(captured_request->sparseResidency4Samples,\r\n                          available.sparseResidency4Sa"
-  "mples);\r\n  ReportMismatchedFeature(captured_request->sparseResidency8Samples,\r\n                          available.sp"
-  "arseResidency8Samples);\r\n  ReportMismatchedFeature(captured_request->sparseResidency16Samples,\r\n                     "
-  "     available.sparseResidency16Samples);\r\n  ReportMismatchedFeature(captured_request->sparseResidencyAliased, availabl"
-  "e.sparseResidencyAliased);\r\n  ReportMismatchedFeature(captured_request->variableMultisampleRate,\r\n                   "
-  "       available.variableMultisampleRate);\r\n  ReportMismatchedFeature(captured_request->inheritedQueries, available.inh"
-  "eritedQueries);\r\n}\r\n\r\nbool RegionsOverlap(const Region &r1, const Region &r2)\r\n{\r\n  // interval '1' and '2' sta"
-  "rt and end points:\r\n  uint64_t i1_start = r1.offset;\r\n  uint64_t i1_end = r1.offset + r1.size;\r\n  uint64_t i2_start"
-  " = r2.offset;\r\n  uint64_t i2_end = r2.offset + r2.size;\r\n\r\n  // two intervals i1 [s, e] and i2 [s, e] intersect\r\n"
-  "  // if X = max(i1.s, i2.s) < Y = min(i1.e, i2.e).\r\n  return std::max<uint64_t>(i1_start, i2_start) < std::min<uint64_t"
-  ">(i1_end, i2_end);\r\n}\r\n\r\n// RegionsIntersect(A, B) == RegionsIntersect(B, A)\r\nRegion RegionsIntersect(const Regio"
-  "n &r1, const Region &r2)\r\n{\r\n  Region r;\r\n\r\n  // two intervals i1 [s, e] and i2 [s, e] intersect\r\n  // if X = m"
-  "ax(i1.s, i2.s) < Y = min(i1.e, i2.e).\r\n  r.offset = std::max<uint64_t>(r1.offset, r2.offset);\r\n  r.size = std::min<ui"
-  "nt64_t>(r1.offset + r1.size, r2.offset + r2.size) - r.offset;\r\n  return r;\r\n}\r\n\r\nvoid MapUpdate(AuxVkTraceResourc"
-  "es aux, uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,\r\n               VkMemoryAllocateInfo &ai, MemoryR"
-  "emapVec &remap, VkDevice dev)\r\n{\r\n  if(dst != NULL)\r\n  {\r\n    std::vector<VkMappedMemoryRange> ranges;\r\n    Reg"
-  "ion memory_region = {range.offset, range.size};\r\n    assert(range.size != VK_WHOLE_SIZE);\r\n\r\n    if(remap.size() > "
-  "0)\r\n    {\r\n      for(uint32_t i = 0; i < remap.size(); i++)\r\n      {\r\n        MemoryRemap mr = remap[i];\r\n     "
-  "   Region captured_resource_region(mr.capture.offset, mr.capture.size);\r\n        // If this memory range doesn't overla"
-  "p with any captured resource continue\r\n        if(!RegionsOverlap(memory_region, captured_resource_region))\r\n        "
-  "  continue;\r\n\r\n        // Find the inteval where these two regions overlap. It is guaranteed to be non-null.\r\n     "
-  "   Region intersect = RegionsIntersect(memory_region, captured_resource_region);\r\n\r\n        uint64_t skipped_resource"
-  "_bytes = intersect.offset - mr.capture.offset;\r\n        uint64_t skipped_memory_bytes = intersect.offset - memory_regio"
-  "n.offset;\r\n        intersect.size = std::min<uint64_t>(intersect.size, mr.replay.size);\r\n\r\n        memcpy(dst + mr."
-  "replay.offset + skipped_resource_bytes, src + skipped_memory_bytes,\r\n               intersect.size);\r\n\r\n        VkM"
-  "appedMemoryRange r = range;\r\n        r.offset = mr.replay.offset + skipped_resource_bytes;\r\n        r.size = AlignedS"
-  "ize(r.offset + intersect.size,\r\n                             aux.physDeviceProperties.limits.nonCoherentAtomSize);\r\n "
-  "       r.offset = AlignedDown(r.offset, aux.physDeviceProperties.limits.nonCoherentAtomSize);\r\n        r.size = r.size "
-  "- r.offset;\r\n        if(r.offset + r.size > range.offset + range.size || r.offset + r.size > ai.allocationSize)\r\n    "
-  "    {\r\n          r.size = VK_WHOLE_SIZE;\r\n        }\r\n        ranges.push_back(r);\r\n      }\r\n    }\r\n    else\r"
-  "\n    {\r\n      VkMappedMemoryRange r = range;\r\n      r.size = std::min<uint64_t>(ai.allocationSize, range.size);\r\n "
-  "     memcpy(dst + r.offset, src, r.size);\r\n      ranges.push_back(r);\r\n    }\r\n\r\n    VkResult result = vkFlushMapp"
-  "edMemoryRanges(dev, (uint32_t)ranges.size(), ranges.data());\r\n    assert(result == VK_SUCCESS);\r\n  }\r\n}\r\n\r\nbool"
-  " IsExtEnabled(const char *const *extList, uint32_t count, const char *ext)\r\n{\r\n  for(uint32_t i = 0; i < count; i++)\r"
-  "\n  {\r\n    if(strcmp(extList[i], ext) == 0)\r\n      return true;\r\n  }\r\n  return false;\r\n}\r\n\r\nbool IsExtSuppo"
-  "rted(VkPhysicalDevice physicalDevice, const char *ext)\r\n{\r\n  uint32_t extensionCount;\r\n  vkEnumerateDeviceExtension"
-  "Properties(physicalDevice, NULL, &extensionCount, NULL);\r\n  std::vector<VkExtensionProperties> extensions(extensionCoun"
-  "t);\r\n  vkEnumerateDeviceExtensionProperties(physicalDevice, NULL, &extensionCount, extensions.data());\r\n  for(auto ex"
-  "tension : extensions)\r\n  {\r\n    if(strcmp(extension.extensionName, ext) == 0)\r\n    {\r\n      return true;\r\n    }"
-  "\r\n  }\r\n  return false;\r\n}\r\n\r\nstd::string StageProgressString(const char *stage, uint32_t i, uint32_t N)\r\n{\r\n"
-  "  return std::string(\"RenderDoc Frame Loop: \" + std::string(stage) + \" part \" + std::to_string(i) +\r\n              "
-  "       \" of \" + std::to_string(N));\r\n}";
+  "rInsert = (PFN_vkCmdDebugMarkerInsertEXT) vkGetInstanceProcAddr(instance, \"vkCmdDebugMarkerInsertEXT\");\r\n  }\r\n\r\n "
+  " uint32_t queueFamilyPropertyCount;\r\n  vkGetPhysicalDeviceQueueFamilyProperties(aux->physDevice, &queueFamilyPropertyCo"
+  "unt, NULL);\r\n  assert(queueFamilyPropertyCount != 0);\r\n  aux->queueFamilyProperties.resize(queueFamilyPropertyCount);"
+  "\r\n  vkGetPhysicalDeviceQueueFamilyProperties(aux->physDevice, &queueFamilyPropertyCount,\r\n    aux->queueFamilyPropert"
+  "ies.data());\r\n}\r\n\r\nint32_t MemoryTypeIndex(VkMemoryPropertyFlags mask, uint32_t bits,\r\n                        Vk"
+  "PhysicalDeviceMemoryProperties memory_props)\r\n{\r\n  for(uint32_t i = 0; i < memory_props.memoryTypeCount; ++i)\r\n  {\r"
+  "\n    if((bits & 1) == 1)\r\n    {\r\n      // Type is available, does it match user properties?\r\n      if((memory_prop"
+  "s.memoryTypes[i].propertyFlags & mask) == mask)\r\n      {\r\n        return i;\r\n      }\r\n    }\r\n    bits = bits >>"
+  " 1;\r\n  }\r\n  return -1;\r\n}\r\n\r\nuint32_t CompatibleMemoryTypeIndex(uint32_t type, const VkPhysicalDeviceMemoryProp"
+  "erties &captured,\r\n                                   const VkPhysicalDeviceMemoryProperties &present, uint32_t bits)\r"
+  "\n{\r\n  // When the application was captured this is the property flag that was\r\n  // picked as compatible. Try to fin"
+  "d the closest match.\r\n  // This if fairly conservative and here is an example where this might fail:\r\n  // Let System"
+  " A, where the trace is captured, has all the memory marked as\r\n  // DEVICE_LOCAL_BIT | HOST_VISIBLE_BIT (for example UM"
+  "A devices).\r\n  // The application requests a memory allocation with just a\r\n  // HOST_VISIBLE_BIT but gets a memory t"
+  "ype index that points to\r\n  // HOST_VISIBLE_BIT | DEVICE_LOCAL_BIT. On System B, memory is split into:\r\n  // 1. HOST_"
+  "VISIBLE 2. DEVICE_LOCAL and 3. HOST_VISIBLE | DEVICE_LOCAL.\r\n  // Since the captured memory type was HOST_VISIBLE | DEV"
+  "ICE_LOCAL on replay\r\n  // the 3rd memory segment will get selected.\r\n  VkMemoryType mem_type = captured.memoryTypes[t"
+  "ype];\r\n  VkMemoryPropertyFlags propertyFlag = mem_type.propertyFlags;\r\n\r\n  // All memory types are approved with 0x"
+  "FFFFFFFF bits\r\n  return MemoryTypeIndex(propertyFlag, bits, present);\r\n}\r\n\r\nVkResult CheckMemoryAllocationCompati"
+  "bility(uint32_t type,\r\n                                            const VkPhysicalDeviceMemoryProperties &captured,\r\n"
+  "                                            const VkPhysicalDeviceMemoryProperties &present,\r\n                         "
+  "                   const VkMemoryRequirements &requirements)\r\n{\r\n  VkMemoryType mem_type = captured.memoryTypes[type]"
+  ";\r\n  VkMemoryPropertyFlags propertyFlag = mem_type.propertyFlags;\r\n\r\n  uint32_t compat_type =\r\n      CompatibleMe"
+  "moryTypeIndex(type, captured, present, requirements.memoryTypeBits);\r\n\r\n  uint32_t current = MemoryTypeIndex(property"
+  "Flag, requirements.memoryTypeBits, present);\r\n\r\n  return (compat_type == current ? VK_SUCCESS : VK_ERROR_VALIDATION_F"
+  "AILED_EXT);\r\n}\r\n\r\nvoid ReadBuffer(const char *name, std::vector<uint8_t> &buf)\r\n{\r\n  FILE *f = fopen(name, \"rb"
+  "\");\r\n  if(f == NULL)\r\n  {\r\n    return;\r\n  }\r\n\r\n  fseek(f, 0, SEEK_END);\r\n  uint64_t length = ftell(f);\r\n"
+  "  buf.resize(length);\r\n  rewind(f);\r\n\r\n  uint64_t result = fread(buf.data(), 1, length, f);\r\n  fclose(f);\r\n  as"
+  "sert(result <= length);\r\n}\r\n\r\n#define ReportMismatchedFeature(x, y)                                                "
+  "             \\\r\n  if(x > y)                                                                                       \\\r"
+  "\n  {                                                                                               \\\r\n    fprintf(std"
+  "out, \"%s (%d) doesn't match %s (%d)\\n\", var_to_string(x), x, var_to_string(y), y); \\\r\n    x = y;                   "
+  "                                                                     \\\r\n  }\r\n\r\nvoid MakePhysicalDeviceFeaturesMatc"
+  "h(const VkPhysicalDeviceFeatures &available,\r\n                                     VkPhysicalDeviceFeatures *captured_r"
+  "equest)\r\n{\r\n  ReportMismatchedFeature(captured_request->robustBufferAccess, available.robustBufferAccess);\r\n  Repor"
+  "tMismatchedFeature(captured_request->fullDrawIndexUint32, available.fullDrawIndexUint32);\r\n  ReportMismatchedFeature(ca"
+  "ptured_request->imageCubeArray, available.imageCubeArray);\r\n  ReportMismatchedFeature(captured_request->independentBlen"
+  "d, available.independentBlend);\r\n  ReportMismatchedFeature(captured_request->geometryShader, available.geometryShader);"
+  "\r\n  ReportMismatchedFeature(captured_request->tessellationShader, available.tessellationShader);\r\n  ReportMismatchedF"
+  "eature(captured_request->sampleRateShading, available.sampleRateShading);\r\n  ReportMismatchedFeature(captured_request->"
+  "dualSrcBlend, available.dualSrcBlend);\r\n  ReportMismatchedFeature(captured_request->logicOp, available.logicOp);\r\n  R"
+  "eportMismatchedFeature(captured_request->multiDrawIndirect, available.multiDrawIndirect);\r\n  ReportMismatchedFeature(ca"
+  "ptured_request->drawIndirectFirstInstance,\r\n                          available.drawIndirectFirstInstance);\r\n  Report"
+  "MismatchedFeature(captured_request->depthClamp, available.depthClamp);\r\n  ReportMismatchedFeature(captured_request->dep"
+  "thBiasClamp, available.depthBiasClamp);\r\n  ReportMismatchedFeature(captured_request->fillModeNonSolid, available.fillMo"
+  "deNonSolid);\r\n  ReportMismatchedFeature(captured_request->depthBounds, available.depthBounds);\r\n  ReportMismatchedFea"
+  "ture(captured_request->wideLines, available.wideLines);\r\n  ReportMismatchedFeature(captured_request->largePoints, avail"
+  "able.largePoints);\r\n  ReportMismatchedFeature(captured_request->alphaToOne, available.alphaToOne);\r\n  ReportMismatche"
+  "dFeature(captured_request->multiViewport, available.multiViewport);\r\n  ReportMismatchedFeature(captured_request->sample"
+  "rAnisotropy, available.samplerAnisotropy);\r\n  ReportMismatchedFeature(captured_request->textureCompressionETC2, availab"
+  "le.textureCompressionETC2);\r\n  ReportMismatchedFeature(captured_request->textureCompressionASTC_LDR,\r\n               "
+  "           available.textureCompressionASTC_LDR);\r\n  ReportMismatchedFeature(captured_request->textureCompressionBC, av"
+  "ailable.textureCompressionBC);\r\n  ReportMismatchedFeature(captured_request->occlusionQueryPrecise, available.occlusionQ"
+  "ueryPrecise);\r\n  ReportMismatchedFeature(captured_request->pipelineStatisticsQuery,\r\n                          availa"
+  "ble.pipelineStatisticsQuery);\r\n  ReportMismatchedFeature(captured_request->vertexPipelineStoresAndAtomics,\r\n         "
+  "                 available.vertexPipelineStoresAndAtomics);\r\n  ReportMismatchedFeature(captured_request->fragmentStores"
+  "AndAtomics,\r\n                          available.fragmentStoresAndAtomics);\r\n  ReportMismatchedFeature(captured_reque"
+  "st->shaderTessellationAndGeometryPointSize,\r\n                          available.shaderTessellationAndGeometryPointSize"
+  ");\r\n  ReportMismatchedFeature(captured_request->shaderImageGatherExtended,\r\n                          available.shade"
+  "rImageGatherExtended);\r\n  ReportMismatchedFeature(captured_request->shaderStorageImageExtendedFormats,\r\n             "
+  "             available.shaderStorageImageExtendedFormats);\r\n  ReportMismatchedFeature(captured_request->shaderStorageIm"
+  "ageMultisample,\r\n                          available.shaderStorageImageMultisample);\r\n  ReportMismatchedFeature(captu"
+  "red_request->shaderStorageImageReadWithoutFormat,\r\n                          available.shaderStorageImageReadWithoutFor"
+  "mat);\r\n  ReportMismatchedFeature(captured_request->shaderStorageImageWriteWithoutFormat,\r\n                          a"
+  "vailable.shaderStorageImageWriteWithoutFormat);\r\n  ReportMismatchedFeature(captured_request->shaderUniformBufferArrayDy"
+  "namicIndexing,\r\n                          available.shaderUniformBufferArrayDynamicIndexing);\r\n  ReportMismatchedFeat"
+  "ure(captured_request->shaderSampledImageArrayDynamicIndexing,\r\n                          available.shaderSampledImageAr"
+  "rayDynamicIndexing);\r\n  ReportMismatchedFeature(captured_request->shaderStorageBufferArrayDynamicIndexing,\r\n         "
+  "                 available.shaderStorageBufferArrayDynamicIndexing);\r\n  ReportMismatchedFeature(captured_request->shade"
+  "rStorageImageArrayDynamicIndexing,\r\n                          available.shaderStorageImageArrayDynamicIndexing);\r\n  R"
+  "eportMismatchedFeature(captured_request->shaderClipDistance, available.shaderClipDistance);\r\n  ReportMismatchedFeature("
+  "captured_request->shaderCullDistance, available.shaderCullDistance);\r\n  ReportMismatchedFeature(captured_request->shade"
+  "rFloat64, available.shaderFloat64);\r\n  ReportMismatchedFeature(captured_request->shaderInt64, available.shaderInt64);\r"
+  "\n  ReportMismatchedFeature(captured_request->shaderInt16, available.shaderInt16);\r\n  ReportMismatchedFeature(captured_"
+  "request->shaderResourceResidency,\r\n                          available.shaderResourceResidency);\r\n  ReportMismatchedF"
+  "eature(captured_request->shaderResourceMinLod, available.shaderResourceMinLod);\r\n  ReportMismatchedFeature(captured_req"
+  "uest->sparseBinding, available.sparseBinding);\r\n  ReportMismatchedFeature(captured_request->sparseResidencyBuffer, avai"
+  "lable.sparseResidencyBuffer);\r\n  ReportMismatchedFeature(captured_request->sparseResidencyImage2D, available.sparseResi"
+  "dencyImage2D);\r\n  ReportMismatchedFeature(captured_request->sparseResidencyImage3D, available.sparseResidencyImage3D);\r"
+  "\n  ReportMismatchedFeature(captured_request->sparseResidency2Samples,\r\n                          available.sparseResid"
+  "ency2Samples);\r\n  ReportMismatchedFeature(captured_request->sparseResidency4Samples,\r\n                          avail"
+  "able.sparseResidency4Samples);\r\n  ReportMismatchedFeature(captured_request->sparseResidency8Samples,\r\n               "
+  "           available.sparseResidency8Samples);\r\n  ReportMismatchedFeature(captured_request->sparseResidency16Samples,\r"
+  "\n                          available.sparseResidency16Samples);\r\n  ReportMismatchedFeature(captured_request->sparseRes"
+  "idencyAliased, available.sparseResidencyAliased);\r\n  ReportMismatchedFeature(captured_request->variableMultisampleRate,"
+  "\r\n                          available.variableMultisampleRate);\r\n  ReportMismatchedFeature(captured_request->inherite"
+  "dQueries, available.inheritedQueries);\r\n}\r\n\r\nbool RegionsOverlap(const Region &r1, const Region &r2)\r\n{\r\n  // i"
+  "nterval '1' and '2' start and end points:\r\n  uint64_t i1_start = r1.offset;\r\n  uint64_t i1_end = r1.offset + r1.size;"
+  "\r\n  uint64_t i2_start = r2.offset;\r\n  uint64_t i2_end = r2.offset + r2.size;\r\n\r\n  // two intervals i1 [s, e] and "
+  "i2 [s, e] intersect\r\n  // if X = max(i1.s, i2.s) < Y = min(i1.e, i2.e).\r\n  return std::max<uint64_t>(i1_start, i2_sta"
+  "rt) < std::min<uint64_t>(i1_end, i2_end);\r\n}\r\n\r\n// RegionsIntersect(A, B) == RegionsIntersect(B, A)\r\nRegion Regio"
+  "nsIntersect(const Region &r1, const Region &r2)\r\n{\r\n  Region r;\r\n\r\n  // two intervals i1 [s, e] and i2 [s, e] int"
+  "ersect\r\n  // if X = max(i1.s, i2.s) < Y = min(i1.e, i2.e).\r\n  r.offset = std::max<uint64_t>(r1.offset, r2.offset);\r\n"
+  "  r.size = std::min<uint64_t>(r1.offset + r1.size, r2.offset + r2.size) - r.offset;\r\n  return r;\r\n}\r\n\r\nvoid MapUp"
+  "date(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,\r\n               VkMemoryAll"
+  "ocateInfo &ai, MemoryRemapVec &remap, VkDevice dev)\r\n{\r\n  if(dst != NULL)\r\n  {\r\n    std::vector<VkMappedMemoryRan"
+  "ge> ranges;\r\n    Region memory_region = {range.offset, range.size};\r\n    assert(range.size != VK_WHOLE_SIZE);\r\n\r\n"
+  "    if(remap.size() > 0)\r\n    {\r\n      for(uint32_t i = 0; i < remap.size(); i++)\r\n      {\r\n        MemoryRemap m"
+  "r = remap[i];\r\n        Region captured_resource_region(mr.capture.offset, mr.capture.size);\r\n        // If this memor"
+  "y range doesn't overlap with any captured resource continue\r\n        if(!RegionsOverlap(memory_region, captured_resourc"
+  "e_region))\r\n          continue;\r\n\r\n        // Find the inteval where these two regions overlap. It is guaranteed to"
+  " be non-null.\r\n        Region intersect = RegionsIntersect(memory_region, captured_resource_region);\r\n\r\n        uin"
+  "t64_t skipped_resource_bytes = intersect.offset - mr.capture.offset;\r\n        uint64_t skipped_memory_bytes = intersect"
+  ".offset - memory_region.offset;\r\n        intersect.size = std::min<uint64_t>(intersect.size, mr.replay.size);\r\n\r\n  "
+  "      memcpy(dst + mr.replay.offset + skipped_resource_bytes, src + skipped_memory_bytes,\r\n               intersect.siz"
+  "e);\r\n\r\n        VkMappedMemoryRange r = range;\r\n        r.offset = mr.replay.offset + skipped_resource_bytes;\r\n   "
+  "     r.size = AlignedSize(r.offset + intersect.size,\r\n                             aux.physDeviceProperties.limits.nonC"
+  "oherentAtomSize);\r\n        r.offset = AlignedDown(r.offset, aux.physDeviceProperties.limits.nonCoherentAtomSize);\r\n  "
+  "      r.size = r.size - r.offset;\r\n        if(r.offset + r.size > range.offset + range.size || r.offset + r.size > ai.a"
+  "llocationSize)\r\n        {\r\n          r.size = VK_WHOLE_SIZE;\r\n        }\r\n        ranges.push_back(r);\r\n      }\r"
+  "\n    }\r\n    else\r\n    {\r\n      VkMappedMemoryRange r = range;\r\n      r.size = std::min<uint64_t>(ai.allocationSi"
+  "ze, range.size);\r\n      memcpy(dst + r.offset, src, r.size);\r\n      ranges.push_back(r);\r\n    }\r\n\r\n    VkResult"
+  " result = vkFlushMappedMemoryRanges(dev, (uint32_t)ranges.size(), ranges.data());\r\n    assert(result == VK_SUCCESS);\r\n"
+  "  }\r\n}\r\n\r\nbool IsExtEnabled(const char *const *extList, uint32_t count, const char *ext)\r\n{\r\n  for(uint32_t i ="
+  " 0; i < count; i++)\r\n  {\r\n    if(strcmp(extList[i], ext) == 0)\r\n      return true;\r\n  }\r\n  return false;\r\n}\r"
+  "\n\r\nbool IsExtSupported(VkPhysicalDevice physicalDevice, const char *ext)\r\n{\r\n  uint32_t extensionCount;\r\n  vkEnu"
+  "merateDeviceExtensionProperties(physicalDevice, NULL, &extensionCount, NULL);\r\n  std::vector<VkExtensionProperties> ext"
+  "ensions(extensionCount);\r\n  vkEnumerateDeviceExtensionProperties(physicalDevice, NULL, &extensionCount, extensions.data"
+  "());\r\n  for(auto extension : extensions)\r\n  {\r\n    if(strcmp(extension.extensionName, ext) == 0)\r\n    {\r\n      "
+  "return true;\r\n    }\r\n  }\r\n  return false;\r\n}\r\n\r\nstd::string StageProgressString(const char *stage, uint32_t i"
+  ", uint32_t N)\r\n{\r\n  return std::string(\"RenderDoc Frame Loop: \" + std::string(stage) + \" part \" + std::to_string("
+  "i) +\r\n                     \" of \" + std::to_string(N));\r\n}";
 const char fileData_24[] =
   "/******************************************************************************\r\n * The MIT License (MIT)\r\n *\r\n * C"
   "opyright (c) 2018 Google LLC\r\n *\r\n * Permission is hereby granted, free of charge, to any person obtaining a copy\r\n"
@@ -9880,51 +9889,79 @@ const char fileData_24[] =
   "ON WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\r\n * THE SOFTWARE.\r\n ********************************************"
   "**********************************/\r\n#pragma once\r\n\r\n#include <assert.h>\r\n#include <math.h>\r\n#include <memory.h"
   ">\r\n#include <stdio.h>\r\n#if defined(_WIN32)\r\n#include <Windows.h>\r\n#endif\r\n\r\n#include <algorithm>\r\n#include "
-  "<vector>\r\n\r\n#include \"vulkan/vulkan.h\"\r\n\r\n#include \"format_helper.h\"\r\n\r\n#define var_to_string(s) #s\r\n\r"
-  "\nstruct AuxVkTraceResources\r\n{\r\n  VkInstance instance;\r\n  VkDevice device;\r\n  VkPhysicalDevice physDevice;\r\n  "
-  "VkPhysicalDeviceProperties physDeviceProperties;\r\n  VkDebugReportCallbackEXT callback;\r\n  VkCommandPool command_pool;"
-  "\r\n  VkCommandBuffer command_buffer;\r\n  VkQueue queue;\r\n  VkFence fence;\r\n  VkSemaphore semaphore;\r\n};\r\n\r\nst"
-  "ruct Region\r\n{\r\n  uint64_t offset = 0;\r\n  uint64_t size = 0;\r\n  Region(){};\r\n  Region(uint64_t o, uint64_t s) :"
-  " offset(o), size(s) {}\r\n};\r\n\r\nstruct MemoryRemap\r\n{\r\n  Region capture;\r\n  Region replay;\r\n};\r\n\r\ntypedef"
-  " std::vector<MemoryRemap> MemoryRemapVec;\r\n\r\nextern PFN_vkDebugMarkerSetObjectTagEXT vkDebugMarkerSetObjectTag;\r\nex"
-  "tern PFN_vkDebugMarkerSetObjectNameEXT vkDebugMarkerSetObjectName;\r\nextern PFN_vkCmdDebugMarkerBeginEXT vkCmdDebugMarke"
-  "rBegin;\r\nextern PFN_vkCmdDebugMarkerEndEXT vkCmdDebugMarkerEnd;\r\nextern PFN_vkCmdDebugMarkerInsertEXT vkCmdDebugMarke"
-  "rInsert;\r\n\r\nVkPresentModeKHR GetCompatiblePresentMode(VkPresentModeKHR captured,\r\n                                 "
-  "         std::vector<VkPresentModeKHR> present);\r\n\r\nint32_t MemoryTypeIndex(VkMemoryPropertyFlags mask, uint32_t bits"
-  ",\r\n                        VkPhysicalDeviceMemoryProperties memory_props);\r\n\r\nuint32_t CompatibleMemoryTypeIndex(ui"
-  "nt32_t type, const VkPhysicalDeviceMemoryProperties &captured,\r\n                                   const VkPhysicalDevi"
-  "ceMemoryProperties &present, uint32_t bits);\r\n\r\nVkResult CheckMemoryAllocationCompatibility(uint32_t type,\r\n       "
-  "                                     const VkPhysicalDeviceMemoryProperties &captured,\r\n                               "
-  "             const VkPhysicalDeviceMemoryProperties &present,\r\n                                            const VkMemo"
-  "ryRequirements &requirements);\r\n\r\nvoid ReadBuffer(const char *name, std::vector<uint8_t> &buf);\r\n\r\nvoid Initializ"
-  "eDestinationBuffer(VkDevice device, VkBuffer *dst_buffer, VkDeviceMemory dst_memory,\r\n                                 "
-  "uint64_t size);\r\nvoid InitializeSourceBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *memory, size_t size,\r\n"
-  "                            uint8_t *initial_data, VkPhysicalDeviceMemoryProperties props,\r\n                           "
-  " MemoryRemapVec &remap);\r\nvoid InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance,\r\n               "
-  "             VkPhysicalDevice physDevice, VkDevice device);\r\n\r\nvoid ImageLayoutTransition(VkCommandBuffer cmdBuffer, "
-  "VkImage dstImage,\r\n                           VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,\r\n   "
-  "                        uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQueueFamily);\r\n\r\nvoid ImageLayo"
-  "utTransition(AuxVkTraceResources aux, VkImage dst, VkImageCreateInfo dst_ci,\r\n                           VkImageLayout "
-  "final_layout,\r\n                           VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED);\r\nvoid ImageLayoutTra"
-  "nsition(AuxVkTraceResources aux, VkImage dst,\r\n                           VkImageSubresourceRange subresourceRange, VkI"
-  "mageLayout final_layout,\r\n                           VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED);\r\nvoid Ima"
-  "geLayoutTransition(AuxVkTraceResources aux, VkImage dstImg, uint32_t arrayLayer,\r\n                           uint32_t m"
-  "ipLevel, VkImageAspectFlagBits aspect, VkImageLayout newLayout,\r\n                           VkImageLayout oldLayout);\r"
-  "\n\r\nvoid CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageCreateInfo dst_ci);\r\nvoid CopyRese"
-  "tBuffer(AuxVkTraceResources aux, VkBuffer dst, VkBuffer src, VkDeviceSize size);\r\n\r\nvoid CopyImageToBuffer(AuxVkTrace"
-  "Resources aux, VkImage src, VkBuffer dst, VkImageCreateInfo src_ci);\r\nvoid DiffDeviceMemory(AuxVkTraceResources aux, Vk"
-  "DeviceMemory expected,\r\n                      VkDeviceSize expected_offset, VkDeviceMemory actual,\r\n                 "
-  "     VkDeviceSize actual_offset, VkDeviceSize size, const char *name);\r\nvoid InitializeDiffBuffer(VkDevice device, VkBu"
-  "ffer *buffer, VkDeviceMemory *memory, size_t size,\r\n                          VkPhysicalDeviceMemoryProperties props);\r"
-  "\n\r\nvoid MakePhysicalDeviceFeaturesMatch(const VkPhysicalDeviceFeatures &available,\r\n                                "
-  "     VkPhysicalDeviceFeatures *captured_request);\r\n\r\nvoid RegisterDebugCallback(AuxVkTraceResources aux, VkInstance i"
-  "nstance, uint32_t flags);\r\n\r\nvoid MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMappedMemory"
-  "Range &range,\r\n               VkMemoryAllocateInfo &ai, MemoryRemapVec &remap, VkDevice dev);\r\n\r\ninline uint64_t Al"
-  "ignedSize(uint64_t size, uint64_t alignment)\r\n{\r\n  return ((size / alignment) + ((size % alignment) > 0 ? 1 : 0)) * a"
-  "lignment;\r\n}\r\n\r\ninline uint64_t AlignedDown(uint64_t size, uint64_t alignment)\r\n{\r\n  return (uint64_t(size / al"
-  "ignment)) * alignment;\r\n}\r\n\r\nbool IsExtEnabled(const char *const *extList, uint32_t count, const char *ext);\r\nboo"
-  "l IsExtSupported(VkPhysicalDevice physicalDevice, const char *ext);\r\n\r\nstd::string StageProgressString(const char *st"
-  "age, uint32_t i, uint32_t N);";
+  "<iostream>\r\n#include <sstream>\r\n#include <vector>\r\n\r\n#include \"vulkan/vulkan.h\"\r\n\r\n#include \"format_helper"
+  ".h\"\r\n\r\n#define var_to_string(s) #s\r\n\r\n#define VK_CHECK_RESULT(f)                                  \\\r\n{       "
+  "                                                    \\\r\n  VkResult res = f;                                         \\\r"
+  "\n  if (res != VK_SUCCESS)                                    \\\r\n  {                                                  "
+  "       \\\r\n    std::stringstream ss;                                   \\\r\n    ss << \"Fatal : VkResult is \\\"\" << "
+  "VkResultToString(res) \\\r\n       << \"\\\" in \" << __FILE__ << \" at line \" << __LINE__;  \\\r\n    std::cout << ss.s"
+  "tr() <<std::endl;                      \\\r\n    assert(res == VK_SUCCESS);                              \\\r\n  }       "
+  "                                                  \\\r\n}                                                           \\\r\n"
+  "\r\nstruct AuxVkTraceResources\r\n{\r\n  VkInstance instance;\r\n  VkDevice device;\r\n  VkPhysicalDevice physDevice;\r\n"
+  "  VkPhysicalDeviceProperties physDeviceProperties;\r\n  VkPhysicalDeviceMemoryProperties physDeviceMemoryProperties;\r\n "
+  " std::vector<VkQueueFamilyProperties> queueFamilyProperties;\r\n  VkDebugReportCallbackEXT callback;\r\n  VkCommandPool c"
+  "ommand_pool;\r\n  VkCommandBuffer command_buffer;\r\n  VkQueue queue;\r\n  VkFence fence;\r\n  VkSemaphore semaphore;\r\n"
+  "\r\n  uint64_t getTimestampValidBits(VkQueue queue) {\r\n    uint64_t bits = 0;\r\n    if (!physDeviceProperties.limits.t"
+  "imestampComputeAndGraphics)\r\n      return 0;\r\n    for (uint32_t i = 0; i < queueFamilyProperties.size() && bits == 0;"
+  " i++) {\r\n      if ((queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0 &&\r\n        (queueFamilyPropert"
+  "ies[i].queueFlags & VK_QUEUE_COMPUTE_BIT) == 0)\r\n        continue;\r\n      for (uint32_t j = 0; j < queueFamilyPropert"
+  "ies[i].queueCount && bits == 0; j++) {\r\n        VkQueue q = NULL;\r\n        vkGetDeviceQueue(device, i, j, &q);\r\n   "
+  "     if (q == queue) {\r\n          bits = (queueFamilyProperties[i].timestampValidBits == 64) ?\r\n            UINT64_MA"
+  "X :\r\n            (1ULL << queueFamilyProperties[i].timestampValidBits) - 1;\r\n        }\r\n      }\r\n    }\r\n    ret"
+  "urn bits;\r\n  }\r\n};\r\n\r\nstruct Region\r\n{\r\n  uint64_t offset = 0;\r\n  uint64_t size = 0;\r\n  Region(){};\r\n  "
+  "Region(uint64_t o, uint64_t s) : offset(o), size(s) {}\r\n};\r\n\r\nstruct MemoryRemap\r\n{\r\n  Region capture;\r\n  Reg"
+  "ion replay;\r\n};\r\n\r\ntypedef std::vector<MemoryRemap> MemoryRemapVec;\r\n\r\nextern PFN_vkDebugMarkerSetObjectTagEXT "
+  "vkDebugMarkerSetObjectTag;\r\nextern PFN_vkDebugMarkerSetObjectNameEXT vkDebugMarkerSetObjectName;\r\nextern PFN_vkCmdDeb"
+  "ugMarkerBeginEXT vkCmdDebugMarkerBegin;\r\nextern PFN_vkCmdDebugMarkerEndEXT vkCmdDebugMarkerEnd;\r\nextern PFN_vkCmdDebu"
+  "gMarkerInsertEXT vkCmdDebugMarkerInsert;\r\n\r\nVkPresentModeKHR GetCompatiblePresentMode(VkPresentModeKHR captured,\r\n "
+  "                                         std::vector<VkPresentModeKHR> present);\r\n\r\nint32_t MemoryTypeIndex(VkMemoryP"
+  "ropertyFlags mask, uint32_t bits,\r\n                        VkPhysicalDeviceMemoryProperties memory_props);\r\n\r\nuint3"
+  "2_t CompatibleMemoryTypeIndex(uint32_t type, const VkPhysicalDeviceMemoryProperties &captured,\r\n                       "
+  "            const VkPhysicalDeviceMemoryProperties &present, uint32_t bits);\r\n\r\nVkResult CheckMemoryAllocationCompati"
+  "bility(uint32_t type,\r\n                                            const VkPhysicalDeviceMemoryProperties &captured,\r\n"
+  "                                            const VkPhysicalDeviceMemoryProperties &present,\r\n                         "
+  "                   const VkMemoryRequirements &requirements);\r\n\r\nvoid ReadBuffer(const char *name, std::vector<uint8_"
+  "t> &buf);\r\n\r\nvoid InitializeDestinationBuffer(VkDevice device, VkBuffer *dst_buffer, VkDeviceMemory dst_memory,\r\n  "
+  "                               uint64_t size);\r\nvoid InitializeSourceBuffer(VkDevice device, VkBuffer *buffer, VkDevice"
+  "Memory *memory, size_t size,\r\n                            uint8_t *initial_data, VkPhysicalDeviceMemoryProperties props"
+  ",\r\n                            MemoryRemapVec &remap);\r\nvoid InitializeAuxResources(AuxVkTraceResources *aux, VkInsta"
+  "nce instance,\r\n                            VkPhysicalDevice physDevice, VkDevice device);\r\n\r\nvoid ImageLayoutTransi"
+  "tion(VkCommandBuffer cmdBuffer, VkImage dstImage,\r\n                           VkImageSubresourceRange subresourceRange,"
+  " VkImageLayout newLayout,\r\n                           uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQue"
+  "ueFamily);\r\n\r\nvoid ImageLayoutTransition(AuxVkTraceResources aux, VkImage dst, VkImageCreateInfo dst_ci,\r\n         "
+  "                  VkImageLayout final_layout,\r\n                           VkImageLayout old_layout = VK_IMAGE_LAYOUT_UN"
+  "DEFINED);\r\nvoid ImageLayoutTransition(AuxVkTraceResources aux, VkImage dst,\r\n                           VkImageSubres"
+  "ourceRange subresourceRange, VkImageLayout final_layout,\r\n                           VkImageLayout old_layout = VK_IMAG"
+  "E_LAYOUT_UNDEFINED);\r\nvoid ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImg, uint32_t arrayLayer,\r\n     "
+  "                      uint32_t mipLevel, VkImageAspectFlagBits aspect, VkImageLayout newLayout,\r\n                      "
+  "     VkImageLayout oldLayout);\r\n\r\nvoid CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageCrea"
+  "teInfo dst_ci);\r\nvoid CopyResetBuffer(AuxVkTraceResources aux, VkBuffer dst, VkBuffer src, VkDeviceSize size);\r\n\r\nv"
+  "oid CopyImageToBuffer(AuxVkTraceResources aux, VkImage src, VkBuffer dst, VkImageCreateInfo src_ci);\r\nvoid DiffDeviceMe"
+  "mory(AuxVkTraceResources aux, VkDeviceMemory expected,\r\n                      VkDeviceSize expected_offset, VkDeviceMem"
+  "ory actual,\r\n                      VkDeviceSize actual_offset, VkDeviceSize size, const char *name);\r\nvoid Initialize"
+  "DiffBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *memory, size_t size,\r\n                          VkPhysica"
+  "lDeviceMemoryProperties props);\r\n\r\nvoid MakePhysicalDeviceFeaturesMatch(const VkPhysicalDeviceFeatures &available,\r\n"
+  "                                     VkPhysicalDeviceFeatures *captured_request);\r\n\r\nvoid RegisterDebugCallback(AuxVk"
+  "TraceResources aux, VkInstance instance, uint32_t flags);\r\n\r\nvoid MapUpdate(AuxVkTraceResources aux, uint8_t *dst, ui"
+  "nt8_t *src, const VkMappedMemoryRange &range,\r\n               VkMemoryAllocateInfo &ai, MemoryRemapVec &remap, VkDevice"
+  " dev);\r\n\r\ninline uint64_t AlignedSize(uint64_t size, uint64_t alignment)\r\n{\r\n  return ((size / alignment) + ((siz"
+  "e % alignment) > 0 ? 1 : 0)) * alignment;\r\n}\r\n\r\ninline uint64_t AlignedDown(uint64_t size, uint64_t alignment)\r\n{"
+  "\r\n  return (uint64_t(size / alignment)) * alignment;\r\n}\r\n\r\ninline std::string VkResultToString(VkResult r) {\r\n "
+  " switch (r) {\r\n#define RETURN_VK_RESULT_STRING(r) case VK_ ##r: return #r\r\n    RETURN_VK_RESULT_STRING(SUCCESS);\r\n "
+  "   RETURN_VK_RESULT_STRING(NOT_READY);\r\n    RETURN_VK_RESULT_STRING(TIMEOUT);\r\n    RETURN_VK_RESULT_STRING(EVENT_SET)"
+  ";\r\n    RETURN_VK_RESULT_STRING(EVENT_RESET);\r\n    RETURN_VK_RESULT_STRING(INCOMPLETE);\r\n    RETURN_VK_RESULT_STRING"
+  "(ERROR_OUT_OF_HOST_MEMORY);\r\n    RETURN_VK_RESULT_STRING(ERROR_OUT_OF_DEVICE_MEMORY);\r\n    RETURN_VK_RESULT_STRING(ER"
+  "ROR_INITIALIZATION_FAILED);\r\n    RETURN_VK_RESULT_STRING(ERROR_DEVICE_LOST);\r\n    RETURN_VK_RESULT_STRING(ERROR_MEMOR"
+  "Y_MAP_FAILED);\r\n    RETURN_VK_RESULT_STRING(ERROR_LAYER_NOT_PRESENT);\r\n    RETURN_VK_RESULT_STRING(ERROR_EXTENSION_NO"
+  "T_PRESENT);\r\n    RETURN_VK_RESULT_STRING(ERROR_FEATURE_NOT_PRESENT);\r\n    RETURN_VK_RESULT_STRING(ERROR_INCOMPATIBLE_"
+  "DRIVER);\r\n    RETURN_VK_RESULT_STRING(ERROR_TOO_MANY_OBJECTS);\r\n    RETURN_VK_RESULT_STRING(ERROR_FORMAT_NOT_SUPPORTE"
+  "D);\r\n    RETURN_VK_RESULT_STRING(ERROR_SURFACE_LOST_KHR);\r\n    RETURN_VK_RESULT_STRING(ERROR_NATIVE_WINDOW_IN_USE_KHR"
+  ");\r\n    RETURN_VK_RESULT_STRING(SUBOPTIMAL_KHR);\r\n    RETURN_VK_RESULT_STRING(ERROR_OUT_OF_DATE_KHR);\r\n    RETURN_V"
+  "K_RESULT_STRING(ERROR_INCOMPATIBLE_DISPLAY_KHR);\r\n    RETURN_VK_RESULT_STRING(ERROR_VALIDATION_FAILED_EXT);\r\n    RETU"
+  "RN_VK_RESULT_STRING(ERROR_INVALID_SHADER_NV);\r\n#undef RETURN_VK_RESULT_STRING\r\n    default:\r\n    return \"UNKNOWN_E"
+  "RROR\";\r\n  }\r\n}\r\nbool IsExtEnabled(const char *const *extList, uint32_t count, const char *ext);\r\nbool IsExtSuppo"
+  "rted(VkPhysicalDevice physicalDevice, const char *ext);\r\n\r\nstd::string StageProgressString(const char *stage, uint32_"
+  "t i, uint32_t N);";
 const char fileData_25[] =
   "SET (THIS_PROJECT_NAME sample_cpp_shim)\r\nPROJECT(${THIS_PROJECT_NAME})\r\n\r\nADD_LIBRARY(${THIS_PROJECT_NAME} SHARED \""
   "shim_vulkan.h\" \"shim_vulkan.cpp\")\r\n\r\nTARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME} PRIVATE\r\n                  "
@@ -18840,10 +18877,3621 @@ const char fileData_36[] =
   "ndBuffer,\r\n                                                VkPipelineStageFlagBits pipelineStage,\r\n                  "
   "                              VkBuffer dstBuffer, VkDeviceSize dstOffset,\r\n                                            "
   "    uint32_t marker);\r\n";
+const char fileData_37[] =
+  "SET (THIS_PROJECT_NAME timestamp_profiling_shim)\r\n\r\nPROJECT(${THIS_PROJECT_NAME})\r\n\r\nADD_LIBRARY(${THIS_PROJECT_N"
+  "AME} SHARED shim_vulkan.h \r\n                                        shim_vulkan.cpp \r\n                               "
+  "         shim_vulkan_base.cpp \r\n                                        utils.h\r\n                                    "
+  "    utils.cpp)\r\n\r\nTARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME} PRIVATE\r\n                           UNICODE _UNIC"
+  "ODE)\r\nIF (NOT WIN32)\r\n  SET_TARGET_PROPERTIES(${THIS_PROJECT_NAME} PROPERTIES\r\n                        CXX_VISIBILI"
+  "TY_PRESET hidden)\r\nENDIF ()\r\n\r\nTARGET_LINK_LIBRARIES(${THIS_PROJECT_NAME}\r\n                      vulkan\r\n      "
+  "                helper)\r\n\r\nSET_TARGET_PROPERTIES(${THIS_PROJECT_NAME} PROPERTIES\r\n                      OUTPUT_NAME"
+  " shim_vulkan\r\n                      ARCHIVE_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n       "
+  "               RUNTIME_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      LIBRARY_"
+  "OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\")\r\n\r\nADD_CUSTOM_COMMAND(TARGET ${THIS_PROJECT_NAME} P"
+  "OST_BUILD\r\n    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${THIS_PROJECT_NAME}> ${WORKING_DIRECTORY_DEBUG}sample_cp"
+  "p_trace)\r\n";
+const char fileData_38[] =
+  "#ifndef SHIM_VK_COMPILE_STATIC_LIB\r\n#define SHIM_VK_EXPORT\r\n#endif\r\n#include <map>\r\n#include <set>\r\n\r\n#includ"
+  "e <assert.h>\r\n\r\n#include \"helper/helper.h\"\r\n#include \"shim_vulkan.h\"\r\n#include \"utils.h\"\r\n\r\nconst int S"
+  "TART_TS_FRAME = 10000;\r\nconst int END_TS_FRAME = START_TS_FRAME + 1500;\r\nconst double DELTA = 0.001;\r\n\r\n#define F"
+  "IRST_TS_STAGE VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT\r\n#define SECOND_TS_STAGE VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT\r\n\r\n"
+  "ShimVkTraceResources aux;\r\nint presentIndex = 0;\r\n\r\nstd::ofstream avrgExeTimeFile = std::ofstream(\"avrgExecuteTime"
+  "s.txt\", std::ios::out | std::ios::binary);\r\nstd::ofstream timeFile = std::ofstream(\"time.txt\", std::ios::out | std::"
+  "ios::binary);\r\n\r\n/* The list of all Vulkan commands and what we query timestamps on:\r\n    \"vkCmdBindPipeline\",\r\n"
+  "    \"vkCmdSetViewport\",\r\n    \"vkCmdSetScissor\",\r\n    \"vkCmdSetLineWidth\",\r\n    \"vkCmdSetDepthBias\",\r\n    "
+  "\"vkCmdSetBlendConstants\",\r\n    \"vkCmdSetDepthBounds\",\r\n    \"vkCmdSetStencilCompareMask\",\r\n    \"vkCmdSetStenc"
+  "ilWriteMask\",\r\n    \"vkCmdSetStencilReference\",\r\n    \"vkCmdBindDescriptorSets\",\r\n    \"vkCmdBindIndexBuffer\",\r"
+  "\n    \"vkCmdBindVertexBuffers\",\r\n    \"vkCmdDraw\",\r\n    \"vkCmdDrawIndexed\",\r\n    \"vkCmdDrawIndirect\",\r\n   "
+  " \"vkCmdDrawIndexedIndirect\",\r\n    \"vkCmdDispatch\",\r\n    \"vkCmdDispatchIndirect\",\r\n    \"vkCmdCopyBuffer\",\r\n"
+  "    \"vkCmdCopyImage\",\r\n    \"vkCmdBlitImage\",\r\n    \"vkCmdCopyBufferToImage\",\r\n    \"vkCmdCopyImageToBuffer\",\r"
+  "\n    \"vkCmdUpdateBuffer\",\r\n    \"vkCmdFillBuffer\",\r\n    \"vkCmdClearColorImage\",\r\n    \"vkCmdClearDepthStencil"
+  "Image\",\r\n    \"vkCmdClearAttachments\",\r\n    \"vkCmdResolveImage\",\r\n    //\"vkCmdSetEvent\",\r\n    //\"vkCmdRese"
+  "tEvent\",\r\n    \"vkCmdWaitEvents\",\r\n    \"vkCmdPipelineBarrier\",\r\n    //\"vkCmdBeginQuery\",\r\n    //\"vkCmdEndQ"
+  "uery\",\r\n    //\"vkCmdResetQueryPool\",\r\n    //\"vkCmdWriteTimestamp\",\r\n    //\"vkCmdCopyQueryPoolResults\",\r\n  "
+  "  \"vkCmdPushConstants\",\r\n    \"vkCmdBeginRenderPass\",\r\n    \"vkCmdNextSubpass\",\r\n    \"vkCmdEndRenderPass\",\r\n"
+  "    \"vkCmdExecuteCommands\",\r\n    //\"vkCmdDebugMarkerBeginEXT\",\r\n    //\"vkCmdDebugMarkerEndEXT\",\r\n    //\"vkCm"
+  "dDebugMarkerInsertEXT\",\r\n    \"vkCmdDrawIndirectCountAMD\",\r\n    \"vkCmdDrawIndexedIndirectCountAMD\",\r\n    //\"vk"
+  "CmdProcessCommandsNVX\",\r\n    //\"vkCmdReserveSpaceForCommandsNVX\",\r\n    \"vkCmdPushDescriptorSetKHR\",\r\n    \"vkC"
+  "mdSetDeviceMask\",\r\n    \"vkCmdSetDeviceMaskKHR\",\r\n    \"vkCmdDispatchBase\",\r\n    \"vkCmdDispatchBaseKHR\",\r\n  "
+  "  \"vkCmdPushDescriptorSetWithTemplateKHR\",\r\n    //\"vkCmdSetViewportWScalingNV\",\r\n    //\"vkCmdSetDiscardRectangle"
+  "EXT\",\r\n    //\"vkCmdSetSampleLocationsEXT\",\r\n    //\"vkCmdBeginDebugUtilsLabelEXT\",\r\n    //\"vkCmdEndDebugUtilsL"
+  "abelEXT\",\r\n    //\"vkCmdInsertDebugUtilsLabelEXT\",\r\n    \"vkCmdWriteBufferMarkerAMD\",\r\n*/\r\n\r\n/**************"
+  "*********** shimmed functions *******************************/\r\nVkResult shim_vkCreateDevice(VkPhysicalDevice physicalD"
+  "evice, const VkDeviceCreateInfo *pCreateInfo,\r\n                             const VkAllocationCallbacks *pAllocator, Vk"
+  "Device *pDevice)\r\n{\r\n  VkResult r = vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);\r\n  Initialize"
+  "AuxResources(&aux, aux.instance, physicalDevice, *pDevice);\r\n  return r;\r\n}\r\n\r\nvoid shim_vkGetPhysicalDeviceMemor"
+  "yProperties(VkPhysicalDevice physicalDevice,\r\n                                              VkPhysicalDeviceMemoryPrope"
+  "rties *pMemoryProperties)\r\n{\r\n  PFN_vkGetPhysicalDeviceMemoryProperties fn = vkGetPhysicalDeviceMemoryProperties;\r\n"
+  "  fn(physicalDevice, pMemoryProperties);\r\n  aux.physDeviceMemoryProperties = *pMemoryProperties;\r\n  return;\r\n}\r\n\r"
+  "\nvoid shim_vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice,\r\n                                        VkP"
+  "hysicalDeviceProperties *pProperties)\r\n{\r\n  static PFN_vkGetPhysicalDeviceProperties fn = vkGetPhysicalDeviceProperti"
+  "es;\r\n  fn(physicalDevice, pProperties);\r\n  aux.physDeviceProperties = *pProperties;\r\n  return;\r\n}\r\n\r\n// We as"
+  "sume there is no use of VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT flag in command buffers\r\n// in all traces.\r\nVkRe"
+  "sult shim_vkBeginCommandBuffer(VkCommandBuffer commandBuffer,\r\n                                   const VkCommandBuffer"
+  "BeginInfo *pBeginInfo)\r\n{\r\n  assert((pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) == 0);\r\n  st"
+  "atic PFN_vkBeginCommandBuffer fn = vkBeginCommandBuffer;\r\n  VkResult r = fn(commandBuffer, pBeginInfo);\r\n  if (presen"
+  "tIndex == 0) {\r\n    // Currently all command buffers are uniquely recorded in a frame. Is this\r\n    // always true?\r"
+  "\n    assert(aux.cbQueries.find(commandBuffer) == aux.cbQueries.end());\r\n    aux.cbCommandInfo[commandBuffer].push_back"
+  "({__FUNCTION__});\r\n    return r;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n   "
+  " uint32_t offset = aux.queryOffset(commandBuffer);\r\n    uint32_t count = aux.queryCount(commandBuffer);\r\n    aux.rese"
+  "tQueries(commandBuffer);\r\n    vkCmdResetQueryPool(commandBuffer, aux.queryPool(commandBuffer), offset, count);\r\n    v"
+  "kCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE,\r\n      aux.queryPool(commandBuffer), aux.queryInc(commandBuffer));\r"
+  "\n  }\r\n  return r;\r\n}\r\n\r\nVkResult shim_vkEndCommandBuffer(VkCommandBuffer commandBuffer) {\r\n  static PFN_vkEndC"
+  "ommandBuffer fn = vkEndCommandBuffer;\r\n  if (presentIndex == 0) {\r\n    aux.cbCommandInfo[commandBuffer].push_back({__"
+  "FUNCTION__});\r\n    VkResult r = fn(commandBuffer);\r\n    return r;\r\n  } else if (presentIndex > START_TS_FRAME && pr"
+  "esentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE,\r\n      aux.queryPool(commandBuf"
+  "fer), aux.queryInc(commandBuffer));\r\n  }\r\n  VkResult r = fn(commandBuffer);\r\n  return r;\r\n}\r\n\r\nVkResult shim_"
+  "vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,\r\n  VkFence fence) {\r\n  static PFN_vk"
+  "QueueSubmit fn = vkQueueSubmit;\r\n  VkResult r = fn(queue, submitCount, pSubmits, fence);\r\n  if (presentIndex == 0) {\r"
+  "\n    for (uint32_t i = 0; i < submitCount; i++) {\r\n      aux.queueSubmit(queue, pSubmits[i].commandBufferCount, \r\n  "
+  "      const_cast<VkCommandBuffer*>(pSubmits[i].pCommandBuffers));\r\n    }\r\n    return r;\r\n  } else if (presentIndex "
+  "> START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n     vkQueueWaitIdle(queue);\r\n     for (uint32_t i = 0; i < submi"
+  "tCount; i++) {\r\n       for (uint32_t cbi = 0; cbi < pSubmits[i].commandBufferCount; cbi++) {\r\n         VkCommandBuffe"
+  "r currentCB = pSubmits[i].pCommandBuffers[cbi];\r\n         if (!aux.isPresent(currentCB)) {\r\n           assert(0);\r\n"
+  "           continue; // this should really never happen.\r\n         }\r\n     \r\n         aux.accumulateAllTimestamps(c"
+  "urrentCB, presentIndex);\r\n       }\r\n     }\r\n  }\r\n  return r;\r\n}\r\n\r\n/*\r\n* In the first frame, create query"
+  "pool and get timestampValidBits from VkQueueFamilyProperties.\r\n*/\r\nVkResult shim_vkQueuePresentKHR(VkQueue queue, con"
+  "st VkPresentInfoKHR *pPresentInfo)\r\n{\r\n  static PFN_vkQueuePresentKHR fn =\r\n      (PFN_vkQueuePresentKHR)vkGetDevic"
+  "eProcAddr(aux.device, \"vkQueuePresentKHR\");\r\n  VkResult r = fn(queue, pPresentInfo);\r\n  if(presentIndex == 0)\r\n  "
+  "{\r\n    aux.createQueryPools();\r\n  }\r\n\r\n  if(presentIndex == END_TS_FRAME)\r\n  {\r\n     for (auto it : aux.cbAcc"
+  "umTimestamps) {\r\n       std::string cbTime = \"Command Buffer Time = \"\r\n         + std::to_string((it.second[0][0] +"
+  " it.second[0][1]) / (1000000.0 * (END_TS_FRAME - START_TS_FRAME)))\r\n         + \" (ms)\\n\";\r\n       OutputDebugStrin"
+  "gA(cbTime.c_str());\r\n     }\r\n     aux.writeCSV(\"timestamps.csv\");\r\n  }\r\n\r\n  presentIndex++;\r\n  return r;\r\n"
+  "}\r\n\r\n// vkCmdExecuteCommand moves query index vector of secondary command buffers to primary command\r\n// buffer's.\r"
+  "\nvoid shim_vkCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount,\r\n                         "
+  "      const VkCommandBuffer *pCommandBuffers)\r\n{\r\n  static PFN_vkCmdExecuteCommands fn = vkCmdExecuteCommands;\r\n  i"
+  "f(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, commandBufferCount, pCommandBuffers);\r\n    aux.cbCommandInfo[comma"
+  "ndBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_T"
+  "S_FRAME) {\r\n    uint32_t offset = aux.queryOffset(commandBuffer);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_S"
+  "TAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, commandBufferCount, p"
+  "CommandBuffers);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.qu"
+  "eryInc(commandBuffer));\r\n    for (uint32_t cb = 0; cb < commandBufferCount; cb++) {\r\n      aux.addExecCmdBufRelation("
+  "commandBuffer, pCommandBuffers[cb], offset);\r\n    }\r\n  } else {\r\n    fn(commandBuffer, commandBufferCount, pCommand"
+  "Buffers);\r\n  }\r\n}\r\n\r\nvoid shim_vkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindP"
+  "oint,\r\n                            VkPipeline pipeline)\r\n{\r\n  PFN_vkCmdBindPipeline fn = vkCmdBindPipeline;\r\n  if"
+  "(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, pipelineBindPoint, pipeline);\r\n    aux.cbCommandInfo[commandBuffer]"
+  ".push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) "
+  "{\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandB"
+  "uffer));\r\n    fn(commandBuffer, pipelineBindPoint, pipeline);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE"
+  ", aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, pipelineBin"
+  "dPoint, pipeline);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdSetViewport(VkCommandBuffer commandBuffer, uint32_t fir"
+  "stViewport,\r\n                           uint32_t viewportCount, const VkViewport *pViewports)\r\n{\r\n  PFN_vkCmdSetVie"
+  "wport fn = vkCmdSetViewport;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, firstViewport, viewportCount, pVi"
+  "ewports);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex "
+  "> START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPo"
+  "ol(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, firstViewport, viewportCount, pViewpor"
+  "ts);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(comma"
+  "ndBuffer));\r\n  } else {\r\n    fn(commandBuffer, firstViewport, viewportCount, pViewports);\r\n  }\r\n  return;\r\n}\r\n"
+  "\r\nvoid shim_vkCmdSetScissor(VkCommandBuffer commandBuffer, uint32_t firstScissor,\r\n                          uint32_t"
+  " scissorCount, const VkRect2D *pScissors)\r\n{\r\n  PFN_vkCmdSetScissor fn = vkCmdSetScissor;\r\n  if(presentIndex == 0)\r"
+  "\n  {\r\n    fn(commandBuffer, firstScissor, scissorCount, pScissors);\r\n    aux.cbCommandInfo[commandBuffer].push_back("
+  "{__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vk"
+  "CmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n"
+  "    fn(commandBuffer, firstScissor, scissorCount, pScissors);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, "
+  "aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, firstScissor,"
+  " scissorCount, pScissors);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdSetLineWidth(VkCommandBuffer commandBuffer, flo"
+  "at lineWidth)\r\n{\r\n  PFN_vkCmdSetLineWidth fn = vkCmdSetLineWidth;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(command"
+  "Buffer, lineWidth);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (pre"
+  "sentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, a"
+  "ux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, lineWidth);\r\n    vkCmdWrit"
+  "eTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } el"
+  "se {\r\n    fn(commandBuffer, lineWidth);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdSetDepthBias(VkCommandBuffer com"
+  "mandBuffer, float depthBiasConstantFactor,\r\n                            float depthBiasClamp, float depthBiasSlopeFacto"
+  "r)\r\n{\r\n  PFN_vkCmdSetDepthBias fn = vkCmdSetDepthBias;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, dep"
+  "thBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTIO"
+  "N__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTi"
+  "mestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(co"
+  "mmandBuffer, depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor);\r\n    vkCmdWriteTimestamp(commandBuffer, SE"
+  "COND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer"
+  ", depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdSetBlend"
+  "Constants(VkCommandBuffer commandBuffer, const float blendConstants[4])\r\n{\r\n  PFN_vkCmdSetBlendConstants fn = vkCmdSe"
+  "tBlendConstants;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, blendConstants);\r\n    aux.cbCommandInfo[com"
+  "mandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END"
+  "_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryI"
+  "nc(commandBuffer));\r\n    fn(commandBuffer, blendConstants);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, "
+  "aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, blendConstant"
+  "s);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdSetDepthBounds(VkCommandBuffer commandBuffer, float minDepthBounds,\r\n"
+  "                              float maxDepthBounds)\r\n{\r\n  PFN_vkCmdSetDepthBounds fn = vkCmdSetDepthBounds;\r\n  if(p"
+  "resentIndex == 0)\r\n  {\r\n    fn(commandBuffer, minDepthBounds, maxDepthBounds);\r\n    aux.cbCommandInfo[commandBuffer"
+  "].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)"
+  " {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(command"
+  "Buffer));\r\n    fn(commandBuffer, minDepthBounds, maxDepthBounds);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_S"
+  "TAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, minDept"
+  "hBounds, maxDepthBounds);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdSetStencilCompareMask(VkCommandBuffer commandBuf"
+  "fer, VkStencilFaceFlags faceMask,\r\n                                     uint32_t compareMask)\r\n{\r\n  PFN_vkCmdSetSte"
+  "ncilCompareMask fn = vkCmdSetStencilCompareMask;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, faceMask, com"
+  "pareMask);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex"
+  " > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryP"
+  "ool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, faceMask, compareMask);\r\n    vkCmdW"
+  "riteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  }"
+  " else {\r\n    fn(commandBuffer, faceMask, compareMask);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdSetStencilWriteMa"
+  "sk(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask,\r\n                                   uint32_t writeMask)\r"
+  "\n{\r\n  PFN_vkCmdSetStencilWriteMask fn = vkCmdSetStencilWriteMask;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandB"
+  "uffer, faceMask, writeMask);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } els"
+  "e if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS"
+  "_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, faceMask, writeMask"
+  ");\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(command"
+  "Buffer));\r\n  } else {\r\n    fn(commandBuffer, faceMask, writeMask);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdSet"
+  "StencilReference(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask,\r\n                                   uint32"
+  "_t reference)\r\n{\r\n  PFN_vkCmdSetStencilReference fn = vkCmdSetStencilReference;\r\n  if(presentIndex == 0)\r\n  {\r\n"
+  "    fn(commandBuffer, faceMask, reference);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    ret"
+  "urn;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBu"
+  "ffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, face"
+  "Mask, reference);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.q"
+  "ueryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, faceMask, reference);\r\n  }\r\n  return;\r\n}\r\n\r\nvoi"
+  "d shim_vkCmdBindDescriptorSets(VkCommandBuffer commandBuffer,\r\n                                  VkPipelineBindPoint pi"
+  "pelineBindPoint, VkPipelineLayout layout,\r\n                                  uint32_t firstSet, uint32_t descriptorSetC"
+  "ount,\r\n                                  const VkDescriptorSet *pDescriptorSets,\r\n                                  u"
+  "int32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets)\r\n{\r\n  PFN_vkCmdBindDescriptorSets fn = vkCmdBindDescript"
+  "orSets;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCoun"
+  "t, pDescriptorSets,\r\n       dynamicOffsetCount, pDynamicOffsets);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__"
+  "FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmd"
+  "WriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  "
+  "  fn(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount, pDescriptorSets,\r\n      dynamicOffsetCount"
+  ", pDynamicOffsets);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux"
+  ".queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount"
+  ", pDescriptorSets,\r\n      dynamicOffsetCount, pDynamicOffsets);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdBindInde"
+  "xBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,\r\n                               VkIndexTyp"
+  "e indexType)\r\n{\r\n  PFN_vkCmdBindIndexBuffer fn = vkCmdBindIndexBuffer;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(co"
+  "mmandBuffer, buffer, offset, indexType);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return"
+  ";\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffe"
+  "r, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, buffer,"
+  " offset, indexType);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      au"
+  "x.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, buffer, offset, indexType);\r\n  }\r\n  return;\r\n}\r"
+  "\n\r\nvoid shim_vkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, uint32_t firstBinding,\r\n                         "
+  "        uint32_t bindingCount, const VkBuffer *pBuffers,\r\n                                 const VkDeviceSize *pOffsets"
+  ")\r\n{\r\n  PFN_vkCmdBindVertexBuffers fn = vkCmdBindVertexBuffers;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBu"
+  "ffer, firstBinding, bindingCount, pBuffers, pOffsets);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});"
+  "\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestam"
+  "p(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandB"
+  "uffer, firstBinding, bindingCount, pBuffers, pOffsets);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.qu"
+  "eryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, firstBinding, bindi"
+  "ngCount, pBuffers, pOffsets);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdDraw(VkCommandBuffer commandBuffer, uint32_t"
+  " vertexCount, uint32_t instanceCount,\r\n                    uint32_t firstVertex, uint32_t firstInstance)\r\n{\r\n  PFN_"
+  "vkCmdDraw fn = vkCmdDraw;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, vertexCount, instanceCount, firstVer"
+  "tex, firstInstance);\r\n    char infoStr[256];\r\n    sprintf(infoStr,\r\n      \"Vertex Count: %d \"\r\n      \"Instance"
+  " Count: %d \" \r\n      \"First Vertex: %d \"\r\n      \"First Instance: %d \",\r\n      vertexCount, instanceCount, firs"
+  "tVertex, firstInstance);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});\r\n    return;\r\n  "
+  "} else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRS"
+  "T_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, vertexCount, in"
+  "stanceCount, firstVertex, firstInstance);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(comman"
+  "dBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, vertexCount, instanceCount, first"
+  "Vertex, firstInstance);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_"
+  "t indexCount, uint32_t instanceCount,\r\n                           uint32_t firstIndex, int32_t vertexOffset, uint32_t f"
+  "irstInstance)\r\n{\r\n  PFN_vkCmdDrawIndexed fn = vkCmdDrawIndexed;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBu"
+  "ffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);\r\n    char infoStr[256];\r\n    sprintf(infoS"
+  "tr,\r\n      \"Index Count: %d \"\r\n      \"Instance Count: %d \"\r\n      \"First Index: %d \"\r\n      \"Vertex Offset"
+  ": %d \"\r\n      \"First Instance: %d \",\r\n      indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);\r"
+  "\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});\r\n    return;\r\n  } else if (presentIndex > "
+  "START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool("
+  "commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, indexCount, instanceCount, firstIndex, ve"
+  "rtexOffset, firstInstance);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n "
+  "     aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, indexCount, instanceCount, firstIndex, vertexOf"
+  "fset, firstInstance);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer"
+  " buffer, VkDeviceSize offset,\r\n                            uint32_t drawCount, uint32_t stride)\r\n{\r\n  PFN_vkCmdDraw"
+  "Indirect fn = vkCmdDrawIndirect;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, buffer, offset, drawCount, st"
+  "ride);\r\n    char infoStr[256];\r\n    sprintf(infoStr,\r\n      \"Draw Count: %d \"\r\n      \"Stride Count: %d \",\r\n"
+  "      drawCount, stride);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});\r\n    return;\r\n "
+  " } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIR"
+  "ST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, buffer, offset"
+  ", drawCount, stride);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      a"
+  "ux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, buffer, offset, drawCount, stride);\r\n  }\r\n  retur"
+  "n;\r\n}\r\n\r\nvoid shim_vkCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer,\r\n                    "
+  "               VkDeviceSize offset, uint32_t drawCount, uint32_t stride)\r\n{\r\n  PFN_vkCmdDrawIndexedIndirect fn = vkCm"
+  "dDrawIndexedIndirect;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, buffer, offset, drawCount, stride);\r\n "
+  "   char infoStr[256];\r\n    sprintf(infoStr,\r\n      \"Offset: %d \"\r\n      \"Draw Count: %d \"\r\n      \"Stride Cou"
+  "nt: %d \",\r\n      offset, drawCount, stride);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr}"
+  ");\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimest"
+  "amp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(command"
+  "Buffer, buffer, offset, drawCount, stride);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(comm"
+  "andBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, buffer, offset, drawCount, stri"
+  "de);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_"
+  "t groupCountY,\r\n                        uint32_t groupCountZ)\r\n{\r\n  PFN_vkCmdDispatch fn = vkCmdDispatch;\r\n  if(p"
+  "resentIndex == 0)\r\n  {\r\n    fn(commandBuffer, groupCountX, groupCountY, groupCountZ);\r\n    char infoStr[256];\r\n  "
+  "  sprintf(infoStr,\r\n      \"Groups X: %d \"\r\n      \"Groups Y: %d \"\r\n      \"Groups Z: %d \",\r\n      groupCountX"
+  ", groupCountY, groupCountZ);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});\r\n    return;\r"
+  "\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, "
+  "FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, groupCountX"
+  ", groupCountY, groupCountZ);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n"
+  "      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, groupCountX, groupCountY, groupCountZ);\r\n  }"
+  "\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize of"
+  "fset)\r\n{\r\n  PFN_vkCmdDispatchIndirect fn = vkCmdDispatchIndirect;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(command"
+  "Buffer, buffer, offset);\r\n    char infoStr[256];\r\n    sprintf(infoStr,\r\n      \"Offset: %d \",\r\n      offset);\r\n"
+  "    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});\r\n    return;\r\n  } else if (presentIndex > ST"
+  "ART_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(co"
+  "mmandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, buffer, offset);\r\n    vkCmdWriteTimestamp"
+  "(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n  "
+  "  fn(commandBuffer, buffer, offset);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdCopyBuffer(VkCommandBuffer commandBuf"
+  "fer, VkBuffer srcBuffer, VkBuffer dstBuffer,\r\n                          uint32_t regionCount, const VkBufferCopy *pRegi"
+  "ons)\r\n{\r\n  PFN_vkCmdCopyBuffer fn = vkCmdCopyBuffer;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, srcBu"
+  "ffer, dstBuffer, regionCount, pRegions);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return"
+  ";\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffe"
+  "r, FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, srcBuffe"
+  "r, dstBuffer, regionCount, pRegions);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuf"
+  "fer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, srcBuffer, dstBuffer, regionCount, pR"
+  "egions);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage,\r\n   "
+  "                      VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout,\r\n                  "
+  "       uint32_t regionCount, const VkImageCopy *pRegions)\r\n{\r\n  PFN_vkCmdCopyImage fn = vkCmdCopyImage;\r\n  if(prese"
+  "ntIndex == 0)\r\n  {\r\n    fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);"
+  "\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_T"
+  "S_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(command"
+  "Buffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayo"
+  "ut, regionCount, pRegions);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n "
+  "     aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLay"
+  "out, regionCount, pRegions);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdBlitImage(VkCommandBuffer commandBuffer, VkIm"
+  "age srcImage,\r\n                         VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout,\r"
+  "\n                         uint32_t regionCount, const VkImageBlit *pRegions, VkFilter filter)\r\n{\r\n  PFN_vkCmdBlitIma"
+  "ge fn = vkCmdBlitImage;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, srcImage, srcImageLayout, dstImage, ds"
+  "tImageLayout, regionCount, pRegions,\r\n       filter);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__})"
+  ";\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimesta"
+  "mp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandB"
+  "uffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions,\r\n      filter);\r\n    vkCmdWriteTime"
+  "stamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r"
+  "\n    fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions,\r\n      filter);\r\n "
+  " }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer,\r\n      "
+  "                           VkImage dstImage, VkImageLayout dstImageLayout,\r\n                                 uint32_t r"
+  "egionCount, const VkBufferImageCopy *pRegions)\r\n{\r\n  PFN_vkCmdCopyBufferToImage fn = vkCmdCopyBufferToImage;\r\n  if("
+  "presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions);\r\n    au"
+  "x.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME &&"
+  " presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r"
+  "\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions"
+  ");\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(command"
+  "Buffer));\r\n  } else {\r\n    fn(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions);\r\n  }\r\n "
+  " return;\r\n}\r\n\r\nvoid shim_vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage,\r\n               "
+  "                  VkImageLayout srcImageLayout, VkBuffer dstBuffer,\r\n                                 uint32_t regionCo"
+  "unt, const VkBufferImageCopy *pRegions)\r\n{\r\n  PFN_vkCmdCopyImageToBuffer fn = vkCmdCopyImageToBuffer;\r\n  if(present"
+  "Index == 0)\r\n  {\r\n    fn(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions);\r\n    aux.cbCom"
+  "mandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presen"
+  "tIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n     "
+  " aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions);\r\n "
+  "   vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer)"
+  ");\r\n  } else {\r\n    fn(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions);\r\n  }\r\n  return"
+  ";\r\n}\r\n\r\nvoid shim_vkCmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,\r\n                         "
+  "   VkDeviceSize dstOffset, VkDeviceSize dataSize, const void *pData)\r\n{\r\n  PFN_vkCmdUpdateBuffer fn = vkCmdUpdateBuff"
+  "er;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, dstBuffer, dstOffset, dataSize, pData);\r\n    aux.cbComma"
+  "ndInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentI"
+  "ndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      a"
+  "ux.queryInc(commandBuffer));\r\n    fn(commandBuffer, dstBuffer, dstOffset, dataSize, pData);\r\n    vkCmdWriteTimestamp("
+  "commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n   "
+  " fn(commandBuffer, dstBuffer, dstOffset, dataSize, pData);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdFillBuffer(VkCo"
+  "mmandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset,\r\n                          VkDeviceSize size, ui"
+  "nt32_t data)\r\n{\r\n  PFN_vkCmdFillBuffer fn = vkCmdFillBuffer;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffe"
+  "r, dstBuffer, dstOffset, size, data);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r"
+  "\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, "
+  "FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, dstBuffer, "
+  "dstOffset, size, data);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n     "
+  " aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, dstBuffer, dstOffset, size, data);\r\n  }\r\n  retu"
+  "rn;\r\n}\r\n\r\nvoid shim_vkCmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image,\r\n                         "
+  "      VkImageLayout imageLayout, const VkClearColorValue *pColor,\r\n                               uint32_t rangeCount, "
+  "const VkImageSubresourceRange *pRanges)\r\n{\r\n  PFN_vkCmdClearColorImage fn = vkCmdClearColorImage;\r\n  if(presentInde"
+  "x == 0)\r\n  {\r\n    fn(commandBuffer, image, imageLayout, pColor, rangeCount, pRanges);\r\n    aux.cbCommandInfo[comman"
+  "dBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS"
+  "_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(c"
+  "ommandBuffer));\r\n    fn(commandBuffer, image, imageLayout, pColor, rangeCount, pRanges);\r\n    vkCmdWriteTimestamp(com"
+  "mandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn"
+  "(commandBuffer, image, imageLayout, pColor, rangeCount, pRanges);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdClearDep"
+  "thStencilImage(VkCommandBuffer commandBuffer, VkImage image,\r\n                                      VkImageLayout image"
+  "Layout,\r\n                                      const VkClearDepthStencilValue *pDepthStencil,\r\n                      "
+  "                uint32_t rangeCount, const VkImageSubresourceRange *pRanges)\r\n{\r\n  PFN_vkCmdClearDepthStencilImage fn"
+  " = vkCmdClearDepthStencilImage;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, image, imageLayout, pDepthSten"
+  "cil, rangeCount, pRanges);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else "
+  "if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_ST"
+  "AGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, image, imageLayout, pD"
+  "epthStencil, rangeCount, pRanges);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer"
+  "),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, image, imageLayout, pDepthStencil, range"
+  "Count, pRanges);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t "
+  "attachmentCount,\r\n                                const VkClearAttachment *pAttachments, uint32_t rectCount,\r\n       "
+  "                         const VkClearRect *pRects)\r\n{\r\n  PFN_vkCmdClearAttachments fn = vkCmdClearAttachments;\r\n  "
+  "if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, attachmentCount, pAttachments, rectCount, pRects);\r\n    aux.cbCom"
+  "mandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presen"
+  "tIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n     "
+  " aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, attachmentCount, pAttachments, rectCount, pRects);\r\n    vkCmdWr"
+  "iteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } "
+  "else {\r\n    fn(commandBuffer, attachmentCount, pAttachments, rectCount, pRects);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid s"
+  "him_vkCmdResolveImage(VkCommandBuffer commandBuffer, VkImage srcImage,\r\n                            VkImageLayout srcIm"
+  "ageLayout, VkImage dstImage,\r\n                            VkImageLayout dstImageLayout, uint32_t regionCount,\r\n      "
+  "                      const VkImageResolve *pRegions)\r\n{\r\n  PFN_vkCmdResolveImage fn = vkCmdResolveImage;\r\n  if(pre"
+  "sentIndex == 0)\r\n  {\r\n    fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions"
+  ");\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START"
+  "_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(comma"
+  "ndBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLa"
+  "yout, regionCount, pRegions);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n"
+  "      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLa"
+  "yout, regionCount, pRegions);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdWaitEvents(VkCommandBuffer commandBuffer, ui"
+  "nt32_t eventCount,\r\n                          const VkEvent *pEvents, VkPipelineStageFlags srcStageMask,\r\n           "
+  "               VkPipelineStageFlags dstStageMask, uint32_t memoryBarrierCount,\r\n                          const VkMemor"
+  "yBarrier *pMemoryBarriers, uint32_t bufferMemoryBarrierCount,\r\n                          const VkBufferMemoryBarrier *p"
+  "BufferMemoryBarriers,\r\n                          uint32_t imageMemoryBarrierCount,\r\n                          const V"
+  "kImageMemoryBarrier *pImageMemoryBarriers)\r\n{\r\n  PFN_vkCmdWaitEvents fn = vkCmdWaitEvents;\r\n  if(presentIndex == 0)"
+  "\r\n  {\r\n    fn(commandBuffer, eventCount, pEvents, srcStageMask, dstStageMask, memoryBarrierCount,\r\n       pMemoryBa"
+  "rriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,\r\n       pImageMemoryBarriers);\r\n   "
+  " aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME"
+  " && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer"
+  "),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, eventCount, pEvents, srcStageMask, dstStageMask, memor"
+  "yBarrierCount,\r\n      pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,\r\n   "
+  "   pImageMemoryBarriers);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n   "
+  "   aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, eventCount, pEvents, srcStageMask, dstStageMask, "
+  "memoryBarrierCount,\r\n      pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,\r"
+  "\n      pImageMemoryBarriers);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdPipelineBarrier(VkCommandBuffer commandBuff"
+  "er, VkPipelineStageFlags srcStageMask,\r\n                               VkPipelineStageFlags dstStageMask, VkDependencyF"
+  "lags dependencyFlags,\r\n                               uint32_t memoryBarrierCount, const VkMemoryBarrier *pMemoryBarrie"
+  "rs,\r\n                               uint32_t bufferMemoryBarrierCount,\r\n                               const VkBuffer"
+  "MemoryBarrier *pBufferMemoryBarriers,\r\n                               uint32_t imageMemoryBarrierCount,\r\n            "
+  "                   const VkImageMemoryBarrier *pImageMemoryBarriers)\r\n{\r\n  PFN_vkCmdPipelineBarrier fn = vkCmdPipelin"
+  "eBarrier;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryB"
+  "arrierCount,\r\n       pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,\r\n    "
+  "   pImageMemoryBarriers);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else i"
+  "f (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_ST"
+  "AGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, srcStageMask, dstStage"
+  "Mask, dependencyFlags, memoryBarrierCount, pMemoryBarriers,\r\n      bufferMemoryBarrierCount, pBufferMemoryBarriers, ima"
+  "geMemoryBarrierCount, pImageMemoryBarriers);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(com"
+  "mandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, srcStageMask, dstStageMask, de"
+  "pendencyFlags, memoryBarrierCount, pMemoryBarriers,\r\n      bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemory"
+  "BarrierCount, pImageMemoryBarriers);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdPushConstants(VkCommandBuffer command"
+  "Buffer, VkPipelineLayout layout,\r\n                             VkShaderStageFlags stageFlags, uint32_t offset, uint32_t"
+  " size,\r\n                             const void *pValues)\r\n{\r\n  PFN_vkCmdPushConstants fn = vkCmdPushConstants;\r\n"
+  "  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, layout, stageFlags, offset, size, pValues);\r\n    aux.cbCommandI"
+  "nfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentInde"
+  "x < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux"
+  ".queryInc(commandBuffer));\r\n    fn(commandBuffer, layout, stageFlags, offset, size, pValues);\r\n    vkCmdWriteTimestam"
+  "p(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n "
+  "   fn(commandBuffer, layout, stageFlags, offset, size, pValues);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdBeginRend"
+  "erPass(VkCommandBuffer commandBuffer,\r\n                               const VkRenderPassBeginInfo *pRenderPassBegin,\r\n"
+  "                               VkSubpassContents contents)\r\n{\r\n  PFN_vkCmdBeginRenderPass fn = vkCmdBeginRenderPass;\r"
+  "\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, pRenderPassBegin, contents);\r\n    aux.cbCommandInfo[commandBu"
+  "ffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FR"
+  "AME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(com"
+  "mandBuffer));\r\n    fn(commandBuffer, pRenderPassBegin, contents);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_S"
+  "TAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, pRender"
+  "PassBegin, contents);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpass"
+  "Contents contents)\r\n{\r\n  PFN_vkCmdNextSubpass fn = vkCmdNextSubpass;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(comm"
+  "andBuffer, contents);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (p"
+  "resentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE,"
+  " aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, contents);\r\n    vkCmdWri"
+  "teTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } e"
+  "lse {\r\n    fn(commandBuffer, contents);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdEndRenderPass(VkCommandBuffer co"
+  "mmandBuffer)\r\n{\r\n  PFN_vkCmdEndRenderPass fn = vkCmdEndRenderPass;\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(comman"
+  "dBuffer);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex "
+  "> START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPo"
+  "ol(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer);\r\n    vkCmdWriteTimestamp(commandBuf"
+  "fer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(comman"
+  "dBuffer);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buf"
+  "fer,\r\n                                    VkDeviceSize offset, VkBuffer countBuffer,\r\n                               "
+  "     VkDeviceSize countBufferOffset, uint32_t maxDrawCount,\r\n                                    uint32_t stride)\r\n{\r"
+  "\n  static PFN_vkCmdDrawIndirectCountAMD fn =\r\n      (PFN_vkCmdDrawIndirectCountAMD)vkGetDeviceProcAddr(aux.device, \"v"
+  "kCmdDrawIndirectCountAMD\");\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, buffer, offset, countBuffer, coun"
+  "tBufferOffset, maxDrawCount, stride);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r"
+  "\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, "
+  "FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, buffer, off"
+  "set, countBuffer, countBufferOffset, maxDrawCount, stride);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, au"
+  "x.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, buffer, offset,"
+  " countBuffer, countBufferOffset, maxDrawCount, stride);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdDrawIndexedIndirec"
+  "tCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer,\r\n                                           VkDeviceSize offs"
+  "et, VkBuffer countBuffer,\r\n                                           VkDeviceSize countBufferOffset, uint32_t maxDrawC"
+  "ount,\r\n                                           uint32_t stride)\r\n{\r\n  static PFN_vkCmdDrawIndexedIndirectCountAM"
+  "D fn =\r\n      (PFN_vkCmdDrawIndexedIndirectCountAMD)vkGetDeviceProcAddr(aux.device,\r\n                                "
+  "                                \"vkCmdDrawIndexedIndirectCountAMD\");\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(comman"
+  "dBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);\r\n    aux.cbCommandInfo[commandBuffer].p"
+  "ush_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r"
+  "\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffe"
+  "r));\r\n    fn(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);\r\n    vkCmdWriteTim"
+  "estamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {"
+  "\r\n    fn(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);\r\n  }\r\n  return;\r\n}"
+  "\r\n\r\nvoid shim_vkCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer,\r\n                                    VkPipel"
+  "ineBindPoint pipelineBindPoint, VkPipelineLayout layout,\r\n                                    uint32_t set, uint32_t de"
+  "scriptorWriteCount,\r\n                                    const VkWriteDescriptorSet *pDescriptorWrites)\r\n{\r\n  stati"
+  "c PFN_vkCmdPushDescriptorSetKHR fn =\r\n      (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(aux.device, \"vkCmdPushD"
+  "escriptorSetKHR\");\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, pipelineBindPoint, layout, set, descriptor"
+  "WriteCount, pDescriptorWrites);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } "
+  "else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND"
+  "_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, pipelineBindPoin"
+  "t, layout, set, descriptorWriteCount, pDescriptorWrites);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux."
+  "queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, pipelineBindPoint"
+  ", layout, set, descriptorWriteCount, pDescriptorWrites);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdSetDeviceMask(VkC"
+  "ommandBuffer commandBuffer, uint32_t deviceMask)\r\n{\r\n  static PFN_vkCmdSetDeviceMask fn =\r\n      (PFN_vkCmdSetDevic"
+  "eMask)vkGetDeviceProcAddr(aux.device, \"vkCmdSetDeviceMask\");\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer,"
+  " deviceMask);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIn"
+  "dex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.que"
+  "ryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, deviceMask);\r\n    vkCmdWriteTime"
+  "stamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r"
+  "\n    fn(commandBuffer, deviceMask);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdSetDeviceMaskKHR(VkCommandBuffer comm"
+  "andBuffer, uint32_t deviceMask)\r\n{\r\n  static PFN_vkCmdSetDeviceMaskKHR fn =\r\n      (PFN_vkCmdSetDeviceMaskKHR)vkGet"
+  "DeviceProcAddr(aux.device, \"vkCmdSetDeviceMaskKHR\");\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(commandBuffer, deviceM"
+  "ask);\r\n    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > ST"
+  "ART_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(c"
+  "ommandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n    fn(commandBuffer, deviceMask);\r\n    vkCmdWriteTimestamp(co"
+  "mmandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    f"
+  "n(commandBuffer, deviceMask);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdDispatchBase(VkCommandBuffer commandBuffer, "
+  "uint32_t baseGroupX, uint32_t baseGroupY,\r\n                            uint32_t baseGroupZ, uint32_t groupCountX, uint3"
+  "2_t groupCountY,\r\n                            uint32_t groupCountZ)\r\n{\r\n  static PFN_vkCmdDispatchBase fn =\r\n    "
+  "  (PFN_vkCmdDispatchBase)vkGetDeviceProcAddr(aux.device, \"vkCmdDispatchBase\");\r\n  if(presentIndex == 0)\r\n  {\r\n   "
+  " fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);\r\n    aux.cbCommandInfo[c"
+  "ommandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < E"
+  "ND_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.query"
+  "Inc(commandBuffer));\r\n    fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);"
+  "\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBu"
+  "ffer));\r\n  } else {\r\n    fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ)"
+  ";\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdDispatchBaseKHR(VkCommandBuffer commandBuffer, uint32_t baseGroupX,\r\n "
+  "                              uint32_t baseGroupY, uint32_t baseGroupZ, uint32_t groupCountX,\r\n                        "
+  "       uint32_t groupCountY, uint32_t groupCountZ)\r\n{\r\n  static PFN_vkCmdDispatchBaseKHR fn =\r\n      (PFN_vkCmdDisp"
+  "atchBaseKHR)vkGetDeviceProcAddr(aux.device, \"vkCmdDispatchBaseKHR\");\r\n  if(presentIndex == 0)\r\n  {\r\n    fn(comman"
+  "dBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);\r\n    aux.cbCommandInfo[commandBuff"
+  "er].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAM"
+  "E) {\r\n    vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(comman"
+  "dBuffer));\r\n    fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);\r\n    vk"
+  "CmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n"
+  "  } else {\r\n    fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);\r\n  }\r\n"
+  "  return;\r\n}\r\n\r\nvoid shim_vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer,\r\n                 "
+  "                               VkDescriptorUpdateTemplate descriptorUpdateTemplate,\r\n                                  "
+  "              VkPipelineLayout layout, uint32_t set,\r\n                                                const void *pData"
+  ")\r\n{\r\n  static PFN_vkCmdPushDescriptorSetWithTemplateKHR fn =\r\n      (PFN_vkCmdPushDescriptorSetWithTemplateKHR)vkG"
+  "etDeviceProcAddr(\r\n          aux.device, \"vkCmdPushDescriptorSetWithTemplateKHR\");\r\n  if(presentIndex == 0)\r\n  {\r"
+  "\n    fn(commandBuffer, descriptorUpdateTemplate, layout, set, pData);\r\n    aux.cbCommandInfo[commandBuffer].push_back("
+  "{__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {\r\n    vk"
+  "CmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n"
+  "    fn(commandBuffer, descriptorUpdateTemplate, layout, set, pData);\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_"
+  "STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    fn(commandBuffer, descri"
+  "ptorUpdateTemplate, layout, set, pData);\r\n  }\r\n  return;\r\n}\r\n\r\nvoid shim_vkCmdWriteBufferMarkerAMD(VkCommandBuf"
+  "fer commandBuffer,\r\n                                    VkPipelineStageFlagBits pipelineStage, VkBuffer dstBuffer,\r\n "
+  "                                   VkDeviceSize dstOffset, uint32_t marker)\r\n{\r\n  static PFN_vkCmdWriteBufferMarkerAM"
+  "D fn =\r\n      (PFN_vkCmdWriteBufferMarkerAMD)vkGetDeviceProcAddr(aux.device, \"vkCmdWriteBufferMarkerAMD\");\r\n  if(pr"
+  "esentIndex == 0)\r\n  {\r\n    fn(commandBuffer, pipelineStage, dstBuffer, dstOffset, marker);\r\n    aux.cbCommandInfo[c"
+  "ommandBuffer].push_back({__FUNCTION__});\r\n    return;\r\n  } else if (presentIndex > START_TS_FRAME && presentIndex < E"
+  "ND_TS_FRAME) {\r\n    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.quer"
+  "yInc(commandBuffer));\r\n    fn(commandBuffer, pipelineStage, dstBuffer, dstOffset, marker);\r\n    vkCmdWriteTimestamp(c"
+  "ommandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),\r\n      aux.queryInc(commandBuffer));\r\n  } else {\r\n    "
+  "fn(commandBuffer, pipelineStage, dstBuffer, dstOffset, marker);\r\n  }\r\n  return;\r\n}\r\n\r\n";
+const char fileData_39[] =
+  "#pragma once\r\n#if defined(_WIN32)\r\n#define SHIM_VK_API_IMPORT __declspec(dllimport)\r\n#define SHIM_VK_API_EXPORT __d"
+  "eclspec(dllexport)\r\n#else\r\n#define SHIM_VK_API_IMPORT __attribute__((visibility(\"default\")))\r\n#define SHIM_VK_API"
+  "_EXPORT __attribute__((visibility(\"default\")))\r\n#endif\r\n#if defined(SHIM_VK_COMPILE_STATIC_LIB)\r\n#define SHIM_VK_"
+  "API\r\n#else\r\n#if defined(SHIM_VK_EXPORT)\r\n#define SHIM_VK_API SHIM_VK_API_EXPORT\r\n#else\r\n#define SHIM_VK_API SHI"
+  "M_VK_API_IMPORT\r\n#endif\r\n#endif\r\n#include \"vulkan/vulkan.h\"\r\n\r\nSHIM_VK_API VkResult shim_vkCreateInstance(con"
+  "st VkInstanceCreateInfo *pCreateInfo,\r\n                                           const VkAllocationCallbacks *pAllocat"
+  "or,\r\n                                           VkInstance *pInstance);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateDevice"
+  "(VkPhysicalDevice physicalDevice,\r\n                                         const VkDeviceCreateInfo *pCreateInfo,\r\n "
+  "                                        const VkAllocationCallbacks *pAllocator, VkDevice *pDevice);\r\n\r\nSHIM_VK_API v"
+  "oid shim_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shi"
+  "m_vkEnumeratePhysicalDevices(VkInstance instance,\r\n                                                     uint32_t *pPhys"
+  "icalDeviceCount,\r\n                                                     VkPhysicalDevice *pPhysicalDevices);\r\n\r\nSHIM"
+  "_VK_API void shim_vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice,\r\n                                     "
+  "               VkPhysicalDeviceProperties *pProperties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceQueueFamilyPrope"
+  "rties(\r\n    VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount,\r\n    VkQueueFamilyProperties *pQueu"
+  "eFamilyProperties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceMemoryProperties(\r\n    VkPhysicalDevice physicalDev"
+  "ice, VkPhysicalDeviceMemoryProperties *pMemoryProperties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceFeatures(VkPhy"
+  "sicalDevice physicalDevice,\r\n                                                  VkPhysicalDeviceFeatures *pFeatures);\r\n"
+  "\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceFormatProperties(VkPhysicalDevice physicalDevice,\r\n                       "
+  "                                   VkFormat format,\r\n                                                          VkFormat"
+  "Properties *pFormatProperties);\r\n\r\nSHIM_VK_API VkResult shim_vkGetPhysicalDeviceImageFormatProperties(\r\n    VkPhysi"
+  "calDevice physicalDevice, VkFormat format, VkImageType type, VkImageTiling tiling,\r\n    VkImageUsageFlags usage, VkImag"
+  "eCreateFlags flags,\r\n    VkImageFormatProperties *pImageFormatProperties);\r\n\r\nSHIM_VK_API void shim_vkDestroyDevice"
+  "(VkDevice device, const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkEnumerateInstanceVersion(u"
+  "int32_t *pApiVersion);\r\n\r\nSHIM_VK_API VkResult shim_vkEnumerateInstanceLayerProperties(uint32_t *pPropertyCount,\r\n "
+  "                                                            VkLayerProperties *pProperties);\r\n\r\nSHIM_VK_API VkResult "
+  "shim_vkEnumerateInstanceExtensionProperties(const char *pLayerName,\r\n                                                  "
+  "               uint32_t *pPropertyCount,\r\n                                                                 VkExtensionP"
+  "roperties *pProperties);\r\n\r\nSHIM_VK_API VkResult shim_vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevic"
+  "e,\r\n                                                           uint32_t *pPropertyCount,\r\n                           "
+  "                                VkLayerProperties *pProperties);\r\n\r\nSHIM_VK_API VkResult shim_vkEnumerateDeviceExtens"
+  "ionProperties(VkPhysicalDevice physicalDevice,\r\n                                                               const ch"
+  "ar *pLayerName,\r\n                                                               uint32_t *pPropertyCount,\r\n          "
+  "                                                     VkExtensionProperties *pProperties);\r\n\r\nSHIM_VK_API void shim_vk"
+  "GetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex,\r\n                                       uint32_t queueIndex,"
+  " VkQueue *pQueue);\r\n\r\nSHIM_VK_API VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount,\r\n               "
+  "                         const VkSubmitInfo *pSubmits, VkFence fence);\r\n\r\nSHIM_VK_API VkResult shim_vkQueueWaitIdle(V"
+  "kQueue queue);\r\n\r\nSHIM_VK_API VkResult shim_vkDeviceWaitIdle(VkDevice device);\r\n\r\nSHIM_VK_API VkResult shim_vkAll"
+  "ocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,\r\n                                           con"
+  "st VkAllocationCallbacks *pAllocator,\r\n                                           VkDeviceMemory *pMemory);\r\n\r\nSHIM"
+  "_VK_API void shim_vkFreeMemory(VkDevice device, VkDeviceMemory memory,\r\n                                   const VkAllo"
+  "cationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkMapMemory(VkDevice device, VkDeviceMemory memory, VkDevi"
+  "ceSize offset,\r\n                                      VkDeviceSize size, VkMemoryMapFlags flags, void **ppData);\r\n\r\n"
+  "SHIM_VK_API void shim_vkUnmapMemory(VkDevice device, VkDeviceMemory memory);\r\n\r\nSHIM_VK_API VkResult shim_vkFlushMapp"
+  "edMemoryRanges(VkDevice device, uint32_t memoryRangeCount,\r\n                                                    const V"
+  "kMappedMemoryRange *pMemoryRanges);\r\n\r\nSHIM_VK_API VkResult shim_vkInvalidateMappedMemoryRanges(VkDevice device, uint"
+  "32_t memoryRangeCount,\r\n                                                         const VkMappedMemoryRange *pMemoryRang"
+  "es);\r\n\r\nSHIM_VK_API void shim_vkGetDeviceMemoryCommitment(VkDevice device, VkDeviceMemory memory,\r\n                "
+  "                                  VkDeviceSize *pCommittedMemoryInBytes);\r\n\r\nSHIM_VK_API void shim_vkGetBufferMemoryR"
+  "equirements(VkDevice device, VkBuffer buffer,\r\n                                                    VkMemoryRequirements"
+  " *pMemoryRequirements);\r\n\r\nSHIM_VK_API VkResult shim_vkBindBufferMemory(VkDevice device, VkBuffer buffer,\r\n        "
+  "                                     VkDeviceMemory memory, VkDeviceSize memoryOffset);\r\n\r\nSHIM_VK_API void shim_vkGe"
+  "tImageMemoryRequirements(VkDevice device, VkImage image,\r\n                                                   VkMemoryRe"
+  "quirements *pMemoryRequirements);\r\n\r\nSHIM_VK_API VkResult shim_vkBindImageMemory(VkDevice device, VkImage image, VkDe"
+  "viceMemory memory,\r\n                                            VkDeviceSize memoryOffset);\r\n\r\nSHIM_VK_API void shi"
+  "m_vkGetImageSparseMemoryRequirements(\r\n    VkDevice device, VkImage image, uint32_t *pSparseMemoryRequirementCount,\r\n"
+  "    VkSparseImageMemoryRequirements *pSparseMemoryRequirements);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceSparseIm"
+  "ageFormatProperties(\r\n    VkPhysicalDevice physicalDevice, VkFormat format, VkImageType type,\r\n    VkSampleCountFlagB"
+  "its samples, VkImageUsageFlags usage, VkImageTiling tiling,\r\n    uint32_t *pPropertyCount, VkSparseImageFormatPropertie"
+  "s *pProperties);\r\n\r\nSHIM_VK_API VkResult shim_vkQueueBindSparse(VkQueue queue, uint32_t bindInfoCount,\r\n           "
+  "                                 const VkBindSparseInfo *pBindInfo, VkFence fence);\r\n\r\nSHIM_VK_API VkResult shim_vkCr"
+  "eateFence(VkDevice device, const VkFenceCreateInfo *pCreateInfo,\r\n                                        const VkAlloc"
+  "ationCallbacks *pAllocator, VkFence *pFence);\r\n\r\nSHIM_VK_API void shim_vkDestroyFence(VkDevice device, VkFence fence,"
+  "\r\n                                     const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkRes"
+  "etFences(VkDevice device, uint32_t fenceCount, const VkFence *pFences);\r\n\r\nSHIM_VK_API VkResult shim_vkGetFenceStatus"
+  "(VkDevice device, VkFence fence);\r\n\r\nSHIM_VK_API VkResult shim_vkWaitForFences(VkDevice device, uint32_t fenceCount,\r"
+  "\n                                          const VkFence *pFences, VkBool32 waitAll, uint64_t timeout);\r\n\r\nSHIM_VK_A"
+  "PI VkResult shim_vkCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo *pCreateInfo,\r\n                        "
+  "                    const VkAllocationCallbacks *pAllocator,\r\n                                            VkSemaphore *"
+  "pSemaphore);\r\n\r\nSHIM_VK_API void shim_vkDestroySemaphore(VkDevice device, VkSemaphore semaphore,\r\n                 "
+  "                        const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateEvent(VkDevice"
+  " device, const VkEventCreateInfo *pCreateInfo,\r\n                                        const VkAllocationCallbacks *pA"
+  "llocator, VkEvent *pEvent);\r\n\r\nSHIM_VK_API void shim_vkDestroyEvent(VkDevice device, VkEvent event,\r\n              "
+  "                       const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkGetEventStatus(VkDevi"
+  "ce device, VkEvent event);\r\n\r\nSHIM_VK_API VkResult shim_vkSetEvent(VkDevice device, VkEvent event);\r\n\r\nSHIM_VK_AP"
+  "I VkResult shim_vkResetEvent(VkDevice device, VkEvent event);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateQueryPool(VkDevice"
+  " device, const VkQueryPoolCreateInfo *pCreateInfo,\r\n                                            const VkAllocationCallb"
+  "acks *pAllocator,\r\n                                            VkQueryPool *pQueryPool);\r\n\r\nSHIM_VK_API void shim_v"
+  "kDestroyQueryPool(VkDevice device, VkQueryPool queryPool,\r\n                                         const VkAllocationC"
+  "allbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkGetQueryPoolResults(VkDevice device, VkQueryPool queryPool,\r\n"
+  "                                                uint32_t firstQuery, uint32_t queryCount,\r\n                            "
+  "                    size_t dataSize, void *pData, VkDeviceSize stride,\r\n                                               "
+  " VkQueryResultFlags flags);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateBuffer(VkDevice device, const VkBufferCreateInfo *pC"
+  "reateInfo,\r\n                                         const VkAllocationCallbacks *pAllocator, VkBuffer *pBuffer);\r\n\r"
+  "\nSHIM_VK_API void shim_vkDestroyBuffer(VkDevice device, VkBuffer buffer,\r\n                                      const "
+  "VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateBufferView(VkDevice device,\r\n             "
+  "                                const VkBufferViewCreateInfo *pCreateInfo,\r\n                                           "
+  "  const VkAllocationCallbacks *pAllocator,\r\n                                             VkBufferView *pView);\r\n\r\nS"
+  "HIM_VK_API void shim_vkDestroyBufferView(VkDevice device, VkBufferView bufferView,\r\n                                   "
+  "       const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateImage(VkDevice device, const Vk"
+  "ImageCreateInfo *pCreateInfo,\r\n                                        const VkAllocationCallbacks *pAllocator, VkImage"
+  " *pImage);\r\n\r\nSHIM_VK_API void shim_vkDestroyImage(VkDevice device, VkImage image,\r\n                               "
+  "      const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API void shim_vkGetImageSubresourceLayout(VkDevice device,"
+  " VkImage image,\r\n                                                  const VkImageSubresource *pSubresource,\r\n         "
+  "                                         VkSubresourceLayout *pLayout);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateImageVie"
+  "w(VkDevice device, const VkImageViewCreateInfo *pCreateInfo,\r\n                                            const VkAlloc"
+  "ationCallbacks *pAllocator,\r\n                                            VkImageView *pView);\r\n\r\nSHIM_VK_API void s"
+  "him_vkDestroyImageView(VkDevice device, VkImageView imageView,\r\n                                         const VkAlloca"
+  "tionCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateShaderModule(VkDevice device,\r\n                   "
+  "                            const VkShaderModuleCreateInfo *pCreateInfo,\r\n                                             "
+  "  const VkAllocationCallbacks *pAllocator,\r\n                                               VkShaderModule *pShaderModul"
+  "e);\r\n\r\nSHIM_VK_API void shim_vkDestroyShaderModule(VkDevice device, VkShaderModule shaderModule,\r\n                 "
+  "                           const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkCreatePipelineCac"
+  "he(VkDevice device,\r\n                                                const VkPipelineCacheCreateInfo *pCreateInfo,\r\n "
+  "                                               const VkAllocationCallbacks *pAllocator,\r\n                              "
+  "                  VkPipelineCache *pPipelineCache);\r\n\r\nSHIM_VK_API void shim_vkDestroyPipelineCache(VkDevice device, "
+  "VkPipelineCache pipelineCache,\r\n                                             const VkAllocationCallbacks *pAllocator);\r"
+  "\n\r\nSHIM_VK_API VkResult shim_vkGetPipelineCacheData(VkDevice device, VkPipelineCache pipelineCache,\r\n               "
+  "                                  size_t *pDataSize, void *pData);\r\n\r\nSHIM_VK_API VkResult shim_vkMergePipelineCaches"
+  "(VkDevice device, VkPipelineCache dstCache,\r\n                                                uint32_t srcCacheCount,\r\n"
+  "                                                const VkPipelineCache *pSrcCaches);\r\n\r\nSHIM_VK_API VkResult shim_vkCr"
+  "eateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache,\r\n                                                "
+  "    uint32_t createInfoCount,\r\n                                                    const VkGraphicsPipelineCreateInfo *"
+  "pCreateInfos,\r\n                                                    const VkAllocationCallbacks *pAllocator,\r\n        "
+  "                                            VkPipeline *pPipelines);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateComputePipe"
+  "lines(VkDevice device, VkPipelineCache pipelineCache,\r\n                                                   uint32_t crea"
+  "teInfoCount,\r\n                                                   const VkComputePipelineCreateInfo *pCreateInfos,\r\n  "
+  "                                                 const VkAllocationCallbacks *pAllocator,\r\n                            "
+  "                       VkPipeline *pPipelines);\r\n\r\nSHIM_VK_API void shim_vkDestroyPipeline(VkDevice device, VkPipelin"
+  "e pipeline,\r\n                                        const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkRes"
+  "ult shim_vkCreatePipelineLayout(VkDevice device,\r\n                                                 const VkPipelineLayo"
+  "utCreateInfo *pCreateInfo,\r\n                                                 const VkAllocationCallbacks *pAllocator,\r"
+  "\n                                                 VkPipelineLayout *pPipelineLayout);\r\n\r\nSHIM_VK_API void shim_vkDes"
+  "troyPipelineLayout(VkDevice device, VkPipelineLayout pipelineLayout,\r\n                                              con"
+  "st VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateSampler(VkDevice device, const VkSamplerC"
+  "reateInfo *pCreateInfo,\r\n                                          const VkAllocationCallbacks *pAllocator,\r\n        "
+  "                                  VkSampler *pSampler);\r\n\r\nSHIM_VK_API void shim_vkDestroySampler(VkDevice device, Vk"
+  "Sampler sampler,\r\n                                       const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API V"
+  "kResult shim_vkCreateDescriptorSetLayout(\r\n    VkDevice device, const VkDescriptorSetLayoutCreateInfo *pCreateInfo,\r\n"
+  "    const VkAllocationCallbacks *pAllocator, VkDescriptorSetLayout *pSetLayout);\r\n\r\nSHIM_VK_API void shim_vkDestroyDe"
+  "scriptorSetLayout(VkDevice device,\r\n                                                   VkDescriptorSetLayout descriptor"
+  "SetLayout,\r\n                                                   const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK"
+  "_API VkResult shim_vkCreateDescriptorPool(VkDevice device,\r\n                                                 const VkDe"
+  "scriptorPoolCreateInfo *pCreateInfo,\r\n                                                 const VkAllocationCallbacks *pAl"
+  "locator,\r\n                                                 VkDescriptorPool *pDescriptorPool);\r\n\r\nSHIM_VK_API void "
+  "shim_vkDestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool,\r\n                                       "
+  "       const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkResetDescriptorPool(VkDevice device, "
+  "VkDescriptorPool descriptorPool,\r\n                                                VkDescriptorPoolResetFlags flags);\r\n"
+  "\r\nSHIM_VK_API VkResult shim_vkAllocateDescriptorSets(VkDevice device,\r\n                                              "
+  "     const VkDescriptorSetAllocateInfo *pAllocateInfo,\r\n                                                   VkDescriptor"
+  "Set *pDescriptorSets);\r\n\r\nSHIM_VK_API VkResult shim_vkFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptor"
+  "Pool,\r\n                                               uint32_t descriptorSetCount,\r\n                                 "
+  "              const VkDescriptorSet *pDescriptorSets);\r\n\r\nSHIM_VK_API void shim_vkUpdateDescriptorSets(VkDevice devic"
+  "e, uint32_t descriptorWriteCount,\r\n                                             const VkWriteDescriptorSet *pDescriptor"
+  "Writes,\r\n                                             uint32_t descriptorCopyCount,\r\n                                "
+  "             const VkCopyDescriptorSet *pDescriptorCopies);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateFramebuffer(VkDevice"
+  " device,\r\n                                              const VkFramebufferCreateInfo *pCreateInfo,\r\n                "
+  "                              const VkAllocationCallbacks *pAllocator,\r\n                                              V"
+  "kFramebuffer *pFramebuffer);\r\n\r\nSHIM_VK_API void shim_vkDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer"
+  ",\r\n                                           const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shi"
+  "m_vkCreateRenderPass(VkDevice device,\r\n                                             const VkRenderPassCreateInfo *pCrea"
+  "teInfo,\r\n                                             const VkAllocationCallbacks *pAllocator,\r\n                     "
+  "                        VkRenderPass *pRenderPass);\r\n\r\nSHIM_VK_API void shim_vkDestroyRenderPass(VkDevice device, VkR"
+  "enderPass renderPass,\r\n                                          const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_"
+  "VK_API void shim_vkGetRenderAreaGranularity(VkDevice device, VkRenderPass renderPass,\r\n                                "
+  "                 VkExtent2D *pGranularity);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateCommandPool(VkDevice device,\r\n    "
+  "                                          const VkCommandPoolCreateInfo *pCreateInfo,\r\n                                "
+  "              const VkAllocationCallbacks *pAllocator,\r\n                                              VkCommandPool *pC"
+  "ommandPool);\r\n\r\nSHIM_VK_API void shim_vkDestroyCommandPool(VkDevice device, VkCommandPool commandPool,\r\n           "
+  "                                const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkResetCommand"
+  "Pool(VkDevice device, VkCommandPool commandPool,\r\n                                             VkCommandPoolResetFlags "
+  "flags);\r\n\r\nSHIM_VK_API VkResult shim_vkAllocateCommandBuffers(VkDevice device,\r\n                                   "
+  "                const VkCommandBufferAllocateInfo *pAllocateInfo,\r\n                                                   V"
+  "kCommandBuffer *pCommandBuffers);\r\n\r\nSHIM_VK_API void shim_vkFreeCommandBuffers(VkDevice device, VkCommandPool comman"
+  "dPool,\r\n                                           uint32_t commandBufferCount,\r\n                                    "
+  "       const VkCommandBuffer *pCommandBuffers);\r\n\r\nSHIM_VK_API VkResult shim_vkBeginCommandBuffer(VkCommandBuffer com"
+  "mandBuffer,\r\n                                               const VkCommandBufferBeginInfo *pBeginInfo);\r\n\r\nSHIM_VK"
+  "_API VkResult shim_vkEndCommandBuffer(VkCommandBuffer commandBuffer);\r\n\r\nSHIM_VK_API VkResult shim_vkResetCommandBuff"
+  "er(VkCommandBuffer commandBuffer,\r\n                                               VkCommandBufferResetFlags flags);\r\n"
+  "\r\nSHIM_VK_API void shim_vkCmdBindPipeline(VkCommandBuffer commandBuffer,\r\n                                        VkP"
+  "ipelineBindPoint pipelineBindPoint, VkPipeline pipeline);\r\n\r\nSHIM_VK_API void shim_vkCmdSetViewport(VkCommandBuffer c"
+  "ommandBuffer, uint32_t firstViewport,\r\n                                       uint32_t viewportCount, const VkViewport "
+  "*pViewports);\r\n\r\nSHIM_VK_API void shim_vkCmdSetScissor(VkCommandBuffer commandBuffer, uint32_t firstScissor,\r\n     "
+  "                                 uint32_t scissorCount, const VkRect2D *pScissors);\r\n\r\nSHIM_VK_API void shim_vkCmdSet"
+  "LineWidth(VkCommandBuffer commandBuffer, float lineWidth);\r\n\r\nSHIM_VK_API void shim_vkCmdSetDepthBias(VkCommandBuffer"
+  " commandBuffer, float depthBiasConstantFactor,\r\n                                        float depthBiasClamp, float dep"
+  "thBiasSlopeFactor);\r\n\r\nSHIM_VK_API void shim_vkCmdSetBlendConstants(VkCommandBuffer commandBuffer,\r\n               "
+  "                              const float blendConstants[4]);\r\n\r\nSHIM_VK_API void shim_vkCmdSetDepthBounds(VkCommandB"
+  "uffer commandBuffer, float minDepthBounds,\r\n                                          float maxDepthBounds);\r\n\r\nSHI"
+  "M_VK_API void shim_vkCmdSetStencilCompareMask(VkCommandBuffer commandBuffer,\r\n                                         "
+  "        VkStencilFaceFlags faceMask, uint32_t compareMask);\r\n\r\nSHIM_VK_API void shim_vkCmdSetStencilWriteMask(VkComma"
+  "ndBuffer commandBuffer,\r\n                                               VkStencilFaceFlags faceMask, uint32_t writeMask"
+  ");\r\n\r\nSHIM_VK_API void shim_vkCmdSetStencilReference(VkCommandBuffer commandBuffer,\r\n                              "
+  "                 VkStencilFaceFlags faceMask, uint32_t reference);\r\n\r\nSHIM_VK_API void shim_vkCmdBindDescriptorSets(\r"
+  "\n    VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout,\r\n    uint32_t firs"
+  "tSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets,\r\n    uint32_t dynamicOffsetCount, const uint"
+  "32_t *pDynamicOffsets);\r\n\r\nSHIM_VK_API void shim_vkCmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer,"
+  "\r\n                                           VkDeviceSize offset, VkIndexType indexType);\r\n\r\nSHIM_VK_API void shim_"
+  "vkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, uint32_t firstBinding,\r\n                                         "
+  "    uint32_t bindingCount, const VkBuffer *pBuffers,\r\n                                             const VkDeviceSize *"
+  "pOffsets);\r\n\r\nSHIM_VK_API void shim_vkCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount,\r\n               "
+  "                 uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);\r\n\r\nSHIM_VK_API void shim_vkCm"
+  "dDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount,\r\n                                       uint32_t insta"
+  "nceCount, uint32_t firstIndex,\r\n                                       int32_t vertexOffset, uint32_t firstInstance);\r"
+  "\n\r\nSHIM_VK_API void shim_vkCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer,\r\n                        "
+  "                VkDeviceSize offset, uint32_t drawCount, uint32_t stride);\r\n\r\nSHIM_VK_API void shim_vkCmdDrawIndexedI"
+  "ndirect(VkCommandBuffer commandBuffer, VkBuffer buffer,\r\n                                               VkDeviceSize of"
+  "fset, uint32_t drawCount,\r\n                                               uint32_t stride);\r\n\r\nSHIM_VK_API void shi"
+  "m_vkCmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX,\r\n                                    uint32_t grou"
+  "pCountY, uint32_t groupCountZ);\r\n\r\nSHIM_VK_API void shim_vkCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffe"
+  "r buffer,\r\n                                            VkDeviceSize offset);\r\n\r\nSHIM_VK_API void shim_vkCmdCopyBuff"
+  "er(VkCommandBuffer commandBuffer, VkBuffer srcBuffer,\r\n                                      VkBuffer dstBuffer, uint32"
+  "_t regionCount,\r\n                                      const VkBufferCopy *pRegions);\r\n\r\nSHIM_VK_API void shim_vkCm"
+  "dCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage,\r\n                                     VkImageLayout srcImag"
+  "eLayout, VkImage dstImage,\r\n                                     VkImageLayout dstImageLayout, uint32_t regionCount,\r\n"
+  "                                     const VkImageCopy *pRegions);\r\n\r\nSHIM_VK_API void shim_vkCmdBlitImage(VkCommandB"
+  "uffer commandBuffer, VkImage srcImage,\r\n                                     VkImageLayout srcImageLayout, VkImage dstI"
+  "mage,\r\n                                     VkImageLayout dstImageLayout, uint32_t regionCount,\r\n                    "
+  "                 const VkImageBlit *pRegions, VkFilter filter);\r\n\r\nSHIM_VK_API void shim_vkCmdCopyBufferToImage(VkCom"
+  "mandBuffer commandBuffer, VkBuffer srcBuffer,\r\n                                             VkImage dstImage, VkImageLa"
+  "yout dstImageLayout,\r\n                                             uint32_t regionCount, const VkBufferImageCopy *pRegi"
+  "ons);\r\n\r\nSHIM_VK_API void shim_vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage,\r\n           "
+  "                                  VkImageLayout srcImageLayout, VkBuffer dstBuffer,\r\n                                  "
+  "           uint32_t regionCount, const VkBufferImageCopy *pRegions);\r\n\r\nSHIM_VK_API void shim_vkCmdUpdateBuffer(VkCom"
+  "mandBuffer commandBuffer, VkBuffer dstBuffer,\r\n                                        VkDeviceSize dstOffset, VkDevice"
+  "Size dataSize,\r\n                                        const void *pData);\r\n\r\nSHIM_VK_API void shim_vkCmdFillBuffe"
+  "r(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,\r\n                                      VkDeviceSize dstOffset, VkD"
+  "eviceSize size, uint32_t data);\r\n\r\nSHIM_VK_API void shim_vkCmdClearColorImage(VkCommandBuffer commandBuffer, VkImage "
+  "image,\r\n                                           VkImageLayout imageLayout,\r\n                                      "
+  "     const VkClearColorValue *pColor, uint32_t rangeCount,\r\n                                           const VkImageSub"
+  "resourceRange *pRanges);\r\n\r\nSHIM_VK_API void shim_vkCmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage "
+  "image,\r\n                                                  VkImageLayout imageLayout,\r\n                               "
+  "                   const VkClearDepthStencilValue *pDepthStencil,\r\n                                                  ui"
+  "nt32_t rangeCount,\r\n                                                  const VkImageSubresourceRange *pRanges);\r\n\r\nS"
+  "HIM_VK_API void shim_vkCmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount,\r\n                  "
+  "                          const VkClearAttachment *pAttachments,\r\n                                            uint32_t "
+  "rectCount, const VkClearRect *pRects);\r\n\r\nSHIM_VK_API void shim_vkCmdResolveImage(VkCommandBuffer commandBuffer, VkIm"
+  "age srcImage,\r\n                                        VkImageLayout srcImageLayout, VkImage dstImage,\r\n             "
+  "                           VkImageLayout dstImageLayout, uint32_t regionCount,\r\n                                       "
+  " const VkImageResolve *pRegions);\r\n\r\nSHIM_VK_API void shim_vkCmdSetEvent(VkCommandBuffer commandBuffer, VkEvent event"
+  ",\r\n                                    VkPipelineStageFlags stageMask);\r\n\r\nSHIM_VK_API void shim_vkCmdResetEvent(Vk"
+  "CommandBuffer commandBuffer, VkEvent event,\r\n                                      VkPipelineStageFlags stageMask);\r\n"
+  "\r\nSHIM_VK_API void shim_vkCmdWaitEvents(VkCommandBuffer commandBuffer, uint32_t eventCount,\r\n                        "
+  "              const VkEvent *pEvents, VkPipelineStageFlags srcStageMask,\r\n                                      VkPipel"
+  "ineStageFlags dstStageMask, uint32_t memoryBarrierCount,\r\n                                      const VkMemoryBarrier *"
+  "pMemoryBarriers,\r\n                                      uint32_t bufferMemoryBarrierCount,\r\n                         "
+  "             const VkBufferMemoryBarrier *pBufferMemoryBarriers,\r\n                                      uint32_t imageM"
+  "emoryBarrierCount,\r\n                                      const VkImageMemoryBarrier *pImageMemoryBarriers);\r\n\r\nSHI"
+  "M_VK_API void shim_vkCmdPipelineBarrier(\r\n    VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask,\r\n    "
+  "VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags,\r\n    uint32_t memoryBarrierCount, const VkMemoryB"
+  "arrier *pMemoryBarriers,\r\n    uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier *pBufferMemoryBarriers,\r\n"
+  "    uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *pImageMemoryBarriers);\r\n\r\nSHIM_VK_API void shim_vkC"
+  "mdBeginQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool,\r\n                                      uint32_t quer"
+  "y, VkQueryControlFlags flags);\r\n\r\nSHIM_VK_API void shim_vkCmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool quer"
+  "yPool,\r\n                                    uint32_t query);\r\n\r\nSHIM_VK_API void shim_vkCmdResetQueryPool(VkCommand"
+  "Buffer commandBuffer, VkQueryPool queryPool,\r\n                                          uint32_t firstQuery, uint32_t q"
+  "ueryCount);\r\n\r\nSHIM_VK_API void shim_vkCmdWriteTimestamp(VkCommandBuffer commandBuffer,\r\n                          "
+  "                VkPipelineStageFlagBits pipelineStage,\r\n                                          VkQueryPool queryPool"
+  ", uint32_t query);\r\n\r\nSHIM_VK_API void shim_vkCmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool quer"
+  "yPool,\r\n                                                uint32_t firstQuery, uint32_t queryCount,\r\n                  "
+  "                              VkBuffer dstBuffer, VkDeviceSize dstOffset,\r\n                                            "
+  "    VkDeviceSize stride, VkQueryResultFlags flags);\r\n\r\nSHIM_VK_API void shim_vkCmdPushConstants(VkCommandBuffer comma"
+  "ndBuffer, VkPipelineLayout layout,\r\n                                         VkShaderStageFlags stageFlags, uint32_t of"
+  "fset,\r\n                                         uint32_t size, const void *pValues);\r\n\r\nSHIM_VK_API void shim_vkCmd"
+  "BeginRenderPass(VkCommandBuffer commandBuffer,\r\n                                           const VkRenderPassBeginInfo "
+  "*pRenderPassBegin,\r\n                                           VkSubpassContents contents);\r\n\r\nSHIM_VK_API void shi"
+  "m_vkCmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents);\r\n\r\nSHIM_VK_API void shim_vkCmdEndRende"
+  "rPass(VkCommandBuffer commandBuffer);\r\n\r\nSHIM_VK_API void shim_vkCmdExecuteCommands(VkCommandBuffer commandBuffer, ui"
+  "nt32_t commandBufferCount,\r\n                                           const VkCommandBuffer *pCommandBuffers);\r\n\r\n"
+  "SHIM_VK_API VkResult shim_vkGetPhysicalDeviceDisplayPropertiesKHR(\r\n    VkPhysicalDevice physicalDevice, uint32_t *pPro"
+  "pertyCount, VkDisplayPropertiesKHR *pProperties);\r\n\r\nSHIM_VK_API VkResult shim_vkGetPhysicalDeviceDisplayPlanePropert"
+  "iesKHR(\r\n    VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount,\r\n    VkDisplayPlanePropertiesKHR *pProperties"
+  ");\r\n\r\nSHIM_VK_API VkResult shim_vkGetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice,\r\n           "
+  "                                                     uint32_t planeIndex,\r\n                                            "
+  "                    uint32_t *pDisplayCount,\r\n                                                                VkDisplay"
+  "KHR *pDisplays);\r\n\r\nSHIM_VK_API VkResult shim_vkGetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice,\r\n     "
+  "                                                   VkDisplayKHR display,\r\n                                             "
+  "           uint32_t *pPropertyCount,\r\n                                                        VkDisplayModePropertiesKH"
+  "R *pProperties);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateDisplayModeKHR(VkPhysicalDevice physicalDevice,\r\n            "
+  "                                     VkDisplayKHR display,\r\n                                                 const VkDi"
+  "splayModeCreateInfoKHR *pCreateInfo,\r\n                                                 const VkAllocationCallbacks *pAl"
+  "locator,\r\n                                                 VkDisplayModeKHR *pMode);\r\n\r\nSHIM_VK_API VkResult shim_v"
+  "kGetDisplayPlaneCapabilitiesKHR(\r\n    VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex,\r\n "
+  "   VkDisplayPlaneCapabilitiesKHR *pCapabilities);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateDisplayPlaneSurfaceKHR(\r\n   "
+  " VkInstance instance, const VkDisplaySurfaceCreateInfoKHR *pCreateInfo,\r\n    const VkAllocationCallbacks *pAllocator, V"
+  "kSurfaceKHR *pSurface);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainC"
+  "ount,\r\n                                                      const VkSwapchainCreateInfoKHR *pCreateInfos,\r\n         "
+  "                                             const VkAllocationCallbacks *pAllocator,\r\n                                "
+  "                      VkSwapchainKHR *pSwapchains);\r\n\r\nSHIM_VK_API void shim_vkDestroySurfaceKHR(VkInstance instance,"
+  " VkSurfaceKHR surface,\r\n                                          const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM"
+  "_VK_API VkResult shim_vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice,\r\n                          "
+  "                                     uint32_t queueFamilyIndex,\r\n                                                      "
+  "         VkSurfaceKHR surface,\r\n                                                               VkBool32 *pSupported);\r"
+  "\n\r\nSHIM_VK_API VkResult\r\nshim_vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKH"
+  "R surface,\r\n                                               VkSurfaceCapabilitiesKHR *pSurfaceCapabilities);\r\n\r\nSHIM"
+  "_VK_API VkResult shim_vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice,\r\n                          "
+  "                                     VkSurfaceKHR surface,\r\n                                                           "
+  "    uint32_t *pSurfaceFormatCount,\r\n                                                               VkSurfaceFormatKHR *"
+  "pSurfaceFormats);\r\n\r\nSHIM_VK_API VkResult shim_vkGetPhysicalDeviceSurfacePresentModesKHR(VkPhysicalDevice physicalDev"
+  "ice,\r\n                                                                    VkSurfaceKHR surface,\r\n                    "
+  "                                                uint32_t *pPresentModeCount,\r\n                                         "
+  "                           VkPresentModeKHR *pPresentModes);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateSwapchainKHR(VkDevi"
+  "ce device,\r\n                                               const VkSwapchainCreateInfoKHR *pCreateInfo,\r\n            "
+  "                                   const VkAllocationCallbacks *pAllocator,\r\n                                          "
+  "     VkSwapchainKHR *pSwapchain);\r\n\r\nSHIM_VK_API void shim_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swap"
+  "chain,\r\n                                            const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResu"
+  "lt shim_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,\r\n                                           "
+  "       uint32_t *pSwapchainImageCount,\r\n                                                  VkImage *pSwapchainImages);\r"
+  "\n\r\nSHIM_VK_API VkResult shim_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,\r\n                     "
+  "                           uint64_t timeout, VkSemaphore semaphore,\r\n                                                Vk"
+  "Fence fence, uint32_t *pImageIndex);\r\n\r\nSHIM_VK_API VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInf"
+  "oKHR *pPresentInfo);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateDebugReportCallbackEXT(\r\n    VkInstance instance, const V"
+  "kDebugReportCallbackCreateInfoEXT *pCreateInfo,\r\n    const VkAllocationCallbacks *pAllocator, VkDebugReportCallbackEXT "
+  "*pCallback);\r\n\r\nSHIM_VK_API void shim_vkDestroyDebugReportCallbackEXT(VkInstance instance,\r\n                       "
+  "                               VkDebugReportCallbackEXT callback,\r\n                                                    "
+  "  const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API void shim_vkDebugReportMessageEXT(VkInstance instance, VkD"
+  "ebugReportFlagsEXT flags,\r\n                                              VkDebugReportObjectTypeEXT objectType,\r\n    "
+  "                                          uint64_t object, size_t location, int32_t messageCode,\r\n                     "
+  "                         const char *pLayerPrefix, const char *pMessage);\r\n\r\nSHIM_VK_API VkResult\r\nshim_vkDebugMark"
+  "erSetObjectNameEXT(VkDevice device, const VkDebugMarkerObjectNameInfoEXT *pNameInfo);\r\n\r\nSHIM_VK_API VkResult shim_vk"
+  "DebugMarkerSetObjectTagEXT(VkDevice device,\r\n                                                       const VkDebugMarker"
+  "ObjectTagInfoEXT *pTagInfo);\r\n\r\nSHIM_VK_API void shim_vkCmdDebugMarkerBeginEXT(VkCommandBuffer commandBuffer,\r\n    "
+  "                                           const VkDebugMarkerMarkerInfoEXT *pMarkerInfo);\r\n\r\nSHIM_VK_API void shim_v"
+  "kCmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer);\r\n\r\nSHIM_VK_API void shim_vkCmdDebugMarkerInsertEXT(VkCommandBuf"
+  "fer commandBuffer,\r\n                                                const VkDebugMarkerMarkerInfoEXT *pMarkerInfo);\r\n"
+  "\r\nSHIM_VK_API VkResult shim_vkGetPhysicalDeviceExternalImageFormatPropertiesNV(\r\n    VkPhysicalDevice physicalDevice,"
+  " VkFormat format, VkImageType type, VkImageTiling tiling,\r\n    VkImageUsageFlags usage, VkImageCreateFlags flags,\r\n  "
+  "  VkExternalMemoryHandleTypeFlagsNV externalHandleType,\r\n    VkExternalImageFormatPropertiesNV *pExternalImageFormatPro"
+  "perties);\r\n\r\nSHIM_VK_API void shim_vkCmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer,\r\n     "
+  "                                           VkDeviceSize offset, VkBuffer countBuffer,\r\n                                "
+  "                VkDeviceSize countBufferOffset,\r\n                                                uint32_t maxDrawCount,"
+  " uint32_t stride);\r\n\r\nSHIM_VK_API void shim_vkCmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer "
+  "buffer,\r\n                                                       VkDeviceSize offset, VkBuffer countBuffer,\r\n         "
+  "                                              VkDeviceSize countBufferOffset,\r\n                                        "
+  "               uint32_t maxDrawCount, uint32_t stride);\r\n\r\nSHIM_VK_API void shim_vkCmdProcessCommandsNVX(VkCommandBuf"
+  "fer commandBuffer,\r\n                                              const VkCmdProcessCommandsInfoNVX *pProcessCommandsIn"
+  "fo);\r\n\r\nSHIM_VK_API void shim_vkCmdReserveSpaceForCommandsNVX(\r\n    VkCommandBuffer commandBuffer, const VkCmdReser"
+  "veSpaceForCommandsInfoNVX *pReserveSpaceInfo);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateIndirectCommandsLayoutNVX(\r\n   "
+  " VkDevice device, const VkIndirectCommandsLayoutCreateInfoNVX *pCreateInfo,\r\n    const VkAllocationCallbacks *pAllocato"
+  "r, VkIndirectCommandsLayoutNVX *pIndirectCommandsLayout);\r\n\r\nSHIM_VK_API void shim_vkDestroyIndirectCommandsLayoutNVX"
+  "(\r\n    VkDevice device, VkIndirectCommandsLayoutNVX indirectCommandsLayout,\r\n    const VkAllocationCallbacks *pAlloca"
+  "tor);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateObjectTableNVX(VkDevice device,\r\n                                       "
+  "          const VkObjectTableCreateInfoNVX *pCreateInfo,\r\n                                                 const VkAllo"
+  "cationCallbacks *pAllocator,\r\n                                                 VkObjectTableNVX *pObjectTable);\r\n\r\n"
+  "SHIM_VK_API void shim_vkDestroyObjectTableNVX(VkDevice device, VkObjectTableNVX objectTable,\r\n                         "
+  "                     const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkResult shim_vkRegisterObjectsNVX(VkDe"
+  "vice device, VkObjectTableNVX objectTable,\r\n                                               uint32_t objectCount,\r\n   "
+  "                                            const VkObjectTableEntryNVX *const *ppObjectTableEntries,\r\n                "
+  "                               const uint32_t *pObjectIndices);\r\n\r\nSHIM_VK_API VkResult shim_vkUnregisterObjectsNVX(V"
+  "kDevice device, VkObjectTableNVX objectTable,\r\n                                                 uint32_t objectCount,\r"
+  "\n                                                 const VkObjectEntryTypeNVX *pObjectEntryTypes,\r\n                    "
+  "                             const uint32_t *pObjectIndices);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceGeneratedCo"
+  "mmandsPropertiesNVX(\r\n    VkPhysicalDevice physicalDevice, VkDeviceGeneratedCommandsFeaturesNVX *pFeatures,\r\n    VkDe"
+  "viceGeneratedCommandsLimitsNVX *pLimits);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceFeatures2(VkPhysicalDevice phys"
+  "icalDevice,\r\n                                                   VkPhysicalDeviceFeatures2 *pFeatures);\r\n\r\nSHIM_VK_A"
+  "PI void shim_vkGetPhysicalDeviceFeatures2KHR(VkPhysicalDevice physicalDevice,\r\n                                        "
+  "              VkPhysicalDeviceFeatures2 *pFeatures);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceProperties2(VkPhysic"
+  "alDevice physicalDevice,\r\n                                                     VkPhysicalDeviceProperties2 *pProperties"
+  ");\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceProperties2KHR(VkPhysicalDevice physicalDevice,\r\n                   "
+  "                                     VkPhysicalDeviceProperties2 *pProperties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysica"
+  "lDeviceFormatProperties2(VkPhysicalDevice physicalDevice,\r\n                                                           V"
+  "kFormat format,\r\n                                                           VkFormatProperties2 *pFormatProperties);\r\n"
+  "\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceFormatProperties2KHR(VkPhysicalDevice physicalDevice,\r\n                   "
+  "                                           VkFormat format,\r\n                                                          "
+  "    VkFormatProperties2 *pFormatProperties);\r\n\r\nSHIM_VK_API VkResult shim_vkGetPhysicalDeviceImageFormatProperties2(\r"
+  "\n    VkPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2 *pImageFormatInfo,\r\n    VkImageFormatProp"
+  "erties2 *pImageFormatProperties);\r\n\r\nSHIM_VK_API VkResult shim_vkGetPhysicalDeviceImageFormatProperties2KHR(\r\n    V"
+  "kPhysicalDevice physicalDevice, const VkPhysicalDeviceImageFormatInfo2 *pImageFormatInfo,\r\n    VkImageFormatProperties2"
+  " *pImageFormatProperties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceQueueFamilyProperties2(\r\n    VkPhysicalDevic"
+  "e physicalDevice, uint32_t *pQueueFamilyPropertyCount,\r\n    VkQueueFamilyProperties2 *pQueueFamilyProperties);\r\n\r\nS"
+  "HIM_VK_API void shim_vkGetPhysicalDeviceQueueFamilyProperties2KHR(\r\n    VkPhysicalDevice physicalDevice, uint32_t *pQue"
+  "ueFamilyPropertyCount,\r\n    VkQueueFamilyProperties2 *pQueueFamilyProperties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysic"
+  "alDeviceMemoryProperties2(\r\n    VkPhysicalDevice physicalDevice, VkPhysicalDeviceMemoryProperties2 *pMemoryProperties);"
+  "\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceMemoryProperties2KHR(\r\n    VkPhysicalDevice physicalDevice, VkPhysical"
+  "DeviceMemoryProperties2 *pMemoryProperties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceSparseImageFormatProperties2"
+  "(\r\n    VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2 *pFormatInfo,\r\n    uint32_t *pPr"
+  "opertyCount, VkSparseImageFormatProperties2 *pProperties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceSparseImageFor"
+  "matProperties2KHR(\r\n    VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSparseImageFormatInfo2 *pFormatInfo,\r\n"
+  "    uint32_t *pPropertyCount, VkSparseImageFormatProperties2 *pProperties);\r\n\r\nSHIM_VK_API void shim_vkCmdPushDescrip"
+  "torSetKHR(VkCommandBuffer commandBuffer,\r\n                                                VkPipelineBindPoint pipelineB"
+  "indPoint,\r\n                                                VkPipelineLayout layout, uint32_t set,\r\n                  "
+  "                              uint32_t descriptorWriteCount,\r\n                                                const VkW"
+  "riteDescriptorSet *pDescriptorWrites);\r\n\r\nSHIM_VK_API void shim_vkTrimCommandPool(VkDevice device, VkCommandPool comm"
+  "andPool,\r\n                                        VkCommandPoolTrimFlags flags);\r\n\r\nSHIM_VK_API void shim_vkTrimCom"
+  "mandPoolKHR(VkDevice device, VkCommandPool commandPool,\r\n                                           VkCommandPoolTrimFl"
+  "ags flags);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceExternalBufferProperties(\r\n    VkPhysicalDevice physicalDev"
+  "ice, const VkPhysicalDeviceExternalBufferInfo *pExternalBufferInfo,\r\n    VkExternalBufferProperties *pExternalBufferPro"
+  "perties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceExternalBufferPropertiesKHR(\r\n    VkPhysicalDevice physicalDe"
+  "vice, const VkPhysicalDeviceExternalBufferInfo *pExternalBufferInfo,\r\n    VkExternalBufferProperties *pExternalBufferPr"
+  "operties);\r\n\r\nSHIM_VK_API VkResult shim_vkGetMemoryFdKHR(VkDevice device, const VkMemoryGetFdInfoKHR *pGetFdInfo,\r\n"
+  "                                           int *pFd);\r\n\r\nSHIM_VK_API VkResult shim_vkGetMemoryFdPropertiesKHR(VkDevic"
+  "e device,\r\n                                                     VkExternalMemoryHandleTypeFlagBits handleType,\r\n     "
+  "                                                int fd,\r\n                                                     VkMemoryF"
+  "dPropertiesKHR *pMemoryFdProperties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceExternalSemaphoreProperties(\r\n   "
+  " VkPhysicalDevice physicalDevice,\r\n    const VkPhysicalDeviceExternalSemaphoreInfo *pExternalSemaphoreInfo,\r\n    VkEx"
+  "ternalSemaphoreProperties *pExternalSemaphoreProperties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceExternalSemapho"
+  "rePropertiesKHR(\r\n    VkPhysicalDevice physicalDevice,\r\n    const VkPhysicalDeviceExternalSemaphoreInfo *pExternalSem"
+  "aphoreInfo,\r\n    VkExternalSemaphoreProperties *pExternalSemaphoreProperties);\r\n\r\nSHIM_VK_API VkResult shim_vkGetSe"
+  "maphoreFdKHR(VkDevice device,\r\n                                              const VkSemaphoreGetFdInfoKHR *pGetFdInfo,"
+  " int *pFd);\r\n\r\nSHIM_VK_API VkResult shim_vkImportSemaphoreFdKHR(\r\n    VkDevice device, const VkImportSemaphoreFdInf"
+  "oKHR *pImportSemaphoreFdInfo);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceExternalFenceProperties(\r\n    VkPhysical"
+  "Device physicalDevice, const VkPhysicalDeviceExternalFenceInfo *pExternalFenceInfo,\r\n    VkExternalFenceProperties *pEx"
+  "ternalFenceProperties);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceExternalFencePropertiesKHR(\r\n    VkPhysicalDevi"
+  "ce physicalDevice, const VkPhysicalDeviceExternalFenceInfo *pExternalFenceInfo,\r\n    VkExternalFenceProperties *pExtern"
+  "alFenceProperties);\r\n\r\nSHIM_VK_API VkResult shim_vkGetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR *pGetFdIn"
+  "fo,\r\n                                          int *pFd);\r\n\r\nSHIM_VK_API VkResult shim_vkImportFenceFdKHR(VkDevice "
+  "device,\r\n                                             const VkImportFenceFdInfoKHR *pImportFenceFdInfo);\r\n\r\nSHIM_VK"
+  "_API VkResult shim_vkReleaseDisplayEXT(VkPhysicalDevice physicalDevice, VkDisplayKHR display);\r\n\r\nSHIM_VK_API VkResul"
+  "t shim_vkDisplayPowerControlEXT(VkDevice device, VkDisplayKHR display,\r\n                                               "
+  "    const VkDisplayPowerInfoEXT *pDisplayPowerInfo);\r\n\r\nSHIM_VK_API VkResult shim_vkRegisterDeviceEventEXT(VkDevice d"
+  "evice,\r\n                                                   const VkDeviceEventInfoEXT *pDeviceEventInfo,\r\n           "
+  "                                        const VkAllocationCallbacks *pAllocator,\r\n                                     "
+  "              VkFence *pFence);\r\n\r\nSHIM_VK_API VkResult shim_vkRegisterDisplayEventEXT(VkDevice device, VkDisplayKHR "
+  "display,\r\n                                                    const VkDisplayEventInfoEXT *pDisplayEventInfo,\r\n      "
+  "                                              const VkAllocationCallbacks *pAllocator,\r\n                               "
+  "                     VkFence *pFence);\r\n\r\nSHIM_VK_API VkResult shim_vkGetSwapchainCounterEXT(VkDevice device, VkSwapc"
+  "hainKHR swapchain,\r\n                                                   VkSurfaceCounterFlagBitsEXT counter,\r\n        "
+  "                                           uint64_t *pCounterValue);\r\n\r\nSHIM_VK_API VkResult shim_vkGetPhysicalDevice"
+  "SurfaceCapabilities2EXT(\r\n    VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,\r\n    VkSurfaceCapabilities2EXT *"
+  "pSurfaceCapabilities);\r\n\r\nSHIM_VK_API VkResult shim_vkEnumeratePhysicalDeviceGroups(\r\n    VkInstance instance, uint"
+  "32_t *pPhysicalDeviceGroupCount,\r\n    VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties);\r\n\r\nSHIM_VK_"
+  "API VkResult shim_vkEnumeratePhysicalDeviceGroupsKHR(\r\n    VkInstance instance, uint32_t *pPhysicalDeviceGroupCount,\r\n"
+  "    VkPhysicalDeviceGroupProperties *pPhysicalDeviceGroupProperties);\r\n\r\nSHIM_VK_API void shim_vkGetDeviceGroupPeerMe"
+  "moryFeatures(\r\n    VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex,\r\n    V"
+  "kPeerMemoryFeatureFlags *pPeerMemoryFeatures);\r\n\r\nSHIM_VK_API void shim_vkGetDeviceGroupPeerMemoryFeaturesKHR(\r\n   "
+  " VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex,\r\n    VkPeerMemoryFeatureFl"
+  "ags *pPeerMemoryFeatures);\r\n\r\nSHIM_VK_API VkResult shim_vkBindBufferMemory2(VkDevice device, uint32_t bindInfoCount,\r"
+  "\n                                              const VkBindBufferMemoryInfo *pBindInfos);\r\n\r\nSHIM_VK_API VkResult sh"
+  "im_vkBindBufferMemory2KHR(VkDevice device, uint32_t bindInfoCount,\r\n                                                 co"
+  "nst VkBindBufferMemoryInfo *pBindInfos);\r\n\r\nSHIM_VK_API VkResult shim_vkBindImageMemory2(VkDevice device, uint32_t bi"
+  "ndInfoCount,\r\n                                             const VkBindImageMemoryInfo *pBindInfos);\r\n\r\nSHIM_VK_API"
+  " VkResult shim_vkBindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount,\r\n                                        "
+  "        const VkBindImageMemoryInfo *pBindInfos);\r\n\r\nSHIM_VK_API void shim_vkCmdSetDeviceMask(VkCommandBuffer command"
+  "Buffer, uint32_t deviceMask);\r\n\r\nSHIM_VK_API void shim_vkCmdSetDeviceMaskKHR(VkCommandBuffer commandBuffer, uint32_t "
+  "deviceMask);\r\n\r\nSHIM_VK_API VkResult shim_vkGetDeviceGroupPresentCapabilitiesKHR(\r\n    VkDevice device, VkDeviceGro"
+  "upPresentCapabilitiesKHR *pDeviceGroupPresentCapabilities);\r\n\r\nSHIM_VK_API VkResult shim_vkGetDeviceGroupSurfacePrese"
+  "ntModesKHR(\r\n    VkDevice device, VkSurfaceKHR surface, VkDeviceGroupPresentModeFlagsKHR *pModes);\r\n\r\nSHIM_VK_API V"
+  "kResult shim_vkAcquireNextImage2KHR(VkDevice device,\r\n                                                 const VkAcquireN"
+  "extImageInfoKHR *pAcquireInfo,\r\n                                                 uint32_t *pImageIndex);\r\n\r\nSHIM_VK"
+  "_API void shim_vkCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX,\r\n                                 "
+  "       uint32_t baseGroupY, uint32_t baseGroupZ,\r\n                                        uint32_t groupCountX, uint32_"
+  "t groupCountY,\r\n                                        uint32_t groupCountZ);\r\n\r\nSHIM_VK_API void shim_vkCmdDispat"
+  "chBaseKHR(VkCommandBuffer commandBuffer, uint32_t baseGroupX,\r\n                                           uint32_t base"
+  "GroupY, uint32_t baseGroupZ,\r\n                                           uint32_t groupCountX, uint32_t groupCountY,\r\n"
+  "                                           uint32_t groupCountZ);\r\n\r\nSHIM_VK_API VkResult shim_vkGetPhysicalDevicePre"
+  "sentRectanglesKHR(VkPhysicalDevice physicalDevice,\r\n                                                                  V"
+  "kSurfaceKHR surface,\r\n                                                                  uint32_t *pRectCount,\r\n      "
+  "                                                            VkRect2D *pRects);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateD"
+  "escriptorUpdateTemplate(\r\n    VkDevice device, const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,\r\n    const Vk"
+  "AllocationCallbacks *pAllocator, VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate);\r\n\r\nSHIM_VK_API VkResult shim"
+  "_vkCreateDescriptorUpdateTemplateKHR(\r\n    VkDevice device, const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,\r\n"
+  "    const VkAllocationCallbacks *pAllocator, VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate);\r\n\r\nSHIM_VK_API v"
+  "oid shim_vkDestroyDescriptorUpdateTemplate(\r\n    VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate,\r"
+  "\n    const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API void shim_vkDestroyDescriptorUpdateTemplateKHR(\r\n   "
+  " VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate,\r\n    const VkAllocationCallbacks *pAllocator);\r"
+  "\n\r\nSHIM_VK_API void shim_vkUpdateDescriptorSetWithTemplate(\r\n    VkDevice device, VkDescriptorSet descriptorSet,\r\n"
+  "    VkDescriptorUpdateTemplate descriptorUpdateTemplate, const void *pData);\r\n\r\nSHIM_VK_API void shim_vkUpdateDescrip"
+  "torSetWithTemplateKHR(\r\n    VkDevice device, VkDescriptorSet descriptorSet,\r\n    VkDescriptorUpdateTemplate descripto"
+  "rUpdateTemplate, const void *pData);\r\n\r\nSHIM_VK_API void shim_vkCmdPushDescriptorSetWithTemplateKHR(\r\n    VkCommand"
+  "Buffer commandBuffer, VkDescriptorUpdateTemplate descriptorUpdateTemplate,\r\n    VkPipelineLayout layout, uint32_t set, "
+  "const void *pData);\r\n\r\nSHIM_VK_API void shim_vkSetHdrMetadataEXT(VkDevice device, uint32_t swapchainCount,\r\n       "
+  "                                   const VkSwapchainKHR *pSwapchains,\r\n                                          const "
+  "VkHdrMetadataEXT *pMetadata);\r\n\r\nSHIM_VK_API VkResult shim_vkGetSwapchainStatusKHR(VkDevice device, VkSwapchainKHR sw"
+  "apchain);\r\n\r\nSHIM_VK_API VkResult\r\nshim_vkGetRefreshCycleDurationGOOGLE(VkDevice device, VkSwapchainKHR swapchain,\r"
+  "\n                                     VkRefreshCycleDurationGOOGLE *pDisplayTimingProperties);\r\n\r\nSHIM_VK_API VkResu"
+  "lt shim_vkGetPastPresentationTimingGOOGLE(\r\n    VkDevice device, VkSwapchainKHR swapchain, uint32_t *pPresentationTimin"
+  "gCount,\r\n    VkPastPresentationTimingGOOGLE *pPresentationTimings);\r\n\r\nSHIM_VK_API void shim_vkCmdSetViewportWScali"
+  "ngNV(VkCommandBuffer commandBuffer,\r\n                                                 uint32_t firstViewport, uint32_t "
+  "viewportCount,\r\n                                                 const VkViewportWScalingNV *pViewportWScalings);\r\n\r"
+  "\nSHIM_VK_API void shim_vkCmdSetDiscardRectangleEXT(VkCommandBuffer commandBuffer,\r\n                                   "
+  "               uint32_t firstDiscardRectangle,\r\n                                                  uint32_t discardRecta"
+  "ngleCount,\r\n                                                  const VkRect2D *pDiscardRectangles);\r\n\r\nSHIM_VK_API v"
+  "oid shim_vkCmdSetSampleLocationsEXT(VkCommandBuffer commandBuffer,\r\n                                                 co"
+  "nst VkSampleLocationsInfoEXT *pSampleLocationsInfo);\r\n\r\nSHIM_VK_API void shim_vkGetPhysicalDeviceMultisamplePropertie"
+  "sEXT(\r\n    VkPhysicalDevice physicalDevice, VkSampleCountFlagBits samples,\r\n    VkMultisamplePropertiesEXT *pMultisam"
+  "pleProperties);\r\n\r\nSHIM_VK_API VkResult shim_vkGetPhysicalDeviceSurfaceCapabilities2KHR(\r\n    VkPhysicalDevice phys"
+  "icalDevice, const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,\r\n    VkSurfaceCapabilities2KHR *pSurfaceCapabilities);"
+  "\r\n\r\nSHIM_VK_API VkResult shim_vkGetPhysicalDeviceSurfaceFormats2KHR(\r\n    VkPhysicalDevice physicalDevice, const Vk"
+  "PhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,\r\n    uint32_t *pSurfaceFormatCount, VkSurfaceFormat2KHR *pSurfaceFormats);"
+  "\r\n\r\nSHIM_VK_API void shim_vkGetBufferMemoryRequirements2(VkDevice device,\r\n                                        "
+  "             const VkBufferMemoryRequirementsInfo2 *pInfo,\r\n                                                     VkMemo"
+  "ryRequirements2 *pMemoryRequirements);\r\n\r\nSHIM_VK_API void shim_vkGetBufferMemoryRequirements2KHR(VkDevice device,\r\n"
+  "                                                        const VkBufferMemoryRequirementsInfo2 *pInfo,\r\n                "
+  "                                        VkMemoryRequirements2 *pMemoryRequirements);\r\n\r\nSHIM_VK_API void shim_vkGetIm"
+  "ageMemoryRequirements2(VkDevice device,\r\n                                                    const VkImageMemoryRequire"
+  "mentsInfo2 *pInfo,\r\n                                                    VkMemoryRequirements2 *pMemoryRequirements);\r\n"
+  "\r\nSHIM_VK_API void shim_vkGetImageMemoryRequirements2KHR(VkDevice device,\r\n                                          "
+  "             const VkImageMemoryRequirementsInfo2 *pInfo,\r\n                                                       VkMem"
+  "oryRequirements2 *pMemoryRequirements);\r\n\r\nSHIM_VK_API void shim_vkGetImageSparseMemoryRequirements2(\r\n    VkDevice"
+  " device, const VkImageSparseMemoryRequirementsInfo2 *pInfo,\r\n    uint32_t *pSparseMemoryRequirementCount,\r\n    VkSpar"
+  "seImageMemoryRequirements2 *pSparseMemoryRequirements);\r\n\r\nSHIM_VK_API void shim_vkGetImageSparseMemoryRequirements2K"
+  "HR(\r\n    VkDevice device, const VkImageSparseMemoryRequirementsInfo2 *pInfo,\r\n    uint32_t *pSparseMemoryRequirementC"
+  "ount,\r\n    VkSparseImageMemoryRequirements2 *pSparseMemoryRequirements);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateSampl"
+  "erYcbcrConversion(\r\n    VkDevice device, const VkSamplerYcbcrConversionCreateInfo *pCreateInfo,\r\n    const VkAllocati"
+  "onCallbacks *pAllocator, VkSamplerYcbcrConversion *pYcbcrConversion);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateSamplerYcb"
+  "crConversionKHR(\r\n    VkDevice device, const VkSamplerYcbcrConversionCreateInfo *pCreateInfo,\r\n    const VkAllocation"
+  "Callbacks *pAllocator, VkSamplerYcbcrConversion *pYcbcrConversion);\r\n\r\nSHIM_VK_API void shim_vkDestroySamplerYcbcrCon"
+  "version(VkDevice device,\r\n                                                      VkSamplerYcbcrConversion ycbcrConversio"
+  "n,\r\n                                                      const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API "
+  "void shim_vkDestroySamplerYcbcrConversionKHR(VkDevice device,\r\n                                                        "
+  " VkSamplerYcbcrConversion ycbcrConversion,\r\n                                                         const VkAllocation"
+  "Callbacks *pAllocator);\r\n\r\nSHIM_VK_API void shim_vkGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo2 *pQueueI"
+  "nfo,\r\n                                        VkQueue *pQueue);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateValidationCach"
+  "eEXT(VkDevice device,\r\n                                                     const VkValidationCacheCreateInfoEXT *pCrea"
+  "teInfo,\r\n                                                     const VkAllocationCallbacks *pAllocator,\r\n             "
+  "                                        VkValidationCacheEXT *pValidationCache);\r\n\r\nSHIM_VK_API void shim_vkDestroyVa"
+  "lidationCacheEXT(VkDevice device,\r\n                                                  VkValidationCacheEXT validationCac"
+  "he,\r\n                                                  const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API VkR"
+  "esult shim_vkGetValidationCacheDataEXT(VkDevice device,\r\n                                                      VkValida"
+  "tionCacheEXT validationCache,\r\n                                                      size_t *pDataSize, void *pData);\r"
+  "\n\r\nSHIM_VK_API VkResult shim_vkMergeValidationCachesEXT(VkDevice device, VkValidationCacheEXT dstCache,\r\n           "
+  "                                          uint32_t srcCacheCount,\r\n                                                    "
+  " const VkValidationCacheEXT *pSrcCaches);\r\n\r\nSHIM_VK_API void shim_vkGetDescriptorSetLayoutSupport(VkDevice device,\r"
+  "\n                                                      const VkDescriptorSetLayoutCreateInfo *pCreateInfo,\r\n          "
+  "                                            VkDescriptorSetLayoutSupport *pSupport);\r\n\r\nSHIM_VK_API void shim_vkGetDe"
+  "scriptorSetLayoutSupportKHR(\r\n    VkDevice device, const VkDescriptorSetLayoutCreateInfo *pCreateInfo,\r\n    VkDescrip"
+  "torSetLayoutSupport *pSupport);\r\n\r\nSHIM_VK_API VkResult shim_vkGetShaderInfoAMD(VkDevice device, VkPipeline pipeline,"
+  "\r\n                                             VkShaderStageFlagBits shaderStage,\r\n                                  "
+  "           VkShaderInfoTypeAMD infoType, size_t *pInfoSize,\r\n                                             void *pInfo);"
+  "\r\n\r\nSHIM_VK_API VkResult shim_vkSetDebugUtilsObjectNameEXT(VkDevice device,\r\n                                      "
+  "                 const VkDebugUtilsObjectNameInfoEXT *pNameInfo);\r\n\r\nSHIM_VK_API VkResult shim_vkSetDebugUtilsObjectT"
+  "agEXT(VkDevice device,\r\n                                                      const VkDebugUtilsObjectTagInfoEXT *pTagI"
+  "nfo);\r\n\r\nSHIM_VK_API void shim_vkQueueBeginDebugUtilsLabelEXT(VkQueue queue,\r\n                                     "
+  "                const VkDebugUtilsLabelEXT *pLabelInfo);\r\n\r\nSHIM_VK_API void shim_vkQueueEndDebugUtilsLabelEXT(VkQueu"
+  "e queue);\r\n\r\nSHIM_VK_API void shim_vkQueueInsertDebugUtilsLabelEXT(VkQueue queue,\r\n                                "
+  "                      const VkDebugUtilsLabelEXT *pLabelInfo);\r\n\r\nSHIM_VK_API void shim_vkCmdBeginDebugUtilsLabelEXT("
+  "VkCommandBuffer commandBuffer,\r\n                                                   const VkDebugUtilsLabelEXT *pLabelIn"
+  "fo);\r\n\r\nSHIM_VK_API void shim_vkCmdEndDebugUtilsLabelEXT(VkCommandBuffer commandBuffer);\r\n\r\nSHIM_VK_API void shim"
+  "_vkCmdInsertDebugUtilsLabelEXT(VkCommandBuffer commandBuffer,\r\n                                                    cons"
+  "t VkDebugUtilsLabelEXT *pLabelInfo);\r\n\r\nSHIM_VK_API VkResult shim_vkCreateDebugUtilsMessengerEXT(\r\n    VkInstance i"
+  "nstance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,\r\n    const VkAllocationCallbacks *pAllocator, VkDebugUt"
+  "ilsMessengerEXT *pMessenger);\r\n\r\nSHIM_VK_API void shim_vkDestroyDebugUtilsMessengerEXT(VkInstance instance,\r\n      "
+  "                                                VkDebugUtilsMessengerEXT messenger,\r\n                                  "
+  "                    const VkAllocationCallbacks *pAllocator);\r\n\r\nSHIM_VK_API void shim_vkSubmitDebugUtilsMessageEXT(\r"
+  "\n    VkInstance instance, VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,\r\n    VkDebugUtilsMessageTypeFlagsEXT"
+  " messageTypes,\r\n    const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData);\r\n\r\nSHIM_VK_API VkResult shim_vkGetM"
+  "emoryHostPointerPropertiesEXT(\r\n    VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, const void *pHostPo"
+  "inter,\r\n    VkMemoryHostPointerPropertiesEXT *pMemoryHostPointerProperties);\r\n\r\nSHIM_VK_API void shim_vkCmdWriteBuf"
+  "ferMarkerAMD(VkCommandBuffer commandBuffer,\r\n                                                VkPipelineStageFlagBits pi"
+  "pelineStage,\r\n                                                VkBuffer dstBuffer, VkDeviceSize dstOffset,\r\n          "
+  "                                      uint32_t marker);\r\n";
+const char fileData_40[] = {
+  '#','i','f','n','d','e','f',' ','S','H','I','M','_','V','K','_','C','O','M','P','I','L','E','_','S','T','A','T','I','C','_',
+  'L','I','B','\r','\n','#','d','e','f','i','n','e',' ','S','H','I','M','_','V','K','_','E','X','P','O','R','T','\r','\n','#',
+  'e','n','d','i','f','\r','\n','#','i','n','c','l','u','d','e',' ','<','m','a','p','>','\r','\n','#','i','n','c','l','u','d',
+  'e',' ','<','s','e','t','>','\r','\n','\r','\n','#','i','n','c','l','u','d','e',' ','<','a','s','s','e','r','t','.','h','>',
+  '\r','\n','\r','\n','#','i','n','c','l','u','d','e',' ','"','h','e','l','p','e','r','/','h','e','l','p','e','r','.','h','"',
+  '\r','\n','#','i','n','c','l','u','d','e',' ','"','s','h','i','m','_','v','u','l','k','a','n','.','h','"','\r','\n','#','i',
+  'n','c','l','u','d','e',' ','"','u','t','i','l','s','.','h','"','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s',
+  'h','i','m','_','v','k','C','r','e','a','t','e','I','n','s','t','a','n','c','e','(','c','o','n','s','t',' ','V','k','I','n',
+  's','t','a','n','c','e','C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',
+  ' ','*','p','A','l','l','o','c','a','t','o','r',',',' ','V','k','I','n','s','t','a','n','c','e',' ','*','p','I','n','s','t',
+  'a','n','c','e',')',' ','{','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','v','k','C','r','e','a',
+  't','e','I','n','s','t','a','n','c','e','(','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a',
+  't','o','r',',',' ','p','I','n','s','t','a','n','c','e',')',';','\r','\n',' ',' ','a','u','x','.','i','n','s','t','a','n',
+  'c','e',' ','=',' ','*','p','I','n','s','t','a','n','c','e',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r',
+  '\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','I','n','s','t',
+  'a','n','c','e','(','V','k','I','n','s','t','a','n','c','e',' ','i','n','s','t','a','n','c','e',',',' ','c','o','n','s','t',
+  ' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a',
+  't','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y',
+  'I','n','s','t','a','n','c','e',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','I','n','s','t','a','n','c','e',
+  ';','\r','\n',' ',' ','f','n','(','i','n','s','t','a','n','c','e',',',' ','p','A','l','l','o','c','a','t','o','r',')',';',
+  '\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h',
+  'i','m','_','v','k','E','n','u','m','e','r','a','t','e','P','h','y','s','i','c','a','l','D','e','v','i','c','e','s','(','V',
+  'k','I','n','s','t','a','n','c','e',' ','i','n','s','t','a','n','c','e',',',' ','u','i','n','t','3','2','_','t',' ','*','p',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','C','o','u','n','t',',','\r','\n',' ',' ','V','k','P','h','y','s',
+  'i','c','a','l','D','e','v','i','c','e',' ','*','p','P','h','y','s','i','c','a','l','D','e','v','i','c','e','s',')',' ','{',
+  '\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','E','n','u','m','e','r','a','t','e','P','h','y','s',
+  'i','c','a','l','D','e','v','i','c','e','s',' ','f','n',' ','=',' ','v','k','E','n','u','m','e','r','a','t','e','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ',
+  'f','n','(','i','n','s','t','a','n','c','e',',',' ','p','P','h','y','s','i','c','a','l','D','e','v','i','c','e','C','o','u',
+  'n','t',',',' ','p','P','h','y','s','i','c','a','l','D','e','v','i','c','e','s',')',';','\r','\n',' ',' ','r','e','t','u',
+  'r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h',
+  'y','s','i','c','a','l','D','e','v','i','c','e','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r','t','i',
+  'e','s','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v',
+  'i','c','e',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','*','p','Q','u','e','u','e','F','a','m','i','l','y',
+  'P','r','o','p','e','r','t','y','C','o','u','n','t',',','\r','\n',' ',' ','V','k','Q','u','e','u','e','F','a','m','i','l',
+  'y','P','r','o','p','e','r','t','i','e','s',' ','*','p','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r',
+  't','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r','t','i','e',
+  's',' ','f','n',' ','=',' ','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','Q','u','e','u','e',
+  'F','a','m','i','l','y','P','r','o','p','e','r','t','i','e','s',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c',
+  'a','l','D','e','v','i','c','e',',',' ','p','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r','t','y','C',
+  'o','u','n','t',',',' ','p','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r','t','i','e','s',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k',
+  'G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','e','a','t','u','r','e','s','(','V','k','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',
+  ' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','e','a','t','u','r','e','s',' ','*','p','F','e','a',
+  't','u','r','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h',
+  'y','s','i','c','a','l','D','e','v','i','c','e','F','e','a','t','u','r','e','s',' ','f','n',' ','=',' ','v','k','G','e','t',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','e','a','t','u','r','e','s',';','\r','\n',' ',' ','f','n','(',
+  'p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','F','e','a','t','u','r','e','s',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e',
+  't','P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',
+  '(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e',',',' ','V','k','F','o','r','m','a','t',' ','f','o','r','m','a','t',',','\r','\n',' ',' ','V','k','F','o','r','m','a',
+  't','P','r','o','p','e','r','t','i','e','s',' ','*','p','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',')',
+  ' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l',
+  'D','e','v','i','c','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',' ','f','n',' ','=',' ','v','k','G',
+  'e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e',
+  's',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','f','o','r','m','a',
+  't',',',' ','p','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u',
+  'r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G','e','t',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r',
+  't','i','e','s','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D',
+  'e','v','i','c','e',',','\r','\n',' ',' ','V','k','F','o','r','m','a','t',' ','f','o','r','m','a','t',',',' ','V','k','I',
+  'm','a','g','e','T','y','p','e',' ','t','y','p','e',',','\r','\n',' ',' ','V','k','I','m','a','g','e','T','i','l','i','n',
+  'g',' ','t','i','l','i','n','g',',',' ','V','k','I','m','a','g','e','U','s','a','g','e','F','l','a','g','s',' ','u','s','a',
+  'g','e',',','\r','\n',' ',' ','V','k','I','m','a','g','e','C','r','e','a','t','e','F','l','a','g','s',' ','f','l','a','g',
+  's',',','\r','\n',' ',' ','V','k','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',' ',
+  '*','p','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ',
+  's','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','I',
+  'm','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',' ','f','n',' ','=',' ','v','k','G','e','t',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r',
+  't','i','e','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h','y','s','i',
+  'c','a','l','D','e','v','i','c','e',',',' ','f','o','r','m','a','t',',',' ','t','y','p','e',',',' ','t','i','l','i','n','g',
+  ',',' ','u','s','a','g','e',',',' ','f','l','a','g','s',',',' ','p','I','m','a','g','e','F','o','r','m','a','t','P','r','o',
+  'p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n',
+  'v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','D','e','v','i','c','e','(','V','k','D','e','v',
+  'i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C',
+  'a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a',
+  't','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','D','e','v','i','c','e',' ','f','n',' ','=',' ','v','k',
+  'D','e','s','t','r','o','y','D','e','v','i','c','e',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','p',
+  'A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n',
+  'V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','E','n','u','m','e','r','a','t','e','I','n','s','t','a','n',
+  'c','e','V','e','r','s','i','o','n','(','u','i','n','t','3','2','_','t',' ','*','p','A','p','i','V','e','r','s','i','o','n',
+  ')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','E','n','u','m','e','r','a','t','e','I',
+  'n','s','t','a','n','c','e','V','e','r','s','i','o','n',' ','f','n',' ','=',' ','v','k','E','n','u','m','e','r','a','t','e',
+  'I','n','s','t','a','n','c','e','V','e','r','s','i','o','n',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',
+  ' ','=',' ','f','n','(','p','A','p','i','V','e','r','s','i','o','n',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ',
+  'r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','E','n','u','m',
+  'e','r','a','t','e','I','n','s','t','a','n','c','e','L','a','y','e','r','P','r','o','p','e','r','t','i','e','s','(','u','i',
+  'n','t','3','2','_','t',' ','*','p','P','r','o','p','e','r','t','y','C','o','u','n','t',',','\r','\n',' ',' ','V','k','L',
+  'a','y','e','r','P','r','o','p','e','r','t','i','e','s',' ','*','p','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','E','n','u','m','e','r','a','t','e','I','n','s','t','a',
+  'n','c','e','L','a','y','e','r','P','r','o','p','e','r','t','i','e','s',' ','f','n',' ','=',' ','v','k','E','n','u','m','e',
+  'r','a','t','e','I','n','s','t','a','n','c','e','L','a','y','e','r','P','r','o','p','e','r','t','i','e','s',';','\r','\n',
+  ' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','P','r','o','p','e','r','t','y','C','o','u','n',
+  't',',',' ','p','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r',
+  '\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','E','n','u','m','e','r','a',
+  't','e','I','n','s','t','a','n','c','e','E','x','t','e','n','s','i','o','n','P','r','o','p','e','r','t','i','e','s','(','c',
+  'o','n','s','t',' ','c','h','a','r',' ','*','p','L','a','y','e','r','N','a','m','e',',',' ','u','i','n','t','3','2','_','t',
+  ' ','*','p','P','r','o','p','e','r','t','y','C','o','u','n','t',',','\r','\n',' ',' ','V','k','E','x','t','e','n','s','i',
+  'o','n','P','r','o','p','e','r','t','i','e','s',' ','*','p','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',
+  ' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','E','n','u','m','e','r','a','t','e','I','n','s','t','a','n','c',
+  'e','E','x','t','e','n','s','i','o','n','P','r','o','p','e','r','t','i','e','s',' ','f','n',' ','=',' ','v','k','E','n','u',
+  'm','e','r','a','t','e','I','n','s','t','a','n','c','e','E','x','t','e','n','s','i','o','n','P','r','o','p','e','r','t','i',
+  'e','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','L','a','y','e','r','N',
+  'a','m','e',',',' ','p','P','r','o','p','e','r','t','y','C','o','u','n','t',',',' ','p','P','r','o','p','e','r','t','i','e',
+  's',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u',
+  'l','t',' ','s','h','i','m','_','v','k','E','n','u','m','e','r','a','t','e','D','e','v','i','c','e','L','a','y','e','r','P',
+  'r','o','p','e','r','t','i','e','s','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s',
+  'i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','*','p','P','r','o','p',
+  'e','r','t','y','C','o','u','n','t',',','\r','\n',' ',' ','V','k','L','a','y','e','r','P','r','o','p','e','r','t','i','e',
+  's',' ','*','p','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F',
+  'N','_','v','k','E','n','u','m','e','r','a','t','e','D','e','v','i','c','e','L','a','y','e','r','P','r','o','p','e','r','t',
+  'i','e','s',' ','f','n',' ','=',' ','v','k','E','n','u','m','e','r','a','t','e','D','e','v','i','c','e','L','a','y','e','r',
+  'P','r','o','p','e','r','t','i','e','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n',
+  '(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','P','r','o','p','e','r','t','y','C','o','u','n','t',
+  ',',' ','p','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n',
+  '}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','E','n','u','m','e','r','a','t','e',
+  'D','e','v','i','c','e','E','x','t','e','n','s','i','o','n','P','r','o','p','e','r','t','i','e','s','(','V','k','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',
+  ' ','c','o','n','s','t',' ','c','h','a','r',' ','*','p','L','a','y','e','r','N','a','m','e',',',' ','u','i','n','t','3','2',
+  '_','t',' ','*','p','P','r','o','p','e','r','t','y','C','o','u','n','t',',','\r','\n',' ',' ','V','k','E','x','t','e','n',
+  's','i','o','n','P','r','o','p','e','r','t','i','e','s',' ','*','p','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','E','n','u','m','e','r','a','t','e','D','e','v','i','c',
+  'e','E','x','t','e','n','s','i','o','n','P','r','o','p','e','r','t','i','e','s',' ','f','n',' ','=',' ','v','k','E','n','u',
+  'm','e','r','a','t','e','D','e','v','i','c','e','E','x','t','e','n','s','i','o','n','P','r','o','p','e','r','t','i','e','s',
+  ';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h','y','s','i','c','a','l','D',
+  'e','v','i','c','e',',',' ','p','L','a','y','e','r','N','a','m','e',',',' ','p','P','r','o','p','e','r','t','y','C','o','u',
+  'n','t',',',' ','p','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';',
+  '\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','D','e','v','i','c','e','Q',
+  'u','e','u','e','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','u','i','n','t','3','2','_','t',' ',
+  'q','u','e','u','e','F','a','m','i','l','y','I','n','d','e','x',',',' ','u','i','n','t','3','2','_','t',' ','q','u','e','u',
+  'e','I','n','d','e','x',',','\r','\n',' ',' ','V','k','Q','u','e','u','e',' ','*','p','Q','u','e','u','e',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','D','e','v','i','c','e','Q','u','e','u','e',
+  ' ','f','n',' ','=',' ','v','k','G','e','t','D','e','v','i','c','e','Q','u','e','u','e',';','\r','\n',' ',' ','f','n','(',
+  'd','e','v','i','c','e',',',' ','q','u','e','u','e','F','a','m','i','l','y','I','n','d','e','x',',',' ','q','u','e','u','e',
+  'I','n','d','e','x',',',' ','p','Q','u','e','u','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r',
+  '\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','Q','u','e','u','e','W','a','i','t','I','d',
+  'l','e','(','V','k','Q','u','e','u','e',' ','q','u','e','u','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ',
+  'P','F','N','_','v','k','Q','u','e','u','e','W','a','i','t','I','d','l','e',' ','f','n',' ','=',' ','v','k','Q','u','e','u',
+  'e','W','a','i','t','I','d','l','e',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(',
+  'q','u','e','u','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k',
+  'R','e','s','u','l','t',' ','s','h','i','m','_','v','k','D','e','v','i','c','e','W','a','i','t','I','d','l','e','(','V','k',
+  'D','e','v','i','c','e',' ','d','e','v','i','c','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N',
+  '_','v','k','D','e','v','i','c','e','W','a','i','t','I','d','l','e',' ','f','n',' ','=',' ','v','k','D','e','v','i','c','e',
+  'W','a','i','t','I','d','l','e',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d',
+  'e','v','i','c','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k',
+  'R','e','s','u','l','t',' ','s','h','i','m','_','v','k','A','l','l','o','c','a','t','e','M','e','m','o','r','y','(','V','k',
+  'D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','M','e','m','o','r','y','A','l',
+  'l','o','c','a','t','e','I','n','f','o',' ','*','p','A','l','l','o','c','a','t','e','I','n','f','o',',','\r','\n',' ',' ',
+  'c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A',
+  'l','l','o','c','a','t','o','r',',',' ','V','k','D','e','v','i','c','e','M','e','m','o','r','y',' ','*','p','M','e','m','o',
+  'r','y',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','A','l','l','o','c','a','t','e',
+  'M','e','m','o','r','y',' ','f','n',' ','=',' ','v','k','A','l','l','o','c','a','t','e','M','e','m','o','r','y',';','\r',
+  '\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','A','l',
+  'l','o','c','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','M','e','m','o','r','y',
+  ')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h',
+  'i','m','_','v','k','F','r','e','e','M','e','m','o','r','y','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',
+  ',',' ','V','k','D','e','v','i','c','e','M','e','m','o','r','y',' ','m','e','m','o','r','y',',',' ','c','o','n','s','t',' ',
+  'V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t',
+  'o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','F','r','e','e','M','e','m','o',
+  'r','y',' ','f','n',' ','=',' ','v','k','F','r','e','e','M','e','m','o','r','y',';','\r','\n',' ',' ','f','n','(','d','e',
+  'v','i','c','e',',',' ','m','e','m','o','r','y',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ',
+  'r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v',
+  'k','M','a','p','M','e','m','o','r','y','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','D',
+  'e','v','i','c','e','M','e','m','o','r','y',' ','m','e','m','o','r','y',',',' ','V','k','D','e','v','i','c','e','S','i','z',
+  'e',' ','o','f','f','s','e','t',',','\r','\n',' ',' ','V','k','D','e','v','i','c','e','S','i','z','e',' ','s','i','z','e',
+  ',',' ','V','k','M','e','m','o','r','y','M','a','p','F','l','a','g','s',' ','f','l','a','g','s',',',' ','v','o','i','d',' ',
+  '*','*','p','p','D','a','t','a',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','M','a',
+  'p','M','e','m','o','r','y',' ','f','n',' ','=',' ','v','k','M','a','p','M','e','m','o','r','y',';','\r','\n',' ',' ','V',
+  'k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','m','e','m','o','r','y',',',' ',
+  'o','f','f','s','e','t',',',' ','s','i','z','e',',',' ','f','l','a','g','s',',',' ','p','p','D','a','t','a',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_',
+  'v','k','U','n','m','a','p','M','e','m','o','r','y','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ',
+  'V','k','D','e','v','i','c','e','M','e','m','o','r','y',' ','m','e','m','o','r','y',')',' ','{','\r','\n',' ',' ','s','t',
+  'a','t','i','c',' ','P','F','N','_','v','k','U','n','m','a','p','M','e','m','o','r','y',' ','f','n',' ','=',' ','v','k','U',
+  'n','m','a','p','M','e','m','o','r','y',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','m','e','m','o',
+  'r','y',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l',
+  't',' ','s','h','i','m','_','v','k','F','l','u','s','h','M','a','p','p','e','d','M','e','m','o','r','y','R','a','n','g','e',
+  's','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','u','i','n','t','3','2','_','t',' ','m','e','m',
+  'o','r','y','R','a','n','g','e','C','o','u','n','t',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','M','a','p','p',
+  'e','d','M','e','m','o','r','y','R','a','n','g','e',' ','*','p','M','e','m','o','r','y','R','a','n','g','e','s',')',' ','{',
+  '\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','F','l','u','s','h','M','a','p','p','e','d','M','e',
+  'm','o','r','y','R','a','n','g','e','s',' ','f','n',' ','=',' ','v','k','F','l','u','s','h','M','a','p','p','e','d','M','e',
+  'm','o','r','y','R','a','n','g','e','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n',
+  '(','d','e','v','i','c','e',',',' ','m','e','m','o','r','y','R','a','n','g','e','C','o','u','n','t',',',' ','p','M','e','m',
+  'o','r','y','R','a','n','g','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n',
+  '\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','I','n','v','a','l','i','d','a','t','e','M','a',
+  'p','p','e','d','M','e','m','o','r','y','R','a','n','g','e','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c',
+  'e',',',' ','u','i','n','t','3','2','_','t',' ','m','e','m','o','r','y','R','a','n','g','e','C','o','u','n','t',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','M','a','p','p','e','d','M','e','m','o','r','y','R','a','n','g','e',' ','*',
+  'p','M','e','m','o','r','y','R','a','n','g','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N',
+  '_','v','k','I','n','v','a','l','i','d','a','t','e','M','a','p','p','e','d','M','e','m','o','r','y','R','a','n','g','e','s',
+  ' ','f','n',' ','=',' ','v','k','I','n','v','a','l','i','d','a','t','e','M','a','p','p','e','d','M','e','m','o','r','y','R',
+  'a','n','g','e','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i',
+  'c','e',',',' ','m','e','m','o','r','y','R','a','n','g','e','C','o','u','n','t',',',' ','p','M','e','m','o','r','y','R','a',
+  'n','g','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i',
+  'd',' ','s','h','i','m','_','v','k','G','e','t','D','e','v','i','c','e','M','e','m','o','r','y','C','o','m','m','i','t','m',
+  'e','n','t','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','D','e','v','i','c','e','M','e',
+  'm','o','r','y',' ','m','e','m','o','r','y',',','\r','\n',' ',' ','V','k','D','e','v','i','c','e','S','i','z','e',' ','*',
+  'p','C','o','m','m','i','t','t','e','d','M','e','m','o','r','y','I','n','B','y','t','e','s',')',' ','{','\r','\n',' ',' ',
+  's','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','D','e','v','i','c','e','M','e','m','o','r','y','C','o','m',
+  'm','i','t','m','e','n','t',' ','f','n',' ','=',' ','v','k','G','e','t','D','e','v','i','c','e','M','e','m','o','r','y','C',
+  'o','m','m','i','t','m','e','n','t',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','m','e','m','o','r',
+  'y',',',' ','p','C','o','m','m','i','t','t','e','d','M','e','m','o','r','y','I','n','B','y','t','e','s',')',';','\r','\n',
+  ' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G',
+  'e','t','B','u','f','f','e','r','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','(','V','k','D','e',
+  'v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','B','u','f','f','e','r',' ','b','u','f','f','e','r',',','\r',
+  '\n',' ',' ','V','k','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',' ','*','p','M','e','m','o',
+  'r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F',
+  'N','_','v','k','G','e','t','B','u','f','f','e','r','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',
+  ' ','f','n',' ','=',' ','v','k','G','e','t','B','u','f','f','e','r','M','e','m','o','r','y','R','e','q','u','i','r','e','m',
+  'e','n','t','s',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','b','u','f','f','e','r',',',' ','p','M',
+  'e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';',
+  '\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','B','i','n','d','B','u',
+  'f','f','e','r','M','e','m','o','r','y','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','B',
+  'u','f','f','e','r',' ','b','u','f','f','e','r',',',' ','V','k','D','e','v','i','c','e','M','e','m','o','r','y',' ','m','e',
+  'm','o','r','y',',','\r','\n',' ',' ','V','k','D','e','v','i','c','e','S','i','z','e',' ','m','e','m','o','r','y','O','f',
+  'f','s','e','t',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','B','i','n','d','B','u',
+  'f','f','e','r','M','e','m','o','r','y',' ','f','n',' ','=',' ','v','k','B','i','n','d','B','u','f','f','e','r','M','e','m',
+  'o','r','y',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',
+  ',',' ','b','u','f','f','e','r',',',' ','m','e','m','o','r','y',',',' ','m','e','m','o','r','y','O','f','f','s','e','t',')',
+  ';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i',
+  'm','_','v','k','G','e','t','I','m','a','g','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','(',
+  'V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','I','m','a','g','e',' ','i','m','a','g','e',',',
+  '\r','\n',' ',' ','V','k','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',' ','*','p','M','e','m',
+  'o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P',
+  'F','N','_','v','k','G','e','t','I','m','a','g','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',
+  ' ','f','n',' ','=',' ','v','k','G','e','t','I','m','a','g','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e',
+  'n','t','s',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','i','m','a','g','e',',',' ','p','M','e','m',
+  'o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n',
+  '}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','B','i','n','d','I','m','a','g','e',
+  'M','e','m','o','r','y','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','I','m','a','g','e',
+  ' ','i','m','a','g','e',',',' ','V','k','D','e','v','i','c','e','M','e','m','o','r','y',' ','m','e','m','o','r','y',',','\r',
+  '\n',' ',' ','V','k','D','e','v','i','c','e','S','i','z','e',' ','m','e','m','o','r','y','O','f','f','s','e','t',')',' ',
+  '{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','B','i','n','d','I','m','a','g','e','M','e','m',
+  'o','r','y',' ','f','n',' ','=',' ','v','k','B','i','n','d','I','m','a','g','e','M','e','m','o','r','y',';','\r','\n',' ',
+  ' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','i','m','a','g','e',',',
+  ' ','m','e','m','o','r','y',',',' ','m','e','m','o','r','y','O','f','f','s','e','t',')',';','\r','\n',' ',' ','r','e','t',
+  'u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','I',
+  'm','a','g','e','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','(','V','k',
+  'D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','I','m','a','g','e',' ','i','m','a','g','e',',','\r',
+  '\n',' ',' ','u','i','n','t','3','2','_','t',' ','*','p','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u',
+  'i','r','e','m','e','n','t','C','o','u','n','t',',','\r','\n',' ',' ','V','k','S','p','a','r','s','e','I','m','a','g','e',
+  'M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',' ','*','p','S','p','a','r','s','e','M','e','m','o',
+  'r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F',
+  'N','_','v','k','G','e','t','I','m','a','g','e','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e',
+  'm','e','n','t','s',' ','f','n',' ','=',' ','v','k','G','e','t','I','m','a','g','e','S','p','a','r','s','e','M','e','m','o',
+  'r','y','R','e','q','u','i','r','e','m','e','n','t','s',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ',
+  'i','m','a','g','e',',',' ','p','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t',
+  'C','o','u','n','t',',',' ','p','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t',
+  's',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i',
+  'm','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','p','a','r','s','e','I','m','a','g',
+  'e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','(','\r','\n',' ',' ','V','k','P','h','y','s','i','c',
+  'a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','V','k','F','o','r','m',
+  'a','t',' ','f','o','r','m','a','t',',',' ','V','k','I','m','a','g','e','T','y','p','e',' ','t','y','p','e',',','\r','\n',
+  ' ',' ','V','k','S','a','m','p','l','e','C','o','u','n','t','F','l','a','g','B','i','t','s',' ','s','a','m','p','l','e','s',
+  ',',' ','V','k','I','m','a','g','e','U','s','a','g','e','F','l','a','g','s',' ','u','s','a','g','e',',',' ','V','k','I','m',
+  'a','g','e','T','i','l','i','n','g',' ','t','i','l','i','n','g',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ',
+  '*','p','P','r','o','p','e','r','t','y','C','o','u','n','t',',',' ','V','k','S','p','a','r','s','e','I','m','a','g','e','F',
+  'o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',' ','*','p','P','r','o','p','e','r','t','i','e','s',')',' ','{',
+  '\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e',
+  'v','i','c','e','S','p','a','r','s','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',
+  ' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e',
+  'S','p','a','r','s','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',';','\r','\n',
+  ' ',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','f','o','r','m','a','t',',',' ','t','y',
+  'p','e',',',' ','s','a','m','p','l','e','s',',',' ','u','s','a','g','e',',',' ','t','i','l','i','n','g',',',' ','p','P','r',
+  'o','p','e','r','t','y','C','o','u','n','t',',',' ','p','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ',
+  'r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v',
+  'k','Q','u','e','u','e','B','i','n','d','S','p','a','r','s','e','(','V','k','Q','u','e','u','e',' ','q','u','e','u','e',',',
+  ' ','u','i','n','t','3','2','_','t',' ','b','i','n','d','I','n','f','o','C','o','u','n','t',',','\r','\n',' ',' ','c','o',
+  'n','s','t',' ','V','k','B','i','n','d','S','p','a','r','s','e','I','n','f','o',' ','*','p','B','i','n','d','I','n','f','o',
+  ',',' ','V','k','F','e','n','c','e',' ','f','e','n','c','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P',
+  'F','N','_','v','k','Q','u','e','u','e','B','i','n','d','S','p','a','r','s','e',' ','f','n',' ','=',' ','v','k','Q','u','e',
+  'u','e','B','i','n','d','S','p','a','r','s','e',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ',
+  'f','n','(','q','u','e','u','e',',',' ','b','i','n','d','I','n','f','o','C','o','u','n','t',',',' ','p','B','i','n','d','I',
+  'n','f','o',',',' ','f','e','n','c','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r',
+  '\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','F','e','n','c','e',
+  '(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','F','e','n','c','e',
+  'C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o',
+  'n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l',
+  'o','c','a','t','o','r',',',' ','V','k','F','e','n','c','e',' ','*','p','F','e','n','c','e',')',' ','{','\r','\n',' ',' ',
+  's','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','F','e','n','c','e',' ','f','n',' ','=',' ','v',
+  'k','C','r','e','a','t','e','F','e','n','c','e',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ',
+  'f','n','(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a',
+  't','o','r',',',' ','p','F','e','n','c','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','F','e','n','c','e','(','V','k',
+  'D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','F','e','n','c','e',' ','f','e','n','c','e',',',' ','c',
+  'o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l',
+  'l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s',
+  't','r','o','y','F','e','n','c','e',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','F','e','n','c','e',';','\r',
+  '\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','f','e','n','c','e',',',' ','p','A','l','l','o','c','a','t','o',
+  'r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',
+  ' ','s','h','i','m','_','v','k','R','e','s','e','t','F','e','n','c','e','s','(','V','k','D','e','v','i','c','e',' ','d','e',
+  'v','i','c','e',',',' ','u','i','n','t','3','2','_','t',' ','f','e','n','c','e','C','o','u','n','t',',',' ','c','o','n','s',
+  't',' ','V','k','F','e','n','c','e',' ','*','p','F','e','n','c','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i',
+  'c',' ','P','F','N','_','v','k','R','e','s','e','t','F','e','n','c','e','s',' ','f','n',' ','=',' ','v','k','R','e','s','e',
+  't','F','e','n','c','e','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e',
+  'v','i','c','e',',',' ','f','e','n','c','e','C','o','u','n','t',',',' ','p','F','e','n','c','e','s',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i',
+  'm','_','v','k','G','e','t','F','e','n','c','e','S','t','a','t','u','s','(','V','k','D','e','v','i','c','e',' ','d','e','v',
+  'i','c','e',',',' ','V','k','F','e','n','c','e',' ','f','e','n','c','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i',
+  'c',' ','P','F','N','_','v','k','G','e','t','F','e','n','c','e','S','t','a','t','u','s',' ','f','n',' ','=',' ','v','k','G',
+  'e','t','F','e','n','c','e','S','t','a','t','u','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',
+  ' ','f','n','(','d','e','v','i','c','e',',',' ','f','e','n','c','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ',
+  'r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','W','a','i','t',
+  'F','o','r','F','e','n','c','e','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','u','i','n','t',
+  '3','2','_','t',' ','f','e','n','c','e','C','o','u','n','t',',',' ','c','o','n','s','t',' ','V','k','F','e','n','c','e',' ',
+  '*','p','F','e','n','c','e','s',',','\r','\n',' ',' ','V','k','B','o','o','l','3','2',' ','w','a','i','t','A','l','l',',',
+  ' ','u','i','n','t','6','4','_','t',' ','t','i','m','e','o','u','t',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',
+  ' ','P','F','N','_','v','k','W','a','i','t','F','o','r','F','e','n','c','e','s',' ','f','n',' ','=',' ','v','k','W','a','i',
+  't','F','o','r','F','e','n','c','e','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n',
+  '(','d','e','v','i','c','e',',',' ','f','e','n','c','e','C','o','u','n','t',',',' ','p','F','e','n','c','e','s',',',' ','w',
+  'a','i','t','A','l','l',',',' ','t','i','m','e','o','u','t',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';',
+  '\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e',
+  'S','e','m','a','p','h','o','r','e','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s',
+  't',' ','V','k','S','e','m','a','p','h','o','r','e','C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t',
+  'e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a',
+  'l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',',' ','V','k','S','e','m','a','p','h','o','r',
+  'e',' ','*','p','S','e','m','a','p','h','o','r','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N',
+  '_','v','k','C','r','e','a','t','e','S','e','m','a','p','h','o','r','e',' ','f','n',' ','=',' ','v','k','C','r','e','a','t',
+  'e','S','e','m','a','p','h','o','r','e',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n',
+  '(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o',
+  'r',',',' ','p','S','e','m','a','p','h','o','r','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n',
+  '}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','S','e','m','a','p','h',
+  'o','r','e','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','S','e','m','a','p','h','o','r',
+  'e',' ','s','e','m','a','p','h','o','r','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a',
+  't','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',
+  ' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','S','e','m','a','p','h','o','r','e',
+  ' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','S','e','m','a','p','h','o','r','e',';','\r','\n',' ',' ','f',
+  'n','(','d','e','v','i','c','e',',',' ','s','e','m','a','p','h','o','r','e',',',' ','p','A','l','l','o','c','a','t','o','r',
+  ')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ',
+  's','h','i','m','_','v','k','C','r','e','a','t','e','E','v','e','n','t','(','V','k','D','e','v','i','c','e',' ','d','e','v',
+  'i','c','e',',',' ','c','o','n','s','t',' ','V','k','E','v','e','n','t','C','r','e','a','t','e','I','n','f','o',' ','*','p',
+  'C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t',
+  'i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',',' ','V','k','E','v','e',
+  'n','t',' ','*','p','E','v','e','n','t',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k',
+  'C','r','e','a','t','e','E','v','e','n','t',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','E','v','e','n','t',';',
+  '\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','C',
+  'r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','E','v','e','n','t',')',';',
+  '\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m',
+  '_','v','k','D','e','s','t','r','o','y','E','v','e','n','t','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',
+  ',',' ','V','k','E','v','e','n','t',' ','e','v','e','n','t',',',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a',
+  't','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',
+  ' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','E','v','e','n','t',' ','f','n',' ',
+  '=',' ','v','k','D','e','s','t','r','o','y','E','v','e','n','t',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',
+  ',',' ','e','v','e','n','t',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r',
+  'n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','E',
+  'v','e','n','t','S','t','a','t','u','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','E',
+  'v','e','n','t',' ','e','v','e','n','t',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k',
+  'G','e','t','E','v','e','n','t','S','t','a','t','u','s',' ','f','n',' ','=',' ','v','k','G','e','t','E','v','e','n','t','S',
+  't','a','t','u','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i',
+  'c','e',',',' ','e','v','e','n','t',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n',
+  '\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','S','e','t','E','v','e','n','t','(','V','k','D',
+  'e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','E','v','e','n','t',' ','e','v','e','n','t',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','S','e','t','E','v','e','n','t',' ','f','n',' ','=',' ',
+  'v','k','S','e','t','E','v','e','n','t',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n',
+  '(','d','e','v','i','c','e',',',' ','e','v','e','n','t',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r',
+  '\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','R','e','s','e','t','E','v',
+  'e','n','t','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','E','v','e','n','t',' ','e','v',
+  'e','n','t',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','R','e','s','e','t','E','v',
+  'e','n','t',' ','f','n',' ','=',' ','v','k','R','e','s','e','t','E','v','e','n','t',';','\r','\n',' ',' ','V','k','R','e',
+  's','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','e','v','e','n','t',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i',
+  'm','_','v','k','C','r','e','a','t','e','Q','u','e','r','y','P','o','o','l','(','V','k','D','e','v','i','c','e',' ','d','e',
+  'v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','Q','u','e','r','y','P','o','o','l','C','r','e','a','t','e','I','n',
+  'f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l',
+  'l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',',' ',
+  'V','k','Q','u','e','r','y','P','o','o','l',' ','*','p','Q','u','e','r','y','P','o','o','l',')',' ','{','\r','\n',' ',' ',
+  's','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','Q','u','e','r','y','P','o','o','l',' ','f','n',
+  ' ','=',' ','v','k','C','r','e','a','t','e','Q','u','e','r','y','P','o','o','l',';','\r','\n',' ',' ','V','k','R','e','s',
+  'u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',
+  ' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','Q','u','e','r','y','P','o','o','l',')',';','\r','\n',' ',' ','r',
+  'e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e',
+  's','t','r','o','y','Q','u','e','r','y','P','o','o','l','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',
+  ' ','V','k','Q','u','e','r','y','P','o','o','l',' ','q','u','e','r','y','P','o','o','l',',','\r','\n',' ',' ','c','o','n',
+  's','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o',
+  'c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r',
+  'o','y','Q','u','e','r','y','P','o','o','l',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','Q','u','e','r','y',
+  'P','o','o','l',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','q','u','e','r','y','P','o','o','l',',',
+  ' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n',
+  '\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','Q','u','e','r','y','P','o','o','l',
+  'R','e','s','u','l','t','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','Q','u','e','r',
+  'y','P','o','o','l',' ','q','u','e','r','y','P','o','o','l',',',' ','u','i','n','t','3','2','_','t',' ','f','i','r','s','t',
+  'Q','u','e','r','y',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','q','u','e','r','y','C','o','u','n','t',',',
+  ' ','s','i','z','e','_','t',' ','d','a','t','a','S','i','z','e',',',' ','v','o','i','d',' ','*','p','D','a','t','a',',','\r',
+  '\n',' ',' ','V','k','D','e','v','i','c','e','S','i','z','e',' ','s','t','r','i','d','e',',',' ','V','k','Q','u','e','r',
+  'y','R','e','s','u','l','t','F','l','a','g','s',' ','f','l','a','g','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i',
+  'c',' ','P','F','N','_','v','k','G','e','t','Q','u','e','r','y','P','o','o','l','R','e','s','u','l','t','s',' ','f','n',' ',
+  '=',' ','v','k','G','e','t','Q','u','e','r','y','P','o','o','l','R','e','s','u','l','t','s',';','\r','\n',' ',' ','V','k',
+  'R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','q','u','e','r','y','P','o','o','l',
+  ',',' ','f','i','r','s','t','Q','u','e','r','y',',',' ','q','u','e','r','y','C','o','u','n','t',',',' ','d','a','t','a','S',
+  'i','z','e',',',' ','p','D','a','t','a',',',' ','s','t','r','i','d','e',',',' ','f','l','a','g','s',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i',
+  'm','_','v','k','C','r','e','a','t','e','B','u','f','f','e','r','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c',
+  'e',',',' ','c','o','n','s','t',' ','V','k','B','u','f','f','e','r','C','r','e','a','t','e','I','n','f','o',' ','*','p','C',
+  'r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i',
+  'o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',',' ','V','k','B','u','f','f',
+  'e','r',' ','*','p','B','u','f','f','e','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v',
+  'k','C','r','e','a','t','e','B','u','f','f','e','r',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','B','u','f','f',
+  'e','r',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',
+  ' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','B','u','f','f',
+  'e','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ',
+  's','h','i','m','_','v','k','D','e','s','t','r','o','y','B','u','f','f','e','r','(','V','k','D','e','v','i','c','e',' ','d',
+  'e','v','i','c','e',',',' ','V','k','B','u','f','f','e','r',' ','b','u','f','f','e','r',',',' ','c','o','n','s','t',' ','V',
+  'k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o',
+  'r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','B','u',
+  'f','f','e','r',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','B','u','f','f','e','r',';','\r','\n',' ',' ',
+  'f','n','(','d','e','v','i','c','e',',',' ','b','u','f','f','e','r',',',' ','p','A','l','l','o','c','a','t','o','r',')',';',
+  '\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h',
+  'i','m','_','v','k','C','r','e','a','t','e','B','u','f','f','e','r','V','i','e','w','(','V','k','D','e','v','i','c','e',' ',
+  'd','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','B','u','f','f','e','r','V','i','e','w','C','r','e','a','t',
+  'e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V',
+  'k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o',
+  'r',',',' ','V','k','B','u','f','f','e','r','V','i','e','w',' ','*','p','V','i','e','w',')',' ','{','\r','\n',' ',' ','s',
+  't','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','B','u','f','f','e','r','V','i','e','w',' ','f','n',
+  ' ','=',' ','v','k','C','r','e','a','t','e','B','u','f','f','e','r','V','i','e','w',';','\r','\n',' ',' ','V','k','R','e',
+  's','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',
+  ',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','V','i','e','w',')',';','\r','\n',' ',' ','r','e','t','u','r',
+  'n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o',
+  'y','B','u','f','f','e','r','V','i','e','w','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k',
+  'B','u','f','f','e','r','V','i','e','w',' ','b','u','f','f','e','r','V','i','e','w',',','\r','\n',' ',' ','c','o','n','s',
+  't',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c',
+  'a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o',
+  'y','B','u','f','f','e','r','V','i','e','w',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','B','u','f','f','e',
+  'r','V','i','e','w',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','b','u','f','f','e','r','V','i','e',
+  'w',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r',
+  '\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','I','m','a','g','e',
+  '(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','I','m','a','g','e',
+  'C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o',
+  'n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l',
+  'o','c','a','t','o','r',',',' ','V','k','I','m','a','g','e',' ','*','p','I','m','a','g','e',')',' ','{','\r','\n',' ',' ',
+  's','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','I','m','a','g','e',' ','f','n',' ','=',' ','v',
+  'k','C','r','e','a','t','e','I','m','a','g','e',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ',
+  'f','n','(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a',
+  't','o','r',',',' ','p','I','m','a','g','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','I','m','a','g','e','(','V','k',
+  'D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','I','m','a','g','e',' ','i','m','a','g','e',',',' ','c',
+  'o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l',
+  'l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s',
+  't','r','o','y','I','m','a','g','e',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','I','m','a','g','e',';','\r',
+  '\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','i','m','a','g','e',',',' ','p','A','l','l','o','c','a','t','o',
+  'r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i',
+  'm','_','v','k','G','e','t','I','m','a','g','e','S','u','b','r','e','s','o','u','r','c','e','L','a','y','o','u','t','(','V',
+  'k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','I','m','a','g','e',' ','i','m','a','g','e',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','I','m','a','g','e','S','u','b','r','e','s','o','u','r','c','e',' ','*','p',
+  'S','u','b','r','e','s','o','u','r','c','e',',','\r','\n',' ',' ','V','k','S','u','b','r','e','s','o','u','r','c','e','L',
+  'a','y','o','u','t',' ','*','p','L','a','y','o','u','t',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F',
+  'N','_','v','k','G','e','t','I','m','a','g','e','S','u','b','r','e','s','o','u','r','c','e','L','a','y','o','u','t',' ','f',
+  'n',' ','=',' ','v','k','G','e','t','I','m','a','g','e','S','u','b','r','e','s','o','u','r','c','e','L','a','y','o','u','t',
+  ';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','i','m','a','g','e',',',' ','p','S','u','b','r','e','s',
+  'o','u','r','c','e',',',' ','p','L','a','y','o','u','t',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}',
+  '\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','I','m','a','g',
+  'e','V','i','e','w','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k',
+  'I','m','a','g','e','V','i','e','w','C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f',
+  'o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a',
+  'c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',',' ','V','k','I','m','a','g','e','V','i','e','w',' ','*','p',
+  'V','i','e','w',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e',
+  'I','m','a','g','e','V','i','e','w',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','I','m','a','g','e','V','i','e',
+  'w',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ',
+  'p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','V','i','e','w',')',
+  ';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i',
+  'm','_','v','k','D','e','s','t','r','o','y','I','m','a','g','e','V','i','e','w','(','V','k','D','e','v','i','c','e',' ','d',
+  'e','v','i','c','e',',',' ','V','k','I','m','a','g','e','V','i','e','w',' ','i','m','a','g','e','V','i','e','w',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',
+  ' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_',
+  'v','k','D','e','s','t','r','o','y','I','m','a','g','e','V','i','e','w',' ','f','n',' ','=',' ','v','k','D','e','s','t','r',
+  'o','y','I','m','a','g','e','V','i','e','w',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','i','m','a',
+  'g','e','V','i','e','w',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',
+  ';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t',
+  'e','S','h','a','d','e','r','M','o','d','u','l','e','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ',
+  'c','o','n','s','t',' ','V','k','S','h','a','d','e','r','M','o','d','u','l','e','C','r','e','a','t','e','I','n','f','o',' ',
+  '*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c',
+  'a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',
+  ' ','V','k','S','h','a','d','e','r','M','o','d','u','l','e',' ','*','p','S','h','a','d','e','r','M','o','d','u','l','e',')',
+  ' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','S','h','a','d','e',
+  'r','M','o','d','u','l','e',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','S','h','a','d','e','r','M','o','d','u',
+  'l','e',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',
+  ' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','S','h','a','d',
+  'e','r','M','o','d','u','l','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r',
+  '\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','S','h','a','d','e','r','M','o','d','u',
+  'l','e','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','S','h','a','d','e','r','M','o','d',
+  'u','l','e',' ','s','h','a','d','e','r','M','o','d','u','l','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A',
+  'l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',
+  ' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','S','h','a','d',
+  'e','r','M','o','d','u','l','e',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','S','h','a','d','e','r','M','o',
+  'd','u','l','e',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','s','h','a','d','e','r','M','o','d','u',
+  'l','e',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}',
+  '\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','P','i','p','e',
+  'l','i','n','e','C','a','c','h','e','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s',
+  't',' ','V','k','P','i','p','e','l','i','n','e','C','a','c','h','e','C','r','e','a','t','e','I','n','f','o',' ','*','p','C',
+  'r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i',
+  'o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',' ','V','k',
+  'P','i','p','e','l','i','n','e','C','a','c','h','e',' ','*','p','P','i','p','e','l','i','n','e','C','a','c','h','e',')',' ',
+  '{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','P','i','p','e','l','i',
+  'n','e','C','a','c','h','e',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','P','i','p','e','l','i','n','e','C','a',
+  'c','h','e',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',
+  ',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','P','i','p',
+  'e','l','i','n','e','C','a','c','h','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','P','i','p','e','l','i','n','e',
+  'C','a','c','h','e','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','P','i','p','e','l','i',
+  'n','e','C','a','c','h','e',' ','p','i','p','e','l','i','n','e','C','a','c','h','e',',','\r','\n',' ',' ','c','o','n','s',
+  't',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c',
+  'a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o',
+  'y','P','i','p','e','l','i','n','e','C','a','c','h','e',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','P','i',
+  'p','e','l','i','n','e','C','a','c','h','e',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','p','i','p',
+  'e','l','i','n','e','C','a','c','h','e',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e',
+  't','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G',
+  'e','t','P','i','p','e','l','i','n','e','C','a','c','h','e','D','a','t','a','(','V','k','D','e','v','i','c','e',' ','d','e',
+  'v','i','c','e',',',' ','V','k','P','i','p','e','l','i','n','e','C','a','c','h','e',' ','p','i','p','e','l','i','n','e','C',
+  'a','c','h','e',',','\r','\n',' ',' ','s','i','z','e','_','t',' ','*','p','D','a','t','a','S','i','z','e',',',' ','v','o',
+  'i','d',' ','*','p','D','a','t','a',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G',
+  'e','t','P','i','p','e','l','i','n','e','C','a','c','h','e','D','a','t','a',' ','f','n',' ','=',' ','v','k','G','e','t','P',
+  'i','p','e','l','i','n','e','C','a','c','h','e','D','a','t','a',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ',
+  'r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','i','p','e','l','i','n','e','C','a','c','h','e',',',' ','p',
+  'D','a','t','a','S','i','z','e',',',' ','p','D','a','t','a',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';',
+  '\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','M','e','r','g','e','P',
+  'i','p','e','l','i','n','e','C','a','c','h','e','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ',
+  'V','k','P','i','p','e','l','i','n','e','C','a','c','h','e',' ','d','s','t','C','a','c','h','e',',','\r','\n',' ',' ','u',
+  'i','n','t','3','2','_','t',' ','s','r','c','C','a','c','h','e','C','o','u','n','t',',',' ','c','o','n','s','t',' ','V','k',
+  'P','i','p','e','l','i','n','e','C','a','c','h','e',' ','*','p','S','r','c','C','a','c','h','e','s',')',' ','{','\r','\n',
+  ' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','M','e','r','g','e','P','i','p','e','l','i','n','e','C','a','c',
+  'h','e','s',' ','f','n',' ','=',' ','v','k','M','e','r','g','e','P','i','p','e','l','i','n','e','C','a','c','h','e','s',';',
+  '\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','d','s',
+  't','C','a','c','h','e',',',' ','s','r','c','C','a','c','h','e','C','o','u','n','t',',',' ','p','S','r','c','C','a','c','h',
+  'e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s',
+  'u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','G','r','a','p','h','i','c','s','P','i','p','e','l','i',
+  'n','e','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','P','i','p','e','l','i','n','e',
+  'C','a','c','h','e',' ','p','i','p','e','l','i','n','e','C','a','c','h','e',',','\r','\n',' ',' ','u','i','n','t','3','2',
+  '_','t',' ','c','r','e','a','t','e','I','n','f','o','C','o','u','n','t',',','\r','\n',' ',' ','c','o','n','s','t',' ','V',
+  'k','G','r','a','p','h','i','c','s','P','i','p','e','l','i','n','e','C','r','e','a','t','e','I','n','f','o',' ','*','p','C',
+  'r','e','a','t','e','I','n','f','o','s',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t',
+  'i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',' ','V',
+  'k','P','i','p','e','l','i','n','e',' ','*','p','P','i','p','e','l','i','n','e','s',')',' ','{','\r','\n',' ',' ','s','t',
+  'a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','G','r','a','p','h','i','c','s','P','i','p','e','l','i',
+  'n','e','s',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','G','r','a','p','h','i','c','s','P','i','p','e','l','i',
+  'n','e','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',
+  ',',' ','p','i','p','e','l','i','n','e','C','a','c','h','e',',',' ','c','r','e','a','t','e','I','n','f','o','C','o','u','n',
+  't',',',' ','p','C','r','e','a','t','e','I','n','f','o','s',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','P',
+  'i','p','e','l','i','n','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r',
+  '\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','C','o','m','p','u','t','e',
+  'P','i','p','e','l','i','n','e','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','P','i',
+  'p','e','l','i','n','e','C','a','c','h','e',' ','p','i','p','e','l','i','n','e','C','a','c','h','e',',','\r','\n',' ',' ',
+  'u','i','n','t','3','2','_','t',' ','c','r','e','a','t','e','I','n','f','o','C','o','u','n','t',',','\r','\n',' ',' ','c',
+  'o','n','s','t',' ','V','k','C','o','m','p','u','t','e','P','i','p','e','l','i','n','e','C','r','e','a','t','e','I','n','f',
+  'o',' ','*','p','C','r','e','a','t','e','I','n','f','o','s',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l',
+  'l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r',
+  '\n',' ',' ','V','k','P','i','p','e','l','i','n','e',' ','*','p','P','i','p','e','l','i','n','e','s',')',' ','{','\r','\n',
+  ' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','C','o','m','p','u','t','e','P','i','p',
+  'e','l','i','n','e','s',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','C','o','m','p','u','t','e','P','i','p','e',
+  'l','i','n','e','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i',
+  'c','e',',',' ','p','i','p','e','l','i','n','e','C','a','c','h','e',',',' ','c','r','e','a','t','e','I','n','f','o','C','o',
+  'u','n','t',',',' ','p','C','r','e','a','t','e','I','n','f','o','s',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ',
+  'p','P','i','p','e','l','i','n','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','P','i','p','e','l','i','n','e',
+  '(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','P','i','p','e','l','i','n','e',' ','p','i',
+  'p','e','l','i','n','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C',
+  'a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a',
+  't','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','P','i','p','e','l','i','n','e',' ','f','n',' ','=',' ',
+  'v','k','D','e','s','t','r','o','y','P','i','p','e','l','i','n','e',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c',
+  'e',',',' ','p','i','p','e','l','i','n','e',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r',
+  'e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k',
+  'C','r','e','a','t','e','P','i','p','e','l','i','n','e','L','a','y','o','u','t','(','V','k','D','e','v','i','c','e',' ','d',
+  'e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','P','i','p','e','l','i','n','e','L','a','y','o','u','t','C','r',
+  'e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s',
+  't',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c',
+  'a','t','o','r',',','\r','\n',' ',' ','V','k','P','i','p','e','l','i','n','e','L','a','y','o','u','t',' ','*','p','P','i',
+  'p','e','l','i','n','e','L','a','y','o','u','t',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_',
+  'v','k','C','r','e','a','t','e','P','i','p','e','l','i','n','e','L','a','y','o','u','t',' ','f','n',' ','=',' ','v','k','C',
+  'r','e','a','t','e','P','i','p','e','l','i','n','e','L','a','y','o','u','t',';','\r','\n',' ',' ','V','k','R','e','s','u',
+  'l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ',
+  'p','A','l','l','o','c','a','t','o','r',',',' ','p','P','i','p','e','l','i','n','e','L','a','y','o','u','t',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_',
+  'v','k','D','e','s','t','r','o','y','P','i','p','e','l','i','n','e','L','a','y','o','u','t','(','V','k','D','e','v','i','c',
+  'e',' ','d','e','v','i','c','e',',',' ','V','k','P','i','p','e','l','i','n','e','L','a','y','o','u','t',' ','p','i','p','e',
+  'l','i','n','e','L','a','y','o','u','t',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t',
+  'i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',
+  ' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','P','i','p','e','l','i','n','e','L','a',
+  'y','o','u','t',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','P','i','p','e','l','i','n','e','L','a','y','o',
+  'u','t',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','p','i','p','e','l','i','n','e','L','a','y','o',
+  'u','t',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}',
+  '\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','S','a','m','p',
+  'l','e','r','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','S','a',
+  'm','p','l','e','r','C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',
+  ' ','*','p','A','l','l','o','c','a','t','o','r',',',' ','V','k','S','a','m','p','l','e','r',' ','*','p','S','a','m','p','l',
+  'e','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','S','a',
+  'm','p','l','e','r',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','S','a','m','p','l','e','r',';','\r','\n',' ',
+  ' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t',
+  'e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','S','a','m','p','l','e','r',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_',
+  'v','k','D','e','s','t','r','o','y','S','a','m','p','l','e','r','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c',
+  'e',',',' ','V','k','S','a','m','p','l','e','r',' ','s','a','m','p','l','e','r',',',' ','c','o','n','s','t',' ','V','k','A',
+  'l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',
+  ' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','S','a','m','p',
+  'l','e','r',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','S','a','m','p','l','e','r',';','\r','\n',' ',' ',
+  'f','n','(','d','e','v','i','c','e',',',' ','s','a','m','p','l','e','r',',',' ','p','A','l','l','o','c','a','t','o','r',')',
+  ';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s',
+  'h','i','m','_','v','k','C','r','e','a','t','e','D','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t',
+  '(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','D',
+  'e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t','C','r','e','a','t','e','I','n','f','o',' ','*','p',
+  'C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t',
+  'i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',' ','V',
+  'k','D','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t',' ','*','p','S','e','t','L','a','y','o','u',
+  't',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','D','e','s',
+  'c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','D',
+  'e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t',';','\r','\n',' ',' ','V','k','R','e','s','u','l',
+  't',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p',
+  'A','l','l','o','c','a','t','o','r',',',' ','p','S','e','t','L','a','y','o','u','t',')',';','\r','\n',' ',' ','r','e','t',
+  'u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t',
+  'r','o','y','D','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t','(','V','k','D','e','v','i','c','e',
+  ' ','d','e','v','i','c','e',',',' ','V','k','D','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t',' ',
+  'd','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t',',','\r','\n',' ',' ','c','o','n','s','t',' ',
+  'V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t',
+  'o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','D',
+  'e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t',' ','f','n',' ','=',' ','v','k','D','e','s','t','r',
+  'o','y','D','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t',';','\r','\n',' ',' ','f','n','(','d',
+  'e','v','i','c','e',',',' ','d','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t',',',' ','p','A','l',
+  'l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k',
+  'R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','D','e','s','c','r','i','p','t','o','r','P',
+  'o','o','l','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','D','e',
+  's','c','r','i','p','t','o','r','P','o','o','l','C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e',
+  'I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l',
+  'l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',' ','V','k','D','e','s','c','r',
+  'i','p','t','o','r','P','o','o','l',' ','*','p','D','e','s','c','r','i','p','t','o','r','P','o','o','l',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','D','e','s','c','r','i','p','t',
+  'o','r','P','o','o','l',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','D','e','s','c','r','i','p','t','o','r','P',
+  'o','o','l',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',
+  ',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','D','e','s',
+  'c','r','i','p','t','o','r','P','o','o','l',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','D','e','s','c','r','i','p','t',
+  'o','r','P','o','o','l','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','D','e','s','c','r',
+  'i','p','t','o','r','P','o','o','l',' ','d','e','s','c','r','i','p','t','o','r','P','o','o','l',',','\r','\n',' ',' ','c',
+  'o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l',
+  'l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s',
+  't','r','o','y','D','e','s','c','r','i','p','t','o','r','P','o','o','l',' ','f','n',' ','=',' ','v','k','D','e','s','t','r',
+  'o','y','D','e','s','c','r','i','p','t','o','r','P','o','o','l',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',
+  ',',' ','d','e','s','c','r','i','p','t','o','r','P','o','o','l',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i',
+  'm','_','v','k','R','e','s','e','t','D','e','s','c','r','i','p','t','o','r','P','o','o','l','(','V','k','D','e','v','i','c',
+  'e',' ','d','e','v','i','c','e',',',' ','V','k','D','e','s','c','r','i','p','t','o','r','P','o','o','l',' ','d','e','s','c',
+  'r','i','p','t','o','r','P','o','o','l',',','\r','\n',' ',' ','V','k','D','e','s','c','r','i','p','t','o','r','P','o','o',
+  'l','R','e','s','e','t','F','l','a','g','s',' ','f','l','a','g','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',
+  ' ','P','F','N','_','v','k','R','e','s','e','t','D','e','s','c','r','i','p','t','o','r','P','o','o','l',' ','f','n',' ','=',
+  ' ','v','k','R','e','s','e','t','D','e','s','c','r','i','p','t','o','r','P','o','o','l',';','\r','\n',' ',' ','V','k','R',
+  'e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','d','e','s','c','r','i','p','t','o','r',
+  'P','o','o','l',',',' ','f','l','a','g','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r',
+  '\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','A','l','l','o','c','a','t','e','D','e','s',
+  'c','r','i','p','t','o','r','S','e','t','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',
+  ' ',' ','c','o','n','s','t',' ','V','k','D','e','s','c','r','i','p','t','o','r','S','e','t','A','l','l','o','c','a','t','e',
+  'I','n','f','o',' ','*','p','A','l','l','o','c','a','t','e','I','n','f','o',',','\r','\n',' ',' ','V','k','D','e','s','c',
+  'r','i','p','t','o','r','S','e','t',' ','*','p','D','e','s','c','r','i','p','t','o','r','S','e','t','s',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','A','l','l','o','c','a','t','e','D','e','s','c','r','i',
+  'p','t','o','r','S','e','t','s',' ','f','n',' ','=',' ','v','k','A','l','l','o','c','a','t','e','D','e','s','c','r','i','p',
+  't','o','r','S','e','t','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e',
+  'v','i','c','e',',',' ','p','A','l','l','o','c','a','t','e','I','n','f','o',',',' ','p','D','e','s','c','r','i','p','t','o',
+  'r','S','e','t','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k',
+  'R','e','s','u','l','t',' ','s','h','i','m','_','v','k','F','r','e','e','D','e','s','c','r','i','p','t','o','r','S','e','t',
+  's','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','D','e','s','c','r','i','p','t','o','r',
+  'P','o','o','l',' ','d','e','s','c','r','i','p','t','o','r','P','o','o','l',',','\r','\n',' ',' ','u','i','n','t','3','2',
+  '_','t',' ','d','e','s','c','r','i','p','t','o','r','S','e','t','C','o','u','n','t',',','\r','\n',' ',' ','c','o','n','s',
+  't',' ','V','k','D','e','s','c','r','i','p','t','o','r','S','e','t',' ','*','p','D','e','s','c','r','i','p','t','o','r','S',
+  'e','t','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','F','r','e','e','D','e','s',
+  'c','r','i','p','t','o','r','S','e','t','s',' ','f','n',' ','=',' ','v','k','F','r','e','e','D','e','s','c','r','i','p','t',
+  'o','r','S','e','t','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v',
+  'i','c','e',',',' ','d','e','s','c','r','i','p','t','o','r','P','o','o','l',',',' ','d','e','s','c','r','i','p','t','o','r',
+  'S','e','t','C','o','u','n','t',',',' ','p','D','e','s','c','r','i','p','t','o','r','S','e','t','s',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k',
+  'U','p','d','a','t','e','D','e','s','c','r','i','p','t','o','r','S','e','t','s','(','V','k','D','e','v','i','c','e',' ','d',
+  'e','v','i','c','e',',',' ','u','i','n','t','3','2','_','t',' ','d','e','s','c','r','i','p','t','o','r','W','r','i','t','e',
+  'C','o','u','n','t',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','W','r','i','t','e','D','e','s','c','r','i','p',
+  't','o','r','S','e','t',' ','*','p','D','e','s','c','r','i','p','t','o','r','W','r','i','t','e','s',',','\r','\n',' ',' ',
+  'u','i','n','t','3','2','_','t',' ','d','e','s','c','r','i','p','t','o','r','C','o','p','y','C','o','u','n','t',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','C','o','p','y','D','e','s','c','r','i','p','t','o','r','S','e','t',' ','*',
+  'p','D','e','s','c','r','i','p','t','o','r','C','o','p','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',
+  ' ','P','F','N','_','v','k','U','p','d','a','t','e','D','e','s','c','r','i','p','t','o','r','S','e','t','s',' ','f','n',' ',
+  '=',' ','v','k','U','p','d','a','t','e','D','e','s','c','r','i','p','t','o','r','S','e','t','s',';','\r','\n',' ',' ','f',
+  'n','(','d','e','v','i','c','e',',',' ','d','e','s','c','r','i','p','t','o','r','W','r','i','t','e','C','o','u','n','t',',',
+  ' ','p','D','e','s','c','r','i','p','t','o','r','W','r','i','t','e','s',',',' ','d','e','s','c','r','i','p','t','o','r','C',
+  'o','p','y','C','o','u','n','t',',',' ','p','D','e','s','c','r','i','p','t','o','r','C','o','p','i','e','s',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i',
+  'm','_','v','k','C','r','e','a','t','e','F','r','a','m','e','b','u','f','f','e','r','(','V','k','D','e','v','i','c','e',' ',
+  'd','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','F','r','a','m','e','b','u','f','f','e','r','C','r','e','a',
+  't','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ',
+  'V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t',
+  'o','r',',','\r','\n',' ',' ','V','k','F','r','a','m','e','b','u','f','f','e','r',' ','*','p','F','r','a','m','e','b','u',
+  'f','f','e','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e',
+  'F','r','a','m','e','b','u','f','f','e','r',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','F','r','a','m','e','b',
+  'u','f','f','e','r',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i',
+  'c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','F',
+  'r','a','m','e','b','u','f','f','e','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','F','r','a','m','e','b','u','f',
+  'f','e','r','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','F','r','a','m','e','b','u','f',
+  'f','e','r',' ','f','r','a','m','e','b','u','f','f','e','r',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l',
+  'l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ',
+  '{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','F','r','a','m','e',
+  'b','u','f','f','e','r',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','F','r','a','m','e','b','u','f','f','e',
+  'r',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','f','r','a','m','e','b','u','f','f','e','r',',',' ',
+  'p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r',
+  '\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','R','e','n','d','e','r','P',
+  'a','s','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','R','e',
+  'n','d','e','r','P','a','s','s','C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',
+  ',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c',
+  'k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',',' ','V','k','R','e','n','d','e','r','P','a','s','s',' ','*','p',
+  'R','e','n','d','e','r','P','a','s','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k',
+  'C','r','e','a','t','e','R','e','n','d','e','r','P','a','s','s',' ','f','n',' ','=',' ','v','k','C','r','e','a','t','e','R',
+  'e','n','d','e','r','P','a','s','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(',
+  'd','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',
+  ',',' ','p','R','e','n','d','e','r','P','a','s','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n',
+  '}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','R','e','n','d','e','r',
+  'P','a','s','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','R','e','n','d','e','r','P',
+  'a','s','s',' ','r','e','n','d','e','r','P','a','s','s',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l',
+  'o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{',
+  '\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','R','e','n','d','e','r',
+  'P','a','s','s',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','R','e','n','d','e','r','P','a','s','s',';','\r',
+  '\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','r','e','n','d','e','r','P','a','s','s',',',' ','p','A','l','l',
+  'o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i',
+  'd',' ','s','h','i','m','_','v','k','G','e','t','R','e','n','d','e','r','A','r','e','a','G','r','a','n','u','l','a','r','i',
+  't','y','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','R','e','n','d','e','r','P','a','s',
+  's',' ','r','e','n','d','e','r','P','a','s','s',',','\r','\n',' ',' ','V','k','E','x','t','e','n','t','2','D',' ','*','p',
+  'G','r','a','n','u','l','a','r','i','t','y',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v',
+  'k','G','e','t','R','e','n','d','e','r','A','r','e','a','G','r','a','n','u','l','a','r','i','t','y',' ','f','n',' ','=',' ',
+  'v','k','G','e','t','R','e','n','d','e','r','A','r','e','a','G','r','a','n','u','l','a','r','i','t','y',';','\r','\n',' ',
+  ' ','f','n','(','d','e','v','i','c','e',',',' ','r','e','n','d','e','r','P','a','s','s',',',' ','p','G','r','a','n','u','l',
+  'a','r','i','t','y',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e',
+  's','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','C','o','m','m','a','n','d','P','o','o','l','(','V',
+  'k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','C','o','m','m','a','n','d',
+  'P','o','o','l','C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',
+  ' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*',
+  'p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',' ','V','k','C','o','m','m','a','n','d','P','o','o','l',' ','*',
+  'p','C','o','m','m','a','n','d','P','o','o','l',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_',
+  'v','k','C','r','e','a','t','e','C','o','m','m','a','n','d','P','o','o','l',' ','f','n',' ','=',' ','v','k','C','r','e','a',
+  't','e','C','o','m','m','a','n','d','P','o','o','l',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',
+  ' ','f','n','(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c',
+  'a','t','o','r',',',' ','p','C','o','m','m','a','n','d','P','o','o','l',')',';','\r','\n',' ',' ','r','e','t','u','r','n',
+  ' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y',
+  'C','o','m','m','a','n','d','P','o','o','l','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k',
+  'C','o','m','m','a','n','d','P','o','o','l',' ','c','o','m','m','a','n','d','P','o','o','l',',','\r','\n',' ',' ','c','o',
+  'n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l',
+  'o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t',
+  'r','o','y','C','o','m','m','a','n','d','P','o','o','l',' ','f','n',' ','=',' ','v','k','D','e','s','t','r','o','y','C','o',
+  'm','m','a','n','d','P','o','o','l',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','c','o','m','m','a',
+  'n','d','P','o','o','l',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',
+  ';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','R','e','s','e','t',
+  'C','o','m','m','a','n','d','P','o','o','l','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k',
+  'C','o','m','m','a','n','d','P','o','o','l',' ','c','o','m','m','a','n','d','P','o','o','l',',','\r','\n',' ',' ','V','k',
+  'C','o','m','m','a','n','d','P','o','o','l','R','e','s','e','t','F','l','a','g','s',' ','f','l','a','g','s',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','R','e','s','e','t','C','o','m','m','a','n','d','P','o',
+  'o','l',' ','f','n',' ','=',' ','v','k','R','e','s','e','t','C','o','m','m','a','n','d','P','o','o','l',';','\r','\n',' ',
+  ' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','c','o','m','m','a','n',
+  'd','P','o','o','l',',',' ','f','l','a','g','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}',
+  '\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','A','l','l','o','c','a','t','e','C','o',
+  'm','m','a','n','d','B','u','f','f','e','r','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','C','o','m','m','a','n','d','B','u','f','f','e','r','A','l','l','o','c','a',
+  't','e','I','n','f','o',' ','*','p','A','l','l','o','c','a','t','e','I','n','f','o',',','\r','\n',' ',' ','V','k','C','o',
+  'm','m','a','n','d','B','u','f','f','e','r',' ','*','p','C','o','m','m','a','n','d','B','u','f','f','e','r','s',')',' ','{',
+  '\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','A','l','l','o','c','a','t','e','C','o','m','m','a',
+  'n','d','B','u','f','f','e','r','s',' ','f','n',' ','=',' ','v','k','A','l','l','o','c','a','t','e','C','o','m','m','a','n',
+  'd','B','u','f','f','e','r','s',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d',
+  'e','v','i','c','e',',',' ','p','A','l','l','o','c','a','t','e','I','n','f','o',',',' ','p','C','o','m','m','a','n','d','B',
+  'u','f','f','e','r','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v',
+  'o','i','d',' ','s','h','i','m','_','v','k','F','r','e','e','C','o','m','m','a','n','d','B','u','f','f','e','r','s','(','V',
+  'k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','C','o','m','m','a','n','d','P','o','o','l',' ','c',
+  'o','m','m','a','n','d','P','o','o','l',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','c','o','m','m','a','n',
+  'd','B','u','f','f','e','r','C','o','u','n','t',',',' ','c','o','n','s','t',' ','V','k','C','o','m','m','a','n','d','B','u',
+  'f','f','e','r',' ','*','p','C','o','m','m','a','n','d','B','u','f','f','e','r','s',')',' ','{','\r','\n',' ',' ','s','t',
+  'a','t','i','c',' ','P','F','N','_','v','k','F','r','e','e','C','o','m','m','a','n','d','B','u','f','f','e','r','s',' ','f',
+  'n',' ','=',' ','v','k','F','r','e','e','C','o','m','m','a','n','d','B','u','f','f','e','r','s',';','\r','\n',' ',' ','f',
+  'n','(','d','e','v','i','c','e',',',' ','c','o','m','m','a','n','d','P','o','o','l',',',' ','c','o','m','m','a','n','d','B',
+  'u','f','f','e','r','C','o','u','n','t',',',' ','p','C','o','m','m','a','n','d','B','u','f','f','e','r','s',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i',
+  'm','_','v','k','R','e','s','e','t','C','o','m','m','a','n','d','B','u','f','f','e','r','(','V','k','C','o','m','m','a','n',
+  'd','B','u','f','f','e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','V','k','C','o','m','m','a','n',
+  'd','B','u','f','f','e','r','R','e','s','e','t','F','l','a','g','s',' ','f','l','a','g','s',')',' ','{','\r','\n',' ',' ',
+  's','t','a','t','i','c',' ','P','F','N','_','v','k','R','e','s','e','t','C','o','m','m','a','n','d','B','u','f','f','e','r',
+  ' ','f','n',' ','=',' ','v','k','R','e','s','e','t','C','o','m','m','a','n','d','B','u','f','f','e','r',';','\r','\n',' ',
+  ' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',',',
+  ' ','f','l','a','g','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v',
+  'o','i','d',' ','s','h','i','m','_','v','k','C','m','d','S','e','t','E','v','e','n','t','(','V','k','C','o','m','m','a','n',
+  'd','B','u','f','f','e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','V','k','E','v','e','n','t',' ',
+  'e','v','e','n','t',',',' ','V','k','P','i','p','e','l','i','n','e','S','t','a','g','e','F','l','a','g','s',' ','s','t','a',
+  'g','e','M','a','s','k',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','S',
+  'e','t','E','v','e','n','t',' ','f','n',' ','=',' ','v','k','C','m','d','S','e','t','E','v','e','n','t',';','\r','\n',' ',
+  ' ','f','n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','e','v','e','n','t',',',' ','s','t','a','g','e',
+  'M','a','s','k',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ',
+  's','h','i','m','_','v','k','C','m','d','R','e','s','e','t','E','v','e','n','t','(','V','k','C','o','m','m','a','n','d','B',
+  'u','f','f','e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','V','k','E','v','e','n','t',' ','e','v',
+  'e','n','t',',',' ','V','k','P','i','p','e','l','i','n','e','S','t','a','g','e','F','l','a','g','s',' ','s','t','a','g','e',
+  'M','a','s','k',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','R','e','s',
+  'e','t','E','v','e','n','t',' ','f','n',' ','=',' ','v','k','C','m','d','R','e','s','e','t','E','v','e','n','t',';','\r',
+  '\n',' ',' ','f','n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','e','v','e','n','t',',',' ','s','t',
+  'a','g','e','M','a','s','k',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o',
+  'i','d',' ','s','h','i','m','_','v','k','C','m','d','B','e','g','i','n','Q','u','e','r','y','(','V','k','C','o','m','m','a',
+  'n','d','B','u','f','f','e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','V','k','Q','u','e','r','y',
+  'P','o','o','l',' ','q','u','e','r','y','P','o','o','l',',',' ','u','i','n','t','3','2','_','t',' ','q','u','e','r','y',',',
+  '\r','\n',' ',' ','V','k','Q','u','e','r','y','C','o','n','t','r','o','l','F','l','a','g','s',' ','f','l','a','g','s',')',
+  ' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','B','e','g','i','n','Q','u','e',
+  'r','y',' ','f','n',' ','=',' ','v','k','C','m','d','B','e','g','i','n','Q','u','e','r','y',';','\r','\n',' ',' ','f','n',
+  '(','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','q','u','e','r','y','P','o','o','l',',',' ','q','u','e','r',
+  'y',',',' ','f','l','a','g','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v',
+  'o','i','d',' ','s','h','i','m','_','v','k','C','m','d','E','n','d','Q','u','e','r','y','(','V','k','C','o','m','m','a','n',
+  'd','B','u','f','f','e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','V','k','Q','u','e','r','y','P',
+  'o','o','l',' ','q','u','e','r','y','P','o','o','l',',',' ','u','i','n','t','3','2','_','t',' ','q','u','e','r','y',')',' ',
+  '{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','E','n','d','Q','u','e','r','y',' ',
+  'f','n',' ','=',' ','v','k','C','m','d','E','n','d','Q','u','e','r','y',';','\r','\n',' ',' ','f','n','(','c','o','m','m',
+  'a','n','d','B','u','f','f','e','r',',',' ','q','u','e','r','y','P','o','o','l',',',' ','q','u','e','r','y',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k',
+  'C','m','d','R','e','s','e','t','Q','u','e','r','y','P','o','o','l','(','V','k','C','o','m','m','a','n','d','B','u','f','f',
+  'e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','V','k','Q','u','e','r','y','P','o','o','l',' ','q',
+  'u','e','r','y','P','o','o','l',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','f','i','r','s','t','Q','u','e',
+  'r','y',',',' ','u','i','n','t','3','2','_','t',' ','q','u','e','r','y','C','o','u','n','t',')',' ','{','\r','\n',' ',' ',
+  's','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','R','e','s','e','t','Q','u','e','r','y','P','o','o','l',' ',
+  'f','n',' ','=',' ','v','k','C','m','d','R','e','s','e','t','Q','u','e','r','y','P','o','o','l',';','\r','\n',' ',' ','f',
+  'n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','q','u','e','r','y','P','o','o','l',',',' ','f','i','r',
+  's','t','Q','u','e','r','y',',',' ','q','u','e','r','y','C','o','u','n','t',')',';','\r','\n',' ',' ','r','e','t','u','r',
+  'n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','C','m','d','W','r','i','t','e',
+  'T','i','m','e','s','t','a','m','p','(','V','k','C','o','m','m','a','n','d','B','u','f','f','e','r',' ','c','o','m','m','a',
+  'n','d','B','u','f','f','e','r',',',' ','V','k','P','i','p','e','l','i','n','e','S','t','a','g','e','F','l','a','g','B','i',
+  't','s',' ','p','i','p','e','l','i','n','e','S','t','a','g','e',',','\r','\n',' ',' ','V','k','Q','u','e','r','y','P','o',
+  'o','l',' ','q','u','e','r','y','P','o','o','l',',',' ','u','i','n','t','3','2','_','t',' ','q','u','e','r','y',')',' ','{',
+  '\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','W','r','i','t','e','T','i','m','e','s',
+  't','a','m','p',' ','f','n',' ','=',' ','v','k','C','m','d','W','r','i','t','e','T','i','m','e','s','t','a','m','p',';','\r',
+  '\n',' ',' ','f','n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','p','i','p','e','l','i','n','e','S',
+  't','a','g','e',',',' ','q','u','e','r','y','P','o','o','l',',',' ','q','u','e','r','y',')',';','\r','\n',' ',' ','r','e',
+  't','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','C','m','d','C','o',
+  'p','y','Q','u','e','r','y','P','o','o','l','R','e','s','u','l','t','s','(','V','k','C','o','m','m','a','n','d','B','u','f',
+  'f','e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','V','k','Q','u','e','r','y','P','o','o','l',' ',
+  'q','u','e','r','y','P','o','o','l',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','f','i','r','s','t','Q','u',
+  'e','r','y',',',' ','u','i','n','t','3','2','_','t',' ','q','u','e','r','y','C','o','u','n','t',',',' ','V','k','B','u','f',
+  'f','e','r',' ','d','s','t','B','u','f','f','e','r',',','\r','\n',' ',' ','V','k','D','e','v','i','c','e','S','i','z','e',
+  ' ','d','s','t','O','f','f','s','e','t',',',' ','V','k','D','e','v','i','c','e','S','i','z','e',' ','s','t','r','i','d','e',
+  ',','\r','\n',' ',' ','V','k','Q','u','e','r','y','R','e','s','u','l','t','F','l','a','g','s',' ','f','l','a','g','s',')',
+  ' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','C','o','p','y','Q','u','e','r',
+  'y','P','o','o','l','R','e','s','u','l','t','s',' ','f','n',' ','=',' ','v','k','C','m','d','C','o','p','y','Q','u','e','r',
+  'y','P','o','o','l','R','e','s','u','l','t','s',';','\r','\n',' ',' ','f','n','(','c','o','m','m','a','n','d','B','u','f',
+  'f','e','r',',',' ','q','u','e','r','y','P','o','o','l',',',' ','f','i','r','s','t','Q','u','e','r','y',',',' ','q','u','e',
+  'r','y','C','o','u','n','t',',',' ','d','s','t','B','u','f','f','e','r',',',' ','d','s','t','O','f','f','s','e','t',',',' ',
+  's','t','r','i','d','e',',',' ','f','l','a','g','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r',
+  '\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l',
+  'D','e','v','i','c','e','D','i','s','p','l','a','y','P','r','o','p','e','r','t','i','e','s','K','H','R','(','V','k','P','h',
+  'y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',
+  ' ',' ','u','i','n','t','3','2','_','t',' ','*','p','P','r','o','p','e','r','t','y','C','o','u','n','t',',','\r','\n',' ',
+  ' ','V','k','D','i','s','p','l','a','y','P','r','o','p','e','r','t','i','e','s','K','H','R',' ','*','p','P','r','o','p','e',
+  'r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h',
+  'y','s','i','c','a','l','D','e','v','i','c','e','D','i','s','p','l','a','y','P','r','o','p','e','r','t','i','e','s','K','H',
+  'R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l',
+  'D','e','v','i','c','e','D','i','s','p','l','a','y','P','r','o','p','e','r','t','i','e','s','K','H','R',')',' ','v','k','G',
+  'e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x',
+  '.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e',
+  'D','i','s','p','l','a','y','P','r','o','p','e','r','t','i','e','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R',
+  'e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','P',
+  'r','o','p','e','r','t','y','C','o','u','n','t',',',' ','p','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i',
+  'm','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','D','i','s','p','l','a','y','P','l','a',
+  'n','e','P','r','o','p','e','r','t','i','e','s','K','H','R','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ',
+  '*','p','P','r','o','p','e','r','t','y','C','o','u','n','t',',','\r','\n',' ',' ','V','k','D','i','s','p','l','a','y','P',
+  'l','a','n','e','P','r','o','p','e','r','t','i','e','s','K','H','R',' ','*','p','P','r','o','p','e','r','t','i','e','s',')',
+  ' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l',
+  'D','e','v','i','c','e','D','i','s','p','l','a','y','P','l','a','n','e','P','r','o','p','e','r','t','i','e','s','K','H','R',
+  ' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D',
+  'e','v','i','c','e','D','i','s','p','l','a','y','P','l','a','n','e','P','r','o','p','e','r','t','i','e','s','K','H','R',')',
+  ' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',
+  ' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e',
+  'v','i','c','e','D','i','s','p','l','a','y','P','l','a','n','e','P','r','o','p','e','r','t','i','e','s','K','H','R','"',')',
+  ';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h','y','s','i','c','a','l','D',
+  'e','v','i','c','e',',',' ','p','P','r','o','p','e','r','t','y','C','o','u','n','t',',',' ','p','P','r','o','p','e','r','t',
+  'i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e',
+  's','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','D','i','s','p','l','a','y','P','l','a','n','e','S','u','p','p',
+  'o','r','t','e','d','D','i','s','p','l','a','y','s','K','H','R','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i',
+  'c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',
+  ' ','p','l','a','n','e','I','n','d','e','x',',',' ','u','i','n','t','3','2','_','t',' ','*','p','D','i','s','p','l','a','y',
+  'C','o','u','n','t',',','\r','\n',' ',' ','V','k','D','i','s','p','l','a','y','K','H','R',' ','*','p','D','i','s','p','l',
+  'a','y','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','D','i','s','p',
+  'l','a','y','P','l','a','n','e','S','u','p','p','o','r','t','e','d','D','i','s','p','l','a','y','s','K','H','R',' ','f','n',
+  ' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','D','i','s','p','l','a','y','P','l','a','n','e',
+  'S','u','p','p','o','r','t','e','d','D','i','s','p','l','a','y','s','K','H','R',')',' ','v','k','G','e','t','I','n','s','t',
+  'a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a',
+  'n','c','e',',',' ','"','v','k','G','e','t','D','i','s','p','l','a','y','P','l','a','n','e','S','u','p','p','o','r','t','e',
+  'd','D','i','s','p','l','a','y','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ',
+  '=',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','l','a','n','e','I','n','d','e','x',
+  ',',' ','p','D','i','s','p','l','a','y','C','o','u','n','t',',',' ','p','D','i','s','p','l','a','y','s',')',';','\r','\n',
+  ' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h',
+  'i','m','_','v','k','G','e','t','D','i','s','p','l','a','y','M','o','d','e','P','r','o','p','e','r','t','i','e','s','K','H',
+  'R','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i',
+  'c','e',',',' ','V','k','D','i','s','p','l','a','y','K','H','R',' ','d','i','s','p','l','a','y',',','\r','\n',' ',' ','u',
+  'i','n','t','3','2','_','t',' ','*','p','P','r','o','p','e','r','t','y','C','o','u','n','t',',','\r','\n',' ',' ','V','k',
+  'D','i','s','p','l','a','y','M','o','d','e','P','r','o','p','e','r','t','i','e','s','K','H','R',' ','*','p','P','r','o','p',
+  'e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','D',
+  'i','s','p','l','a','y','M','o','d','e','P','r','o','p','e','r','t','i','e','s','K','H','R',' ','f','n',' ','=','\r','\n',
+  ' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','D','i','s','p','l','a','y','M','o','d','e','P','r','o','p','e','r',
+  't','i','e','s','K','H','R',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(',
+  'a','u','x','.','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','G','e','t','D','i','s',
+  'p','l','a','y','M','o','d','e','P','r','o','p','e','r','t','i','e','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k',
+  'R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','d',
+  'i','s','p','l','a','y',',',' ','p','P','r','o','p','e','r','t','y','C','o','u','n','t',',',' ','p','P','r','o','p','e','r',
+  't','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R',
+  'e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','D','i','s','p','l','a','y','M','o','d','e','K',
+  'H','R','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v',
+  'i','c','e',',',' ','V','k','D','i','s','p','l','a','y','K','H','R',' ','d','i','s','p','l','a','y',',','\r','\n',' ',' ',
+  'c','o','n','s','t',' ','V','k','D','i','s','p','l','a','y','M','o','d','e','C','r','e','a','t','e','I','n','f','o','K','H',
+  'R',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l',
+  'o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',',' ','V',
+  'k','D','i','s','p','l','a','y','M','o','d','e','K','H','R',' ','*','p','M','o','d','e',')',' ','{','\r','\n',' ',' ','s',
+  't','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','D','i','s','p','l','a','y','M','o','d','e','K','H',
+  'R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e','D','i','s','p','l',
+  'a','y','M','o','d','e','K','H','R',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d',
+  'r','(','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','C','r','e','a','t','e','D','i','s','p','l','a',
+  'y','M','o','d','e','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n',
+  '(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','d','i','s','p','l','a','y',',',' ','p','C','r','e','a',
+  't','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','M','o','d','e',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i',
+  'm','_','v','k','G','e','t','D','i','s','p','l','a','y','P','l','a','n','e','C','a','p','a','b','i','l','i','t','i','e','s',
+  'K','H','R','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e',
+  'v','i','c','e',',','\r','\n',' ',' ','V','k','D','i','s','p','l','a','y','M','o','d','e','K','H','R',' ','m','o','d','e',
+  ',',' ','u','i','n','t','3','2','_','t',' ','p','l','a','n','e','I','n','d','e','x',',','\r','\n',' ',' ','V','k','D','i',
+  's','p','l','a','y','P','l','a','n','e','C','a','p','a','b','i','l','i','t','i','e','s','K','H','R',' ','*','p','C','a','p',
+  'a','b','i','l','i','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G',
+  'e','t','D','i','s','p','l','a','y','P','l','a','n','e','C','a','p','a','b','i','l','i','t','i','e','s','K','H','R',' ','f',
+  'n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','D','i','s','p','l','a','y','P','l','a','n',
+  'e','C','a','p','a','b','i','l','i','t','i','e','s','K','H','R',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e',
+  'P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',
+  ' ','"','v','k','G','e','t','D','i','s','p','l','a','y','P','l','a','n','e','C','a','p','a','b','i','l','i','t','i','e','s',
+  'K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h','y','s',
+  'i','c','a','l','D','e','v','i','c','e',',',' ','m','o','d','e',',',' ','p','l','a','n','e','I','n','d','e','x',',',' ','p',
+  'C','a','p','a','b','i','l','i','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}',
+  '\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','D','i','s','p',
+  'l','a','y','P','l','a','n','e','S','u','r','f','a','c','e','K','H','R','(','V','k','I','n','s','t','a','n','c','e',' ','i',
+  'n','s','t','a','n','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','D','i','s','p','l','a','y','S','u','r',
+  'f','a','c','e','C','r','e','a','t','e','I','n','f','o','K','H','R',' ','*','p','C','r','e','a','t','e','I','n','f','o',',',
+  '\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k',
+  's',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',' ','V','k','S','u','r','f','a','c','e','K','H','R',
+  ' ','*','p','S','u','r','f','a','c','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k',
+  'C','r','e','a','t','e','D','i','s','p','l','a','y','P','l','a','n','e','S','u','r','f','a','c','e','K','H','R',' ','f','n',
+  ' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e','D','i','s','p','l','a','y','P','l',
+  'a','n','e','S','u','r','f','a','c','e','K','H','R',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o',
+  'c','A','d','d','r','(','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','C','r','e','a',
+  't','e','D','i','s','p','l','a','y','P','l','a','n','e','S','u','r','f','a','c','e','K','H','R','"',')',';','\r','\n',' ',
+  ' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','i','n','s','t','a','n','c','e',',',' ','p','C','r','e',
+  'a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','S','u','r','f','a','c','e',')',';',
+  '\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ',
+  's','h','i','m','_','v','k','C','r','e','a','t','e','S','h','a','r','e','d','S','w','a','p','c','h','a','i','n','s','K','H',
+  'R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','u','i','n','t','3','2','_','t',' ','s','w','a',
+  'p','c','h','a','i','n','C','o','u','n','t',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','S','w','a','p','c','h',
+  'a','i','n','C','r','e','a','t','e','I','n','f','o','K','H','R',' ','*','p','C','r','e','a','t','e','I','n','f','o','s',',',
+  '\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k',
+  's',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',' ','V','k','S','w','a','p','c','h','a','i','n','K',
+  'H','R',' ','*','p','S','w','a','p','c','h','a','i','n','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P',
+  'F','N','_','v','k','C','r','e','a','t','e','S','h','a','r','e','d','S','w','a','p','c','h','a','i','n','s','K','H','R',' ',
+  'f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e','S','h','a','r','e','d','S',
+  'w','a','p','c','h','a','i','n','s','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d',
+  'd','r','(','d','e','v','i','c','e',',',' ','"','v','k','C','r','e','a','t','e','S','h','a','r','e','d','S','w','a','p','c',
+  'h','a','i','n','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n',
+  '(','d','e','v','i','c','e',',',' ','s','w','a','p','c','h','a','i','n','C','o','u','n','t',',',' ','p','C','r','e','a','t',
+  'e','I','n','f','o','s',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','S','w','a','p','c','h','a','i','n','s',
+  ')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h',
+  'i','m','_','v','k','D','e','s','t','r','o','y','S','u','r','f','a','c','e','K','H','R','(','V','k','I','n','s','t','a','n',
+  'c','e',' ','i','n','s','t','a','n','c','e',',',' ','V','k','S','u','r','f','a','c','e','K','H','R',' ','s','u','r','f','a',
+  'c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b',
+  'a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ',
+  'P','F','N','_','v','k','D','e','s','t','r','o','y','S','u','r','f','a','c','e','K','H','R',' ','f','n',' ','=','\r','\n',
+  ' ',' ',' ',' ','(','P','F','N','_','v','k','D','e','s','t','r','o','y','S','u','r','f','a','c','e','K','H','R',')',' ','v',
+  'k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','i','n','s','t','a','n','c','e',',',' ',
+  '"','v','k','D','e','s','t','r','o','y','S','u','r','f','a','c','e','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(',
+  'i','n','s','t','a','n','c','e',',',' ','s','u','r','f','a','c','e',',',' ','p','A','l','l','o','c','a','t','o','r',')',';',
+  '\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h',
+  'i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','S','u',
+  'p','p','o','r','t','K','H','R','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i',
+  'c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','q','u','e','u','e','F','a',
+  'm','i','l','y','I','n','d','e','x',',',' ','V','k','S','u','r','f','a','c','e','K','H','R',' ','s','u','r','f','a','c','e',
+  ',','\r','\n',' ',' ','V','k','B','o','o','l','3','2',' ','*','p','S','u','p','p','o','r','t','e','d',')',' ','{','\r','\n',
+  ' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e','S','u','r','f','a','c','e','S','u','p','p','o','r','t','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(',
+  'P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','S',
+  'u','p','p','o','r','t','K','H','R',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d',
+  'r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','S','u','p','p','o','r','t','K','H','R',
+  '"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h','y','s','i','c','a',
+  'l','D','e','v','i','c','e',',',' ','q','u','e','u','e','F','a','m','i','l','y','I','n','d','e','x',',',' ','s','u','r','f',
+  'a','c','e',',',' ','p','S','u','p','p','o','r','t','e','d',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';',
+  '\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s','K',
+  'H','R','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v',
+  'i','c','e',',','\r','\n',' ',' ','V','k','S','u','r','f','a','c','e','K','H','R',' ','s','u','r','f','a','c','e',',','\r',
+  '\n',' ',' ','V','k','S','u','r','f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s','K','H','R',' ','*','p',
+  'S','u','r','f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t',
+  'i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a',
+  'c','e','C','a','p','a','b','i','l','i','t','i','e','s','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P',
+  'F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','C','a',
+  'p','a','b','i','l','i','t','i','e','s','K','H','R',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o',
+  'c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v',
+  'k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','C','a','p','a','b','i',
+  'l','i','t','i','e','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f',
+  'n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','s','u','r','f','a','c','e',',',' ','p','S','u','r',
+  'f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',
+  ';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','P','h',
+  'y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','F','o','r','m','a','t','s','K','H','R','(','V',
+  'k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',
+  '\r','\n',' ',' ','V','k','S','u','r','f','a','c','e','K','H','R',' ','s','u','r','f','a','c','e',',','\r','\n',' ',' ','u',
+  'i','n','t','3','2','_','t',' ','*','p','S','u','r','f','a','c','e','F','o','r','m','a','t','C','o','u','n','t',',','\r',
+  '\n',' ',' ','V','k','S','u','r','f','a','c','e','F','o','r','m','a','t','K','H','R',' ','*','p','S','u','r','f','a','c',
+  'e','F','o','r','m','a','t','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e',
+  't','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','F','o','r','m','a','t','s','K','H',
+  'R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l',
+  'D','e','v','i','c','e','S','u','r','f','a','c','e','F','o','r','m','a','t','s','K','H','R',')',' ','v','k','G','e','t','I',
+  'n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n',
+  's','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r',
+  'f','a','c','e','F','o','r','m','a','t','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ',
+  'r',' ','=',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','s','u','r','f','a','c','e',',',
+  ' ','p','S','u','r','f','a','c','e','F','o','r','m','a','t','C','o','u','n','t',',',' ','p','S','u','r','f','a','c','e','F',
+  'o','r','m','a','t','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V',
+  'k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e','S','u','r','f','a','c','e','P','r','e','s','e','n','t','M','o','d','e','s','K','H','R','(','V','k','P','h','y','s','i',
+  'c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','V',
+  'k','S','u','r','f','a','c','e','K','H','R',' ','s','u','r','f','a','c','e',',','\r','\n',' ',' ','u','i','n','t','3','2',
+  '_','t',' ','*','p','P','r','e','s','e','n','t','M','o','d','e','C','o','u','n','t',',','\r','\n',' ',' ','V','k','P','r',
+  'e','s','e','n','t','M','o','d','e','K','H','R',' ','*','p','P','r','e','s','e','n','t','M','o','d','e','s',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v',
+  'i','c','e','S','u','r','f','a','c','e','P','r','e','s','e','n','t','M','o','d','e','s','K','H','R',' ','f','n',' ','=','\r',
+  '\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S',
+  'u','r','f','a','c','e','P','r','e','s','e','n','t','M','o','d','e','s','K','H','R',')',' ','v','k','G','e','t','I','n','s',
+  't','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t',
+  'a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a',
+  'c','e','P','r','e','s','e','n','t','M','o','d','e','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u',
+  'l','t',' ','r',' ','=',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','s','u','r','f','a',
+  'c','e',',',' ','p','P','r','e','s','e','n','t','M','o','d','e','C','o','u','n','t',',',' ','p','P','r','e','s','e','n','t',
+  'M','o','d','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k',
+  'R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','S','w','a','p','c','h','a','i','n','K','H',
+  'R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','S','w','a','p',
+  'c','h','a','i','n','C','r','e','a','t','e','I','n','f','o','K','H','R',' ','*','p','C','r','e','a','t','e','I','n','f','o',
+  ',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c',
+  'k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',' ','V','k','S','w','a','p','c','h','a','i','n',
+  'K','H','R',' ','*','p','S','w','a','p','c','h','a','i','n',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P',
+  'F','N','_','v','k','C','r','e','a','t','e','S','w','a','p','c','h','a','i','n','K','H','R',' ','f','n',' ','=','\r','\n',
+  ' ',' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e','S','w','a','p','c','h','a','i','n','K','H','R',')',' ',
+  'v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k',
+  'C','r','e','a','t','e','S','w','a','p','c','h','a','i','n','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s',
+  'u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',
+  ' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','S','w','a','p','c','h','a','i','n',')',';','\r','\n',' ',' ','r',
+  'e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e',
+  's','t','r','o','y','S','w','a','p','c','h','a','i','n','K','H','R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i',
+  'c','e',',',' ','V','k','S','w','a','p','c','h','a','i','n','K','H','R',' ','s','w','a','p','c','h','a','i','n',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',
+  ' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_',
+  'v','k','D','e','s','t','r','o','y','S','w','a','p','c','h','a','i','n','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',
+  ' ',' ','(','P','F','N','_','v','k','D','e','s','t','r','o','y','S','w','a','p','c','h','a','i','n','K','H','R',')',' ','v',
+  'k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','D',
+  'e','s','t','r','o','y','S','w','a','p','c','h','a','i','n','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(','d','e',
+  'v','i','c','e',',',' ','s','w','a','p','c','h','a','i','n',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i',
+  'm','_','v','k','G','e','t','S','w','a','p','c','h','a','i','n','I','m','a','g','e','s','K','H','R','(','V','k','D','e','v',
+  'i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','S','w','a','p','c','h','a','i','n','K','H','R',' ','s','w','a','p',
+  'c','h','a','i','n',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','*','p','S','w','a','p','c','h','a','i','n',
+  'I','m','a','g','e','C','o','u','n','t',',',' ','V','k','I','m','a','g','e',' ','*','p','S','w','a','p','c','h','a','i','n',
+  'I','m','a','g','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','S',
+  'w','a','p','c','h','a','i','n','I','m','a','g','e','s','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P',
+  'F','N','_','v','k','G','e','t','S','w','a','p','c','h','a','i','n','I','m','a','g','e','s','K','H','R',')',' ','v','k','G',
+  'e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','G','e','t',
+  'S','w','a','p','c','h','a','i','n','I','m','a','g','e','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s',
+  'u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','s','w','a','p','c','h','a','i','n',',',' ','p',
+  'S','w','a','p','c','h','a','i','n','I','m','a','g','e','C','o','u','n','t',',',' ','p','S','w','a','p','c','h','a','i','n',
+  'I','m','a','g','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V',
+  'k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','A','c','q','u','i','r','e','N','e','x','t','I','m','a','g','e',
+  'K','H','R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','S','w','a','p','c','h','a','i',
+  'n','K','H','R',' ','s','w','a','p','c','h','a','i','n',',',' ','u','i','n','t','6','4','_','t',' ','t','i','m','e','o','u',
+  't',',','\r','\n',' ',' ','V','k','S','e','m','a','p','h','o','r','e',' ','s','e','m','a','p','h','o','r','e',',',' ','V',
+  'k','F','e','n','c','e',' ','f','e','n','c','e',',',' ','u','i','n','t','3','2','_','t',' ','*','p','I','m','a','g','e','I',
+  'n','d','e','x',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','A','c','q','u','i','r',
+  'e','N','e','x','t','I','m','a','g','e','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v',
+  'k','A','c','q','u','i','r','e','N','e','x','t','I','m','a','g','e','K','H','R',')',' ','v','k','G','e','t','D','e','v','i',
+  'c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','A','c','q','u','i','r','e','N','e',
+  'x','t','I','m','a','g','e','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ',
+  'f','n','(','d','e','v','i','c','e',',',' ','s','w','a','p','c','h','a','i','n',',',' ','t','i','m','e','o','u','t',',',' ',
+  's','e','m','a','p','h','o','r','e',',',' ','f','e','n','c','e',',',' ','p','I','m','a','g','e','I','n','d','e','x',')',';',
+  '\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ',
+  's','h','i','m','_','v','k','C','r','e','a','t','e','D','e','b','u','g','R','e','p','o','r','t','C','a','l','l','b','a','c',
+  'k','E','X','T','(','V','k','I','n','s','t','a','n','c','e',' ','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ','c',
+  'o','n','s','t',' ','V','k','D','e','b','u','g','R','e','p','o','r','t','C','a','l','l','b','a','c','k','C','r','e','a','t',
+  'e','I','n','f','o','E','X','T',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s',
+  't',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c',
+  'a','t','o','r',',','\r','\n',' ',' ','V','k','D','e','b','u','g','R','e','p','o','r','t','C','a','l','l','b','a','c','k',
+  'E','X','T',' ','*','p','C','a','l','l','b','a','c','k',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F',
+  'N','_','v','k','C','r','e','a','t','e','D','e','b','u','g','R','e','p','o','r','t','C','a','l','l','b','a','c','k','E','X',
+  'T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e','D','e','b','u','g',
+  'R','e','p','o','r','t','C','a','l','l','b','a','c','k','E','X','T',')',' ','v','k','G','e','t','I','n','s','t','a','n','c',
+  'e','P','r','o','c','A','d','d','r','(','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k',
+  'C','r','e','a','t','e','D','e','b','u','g','R','e','p','o','r','t','C','a','l','l','b','a','c','k','E','X','T','"',')',';',
+  '\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','i','n','s','t','a','n','c','e',',',' ',
+  'p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','C','a','l','l','b',
+  'a','c','k',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',
+  ' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','D','e','b','u','g','R','e','p','o','r','t','C','a','l','l','b',
+  'a','c','k','E','X','T','(','V','k','I','n','s','t','a','n','c','e',' ','i','n','s','t','a','n','c','e',',',' ','V','k','D',
+  'e','b','u','g','R','e','p','o','r','t','C','a','l','l','b','a','c','k','E','X','T',' ','c','a','l','l','b','a','c','k',',',
+  '\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k',
+  's',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N',
+  '_','v','k','D','e','s','t','r','o','y','D','e','b','u','g','R','e','p','o','r','t','C','a','l','l','b','a','c','k','E','X',
+  'T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','D','e','s','t','r','o','y','D','e','b','u',
+  'g','R','e','p','o','r','t','C','a','l','l','b','a','c','k','E','X','T',')',' ','v','k','G','e','t','I','n','s','t','a','n',
+  'c','e','P','r','o','c','A','d','d','r','(','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v',
+  'k','D','e','s','t','r','o','y','D','e','b','u','g','R','e','p','o','r','t','C','a','l','l','b','a','c','k','E','X','T','"',
+  ')',';','\r','\n',' ',' ','f','n','(','i','n','s','t','a','n','c','e',',',' ','c','a','l','l','b','a','c','k',',',' ','p',
+  'A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n',
+  'v','o','i','d',' ','s','h','i','m','_','v','k','D','e','b','u','g','R','e','p','o','r','t','M','e','s','s','a','g','e','E',
+  'X','T','(','V','k','I','n','s','t','a','n','c','e',' ','i','n','s','t','a','n','c','e',',',' ','V','k','D','e','b','u','g',
+  'R','e','p','o','r','t','F','l','a','g','s','E','X','T',' ','f','l','a','g','s',',','\r','\n',' ',' ','V','k','D','e','b',
+  'u','g','R','e','p','o','r','t','O','b','j','e','c','t','T','y','p','e','E','X','T',' ','o','b','j','e','c','t','T','y','p',
+  'e',',',' ','u','i','n','t','6','4','_','t',' ','o','b','j','e','c','t',',','\r','\n',' ',' ','s','i','z','e','_','t',' ',
+  'l','o','c','a','t','i','o','n',',',' ','i','n','t','3','2','_','t',' ','m','e','s','s','a','g','e','C','o','d','e',',',' ',
+  'c','o','n','s','t',' ','c','h','a','r',' ','*','p','L','a','y','e','r','P','r','e','f','i','x',',','\r','\n',' ',' ','c',
+  'o','n','s','t',' ','c','h','a','r',' ','*','p','M','e','s','s','a','g','e',')',' ','{','\r','\n',' ',' ','s','t','a','t',
+  'i','c',' ','P','F','N','_','v','k','D','e','b','u','g','R','e','p','o','r','t','M','e','s','s','a','g','e','E','X','T',' ',
+  'f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','D','e','b','u','g','R','e','p','o','r','t','M','e',
+  's','s','a','g','e','E','X','T',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r',
+  '(','i','n','s','t','a','n','c','e',',',' ','"','v','k','D','e','b','u','g','R','e','p','o','r','t','M','e','s','s','a','g',
+  'e','E','X','T','"',')',';','\r','\n',' ',' ','f','n','(','i','n','s','t','a','n','c','e',',',' ','f','l','a','g','s',',',
+  ' ','o','b','j','e','c','t','T','y','p','e',',',' ','o','b','j','e','c','t',',',' ','l','o','c','a','t','i','o','n',',',' ',
+  'm','e','s','s','a','g','e','C','o','d','e',',',' ','p','L','a','y','e','r','P','r','e','f','i','x',',',' ','p','M','e','s',
+  's','a','g','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s',
+  'u','l','t',' ','s','h','i','m','_','v','k','D','e','b','u','g','M','a','r','k','e','r','S','e','t','O','b','j','e','c','t',
+  'N','a','m','e','E','X','T','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o',
+  'n','s','t',' ','V','k','D','e','b','u','g','M','a','r','k','e','r','O','b','j','e','c','t','N','a','m','e','I','n','f','o',
+  'E','X','T',' ','*','p','N','a','m','e','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F',
+  'N','_','v','k','D','e','b','u','g','M','a','r','k','e','r','S','e','t','O','b','j','e','c','t','N','a','m','e','E','X','T',
+  ' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','D','e','b','u','g','M','a','r','k','e','r','S',
+  'e','t','O','b','j','e','c','t','N','a','m','e','E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o',
+  'c','A','d','d','r','(','d','e','v','i','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','D','e','b','u','g','M',
+  'a','r','k','e','r','S','e','t','O','b','j','e','c','t','N','a','m','e','E','X','T','"',')',';','\r','\n',' ',' ','V','k',
+  'R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','N','a','m','e','I','n','f','o',
+  ')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l',
+  't',' ','s','h','i','m','_','v','k','D','e','b','u','g','M','a','r','k','e','r','S','e','t','O','b','j','e','c','t','T','a',
+  'g','E','X','T','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',
+  ' ','V','k','D','e','b','u','g','M','a','r','k','e','r','O','b','j','e','c','t','T','a','g','I','n','f','o','E','X','T',' ',
+  '*','p','T','a','g','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D',
+  'e','b','u','g','M','a','r','k','e','r','S','e','t','O','b','j','e','c','t','T','a','g','E','X','T',' ','f','n',' ','=','\r',
+  '\n',' ',' ',' ',' ','(','P','F','N','_','v','k','D','e','b','u','g','M','a','r','k','e','r','S','e','t','O','b','j','e',
+  'c','t','T','a','g','E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d',
+  'e','v','i','c','e',',',' ','"','v','k','D','e','b','u','g','M','a','r','k','e','r','S','e','t','O','b','j','e','c','t','T',
+  'a','g','E','X','T','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e',
+  'v','i','c','e',',',' ','p','T','a','g','I','n','f','o',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r',
+  '\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','C','m','d','D','e','b','u','g','M','a','r',
+  'k','e','r','B','e','g','i','n','E','X','T','(','V','k','C','o','m','m','a','n','d','B','u','f','f','e','r',' ','c','o','m',
+  'm','a','n','d','B','u','f','f','e','r',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','D','e','b','u','g','M','a',
+  'r','k','e','r','M','a','r','k','e','r','I','n','f','o','E','X','T',' ','*','p','M','a','r','k','e','r','I','n','f','o',')',
+  ' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','D','e','b','u','g','M','a','r',
+  'k','e','r','B','e','g','i','n','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C',
+  'm','d','D','e','b','u','g','M','a','r','k','e','r','B','e','g','i','n','E','X','T',')',' ','v','k','G','e','t','D','e','v',
+  'i','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','d','e','v','i','c','e',',',' ','"','v','k','C','m','d','D',
+  'e','b','u','g','M','a','r','k','e','r','B','e','g','i','n','E','X','T','"',')',';','\r','\n',' ',' ','f','n','(','c','o',
+  'm','m','a','n','d','B','u','f','f','e','r',',',' ','p','M','a','r','k','e','r','I','n','f','o',')',';','\r','\n',' ',' ',
+  'r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','C','m','d',
+  'D','e','b','u','g','M','a','r','k','e','r','E','n','d','E','X','T','(','V','k','C','o','m','m','a','n','d','B','u','f','f',
+  'e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ',
+  'P','F','N','_','v','k','C','m','d','D','e','b','u','g','M','a','r','k','e','r','E','n','d','E','X','T',' ','f','n',' ','=',
+  '\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','m','d','D','e','b','u','g','M','a','r','k','e','r','E','n','d',
+  'E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','d','e',
+  'v','i','c','e',',',' ','"','v','k','C','m','d','D','e','b','u','g','M','a','r','k','e','r','E','n','d','E','X','T','"',')',
+  ';','\r','\n',' ',' ','f','n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',')',';','\r','\n',' ',' ','r','e','t',
+  'u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','C','m','d','D','e','b',
+  'u','g','M','a','r','k','e','r','I','n','s','e','r','t','E','X','T','(','V','k','C','o','m','m','a','n','d','B','u','f','f',
+  'e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','D',
+  'e','b','u','g','M','a','r','k','e','r','M','a','r','k','e','r','I','n','f','o','E','X','T',' ','*','p','M','a','r','k','e',
+  'r','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','D','e',
+  'b','u','g','M','a','r','k','e','r','I','n','s','e','r','t','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(',
+  'P','F','N','_','v','k','C','m','d','D','e','b','u','g','M','a','r','k','e','r','I','n','s','e','r','t','E','X','T',')',' ',
+  'v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','d','e','v','i','c','e',',',
+  ' ','"','v','k','C','m','d','D','e','b','u','g','M','a','r','k','e','r','I','n','s','e','r','t','E','X','T','"',')',';','\r',
+  '\n',' ',' ','f','n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','p','M','a','r','k','e','r','I','n',
+  'f','o',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l',
+  't',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r',
+  'n','a','l','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','N','V','(','\r','\n',' ',
+  ' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e',',',' ','V','k','F','o','r','m','a','t',' ','f','o','r','m','a','t',',',' ','V','k','I','m','a','g','e','T','y','p','e',
+  ' ','t','y','p','e',',',' ','V','k','I','m','a','g','e','T','i','l','i','n','g',' ','t','i','l','i','n','g',',','\r','\n',
+  ' ',' ','V','k','I','m','a','g','e','U','s','a','g','e','F','l','a','g','s',' ','u','s','a','g','e',',',' ','V','k','I','m',
+  'a','g','e','C','r','e','a','t','e','F','l','a','g','s',' ','f','l','a','g','s',',','\r','\n',' ',' ','V','k','E','x','t',
+  'e','r','n','a','l','M','e','m','o','r','y','H','a','n','d','l','e','T','y','p','e','F','l','a','g','s','N','V',' ','e','x',
+  't','e','r','n','a','l','H','a','n','d','l','e','T','y','p','e',',','\r','\n',' ',' ','V','k','E','x','t','e','r','n','a',
+  'l','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','N','V',' ','*','p','E','x','t','e',
+  'r','n','a','l','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',
+  ' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e','E','x','t','e','r','n','a','l','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','N',
+  'V',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l',
+  'D','e','v','i','c','e','E','x','t','e','r','n','a','l','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r',
+  't','i','e','s','N','V',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r',
+  '\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','I','m','a','g','e','F','o','r','m','a','t','P',
+  'r','o','p','e','r','t','i','e','s','N','V','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',
+  ' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','f','o','r','m','a','t',',',' ','t','y','p',
+  'e',',',' ','t','i','l','i','n','g',',',' ','u','s','a','g','e',',',' ','f','l','a','g','s',',',' ','e','x','t','e','r','n',
+  'a','l','H','a','n','d','l','e','T','y','p','e',',','\r','\n',' ',' ',' ',' ','p','E','x','t','e','r','n','a','l','I','m',
+  'a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r',
+  'n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','C','m','d','P','r','o',
+  'c','e','s','s','C','o','m','m','a','n','d','s','N','V','X','(','V','k','C','o','m','m','a','n','d','B','u','f','f','e','r',
+  ' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','C','m','d',
+  'P','r','o','c','e','s','s','C','o','m','m','a','n','d','s','I','n','f','o','N','V','X',' ','*','p','P','r','o','c','e','s',
+  's','C','o','m','m','a','n','d','s','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N',
+  '_','v','k','C','m','d','P','r','o','c','e','s','s','C','o','m','m','a','n','d','s','N','V','X',' ','f','n',' ','=','\r',
+  '\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','m','d','P','r','o','c','e','s','s','C','o','m','m','a','n','d','s',
+  'N','V','X',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','d','e',
+  'v','i','c','e',',',' ','"','v','k','C','m','d','P','r','o','c','e','s','s','C','o','m','m','a','n','d','s','N','V','X','"',
+  ')',';','\r','\n',' ',' ','f','n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','p','P','r','o','c','e',
+  's','s','C','o','m','m','a','n','d','s','I','n','f','o',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}',
+  '\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','C','m','d','R','e','s','e','r','v','e','S','p','a','c',
+  'e','F','o','r','C','o','m','m','a','n','d','s','N','V','X','(','V','k','C','o','m','m','a','n','d','B','u','f','f','e','r',
+  ' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','C','m','d',
+  'R','e','s','e','r','v','e','S','p','a','c','e','F','o','r','C','o','m','m','a','n','d','s','I','n','f','o','N','V','X',' ',
+  '*','p','R','e','s','e','r','v','e','S','p','a','c','e','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i',
+  'c',' ','P','F','N','_','v','k','C','m','d','R','e','s','e','r','v','e','S','p','a','c','e','F','o','r','C','o','m','m','a',
+  'n','d','s','N','V','X',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','m','d','R','e','s',
+  'e','r','v','e','S','p','a','c','e','F','o','r','C','o','m','m','a','n','d','s','N','V','X',')',' ','v','k','G','e','t','D',
+  'e','v','i','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','d','e','v','i','c','e',',','\r','\n',' ',' ',' ',
+  ' ',' ',' ','"','v','k','C','m','d','R','e','s','e','r','v','e','S','p','a','c','e','F','o','r','C','o','m','m','a','n','d',
+  's','N','V','X','"',')',';','\r','\n',' ',' ','f','n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','p',
+  'R','e','s','e','r','v','e','S','p','a','c','e','I','n','f','o',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r',
+  '\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','I',
+  'n','d','i','r','e','c','t','C','o','m','m','a','n','d','s','L','a','y','o','u','t','N','V','X','(','\r','\n',' ',' ','V',
+  'k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','I','n','d','i','r','e','c',
+  't','C','o','m','m','a','n','d','s','L','a','y','o','u','t','C','r','e','a','t','e','I','n','f','o','N','V','X',' ','*','p',
+  'C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t',
+  'i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',',' ','V','k','I','n','d',
+  'i','r','e','c','t','C','o','m','m','a','n','d','s','L','a','y','o','u','t','N','V','X',' ','*','p','I','n','d','i','r','e',
+  'c','t','C','o','m','m','a','n','d','s','L','a','y','o','u','t',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ',
+  'P','F','N','_','v','k','C','r','e','a','t','e','I','n','d','i','r','e','c','t','C','o','m','m','a','n','d','s','L','a','y',
+  'o','u','t','N','V','X',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e',
+  'I','n','d','i','r','e','c','t','C','o','m','m','a','n','d','s','L','a','y','o','u','t','N','V','X',')',' ','v','k','G','e',
+  't','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','d','e','v','i','c','e',
+  ',',' ','"','v','k','C','r','e','a','t','e','I','n','d','i','r','e','c','t','C','o','m','m','a','n','d','s','L','a','y','o',
+  'u','t','N','V','X','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e',
+  'v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ',
+  'p','I','n','d','i','r','e','c','t','C','o','m','m','a','n','d','s','L','a','y','o','u','t',')',';','\r','\n',' ',' ','r',
+  'e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e',
+  's','t','r','o','y','I','n','d','i','r','e','c','t','C','o','m','m','a','n','d','s','L','a','y','o','u','t','N','V','X','(',
+  'V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','V','k','I','n','d','i','r','e','c','t',
+  'C','o','m','m','a','n','d','s','L','a','y','o','u','t','N','V','X',' ','i','n','d','i','r','e','c','t','C','o','m','m','a',
+  'n','d','s','L','a','y','o','u','t',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i',
+  'o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ',
+  's','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','I','n','d','i','r','e','c','t','C','o','m',
+  'm','a','n','d','s','L','a','y','o','u','t','N','V','X',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_',
+  'v','k','D','e','s','t','r','o','y','I','n','d','i','r','e','c','t','C','o','m','m','a','n','d','s','L','a','y','o','u','t',
+  'N','V','X',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',
+  ' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','D','e','s','t','r','o','y','I','n','d','i','r','e','c','t','C','o',
+  'm','m','a','n','d','s','L','a','y','o','u','t','N','V','X','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c',
+  'e',',',' ','i','n','d','i','r','e','c','t','C','o','m','m','a','n','d','s','L','a','y','o','u','t',',',' ','p','A','l','l',
+  'o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R',
+  'e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','O','b','j','e','c','t','T','a','b','l','e','N',
+  'V','X','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','O','b','j',
+  'e','c','t','T','a','b','l','e','C','r','e','a','t','e','I','n','f','o','N','V','X',' ','*','p','C','r','e','a','t','e','I',
+  'n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l',
+  'b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',' ','V','k','O','b','j','e','c','t',
+  'T','a','b','l','e','N','V','X',' ','*','p','O','b','j','e','c','t','T','a','b','l','e',')',' ','{','\r','\n',' ',' ','s',
+  't','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','O','b','j','e','c','t','T','a','b','l','e','N','V',
+  'X',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e','O','b','j','e','c',
+  't','T','a','b','l','e','N','V','X',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(',
+  'd','e','v','i','c','e',',',' ','"','v','k','C','r','e','a','t','e','O','b','j','e','c','t','T','a','b','l','e','N','V','X',
+  '"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',
+  ' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','O','b','j','e',
+  'c','t','T','a','b','l','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n',
+  'v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','O','b','j','e','c','t','T','a','b','l','e','N',
+  'V','X','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','O','b','j','e','c','t','T','a','b',
+  'l','e','N','V','X',' ','o','b','j','e','c','t','T','a','b','l','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k',
+  'A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',
+  ')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','O','b','j',
+  'e','c','t','T','a','b','l','e','N','V','X',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','D',
+  'e','s','t','r','o','y','O','b','j','e','c','t','T','a','b','l','e','N','V','X',')',' ','v','k','G','e','t','D','e','v','i',
+  'c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','D','e','s','t','r','o','y','O','b',
+  'j','e','c','t','T','a','b','l','e','N','V','X','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ',
+  'o','b','j','e','c','t','T','a','b','l','e',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r',
+  'e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k',
+  'R','e','g','i','s','t','e','r','O','b','j','e','c','t','s','N','V','X','(','V','k','D','e','v','i','c','e',' ','d','e','v',
+  'i','c','e',',',' ','V','k','O','b','j','e','c','t','T','a','b','l','e','N','V','X',' ','o','b','j','e','c','t','T','a','b',
+  'l','e',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','o','b','j','e','c','t','C','o','u','n','t',',','\r','\n',
+  ' ',' ','c','o','n','s','t',' ','V','k','O','b','j','e','c','t','T','a','b','l','e','E','n','t','r','y','N','V','X',' ','*',
+  'c','o','n','s','t',' ','*','p','p','O','b','j','e','c','t','T','a','b','l','e','E','n','t','r','i','e','s',',','\r','\n',
+  ' ',' ','c','o','n','s','t',' ','u','i','n','t','3','2','_','t',' ','*','p','O','b','j','e','c','t','I','n','d','i','c','e',
+  's',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','R','e','g','i','s','t','e','r','O',
+  'b','j','e','c','t','s','N','V','X',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','R','e','g',
+  'i','s','t','e','r','O','b','j','e','c','t','s','N','V','X',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o',
+  'c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','R','e','g','i','s','t','e','r','O','b','j','e','c','t',
+  's','N','V','X','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v',
+  'i','c','e',',',' ','o','b','j','e','c','t','T','a','b','l','e',',',' ','o','b','j','e','c','t','C','o','u','n','t',',',' ',
+  'p','p','O','b','j','e','c','t','T','a','b','l','e','E','n','t','r','i','e','s',',',' ','p','O','b','j','e','c','t','I','n',
+  'd','i','c','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k',
+  'R','e','s','u','l','t',' ','s','h','i','m','_','v','k','U','n','r','e','g','i','s','t','e','r','O','b','j','e','c','t','s',
+  'N','V','X','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','O','b','j','e','c','t','T','a',
+  'b','l','e','N','V','X',' ','o','b','j','e','c','t','T','a','b','l','e',',','\r','\n',' ',' ','u','i','n','t','3','2','_',
+  't',' ','o','b','j','e','c','t','C','o','u','n','t',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','O','b','j','e',
+  'c','t','E','n','t','r','y','T','y','p','e','N','V','X',' ','*','p','O','b','j','e','c','t','E','n','t','r','y','T','y','p',
+  'e','s',',','\r','\n',' ',' ','c','o','n','s','t',' ','u','i','n','t','3','2','_','t',' ','*','p','O','b','j','e','c','t',
+  'I','n','d','i','c','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','U','n','r',
+  'e','g','i','s','t','e','r','O','b','j','e','c','t','s','N','V','X',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P',
+  'F','N','_','v','k','U','n','r','e','g','i','s','t','e','r','O','b','j','e','c','t','s','N','V','X',')',' ','v','k','G','e',
+  't','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','U','n','r','e',
+  'g','i','s','t','e','r','O','b','j','e','c','t','s','N','V','X','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l',
+  't',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','o','b','j','e','c','t','T','a','b','l','e',',',' ','o',
+  'b','j','e','c','t','C','o','u','n','t',',',' ','p','O','b','j','e','c','t','E','n','t','r','y','T','y','p','e','s',',',' ',
+  'p','O','b','j','e','c','t','I','n','d','i','c','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r',
+  '\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l',
+  'D','e','v','i','c','e','G','e','n','e','r','a','t','e','d','C','o','m','m','a','n','d','s','P','r','o','p','e','r','t','i',
+  'e','s','N','V','X','(','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y',
+  's','i','c','a','l','D','e','v','i','c','e',',',' ','V','k','D','e','v','i','c','e','G','e','n','e','r','a','t','e','d','C',
+  'o','m','m','a','n','d','s','F','e','a','t','u','r','e','s','N','V','X',' ','*','p','F','e','a','t','u','r','e','s',',','\r',
+  '\n',' ',' ','V','k','D','e','v','i','c','e','G','e','n','e','r','a','t','e','d','C','o','m','m','a','n','d','s','L','i',
+  'm','i','t','s','N','V','X',' ','*','p','L','i','m','i','t','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ',
+  'P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','e','n','e','r','a','t','e',
+  'd','C','o','m','m','a','n','d','s','P','r','o','p','e','r','t','i','e','s','N','V','X',' ','f','n',' ','=','\r','\n',' ',
+  ' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','e','n','e',
+  'r','a','t','e','d','C','o','m','m','a','n','d','s','P','r','o','p','e','r','t','i','e','s','N','V','X',')',' ','v','k','G',
+  'e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','d',
+  'e','v','i','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','e','n','e',
+  'r','a','t','e','d','C','o','m','m','a','n','d','s','P','r','o','p','e','r','t','i','e','s','N','V','X','"',')',';','\r',
+  '\n',' ',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','F','e','a','t','u','r','e',
+  's',',',' ','p','L','i','m','i','t','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r',
+  '\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e',
+  'F','e','a','t','u','r','e','s','2','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s',
+  'i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e','F','e','a','t','u','r','e','s','2',' ','*','p','F','e','a','t','u','r','e','s',')',' ','{','\r','\n',' ',' ','s','t',
+  'a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','e','a',
+  't','u','r','e','s','2',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','F','e','a','t','u','r','e','s','2',')',' ','v','k','G','e','t','I','n','s','t',
+  'a','n','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',
+  ' ',' ',' ',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','e','a','t','u','r','e',
+  's','2','"',')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','F',
+  'e','a','t','u','r','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o',
+  'i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','e','a','t',
+  'u','r','e','s','2','K','H','R','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i',
+  'c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',
+  'F','e','a','t','u','r','e','s','2',' ','*','p','F','e','a','t','u','r','e','s',')',' ','{','\r','\n',' ',' ','s','t','a',
+  't','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','e','a','t',
+  'u','r','e','s','2','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P',
+  'h','y','s','i','c','a','l','D','e','v','i','c','e','F','e','a','t','u','r','e','s','2','K','H','R',')',' ','v','k','G','e',
+  't','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','i','n','s','t','a','n','c','e',',',
+  '\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','e',
+  'a','t','u','r','e','s','2','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c','a','l','D','e',
+  'v','i','c','e',',',' ','p','F','e','a','t','u','r','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n',
+  '}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e',
+  'v','i','c','e','P','r','o','p','e','r','t','i','e','s','2','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a',
+  'l','D','e','v','i','c','e','P','r','o','p','e','r','t','i','e','s','2',' ','*','p','P','r','o','p','e','r','t','i','e','s',
+  ')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a',
+  'l','D','e','v','i','c','e','P','r','o','p','e','r','t','i','e','s','2',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(',
+  'P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','P','r','o','p','e','r','t','i',
+  'e','s','2',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.',
+  'i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','G','e','t','P','h','y','s','i','c','a',
+  'l','D','e','v','i','c','e','P','r','o','p','e','r','t','i','e','s','2','"',')',';','\r','\n',' ',' ','f','n','(','p','h',
+  'y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e',
+  't','P','h','y','s','i','c','a','l','D','e','v','i','c','e','P','r','o','p','e','r','t','i','e','s','2','K','H','R','(','V',
+  'k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',
+  '\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e','P','r','o','p','e','r','t','i','e','s',
+  '2',' ','*','p','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F',
+  'N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','P','r','o','p','e','r','t','i','e','s',
+  '2','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i',
+  'c','a','l','D','e','v','i','c','e','P','r','o','p','e','r','t','i','e','s','2','K','H','R',')',' ','v','k','G','e','t','I',
+  'n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n',
+  's','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','P','r','o',
+  'p','e','r','t','i','e','s','2','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c','a','l','D',
+  'e','v','i','c','e',',',' ','p','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',
+  ';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c',
+  'a','l','D','e','v','i','c','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','2','(','V','k','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','V','k','F',
+  'o','r','m','a','t',' ','f','o','r','m','a','t',',','\r','\n',' ',' ','V','k','F','o','r','m','a','t','P','r','o','p','e',
+  'r','t','i','e','s','2',' ','*','p','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',
+  ' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','2',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(',
+  'P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','o','r','m','a','t','P','r',
+  'o','p','e','r','t','i','e','s','2',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d',
+  'r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','2',
+  '"',')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','f','o','r','m',
+  'a','t',',',' ','p','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t',
+  'u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','2','K','H','R',
+  '(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e',',',' ','V','k','F','o','r','m','a','t',' ','f','o','r','m','a','t',',','\r','\n',' ',' ','V','k','F','o','r','m','a',
+  't','P','r','o','p','e','r','t','i','e','s','2',' ','*','p','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',
+  ')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a',
+  'l','D','e','v','i','c','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','2','K','H','R',' ','f','n',' ',
+  '=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','2','K','H','R',')',' ','v','k','G','e','t','I','n','s',
+  't','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t',
+  'a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','F','o','r','m','a',
+  't','P','r','o','p','e','r','t','i','e','s','2','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i',
+  'c','a','l','D','e','v','i','c','e',',',' ','f','o','r','m','a','t',',',' ','p','F','o','r','m','a','t','P','r','o','p','e',
+  'r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e',
+  's','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','I','m',
+  'a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','2','(','\r','\n',' ',' ','V','k','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','c','o','n',
+  's','t',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e','I','m','a','g','e','F','o','r','m','a','t','I',
+  'n','f','o','2',' ','*','p','I','m','a','g','e','F','o','r','m','a','t','I','n','f','o',',','\r','\n',' ',' ','V','k','I',
+  'm','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','2',' ','*','p','I','m','a','g','e','F','o',
+  'r','m','a','t','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F',
+  'N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','I','m','a','g','e','F','o','r','m','a',
+  't','P','r','o','p','e','r','t','i','e','s','2',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k',
+  'G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o',
+  'p','e','r','t','i','e','s','2',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r',
+  '(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t','P',
+  'h','y','s','i','c','a','l','D','e','v','i','c','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t',
+  'i','e','s','2','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h','y',
+  's','i','c','a','l','D','e','v','i','c','e',',',' ','p','I','m','a','g','e','F','o','r','m','a','t','I','n','f','o',',',' ',
+  'p','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e',
+  't','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v',
+  'k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','I','m','a','g','e','F','o','r','m','a','t','P','r',
+  'o','p','e','r','t','i','e','s','2','K','H','R','(','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l','D','e','v',
+  'i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','I','m','a','g','e','F','o','r','m','a','t','I','n','f','o','2',' ','*','p','I',
+  'm','a','g','e','F','o','r','m','a','t','I','n','f','o',',','\r','\n',' ',' ','V','k','I','m','a','g','e','F','o','r','m',
+  'a','t','P','r','o','p','e','r','t','i','e','s','2',' ','*','p','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p',
+  'e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P',
+  'h','y','s','i','c','a','l','D','e','v','i','c','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t',
+  'i','e','s','2','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h',
+  'y','s','i','c','a','l','D','e','v','i','c','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i',
+  'e','s','2','K','H','R',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r',
+  '\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e',
+  's','2','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h',
+  'y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','I','m','a','g','e','F','o','r','m','a','t','I','n','f','o',',',
+  ' ','p','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r',
+  'e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e',
+  't','P','h','y','s','i','c','a','l','D','e','v','i','c','e','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e',
+  'r','t','i','e','s','2','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a',
+  'l','D','e','v','i','c','e',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','*','p','Q','u','e','u','e','F','a',
+  'm','i','l','y','P','r','o','p','e','r','t','y','C','o','u','n','t',',','\r','\n',' ',' ','V','k','Q','u','e','u','e','F',
+  'a','m','i','l','y','P','r','o','p','e','r','t','i','e','s','2',' ','*','p','Q','u','e','u','e','F','a','m','i','l','y','P',
+  'r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G',
+  'e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p',
+  'e','r','t','i','e','s','2',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h',
+  'y','s','i','c','a','l','D','e','v','i','c','e','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r','t','i',
+  'e','s','2',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',
+  ' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c',
+  'a','l','D','e','v','i','c','e','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r','t','i','e','s','2','"',
+  ')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','Q','u','e','u',
+  'e','F','a','m','i','l','y','P','r','o','p','e','r','t','y','C','o','u','n','t',',',' ','p','Q','u','e','u','e','F','a','m',
+  'i','l','y','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i',
+  'c','e','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r','t','i','e','s','2','K','H','R','(','V','k','P',
+  'h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r',
+  '\n',' ',' ','u','i','n','t','3','2','_','t',' ','*','p','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e',
+  'r','t','y','C','o','u','n','t',',','\r','\n',' ',' ','V','k','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p',
+  'e','r','t','i','e','s','2',' ','*','p','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r','t','i','e','s',
+  ')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a',
+  'l','D','e','v','i','c','e','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r','t','i','e','s','2','K','H',
+  'R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l',
+  'D','e','v','i','c','e','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r','t','i','e','s','2','K','H','R',
+  ')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',
+  ' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D',
+  'e','v','i','c','e','Q','u','e','u','e','F','a','m','i','l','y','P','r','o','p','e','r','t','i','e','s','2','K','H','R','"',
+  ')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','Q','u','e','u',
+  'e','F','a','m','i','l','y','P','r','o','p','e','r','t','y','C','o','u','n','t',',',' ','p','Q','u','e','u','e','F','a','m',
+  'i','l','y','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i',
+  'c','e','M','e','m','o','r','y','P','r','o','p','e','r','t','i','e','s','2','(','V','k','P','h','y','s','i','c','a','l','D',
+  'e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','V','k','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','M','e','m','o','r','y','P','r','o','p','e','r','t','i','e','s','2',' ','*','p',
+  'M','e','m','o','r','y','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ',
+  'P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','M','e','m','o','r','y','P','r',
+  'o','p','e','r','t','i','e','s','2',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','M','e','m','o','r','y','P','r','o','p','e','r','t','i','e','s','2',
+  ')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',
+  ' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D',
+  'e','v','i','c','e','M','e','m','o','r','y','P','r','o','p','e','r','t','i','e','s','2','"',')',';','\r','\n',' ',' ','f',
+  'n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','M','e','m','o','r','y','P','r','o','p','e','r',
+  't','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ',
+  's','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','M','e','m','o','r','y','P',
+  'r','o','p','e','r','t','i','e','s','2','K','H','R','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ',
+  'p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l','D',
+  'e','v','i','c','e','M','e','m','o','r','y','P','r','o','p','e','r','t','i','e','s','2',' ','*','p','M','e','m','o','r','y',
+  'P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k',
+  'G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','M','e','m','o','r','y','P','r','o','p','e','r','t','i',
+  'e','s','2','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','M','e','m','o','r','y','P','r','o','p','e','r','t','i','e','s','2','K','H','R',
+  ')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',
+  ' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D',
+  'e','v','i','c','e','M','e','m','o','r','y','P','r','o','p','e','r','t','i','e','s','2','K','H','R','"',')',';','\r','\n',
+  ' ',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','M','e','m','o','r','y','P','r','o',
+  'p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o',
+  'i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','p','a','r',
+  's','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','2','(','\r','\n',' ',' ','V',
+  'k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',
+  ' ','c','o','n','s','t',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','p','a','r','s','e','I','m',
+  'a','g','e','F','o','r','m','a','t','I','n','f','o','2',' ','*','p','F','o','r','m','a','t','I','n','f','o',',','\r','\n',
+  ' ',' ','u','i','n','t','3','2','_','t',' ','*','p','P','r','o','p','e','r','t','y','C','o','u','n','t',',',' ','V','k','S',
+  'p','a','r','s','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','2',' ','*','p','P',
+  'r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G',
+  'e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','p','a','r','s','e','I','m','a','g','e','F','o','r','m',
+  'a','t','P','r','o','p','e','r','t','i','e','s','2',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v',
+  'k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','p','a','r','s','e','I','m','a','g','e','F','o',
+  'r','m','a','t','P','r','o','p','e','r','t','i','e','s','2',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P',
+  'r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ',
+  '"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','p','a','r','s','e','I','m','a','g','e',
+  'F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s','2','"',')',';','\r','\n',' ',' ','f','n','(','p','h','y',
+  's','i','c','a','l','D','e','v','i','c','e',',',' ','p','F','o','r','m','a','t','I','n','f','o',',',' ','p','P','r','o','p',
+  'e','r','t','y','C','o','u','n','t',',',' ','p','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e',
+  't','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h',
+  'y','s','i','c','a','l','D','e','v','i','c','e','S','p','a','r','s','e','I','m','a','g','e','F','o','r','m','a','t','P','r',
+  'o','p','e','r','t','i','e','s','2','K','H','R','(','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l','D','e','v',
+  'i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','S','p','a','r','s','e','I','m','a','g','e','F','o','r','m','a','t','I','n','f',
+  'o','2',' ','*','p','F','o','r','m','a','t','I','n','f','o',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','*',
+  'p','P','r','o','p','e','r','t','y','C','o','u','n','t',',',' ','V','k','S','p','a','r','s','e','I','m','a','g','e','F','o',
+  'r','m','a','t','P','r','o','p','e','r','t','i','e','s','2',' ','*','p','P','r','o','p','e','r','t','i','e','s',')',' ','{',
+  '\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e',
+  'v','i','c','e','S','p','a','r','s','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e','r','t','i','e','s',
+  '2','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i',
+  'c','a','l','D','e','v','i','c','e','S','p','a','r','s','e','I','m','a','g','e','F','o','r','m','a','t','P','r','o','p','e',
+  'r','t','i','e','s','2','K','H','R',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d',
+  'r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','p','a','r','s','e','I','m','a','g','e','F','o','r','m','a','t',
+  'P','r','o','p','e','r','t','i','e','s','2','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c',
+  'a','l','D','e','v','i','c','e',',',' ','p','F','o','r','m','a','t','I','n','f','o',',',' ','p','P','r','o','p','e','r','t',
+  'y','C','o','u','n','t',',',' ','p','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r',
+  'n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','T','r','i','m','C','o','m','m',
+  'a','n','d','P','o','o','l','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','C','o','m','m',
+  'a','n','d','P','o','o','l',' ','c','o','m','m','a','n','d','P','o','o','l',',',' ','V','k','C','o','m','m','a','n','d','P',
+  'o','o','l','T','r','i','m','F','l','a','g','s',' ','f','l','a','g','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i',
+  'c',' ','P','F','N','_','v','k','T','r','i','m','C','o','m','m','a','n','d','P','o','o','l',' ','f','n',' ','=','\r','\n',
+  ' ',' ',' ',' ','(','P','F','N','_','v','k','T','r','i','m','C','o','m','m','a','n','d','P','o','o','l',')',' ','v','k','G',
+  'e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','T','r','i',
+  'm','C','o','m','m','a','n','d','P','o','o','l','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ',
+  'c','o','m','m','a','n','d','P','o','o','l',',',' ','f','l','a','g','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',
+  ';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','T','r','i','m','C','o','m','m','a',
+  'n','d','P','o','o','l','K','H','R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','C','o',
+  'm','m','a','n','d','P','o','o','l',' ','c','o','m','m','a','n','d','P','o','o','l',',','\r','\n',' ',' ','V','k','C','o',
+  'm','m','a','n','d','P','o','o','l','T','r','i','m','F','l','a','g','s',' ','f','l','a','g','s',')',' ','{','\r','\n',' ',
+  ' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','T','r','i','m','C','o','m','m','a','n','d','P','o','o','l','K','H',
+  'R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','T','r','i','m','C','o','m','m','a','n','d',
+  'P','o','o','l','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e',
+  'v','i','c','e',',',' ','"','v','k','T','r','i','m','C','o','m','m','a','n','d','P','o','o','l','K','H','R','"',')',';','\r',
+  '\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','c','o','m','m','a','n','d','P','o','o','l',',',' ','f','l','a',
+  'g','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h',
+  'i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','B',
+  'u','f','f','e','r','P','r','o','p','e','r','t','i','e','s','(','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l',
+  'D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','B','u','f','f','e','r','I','n','f',
+  'o',' ','*','p','E','x','t','e','r','n','a','l','B','u','f','f','e','r','I','n','f','o',',','\r','\n',' ',' ','V','k','E',
+  'x','t','e','r','n','a','l','B','u','f','f','e','r','P','r','o','p','e','r','t','i','e','s',' ','*','p','E','x','t','e','r',
+  'n','a','l','B','u','f','f','e','r','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t',
+  'i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r',
+  'n','a','l','B','u','f','f','e','r','P','r','o','p','e','r','t','i','e','s',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ',
+  '(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a',
+  'l','B','u','f','f','e','r','P','r','o','p','e','r','t','i','e','s',')',' ','v','k','G','e','t','I','n','s','t','a','n','c',
+  'e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',
+  ',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','B',
+  'u','f','f','e','r','P','r','o','p','e','r','t','i','e','s','"',')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i',
+  'c','a','l','D','e','v','i','c','e',',',' ','p','E','x','t','e','r','n','a','l','B','u','f','f','e','r','I','n','f','o',',',
+  ' ','p','E','x','t','e','r','n','a','l','B','u','f','f','e','r','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',
+  ' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G',
+  'e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','B','u','f','f','e','r','P',
+  'r','o','p','e','r','t','i','e','s','K','H','R','(','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l','D','e','v',
+  'i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','B','u','f','f','e','r','I','n','f','o',' ','*',
+  'p','E','x','t','e','r','n','a','l','B','u','f','f','e','r','I','n','f','o',',','\r','\n',' ',' ','V','k','E','x','t','e',
+  'r','n','a','l','B','u','f','f','e','r','P','r','o','p','e','r','t','i','e','s',' ','*','p','E','x','t','e','r','n','a','l',
+  'B','u','f','f','e','r','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ',
+  'P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l',
+  'B','u','f','f','e','r','P','r','o','p','e','r','t','i','e','s','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ',
+  '(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a',
+  'l','B','u','f','f','e','r','P','r','o','p','e','r','t','i','e','s','K','H','R',')',' ','v','k','G','e','t','I','n','s','t',
+  'a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a',
+  'n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n',
+  'a','l','B','u','f','f','e','r','P','r','o','p','e','r','t','i','e','s','K','H','R','"',')',';','\r','\n',' ',' ','f','n',
+  '(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','E','x','t','e','r','n','a','l','B','u','f','f','e',
+  'r','I','n','f','o',',',' ','p','E','x','t','e','r','n','a','l','B','u','f','f','e','r','P','r','o','p','e','r','t','i','e',
+  's',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',
+  ' ','s','h','i','m','_','v','k','G','e','t','M','e','m','o','r','y','F','d','K','H','R','(','V','k','D','e','v','i','c','e',
+  ' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','M','e','m','o','r','y','G','e','t','F','d','I','n','f',
+  'o','K','H','R',' ','*','p','G','e','t','F','d','I','n','f','o',',',' ','i','n','t',' ','*','p','F','d',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','M','e','m','o','r','y','F','d','K','H','R',
+  ' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','M','e','m','o','r','y','F','d','K',
+  'H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',
+  ' ','"','v','k','G','e','t','M','e','m','o','r','y','F','d','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s',
+  'u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','G','e','t','F','d','I','n','f','o',',',' ',
+  'p','F','d',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e',
+  's','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','M','e','m','o','r','y','F','d','P','r','o','p','e','r','t','i',
+  'e','s','K','H','R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','V','k','E','x',
+  't','e','r','n','a','l','M','e','m','o','r','y','H','a','n','d','l','e','T','y','p','e','F','l','a','g','B','i','t','s',' ',
+  'h','a','n','d','l','e','T','y','p','e',',',' ','i','n','t',' ','f','d',',','\r','\n',' ',' ','V','k','M','e','m','o','r',
+  'y','F','d','P','r','o','p','e','r','t','i','e','s','K','H','R',' ','*','p','M','e','m','o','r','y','F','d','P','r','o','p',
+  'e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','M',
+  'e','m','o','r','y','F','d','P','r','o','p','e','r','t','i','e','s','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',
+  ' ','(','P','F','N','_','v','k','G','e','t','M','e','m','o','r','y','F','d','P','r','o','p','e','r','t','i','e','s','K','H',
+  'R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ',
+  '"','v','k','G','e','t','M','e','m','o','r','y','F','d','P','r','o','p','e','r','t','i','e','s','K','H','R','"',')',';','\r',
+  '\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','h','a','n',
+  'd','l','e','T','y','p','e',',',' ','f','d',',',' ','p','M','e','m','o','r','y','F','d','P','r','o','p','e','r','t','i','e',
+  's',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s',
+  'h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l',
+  'S','e','m','a','p','h','o','r','e','P','r','o','p','e','r','t','i','e','s','(','\r','\n',' ',' ','V','k','P','h','y','s',
+  'i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ',
+  'c','o','n','s','t',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','S',
+  'e','m','a','p','h','o','r','e','I','n','f','o',' ','*','p','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o','r',
+  'e','I','n','f','o',',','\r','\n',' ',' ','V','k','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o','r','e','P',
+  'r','o','p','e','r','t','i','e','s',' ','*','p','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o','r','e','P','r',
+  'o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e',
+  't','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o','r',
+  'e','P','r','o','p','e','r','t','i','e','s',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G',
+  'e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o',
+  'r','e','P','r','o','p','e','r','t','i','e','s',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c',
+  'A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k',
+  'G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','S','e','m','a','p','h',
+  'o','r','e','P','r','o','p','e','r','t','i','e','s','"',')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c','a',
+  'l','D','e','v','i','c','e',',',' ','p','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o','r','e','I','n','f','o',
+  ',',' ','p','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o','r','e','P','r','o','p','e','r','t','i','e','s',')',
+  ';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_',
+  'v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','S','e','m','a',
+  'p','h','o','r','e','P','r','o','p','e','r','t','i','e','s','K','H','R','(','\r','\n',' ',' ','V','k','P','h','y','s','i',
+  'c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','c',
+  'o','n','s','t',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','S','e',
+  'm','a','p','h','o','r','e','I','n','f','o',' ','*','p','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o','r','e',
+  'I','n','f','o',',','\r','\n',' ',' ','V','k','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o','r','e','P','r',
+  'o','p','e','r','t','i','e','s',' ','*','p','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o','r','e','P','r','o',
+  'p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o','r','e',
+  'P','r','o','p','e','r','t','i','e','s','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v',
+  'k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','S','e','m','a','p',
+  'h','o','r','e','P','r','o','p','e','r','t','i','e','s','K','H','R',')',' ','v','k','G','e','t','I','n','s','t','a','n','c',
+  'e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',
+  ',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','S',
+  'e','m','a','p','h','o','r','e','P','r','o','p','e','r','t','i','e','s','K','H','R','"',')',';','\r','\n',' ',' ','f','n',
+  '(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','E','x','t','e','r','n','a','l','S','e','m','a','p',
+  'h','o','r','e','I','n','f','o',',',' ','p','E','x','t','e','r','n','a','l','S','e','m','a','p','h','o','r','e','P','r','o',
+  'p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k',
+  'R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','S','e','m','a','p','h','o','r','e','F','d','K','H','R',
+  '(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','S','e','m','a','p',
+  'h','o','r','e','G','e','t','F','d','I','n','f','o','K','H','R',' ','*','p','G','e','t','F','d','I','n','f','o',',',' ','i',
+  'n','t',' ','*','p','F','d',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t',
+  'S','e','m','a','p','h','o','r','e','F','d','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_',
+  'v','k','G','e','t','S','e','m','a','p','h','o','r','e','F','d','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c',
+  'e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','S','e','m','a','p','h','o',
+  'r','e','F','d','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(',
+  'd','e','v','i','c','e',',',' ','p','G','e','t','F','d','I','n','f','o',',',' ','p','F','d',')',';','\r','\n',' ',' ','r',
+  'e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_',
+  'v','k','I','m','p','o','r','t','S','e','m','a','p','h','o','r','e','F','d','K','H','R','(','V','k','D','e','v','i','c','e',
+  ' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','I','m','p','o','r','t','S','e','m','a',
+  'p','h','o','r','e','F','d','I','n','f','o','K','H','R',' ','*','p','I','m','p','o','r','t','S','e','m','a','p','h','o','r',
+  'e','F','d','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','I','m','p',
+  'o','r','t','S','e','m','a','p','h','o','r','e','F','d','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P',
+  'F','N','_','v','k','I','m','p','o','r','t','S','e','m','a','p','h','o','r','e','F','d','K','H','R',')',' ','v','k','G','e',
+  't','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','I','m','p','o',
+  'r','t','S','e','m','a','p','h','o','r','e','F','d','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l',
+  't',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','I','m','p','o','r','t','S','e','m','a','p','h','o',
+  'r','e','F','d','I','n','f','o',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r',
+  '\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e',
+  'E','x','t','e','r','n','a','l','F','e','n','c','e','P','r','o','p','e','r','t','i','e','s','(','\r','\n',' ',' ','V','k',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ',
+  'c','o','n','s','t',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','F',
+  'e','n','c','e','I','n','f','o',' ','*','p','E','x','t','e','r','n','a','l','F','e','n','c','e','I','n','f','o',',','\r',
+  '\n',' ',' ','V','k','E','x','t','e','r','n','a','l','F','e','n','c','e','P','r','o','p','e','r','t','i','e','s',' ','*',
+  'p','E','x','t','e','r','n','a','l','F','e','n','c','e','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',
+  ' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e',
+  'E','x','t','e','r','n','a','l','F','e','n','c','e','P','r','o','p','e','r','t','i','e','s',' ','f','n',' ','=','\r','\n',
+  ' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t',
+  'e','r','n','a','l','F','e','n','c','e','P','r','o','p','e','r','t','i','e','s',')',' ','v','k','G','e','t','I','n','s','t',
+  'a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a',
+  'n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n',
+  'a','l','F','e','n','c','e','P','r','o','p','e','r','t','i','e','s','"',')',';','\r','\n',' ',' ','f','n','(','p','h','y',
+  's','i','c','a','l','D','e','v','i','c','e',',',' ','p','E','x','t','e','r','n','a','l','F','e','n','c','e','I','n','f','o',
+  ',',' ','p','E','x','t','e','r','n','a','l','F','e','n','c','e','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',
+  ' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G',
+  'e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','F','e','n','c','e','P','r',
+  'o','p','e','r','t','i','e','s','K','H','R','(','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i',
+  'c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','P','h','y','s',
+  'i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','F','e','n','c','e','I','n','f','o',' ','*','p','E',
+  'x','t','e','r','n','a','l','F','e','n','c','e','I','n','f','o',',','\r','\n',' ',' ','V','k','E','x','t','e','r','n','a',
+  'l','F','e','n','c','e','P','r','o','p','e','r','t','i','e','s',' ','*','p','E','x','t','e','r','n','a','l','F','e','n','c',
+  'e','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v',
+  'k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','F','e','n','c','e',
+  'P','r','o','p','e','r','t','i','e','s','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v',
+  'k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','F','e','n','c','e',
+  'P','r','o','p','e','r','t','i','e','s','K','H','R',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o',
+  'c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v',
+  'k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','E','x','t','e','r','n','a','l','F','e','n','c','e',
+  'P','r','o','p','e','r','t','i','e','s','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c','a',
+  'l','D','e','v','i','c','e',',',' ','p','E','x','t','e','r','n','a','l','F','e','n','c','e','I','n','f','o',',',' ','p','E',
+  'x','t','e','r','n','a','l','F','e','n','c','e','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e',
+  't','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G',
+  'e','t','F','e','n','c','e','F','d','K','H','R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c',
+  'o','n','s','t',' ','V','k','F','e','n','c','e','G','e','t','F','d','I','n','f','o','K','H','R',' ','*','p','G','e','t','F',
+  'd','I','n','f','o',',',' ','i','n','t',' ','*','p','F','d',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P',
+  'F','N','_','v','k','G','e','t','F','e','n','c','e','F','d','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(',
+  'P','F','N','_','v','k','G','e','t','F','e','n','c','e','F','d','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c',
+  'e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','F','e','n','c','e','F','d',
+  'K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i',
+  'c','e',',',' ','p','G','e','t','F','d','I','n','f','o',',',' ','p','F','d',')',';','\r','\n',' ',' ','r','e','t','u','r',
+  'n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','I','m',
+  'p','o','r','t','F','e','n','c','e','F','d','K','H','R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',
+  ' ','c','o','n','s','t',' ','V','k','I','m','p','o','r','t','F','e','n','c','e','F','d','I','n','f','o','K','H','R',' ','*',
+  'p','I','m','p','o','r','t','F','e','n','c','e','F','d','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i',
+  'c',' ','P','F','N','_','v','k','I','m','p','o','r','t','F','e','n','c','e','F','d','K','H','R',' ','f','n',' ','=','\r',
+  '\n',' ',' ',' ',' ','(','P','F','N','_','v','k','I','m','p','o','r','t','F','e','n','c','e','F','d','K','H','R',')',' ',
+  'v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k',
+  'I','m','p','o','r','t','F','e','n','c','e','F','d','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l',
+  't',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','I','m','p','o','r','t','F','e','n','c','e','F','d',
+  'I','n','f','o',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R',
+  'e','s','u','l','t',' ','s','h','i','m','_','v','k','R','e','l','e','a','s','e','D','i','s','p','l','a','y','E','X','T','(',
+  'V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',
+  ',',' ','V','k','D','i','s','p','l','a','y','K','H','R',' ','d','i','s','p','l','a','y',')',' ','{','\r','\n',' ',' ','s',
+  't','a','t','i','c',' ','P','F','N','_','v','k','R','e','l','e','a','s','e','D','i','s','p','l','a','y','E','X','T',' ','f',
+  'n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','R','e','l','e','a','s','e','D','i','s','p','l','a','y',
+  'E','X','T',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.',
+  'i','n','s','t','a','n','c','e',',',' ','"','v','k','R','e','l','e','a','s','e','D','i','s','p','l','a','y','E','X','T','"',
+  ')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h','y','s','i','c','a','l',
+  'D','e','v','i','c','e',',',' ','d','i','s','p','l','a','y',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';',
+  '\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','D','i','s','p','l','a',
+  'y','P','o','w','e','r','C','o','n','t','r','o','l','E','X','T','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c',
+  'e',',',' ','V','k','D','i','s','p','l','a','y','K','H','R',' ','d','i','s','p','l','a','y',',','\r','\n',' ',' ','c','o',
+  'n','s','t',' ','V','k','D','i','s','p','l','a','y','P','o','w','e','r','I','n','f','o','E','X','T',' ','*','p','D','i','s',
+  'p','l','a','y','P','o','w','e','r','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N',
+  '_','v','k','D','i','s','p','l','a','y','P','o','w','e','r','C','o','n','t','r','o','l','E','X','T',' ','f','n',' ','=','\r',
+  '\n',' ',' ',' ',' ','(','P','F','N','_','v','k','D','i','s','p','l','a','y','P','o','w','e','r','C','o','n','t','r','o',
+  'l','E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c',
+  'e',',',' ','"','v','k','D','i','s','p','l','a','y','P','o','w','e','r','C','o','n','t','r','o','l','E','X','T','"',')',';',
+  '\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','d','i',
+  's','p','l','a','y',',',' ','p','D','i','s','p','l','a','y','P','o','w','e','r','I','n','f','o',')',';','\r','\n',' ',' ',
+  'r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m',
+  '_','v','k','R','e','g','i','s','t','e','r','D','e','v','i','c','e','E','v','e','n','t','E','X','T','(','V','k','D','e','v',
+  'i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','D','e','v','i','c','e','E','v','e','n','t',
+  'I','n','f','o','E','X','T',' ','*','p','D','e','v','i','c','e','E','v','e','n','t','I','n','f','o',',','\r','\n',' ',' ',
+  'c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A',
+  'l','l','o','c','a','t','o','r',',',' ','V','k','F','e','n','c','e',' ','*','p','F','e','n','c','e',')',' ','{','\r','\n',
+  ' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','R','e','g','i','s','t','e','r','D','e','v','i','c','e','E','v',
+  'e','n','t','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','R','e','g','i','s','t',
+  'e','r','D','e','v','i','c','e','E','v','e','n','t','E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r',
+  'o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','R','e','g','i','s','t','e','r','D','e','v','i','c',
+  'e','E','v','e','n','t','E','X','T','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f',
+  'n','(','d','e','v','i','c','e',',',' ','p','D','e','v','i','c','e','E','v','e','n','t','I','n','f','o',',',' ','p','A','l',
+  'l','o','c','a','t','o','r',',',' ','p','F','e','n','c','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';',
+  '\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','R','e','g','i','s','t',
+  'e','r','D','i','s','p','l','a','y','E','v','e','n','t','E','X','T','(','V','k','D','e','v','i','c','e',' ','d','e','v','i',
+  'c','e',',',' ','V','k','D','i','s','p','l','a','y','K','H','R',' ','d','i','s','p','l','a','y',',','\r','\n',' ',' ','c',
+  'o','n','s','t',' ','V','k','D','i','s','p','l','a','y','E','v','e','n','t','I','n','f','o','E','X','T',' ','*','p','D','i',
+  's','p','l','a','y','E','v','e','n','t','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l',
+  'o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',',' ','V',
+  'k','F','e','n','c','e',' ','*','p','F','e','n','c','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F',
+  'N','_','v','k','R','e','g','i','s','t','e','r','D','i','s','p','l','a','y','E','v','e','n','t','E','X','T',' ','f','n',' ',
+  '=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','R','e','g','i','s','t','e','r','D','i','s','p','l','a','y','E',
+  'v','e','n','t','E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e',
+  'v','i','c','e',',',' ','"','v','k','R','e','g','i','s','t','e','r','D','i','s','p','l','a','y','E','v','e','n','t','E','X',
+  'T','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',
+  ',',' ','d','i','s','p','l','a','y',',',' ','p','D','i','s','p','l','a','y','E','v','e','n','t','I','n','f','o',',',' ','p',
+  'A','l','l','o','c','a','t','o','r',',',' ','p','F','e','n','c','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ',
+  'r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','S',
+  'w','a','p','c','h','a','i','n','C','o','u','n','t','e','r','E','X','T','(','V','k','D','e','v','i','c','e',' ','d','e','v',
+  'i','c','e',',',' ','V','k','S','w','a','p','c','h','a','i','n','K','H','R',' ','s','w','a','p','c','h','a','i','n',',','\r',
+  '\n',' ',' ','V','k','S','u','r','f','a','c','e','C','o','u','n','t','e','r','F','l','a','g','B','i','t','s','E','X','T',
+  ' ','c','o','u','n','t','e','r',',',' ','u','i','n','t','6','4','_','t',' ','*','p','C','o','u','n','t','e','r','V','a','l',
+  'u','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','S','w','a','p','c',
+  'h','a','i','n','C','o','u','n','t','e','r','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_',
+  'v','k','G','e','t','S','w','a','p','c','h','a','i','n','C','o','u','n','t','e','r','E','X','T',')',' ','v','k','G','e','t',
+  'D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','S','w',
+  'a','p','c','h','a','i','n','C','o','u','n','t','e','r','E','X','T','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u',
+  'l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','s','w','a','p','c','h','a','i','n',',',' ','c','o',
+  'u','n','t','e','r',',',' ','p','C','o','u','n','t','e','r','V','a','l','u','e',')',';','\r','\n',' ',' ','r','e','t','u',
+  'r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G',
+  'e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','C','a','p','a','b','i','l','i',
+  't','i','e','s','2','E','X','T','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i',
+  'c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','V','k','S','u','r','f','a','c','e','K','H','R',' ','s','u','r',
+  'f','a','c','e',',','\r','\n',' ',' ','V','k','S','u','r','f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s',
+  '2','E','X','T',' ','*','p','S','u','r','f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v',
+  'i','c','e','S','u','r','f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s','2','E','X','T',' ','f','n',' ','=',
+  '\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e',
+  'S','u','r','f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s','2','E','X','T',')',' ','v','k','G','e','t','I',
+  'n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n',
+  's','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r',
+  'f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s','2','E','X','T','"',')',';','\r','\n',' ',' ','V','k','R',
+  'e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','s','u',
+  'r','f','a','c','e',',',' ','p','S','u','r','f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s',
+  'h','i','m','_','v','k','E','n','u','m','e','r','a','t','e','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r',
+  'o','u','p','s','(','\r','\n',' ',' ','V','k','I','n','s','t','a','n','c','e',' ','i','n','s','t','a','n','c','e',',',' ',
+  'u','i','n','t','3','2','_','t',' ','*','p','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o','u','p','C',
+  'o','u','n','t',',','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o','u','p',
+  'P','r','o','p','e','r','t','i','e','s',' ','*','p','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o','u',
+  'p','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v',
+  'k','E','n','u','m','e','r','a','t','e','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o','u','p','s',' ',
+  'f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','E','n','u','m','e','r','a','t','e','P','h','y','s',
+  'i','c','a','l','D','e','v','i','c','e','G','r','o','u','p','s',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e',
+  'P','r','o','c','A','d','d','r','(','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','E',
+  'n','u','m','e','r','a','t','e','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o','u','p','s','"',')',';',
+  '\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','i','n','s','t','a','n','c','e',',',' ',
+  'p','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o','u','p','C','o','u','n','t',',',' ','p','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','G','r','o','u','p','P','r','o','p','e','r','t','i','e','s',')',';','\r','\n',
+  ' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h',
+  'i','m','_','v','k','E','n','u','m','e','r','a','t','e','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o',
+  'u','p','s','K','H','R','(','\r','\n',' ',' ','V','k','I','n','s','t','a','n','c','e',' ','i','n','s','t','a','n','c','e',
+  ',',' ','u','i','n','t','3','2','_','t',' ','*','p','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o','u',
+  'p','C','o','u','n','t',',','\r','\n',' ',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o',
+  'u','p','P','r','o','p','e','r','t','i','e','s',' ','*','p','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r',
+  'o','u','p','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N',
+  '_','v','k','E','n','u','m','e','r','a','t','e','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o','u','p',
+  's','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','E','n','u','m','e','r','a','t',
+  'e','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o','u','p','s','K','H','R',')',' ','v','k','G','e','t',
+  'I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','i','n','s','t','a',
+  'n','c','e',',',' ','"','v','k','E','n','u','m','e','r','a','t','e','P','h','y','s','i','c','a','l','D','e','v','i','c','e',
+  'G','r','o','u','p','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f',
+  'n','(','i','n','s','t','a','n','c','e',',',' ','p','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o','u',
+  'p','C','o','u','n','t',',',' ','p','P','h','y','s','i','c','a','l','D','e','v','i','c','e','G','r','o','u','p','P','r','o',
+  'p','e','r','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n',
+  'v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','D','e','v','i','c','e','G','r','o','u','p','P','e','e','r','M',
+  'e','m','o','r','y','F','e','a','t','u','r','e','s','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ',
+  'u','i','n','t','3','2','_','t',' ','h','e','a','p','I','n','d','e','x',',','\r','\n',' ',' ','u','i','n','t','3','2','_',
+  't',' ','l','o','c','a','l','D','e','v','i','c','e','I','n','d','e','x',',',' ','u','i','n','t','3','2','_','t',' ','r','e',
+  'm','o','t','e','D','e','v','i','c','e','I','n','d','e','x',',','\r','\n',' ',' ','V','k','P','e','e','r','M','e','m','o',
+  'r','y','F','e','a','t','u','r','e','F','l','a','g','s',' ','*','p','P','e','e','r','M','e','m','o','r','y','F','e','a','t',
+  'u','r','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','D','e','v',
+  'i','c','e','G','r','o','u','p','P','e','e','r','M','e','m','o','r','y','F','e','a','t','u','r','e','s',' ','f','n',' ','=',
+  '\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','D','e','v','i','c','e','G','r','o','u','p','P','e','e',
+  'r','M','e','m','o','r','y','F','e','a','t','u','r','e','s',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o',
+  'c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','D','e',
+  'v','i','c','e','G','r','o','u','p','P','e','e','r','M','e','m','o','r','y','F','e','a','t','u','r','e','s','"',')',';','\r',
+  '\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','h','e','a','p','I','n','d','e','x',',',' ','l','o','c','a','l',
+  'D','e','v','i','c','e','I','n','d','e','x',',',' ','r','e','m','o','t','e','D','e','v','i','c','e','I','n','d','e','x',',',
+  ' ','p','P','e','e','r','M','e','m','o','r','y','F','e','a','t','u','r','e','s',')',';','\r','\n',' ',' ','r','e','t','u',
+  'r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','D','e','v','i',
+  'c','e','G','r','o','u','p','P','e','e','r','M','e','m','o','r','y','F','e','a','t','u','r','e','s','K','H','R','(','V','k',
+  'D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','u','i','n','t','3','2','_','t',' ','h','e','a','p','I','n','d',
+  'e','x',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','l','o','c','a','l','D','e','v','i','c','e','I','n','d',
+  'e','x',',',' ','u','i','n','t','3','2','_','t',' ','r','e','m','o','t','e','D','e','v','i','c','e','I','n','d','e','x',',',
+  '\r','\n',' ',' ','V','k','P','e','e','r','M','e','m','o','r','y','F','e','a','t','u','r','e','F','l','a','g','s',' ','*',
+  'p','P','e','e','r','M','e','m','o','r','y','F','e','a','t','u','r','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t',
+  'i','c',' ','P','F','N','_','v','k','G','e','t','D','e','v','i','c','e','G','r','o','u','p','P','e','e','r','M','e','m','o',
+  'r','y','F','e','a','t','u','r','e','s','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v',
+  'k','G','e','t','D','e','v','i','c','e','G','r','o','u','p','P','e','e','r','M','e','m','o','r','y','F','e','a','t','u','r',
+  'e','s','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',
+  ' ',' ',' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','D','e','v','i','c','e','G','r','o','u','p','P',
+  'e','e','r','M','e','m','o','r','y','F','e','a','t','u','r','e','s','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(',
+  'd','e','v','i','c','e',',',' ','h','e','a','p','I','n','d','e','x',',',' ','l','o','c','a','l','D','e','v','i','c','e','I',
+  'n','d','e','x',',',' ','r','e','m','o','t','e','D','e','v','i','c','e','I','n','d','e','x',',',' ','p','P','e','e','r','M',
+  'e','m','o','r','y','F','e','a','t','u','r','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r',
+  '\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','B','i','n','d','B','u','f','f','e','r','M',
+  'e','m','o','r','y','2','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','u','i','n','t','3','2','_',
+  't',' ','b','i','n','d','I','n','f','o','C','o','u','n','t',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','B','i',
+  'n','d','B','u','f','f','e','r','M','e','m','o','r','y','I','n','f','o',' ','*','p','B','i','n','d','I','n','f','o','s',')',
+  ' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','B','i','n','d','B','u','f','f','e','r','M',
+  'e','m','o','r','y','2',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','B','i','n','d','B','u',
+  'f','f','e','r','M','e','m','o','r','y','2',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d',
+  'r','(','d','e','v','i','c','e',',',' ','"','v','k','B','i','n','d','B','u','f','f','e','r','M','e','m','o','r','y','2','"',
+  ')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ',
+  'b','i','n','d','I','n','f','o','C','o','u','n','t',',',' ','p','B','i','n','d','I','n','f','o','s',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i',
+  'm','_','v','k','B','i','n','d','B','u','f','f','e','r','M','e','m','o','r','y','2','K','H','R','(','V','k','D','e','v','i',
+  'c','e',' ','d','e','v','i','c','e',',',' ','u','i','n','t','3','2','_','t',' ','b','i','n','d','I','n','f','o','C','o','u',
+  'n','t',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','B','i','n','d','B','u','f','f','e','r','M','e','m','o','r',
+  'y','I','n','f','o',' ','*','p','B','i','n','d','I','n','f','o','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',
+  ' ','P','F','N','_','v','k','B','i','n','d','B','u','f','f','e','r','M','e','m','o','r','y','2','K','H','R',' ','f','n',' ',
+  '=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','B','i','n','d','B','u','f','f','e','r','M','e','m','o','r','y',
+  '2','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c',
+  'e',',',' ','"','v','k','B','i','n','d','B','u','f','f','e','r','M','e','m','o','r','y','2','K','H','R','"',')',';','\r',
+  '\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','b','i','n',
+  'd','I','n','f','o','C','o','u','n','t',',',' ','p','B','i','n','d','I','n','f','o','s',')',';','\r','\n',' ',' ','r','e',
+  't','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v',
+  'k','B','i','n','d','I','m','a','g','e','M','e','m','o','r','y','2','(','V','k','D','e','v','i','c','e',' ','d','e','v','i',
+  'c','e',',',' ','u','i','n','t','3','2','_','t',' ','b','i','n','d','I','n','f','o','C','o','u','n','t',',','\r','\n',' ',
+  ' ','c','o','n','s','t',' ','V','k','B','i','n','d','I','m','a','g','e','M','e','m','o','r','y','I','n','f','o',' ','*','p',
+  'B','i','n','d','I','n','f','o','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','B',
+  'i','n','d','I','m','a','g','e','M','e','m','o','r','y','2',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N',
+  '_','v','k','B','i','n','d','I','m','a','g','e','M','e','m','o','r','y','2',')',' ','v','k','G','e','t','D','e','v','i','c',
+  'e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','B','i','n','d','I','m','a','g','e','M',
+  'e','m','o','r','y','2','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d',
+  'e','v','i','c','e',',',' ','b','i','n','d','I','n','f','o','C','o','u','n','t',',',' ','p','B','i','n','d','I','n','f','o',
+  's',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u',
+  'l','t',' ','s','h','i','m','_','v','k','B','i','n','d','I','m','a','g','e','M','e','m','o','r','y','2','K','H','R','(','V',
+  'k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','u','i','n','t','3','2','_','t',' ','b','i','n','d','I','n',
+  'f','o','C','o','u','n','t',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','B','i','n','d','I','m','a','g','e','M',
+  'e','m','o','r','y','I','n','f','o',' ','*','p','B','i','n','d','I','n','f','o','s',')',' ','{','\r','\n',' ',' ','s','t',
+  'a','t','i','c',' ','P','F','N','_','v','k','B','i','n','d','I','m','a','g','e','M','e','m','o','r','y','2','K','H','R',' ',
+  'f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','B','i','n','d','I','m','a','g','e','M','e','m','o',
+  'r','y','2','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v',
+  'i','c','e',',',' ','"','v','k','B','i','n','d','I','m','a','g','e','M','e','m','o','r','y','2','K','H','R','"',')',';','\r',
+  '\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','b','i','n',
+  'd','I','n','f','o','C','o','u','n','t',',',' ','p','B','i','n','d','I','n','f','o','s',')',';','\r','\n',' ',' ','r','e',
+  't','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v',
+  'k','G','e','t','D','e','v','i','c','e','G','r','o','u','p','P','r','e','s','e','n','t','C','a','p','a','b','i','l','i','t',
+  'i','e','s','K','H','R','(','\r','\n',' ',' ','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k',
+  'D','e','v','i','c','e','G','r','o','u','p','P','r','e','s','e','n','t','C','a','p','a','b','i','l','i','t','i','e','s','K',
+  'H','R',' ','*','p','D','e','v','i','c','e','G','r','o','u','p','P','r','e','s','e','n','t','C','a','p','a','b','i','l','i',
+  't','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','D','e','v',
+  'i','c','e','G','r','o','u','p','P','r','e','s','e','n','t','C','a','p','a','b','i','l','i','t','i','e','s','K','H','R',' ',
+  'f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','D','e','v','i','c','e','G','r','o','u',
+  'p','P','r','e','s','e','n','t','C','a','p','a','b','i','l','i','t','i','e','s','K','H','R',')',' ','v','k','G','e','t','D',
+  'e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','d','e','v','i','c','e',',',' ',
+  '"','v','k','G','e','t','D','e','v','i','c','e','G','r','o','u','p','P','r','e','s','e','n','t','C','a','p','a','b','i','l',
+  'i','t','i','e','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n',
+  '(','d','e','v','i','c','e',',',' ','p','D','e','v','i','c','e','G','r','o','u','p','P','r','e','s','e','n','t','C','a','p',
+  'a','b','i','l','i','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n',
+  '\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','D','e','v','i','c','e','G','r','o',
+  'u','p','S','u','r','f','a','c','e','P','r','e','s','e','n','t','M','o','d','e','s','K','H','R','(','V','k','D','e','v','i',
+  'c','e',' ','d','e','v','i','c','e',',',' ','V','k','S','u','r','f','a','c','e','K','H','R',' ','s','u','r','f','a','c','e',
+  ',','\r','\n',' ',' ','V','k','D','e','v','i','c','e','G','r','o','u','p','P','r','e','s','e','n','t','M','o','d','e','F',
+  'l','a','g','s','K','H','R',' ','*','p','M','o','d','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P',
+  'F','N','_','v','k','G','e','t','D','e','v','i','c','e','G','r','o','u','p','S','u','r','f','a','c','e','P','r','e','s','e',
+  'n','t','M','o','d','e','s','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e',
+  't','D','e','v','i','c','e','G','r','o','u','p','S','u','r','f','a','c','e','P','r','e','s','e','n','t','M','o','d','e','s',
+  'K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',
+  ' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','D','e','v','i','c','e','G','r','o','u','p','S','u','r',
+  'f','a','c','e','P','r','e','s','e','n','t','M','o','d','e','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e',
+  's','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','s','u','r','f','a','c','e',',',' ','p','M',
+  'o','d','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R',
+  'e','s','u','l','t',' ','s','h','i','m','_','v','k','A','c','q','u','i','r','e','N','e','x','t','I','m','a','g','e','2','K',
+  'H','R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','A','c','q',
+  'u','i','r','e','N','e','x','t','I','m','a','g','e','I','n','f','o','K','H','R',' ','*','p','A','c','q','u','i','r','e','I',
+  'n','f','o',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','*','p','I','m','a','g','e','I','n','d','e','x',')',
+  ' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','A','c','q','u','i','r','e','N','e','x','t',
+  'I','m','a','g','e','2','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','A','c','q',
+  'u','i','r','e','N','e','x','t','I','m','a','g','e','2','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P',
+  'r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','A','c','q','u','i','r','e','N','e','x','t','I',
+  'm','a','g','e','2','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n',
+  '(','d','e','v','i','c','e',',',' ','p','A','c','q','u','i','r','e','I','n','f','o',',',' ','p','I','m','a','g','e','I','n',
+  'd','e','x',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e',
+  's','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','P','r',
+  'e','s','e','n','t','R','e','c','t','a','n','g','l','e','s','K','H','R','(','V','k','P','h','y','s','i','c','a','l','D','e',
+  'v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','V','k','S','u','r','f',
+  'a','c','e','K','H','R',' ','s','u','r','f','a','c','e',',',' ','u','i','n','t','3','2','_','t',' ','*','p','R','e','c','t',
+  'C','o','u','n','t',',','\r','\n',' ',' ','V','k','R','e','c','t','2','D',' ','*','p','R','e','c','t','s',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v',
+  'i','c','e','P','r','e','s','e','n','t','R','e','c','t','a','n','g','l','e','s','K','H','R',' ','f','n',' ','=','\r','\n',
+  ' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','P','r','e',
+  's','e','n','t','R','e','c','t','a','n','g','l','e','s','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P',
+  'r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','d','e','v','i','c','e',',',' ','"','v',
+  'k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','P','r','e','s','e','n','t','R','e','c','t','a','n',
+  'g','l','e','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(',
+  'p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','s','u','r','f','a','c','e',',',' ','p','R','e','c','t','C',
+  'o','u','n','t',',',' ','p','R','e','c','t','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}',
+  '\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','D','e','s','c',
+  'r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e','(','V','k','D','e','v','i','c','e',' ','d',
+  'e','v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','D','e','s','c','r','i','p','t','o','r','U','p',
+  'd','a','t','e','T','e','m','p','l','a','t','e','C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e',
+  'I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l',
+  'l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',' ','V','k','D','e','s','c','r',
+  'i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',' ','*','p','D','e','s','c','r','i','p','t','o',
+  'r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P',
+  'F','N','_','v','k','C','r','e','a','t','e','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p',
+  'l','a','t','e',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e','D','e',
+  's','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',')',' ','v','k','G','e','t','D','e',
+  'v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v',
+  'k','C','r','e','a','t','e','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',
+  '"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',
+  ' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','D','e','s','c',
+  'r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',')',';','\r','\n',' ',' ','r','e','t','u',
+  'r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C',
+  'r','e','a','t','e','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e','K','H',
+  'R','(','\r','\n',' ',' ','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V',
+  'k','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e','C','r','e','a','t','e',
+  'I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k',
+  'A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',
+  ',',' ','V','k','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',' ','*','p',
+  'D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',')',' ','{','\r','\n',' ',
+  ' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','D','e','s','c','r','i','p','t','o','r','U',
+  'p','d','a','t','e','T','e','m','p','l','a','t','e','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F',
+  'N','_','v','k','C','r','e','a','t','e','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l',
+  'a','t','e','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',
+  ' ',' ',' ',' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','C','r','e','a','t','e','D','e','s','c','r','i','p','t',
+  'o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e',
+  's','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',
+  ',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e',
+  'T','e','m','p','l','a','t','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r',
+  '\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','D','e','s','c','r','i','p','t','o','r',
+  'U','p','d','a','t','e','T','e','m','p','l','a','t','e','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',
+  '\r','\n',' ',' ','V','k','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',
+  ' ','d','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',',','\r','\n',' ',' ',
+  'c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A',
+  'l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e',
+  's','t','r','o','y','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',' ','f',
+  'n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','D','e','s','t','r','o','y','D','e','s','c','r','i','p',
+  't','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',')',' ','v','k','G','e','t','D','e','v','i','c','e','P',
+  'r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','D','e','s',
+  't','r','o','y','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e','"',')',';',
+  '\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','d','e','s','c','r','i','p','t','o','r','U','p','d','a','t',
+  'e','T','e','m','p','l','a','t','e',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t',
+  'u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o',
+  'y','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e','K','H','R','(','V','k',
+  'D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','V','k','D','e','s','c','r','i','p','t','o','r',
+  'U','p','d','a','t','e','T','e','m','p','l','a','t','e',' ','d','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e',
+  'T','e','m','p','l','a','t','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o',
+  'n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s',
+  't','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','D','e','s','c','r','i','p','t','o','r','U','p',
+  'd','a','t','e','T','e','m','p','l','a','t','e','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N',
+  '_','v','k','D','e','s','t','r','o','y','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l',
+  'a','t','e','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',
+  ' ',' ',' ',' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','D','e','s','t','r','o','y','D','e','s','c','r','i','p',
+  't','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(',
+  'd','e','v','i','c','e',',',' ','d','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t',
+  'e',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','U','p','d','a','t','e','D','e','s','c','r','i','p','t','o',
+  'r','S','e','t','W','i','t','h','T','e','m','p','l','a','t','e','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c',
+  'e',',',' ','V','k','D','e','s','c','r','i','p','t','o','r','S','e','t',' ','d','e','s','c','r','i','p','t','o','r','S','e',
+  't',',','\r','\n',' ',' ','V','k','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a',
+  't','e',' ','d','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',',','\r','\n',
+  ' ',' ','c','o','n','s','t',' ','v','o','i','d',' ','*','p','D','a','t','a',')',' ','{','\r','\n',' ',' ','s','t','a','t',
+  'i','c',' ','P','F','N','_','v','k','U','p','d','a','t','e','D','e','s','c','r','i','p','t','o','r','S','e','t','W','i','t',
+  'h','T','e','m','p','l','a','t','e',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','U','p','d',
+  'a','t','e','D','e','s','c','r','i','p','t','o','r','S','e','t','W','i','t','h','T','e','m','p','l','a','t','e',')',' ','v',
+  'k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','d','e','v',
+  'i','c','e',',',' ','"','v','k','U','p','d','a','t','e','D','e','s','c','r','i','p','t','o','r','S','e','t','W','i','t','h',
+  'T','e','m','p','l','a','t','e','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','d','e','s','c',
+  'r','i','p','t','o','r','S','e','t',',',' ','d','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p',
+  'l','a','t','e',',',' ','p','D','a','t','a',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n',
+  '\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','U','p','d','a','t','e','D','e','s','c','r','i','p','t','o','r',
+  'S','e','t','W','i','t','h','T','e','m','p','l','a','t','e','K','H','R','(','V','k','D','e','v','i','c','e',' ','d','e','v',
+  'i','c','e',',',' ','V','k','D','e','s','c','r','i','p','t','o','r','S','e','t',' ','d','e','s','c','r','i','p','t','o','r',
+  'S','e','t',',','\r','\n',' ',' ','V','k','D','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p',
+  'l','a','t','e',' ','d','e','s','c','r','i','p','t','o','r','U','p','d','a','t','e','T','e','m','p','l','a','t','e',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','v','o','i','d',' ','*','p','D','a','t','a',')',' ','{','\r','\n',' ',' ','s','t','a',
+  't','i','c',' ','P','F','N','_','v','k','U','p','d','a','t','e','D','e','s','c','r','i','p','t','o','r','S','e','t','W','i',
+  't','h','T','e','m','p','l','a','t','e','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v',
+  'k','U','p','d','a','t','e','D','e','s','c','r','i','p','t','o','r','S','e','t','W','i','t','h','T','e','m','p','l','a','t',
+  'e','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',
+  ' ',' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','U','p','d','a','t','e','D','e','s','c','r','i','p','t','o','r',
+  'S','e','t','W','i','t','h','T','e','m','p','l','a','t','e','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(','d','e',
+  'v','i','c','e',',',' ','d','e','s','c','r','i','p','t','o','r','S','e','t',',',' ','d','e','s','c','r','i','p','t','o','r',
+  'U','p','d','a','t','e','T','e','m','p','l','a','t','e',',',' ','p','D','a','t','a',')',';','\r','\n',' ',' ','r','e','t',
+  'u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','S','e','t','H','d','r',
+  'M','e','t','a','d','a','t','a','E','X','T','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','u','i',
+  'n','t','3','2','_','t',' ','s','w','a','p','c','h','a','i','n','C','o','u','n','t',',','\r','\n',' ',' ','c','o','n','s',
+  't',' ','V','k','S','w','a','p','c','h','a','i','n','K','H','R',' ','*','p','S','w','a','p','c','h','a','i','n','s',',',' ',
+  'c','o','n','s','t',' ','V','k','H','d','r','M','e','t','a','d','a','t','a','E','X','T',' ','*','p','M','e','t','a','d','a',
+  't','a',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','S','e','t','H','d','r','M','e',
+  't','a','d','a','t','a','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','S','e','t',
+  'H','d','r','M','e','t','a','d','a','t','a','E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c',
+  'A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','S','e','t','H','d','r','M','e','t','a','d','a','t','a','E',
+  'X','T','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','s','w','a','p','c','h','a','i','n','C',
+  'o','u','n','t',',',' ','p','S','w','a','p','c','h','a','i','n','s',',',' ','p','M','e','t','a','d','a','t','a',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i',
+  'm','_','v','k','G','e','t','S','w','a','p','c','h','a','i','n','S','t','a','t','u','s','K','H','R','(','V','k','D','e','v',
+  'i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','S','w','a','p','c','h','a','i','n','K','H','R',' ','s','w','a','p',
+  'c','h','a','i','n',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','S','w',
+  'a','p','c','h','a','i','n','S','t','a','t','u','s','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F',
+  'N','_','v','k','G','e','t','S','w','a','p','c','h','a','i','n','S','t','a','t','u','s','K','H','R',')',' ','v','k','G','e',
+  't','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','S',
+  'w','a','p','c','h','a','i','n','S','t','a','t','u','s','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u',
+  'l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','s','w','a','p','c','h','a','i','n',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s',
+  'h','i','m','_','v','k','G','e','t','R','e','f','r','e','s','h','C','y','c','l','e','D','u','r','a','t','i','o','n','G','O',
+  'O','G','L','E','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','S','w','a','p','c','h','a',
+  'i','n','K','H','R',' ','s','w','a','p','c','h','a','i','n',',','\r','\n',' ',' ','V','k','R','e','f','r','e','s','h','C',
+  'y','c','l','e','D','u','r','a','t','i','o','n','G','O','O','G','L','E',' ','*','p','D','i','s','p','l','a','y','T','i','m',
+  'i','n','g','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N',
+  '_','v','k','G','e','t','R','e','f','r','e','s','h','C','y','c','l','e','D','u','r','a','t','i','o','n','G','O','O','G','L',
+  'E',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','R','e','f','r','e','s','h','C',
+  'y','c','l','e','D','u','r','a','t','i','o','n','G','O','O','G','L','E',')',' ','v','k','G','e','t','D','e','v','i','c','e',
+  'P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','G','e','t',
+  'R','e','f','r','e','s','h','C','y','c','l','e','D','u','r','a','t','i','o','n','G','O','O','G','L','E','"',')',';','\r',
+  '\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','s','w','a',
+  'p','c','h','a','i','n',',',' ','p','D','i','s','p','l','a','y','T','i','m','i','n','g','P','r','o','p','e','r','t','i','e',
+  's',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u',
+  'l','t',' ','s','h','i','m','_','v','k','G','e','t','P','a','s','t','P','r','e','s','e','n','t','a','t','i','o','n','T','i',
+  'm','i','n','g','G','O','O','G','L','E','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','S',
+  'w','a','p','c','h','a','i','n','K','H','R',' ','s','w','a','p','c','h','a','i','n',',','\r','\n',' ',' ','u','i','n','t',
+  '3','2','_','t',' ','*','p','P','r','e','s','e','n','t','a','t','i','o','n','T','i','m','i','n','g','C','o','u','n','t',',',
+  '\r','\n',' ',' ','V','k','P','a','s','t','P','r','e','s','e','n','t','a','t','i','o','n','T','i','m','i','n','g','G','O',
+  'O','G','L','E',' ','*','p','P','r','e','s','e','n','t','a','t','i','o','n','T','i','m','i','n','g','s',')',' ','{','\r',
+  '\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','a','s','t','P','r','e','s','e','n','t',
+  'a','t','i','o','n','T','i','m','i','n','g','G','O','O','G','L','E',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P',
+  'F','N','_','v','k','G','e','t','P','a','s','t','P','r','e','s','e','n','t','a','t','i','o','n','T','i','m','i','n','g','G',
+  'O','O','G','L','E',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',
+  ' ',' ',' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','P','a','s','t','P','r','e','s','e','n','t','a',
+  't','i','o','n','T','i','m','i','n','g','G','O','O','G','L','E','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l',
+  't',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','s','w','a','p','c','h','a','i','n',',',' ','p','P','r',
+  'e','s','e','n','t','a','t','i','o','n','T','i','m','i','n','g','C','o','u','n','t',',',' ','p','P','r','e','s','e','n','t',
+  'a','t','i','o','n','T','i','m','i','n','g','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}',
+  '\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','C','m','d','S','e','t','V','i','e','w','p','o','r','t',
+  'W','S','c','a','l','i','n','g','N','V','(','V','k','C','o','m','m','a','n','d','B','u','f','f','e','r',' ','c','o','m','m',
+  'a','n','d','B','u','f','f','e','r',',',' ','u','i','n','t','3','2','_','t',' ','f','i','r','s','t','V','i','e','w','p','o',
+  'r','t',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','v','i','e','w','p','o','r','t','C','o','u','n','t',',',
+  '\r','\n',' ',' ','c','o','n','s','t',' ','V','k','V','i','e','w','p','o','r','t','W','S','c','a','l','i','n','g','N','V',
+  ' ','*','p','V','i','e','w','p','o','r','t','W','S','c','a','l','i','n','g','s',')',' ','{','\r','\n',' ',' ','s','t','a',
+  't','i','c',' ','P','F','N','_','v','k','C','m','d','S','e','t','V','i','e','w','p','o','r','t','W','S','c','a','l','i','n',
+  'g','N','V',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','m','d','S','e','t','V','i','e',
+  'w','p','o','r','t','W','S','c','a','l','i','n','g','N','V',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o',
+  'c','A','d','d','r','(','a','u','x','.','d','e','v','i','c','e',',',' ','"','v','k','C','m','d','S','e','t','V','i','e','w',
+  'p','o','r','t','W','S','c','a','l','i','n','g','N','V','"',')',';','\r','\n',' ',' ','f','n','(','c','o','m','m','a','n',
+  'd','B','u','f','f','e','r',',',' ','f','i','r','s','t','V','i','e','w','p','o','r','t',',',' ','v','i','e','w','p','o','r',
+  't','C','o','u','n','t',',',' ','p','V','i','e','w','p','o','r','t','W','S','c','a','l','i','n','g','s',')',';','\r','\n',
+  ' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','C',
+  'm','d','S','e','t','D','i','s','c','a','r','d','R','e','c','t','a','n','g','l','e','E','X','T','(','V','k','C','o','m','m',
+  'a','n','d','B','u','f','f','e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','u','i','n','t','3','2',
+  '_','t',' ','f','i','r','s','t','D','i','s','c','a','r','d','R','e','c','t','a','n','g','l','e',',','\r','\n',' ',' ','u',
+  'i','n','t','3','2','_','t',' ','d','i','s','c','a','r','d','R','e','c','t','a','n','g','l','e','C','o','u','n','t',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','R','e','c','t','2','D',' ','*','p','D','i','s','c','a','r','d','R','e','c',
+  't','a','n','g','l','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d',
+  'S','e','t','D','i','s','c','a','r','d','R','e','c','t','a','n','g','l','e','E','X','T',' ','f','n',' ','=',' ','(','P','F',
+  'N','_','v','k','C','m','d','S','e','t','D','i','s','c','a','r','d','R','e','c','t','a','n','g','l','e','E','X','T',')',' ',
+  'v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ','a','u','x','.',
+  'd','e','v','i','c','e',',',' ','"','v','k','C','m','d','S','e','t','D','i','s','c','a','r','d','R','e','c','t','a','n','g',
+  'l','e','E','X','T','"',')',';','\r','\n',' ',' ','f','n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ',
+  'f','i','r','s','t','D','i','s','c','a','r','d','R','e','c','t','a','n','g','l','e',',',' ','d','i','s','c','a','r','d','R',
+  'e','c','t','a','n','g','l','e','C','o','u','n','t',',',' ','p','D','i','s','c','a','r','d','R','e','c','t','a','n','g','l',
+  'e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h',
+  'i','m','_','v','k','C','m','d','S','e','t','S','a','m','p','l','e','L','o','c','a','t','i','o','n','s','E','X','T','(','V',
+  'k','C','o','m','m','a','n','d','B','u','f','f','e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','S','a','m','p','l','e','L','o','c','a','t','i','o','n','s','I','n','f','o',
+  'E','X','T',' ','*','p','S','a','m','p','l','e','L','o','c','a','t','i','o','n','s','I','n','f','o',')',' ','{','\r','\n',
+  ' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','S','e','t','S','a','m','p','l','e','L','o','c','a',
+  't','i','o','n','s','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','m','d','S',
+  'e','t','S','a','m','p','l','e','L','o','c','a','t','i','o','n','s','E','X','T',')',' ','v','k','G','e','t','D','e','v','i',
+  'c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','d','e','v','i','c','e',',',' ','"','v','k','C','m','d','S','e',
+  't','S','a','m','p','l','e','L','o','c','a','t','i','o','n','s','E','X','T','"',')',';','\r','\n',' ',' ','f','n','(','c',
+  'o','m','m','a','n','d','B','u','f','f','e','r',',',' ','p','S','a','m','p','l','e','L','o','c','a','t','i','o','n','s','I',
+  'n','f','o',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s',
+  'h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','M','u','l','t','i','s','a','m',
+  'p','l','e','P','r','o','p','e','r','t','i','e','s','E','X','T','(','V','k','P','h','y','s','i','c','a','l','D','e','v','i',
+  'c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',' ','V','k','S','a','m','p','l','e',
+  'C','o','u','n','t','F','l','a','g','B','i','t','s',' ','s','a','m','p','l','e','s',',','\r','\n',' ',' ','V','k','M','u',
+  'l','t','i','s','a','m','p','l','e','P','r','o','p','e','r','t','i','e','s','E','X','T',' ','*','p','M','u','l','t','i','s',
+  'a','m','p','l','e','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P',
+  'F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','M','u','l','t','i','s','a','m','p',
+  'l','e','P','r','o','p','e','r','t','i','e','s','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N',
+  '_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','M','u','l','t','i','s','a','m','p','l','e',
+  'P','r','o','p','e','r','t','i','e','s','E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A',
+  'd','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','d','e','v','i','c','e',',',' ','"','v','k','G','e','t',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','M','u','l','t','i','s','a','m','p','l','e','P','r','o','p','e','r',
+  't','i','e','s','E','X','T','"',')',';','\r','\n',' ',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c',
+  'e',',',' ','s','a','m','p','l','e','s',',',' ','p','M','u','l','t','i','s','a','m','p','l','e','P','r','o','p','e','r','t',
+  'i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u',
+  'l','t',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f',
+  'a','c','e','C','a','p','a','b','i','l','i','t','i','e','s','2','K','H','R','(','\r','\n',' ',' ','V','k','P','h','y','s',
+  'i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','c','o','n','s',
+  't',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','I','n','f','o','2','K',
+  'H','R',' ','*','p','S','u','r','f','a','c','e','I','n','f','o',',','\r','\n',' ',' ','V','k','S','u','r','f','a','c','e',
+  'C','a','p','a','b','i','l','i','t','i','e','s','2','K','H','R',' ','*','p','S','u','r','f','a','c','e','C','a','p','a','b',
+  'i','l','i','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t',
+  'P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','C','a','p','a','b','i','l','i','t','i',
+  'e','s','2','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s','2',
+  'K','H','R',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',
+  ' ',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c',
+  'a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','C','a','p','a','b','i','l','i','t','i','e','s','2','K','H','R',
+  '"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','p','h','y','s','i','c','a',
+  'l','D','e','v','i','c','e',',',' ','p','S','u','r','f','a','c','e','I','n','f','o',',',' ','p','S','u','r','f','a','c','e',
+  'C','a','p','a','b','i','l','i','t','i','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}',
+  '\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','G','e','t','P','h','y','s','i','c','a',
+  'l','D','e','v','i','c','e','S','u','r','f','a','c','e','F','o','r','m','a','t','s','2','K','H','R','(','V','k','P','h','y',
+  's','i','c','a','l','D','e','v','i','c','e',' ','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',','\r','\n',' ',
+  ' ','c','o','n','s','t',' ','V','k','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','I',
+  'n','f','o','2','K','H','R',' ','*','p','S','u','r','f','a','c','e','I','n','f','o',',','\r','\n',' ',' ','u','i','n','t',
+  '3','2','_','t',' ','*','p','S','u','r','f','a','c','e','F','o','r','m','a','t','C','o','u','n','t',',','\r','\n',' ',' ',
+  'V','k','S','u','r','f','a','c','e','F','o','r','m','a','t','2','K','H','R',' ','*','p','S','u','r','f','a','c','e','F','o',
+  'r','m','a','t','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','P','h',
+  'y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f','a','c','e','F','o','r','m','a','t','s','2','K','H','R',' ',
+  'f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e',
+  'v','i','c','e','S','u','r','f','a','c','e','F','o','r','m','a','t','s','2','K','H','R',')',' ','v','k','G','e','t','I','n',
+  's','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','a','u','x','.','i','n','s',
+  't','a','n','c','e',',',' ','"','v','k','G','e','t','P','h','y','s','i','c','a','l','D','e','v','i','c','e','S','u','r','f',
+  'a','c','e','F','o','r','m','a','t','s','2','K','H','R','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ',
+  'r',' ','=',' ','f','n','(','p','h','y','s','i','c','a','l','D','e','v','i','c','e',',',' ','p','S','u','r','f','a','c','e',
+  'I','n','f','o',',',' ','p','S','u','r','f','a','c','e','F','o','r','m','a','t','C','o','u','n','t',',',' ','p','S','u','r',
+  'f','a','c','e','F','o','r','m','a','t','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','B','u','f','f','e','r','M','e','m','o','r','y',
+  'R','e','q','u','i','r','e','m','e','n','t','s','2','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','B','u','f','f','e','r','M','e','m','o','r','y','R','e','q','u','i','r','e',
+  'm','e','n','t','s','I','n','f','o','2',' ','*','p','I','n','f','o',',','\r','\n',' ',' ','V','k','M','e','m','o','r','y',
+  'R','e','q','u','i','r','e','m','e','n','t','s','2',' ','*','p','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e',
+  'n','t','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','B','u','f','f',
+  'e','r','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2',' ','f','n',' ','=','\r','\n',' ',' ',
+  ' ',' ','(','P','F','N','_','v','k','G','e','t','B','u','f','f','e','r','M','e','m','o','r','y','R','e','q','u','i','r','e',
+  'm','e','n','t','s','2',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v',
+  'i','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','G','e','t','B','u','f','f','e','r','M','e','m','o','r','y',
+  'R','e','q','u','i','r','e','m','e','n','t','s','2','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',
+  ' ','p','I','n','f','o',',',' ','p','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k',
+  'G','e','t','B','u','f','f','e','r','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2','K','H','R',
+  '(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','B',
+  'u','f','f','e','r','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','I','n','f','o','2',' ','*','p',
+  'I','n','f','o',',','\r','\n',' ',' ','V','k','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2',
+  ' ','*','p','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',' ','{','\r','\n',' ',' ','s','t',
+  'a','t','i','c',' ','P','F','N','_','v','k','G','e','t','B','u','f','f','e','r','M','e','m','o','r','y','R','e','q','u','i',
+  'r','e','m','e','n','t','s','2','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G',
+  'e','t','B','u','f','f','e','r','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2','K','H','R',')',
+  ' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','d',
+  'e','v','i','c','e',',',' ','"','v','k','G','e','t','B','u','f','f','e','r','M','e','m','o','r','y','R','e','q','u','i','r',
+  'e','m','e','n','t','s','2','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','p','I',
+  'n','f','o',',',' ','p','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',';','\r','\n',' ',' ',
+  'r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t',
+  'I','m','a','g','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2','(','V','k','D','e','v','i',
+  'c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','I','m','a','g','e','M','e','m','o','r','y','R',
+  'e','q','u','i','r','e','m','e','n','t','s','I','n','f','o','2',' ','*','p','I','n','f','o',',','\r','\n',' ',' ','V','k',
+  'M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2',' ','*','p','M','e','m','o','r','y','R','e','q',
+  'u','i','r','e','m','e','n','t','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G',
+  'e','t','I','m','a','g','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2',' ','f','n',' ','=',
+  '\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','I','m','a','g','e','M','e','m','o','r','y','R','e','q',
+  'u','i','r','e','m','e','n','t','s','2',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r',
+  '(','d','e','v','i','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','G','e','t','I','m','a','g','e','M','e','m',
+  'o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i',
+  'c','e',',',' ','p','I','n','f','o',',',' ','p','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',
+  ';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_',
+  'v','k','G','e','t','I','m','a','g','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2','K','H',
+  'R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k',
+  'I','m','a','g','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','I','n','f','o','2',' ','*','p',
+  'I','n','f','o',',','\r','\n',' ',' ','V','k','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2',
+  ' ','*','p','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',' ','{','\r','\n',' ',' ','s','t',
+  'a','t','i','c',' ','P','F','N','_','v','k','G','e','t','I','m','a','g','e','M','e','m','o','r','y','R','e','q','u','i','r',
+  'e','m','e','n','t','s','2','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e',
+  't','I','m','a','g','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2','K','H','R',')',' ','v',
+  'k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',','\r','\n',' ',' ',
+  ' ',' ',' ',' ','"','v','k','G','e','t','I','m','a','g','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n',
+  't','s','2','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','p','I','n','f','o',',',
+  ' ','p','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',';','\r','\n',' ',' ','r','e','t','u',
+  'r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','I','m','a','g',
+  'e','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2','(','V','k','D','e',
+  'v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','I','m','a','g','e','S',
+  'p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','I','n','f','o','2',' ','*','p',
+  'I','n','f','o',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','*','p','S','p','a','r','s','e','M','e','m','o',
+  'r','y','R','e','q','u','i','r','e','m','e','n','t','C','o','u','n','t',',','\r','\n',' ',' ','V','k','S','p','a','r','s',
+  'e','I','m','a','g','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2',' ','*','p','S','p','a',
+  'r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',')',' ','{','\r','\n',' ',' ','s','t',
+  'a','t','i','c',' ','P','F','N','_','v','k','G','e','t','I','m','a','g','e','S','p','a','r','s','e','M','e','m','o','r','y',
+  'R','e','q','u','i','r','e','m','e','n','t','s','2',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v',
+  'k','G','e','t','I','m','a','g','e','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n',
+  't','s','2',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',
+  ' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','I','m','a','g','e','S','p','a','r','s','e','M','e','m',
+  'o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i',
+  'c','e',',',' ','p','I','n','f','o',',',' ','p','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e',
+  'm','e','n','t','C','o','u','n','t',',',' ','p','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e',
+  'm','e','n','t','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',
+  ' ','s','h','i','m','_','v','k','G','e','t','I','m','a','g','e','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q',
+  'u','i','r','e','m','e','n','t','s','2','K','H','R','(','\r','\n',' ',' ','V','k','D','e','v','i','c','e',' ','d','e','v',
+  'i','c','e',',',' ','c','o','n','s','t',' ','V','k','I','m','a','g','e','S','p','a','r','s','e','M','e','m','o','r','y','R',
+  'e','q','u','i','r','e','m','e','n','t','s','I','n','f','o','2',' ','*','p','I','n','f','o',',','\r','\n',' ',' ','u','i',
+  'n','t','3','2','_','t',' ','*','p','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n',
+  't','C','o','u','n','t',',','\r','\n',' ',' ','V','k','S','p','a','r','s','e','I','m','a','g','e','M','e','m','o','r','y',
+  'R','e','q','u','i','r','e','m','e','n','t','s','2',' ','*','p','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q',
+  'u','i','r','e','m','e','n','t','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G',
+  'e','t','I','m','a','g','e','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s',
+  '2','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','I','m','a','g','e',
+  'S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n','t','s','2','K','H','R',')',' ','v',
+  'k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','d','e','v',
+  'i','c','e',',',' ','"','v','k','G','e','t','I','m','a','g','e','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q',
+  'u','i','r','e','m','e','n','t','s','2','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',
+  ' ','p','I','n','f','o',',',' ','p','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n',
+  't','C','o','u','n','t',',',' ','p','S','p','a','r','s','e','M','e','m','o','r','y','R','e','q','u','i','r','e','m','e','n',
+  't','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l',
+  't',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n','v',
+  'e','r','s','i','o','n','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o','n',
+  's','t',' ','V','k','S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n','C','r','e','a',
+  't','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ',
+  'V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t',
+  'o','r',',','\r','\n',' ',' ','V','k','S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o',
+  'n',' ','*','p','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n',')',' ','{','\r','\n',' ',' ','s','t','a','t',
+  'i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n','v',
+  'e','r','s','i','o','n',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e',
+  'S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n',')',' ','v','k','G','e','t','D','e',
+  'v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v',
+  'k','C','r','e','a','t','e','S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n','"',')',
+  ';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p',
+  'C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','Y','c','b','c','r','C',
+  'o','n','v','e','r','s','i','o','n',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n',
+  '\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','S','a','m','p','l','e',
+  'r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n','K','H','R','(','V','k','D','e','v','i','c','e',' ','d','e',
+  'v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','S','a','m','p','l','e','r','Y','c','b','c','r','C',
+  'o','n','v','e','r','s','i','o','n','C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f',
+  'o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a',
+  'c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',' ','V','k','S','a','m','p','l','e','r','Y',
+  'c','b','c','r','C','o','n','v','e','r','s','i','o','n',' ','*','p','Y','c','b','c','r','C','o','n','v','e','r','s','i','o',
+  'n',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','r','e','a','t','e','S','a','m',
+  'p','l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n','K','H','R',' ','f','n',' ','=','\r','\n',' ',
+  ' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e','S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n',
+  'v','e','r','s','i','o','n','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r',
+  '(','\r','\n',' ',' ',' ',' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','C','r','e','a','t','e','S','a','m','p',
+  'l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n','K','H','R','"',')',';','\r','\n',' ',' ','V','k',
+  'R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n',
+  'f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','Y','c','b','c','r','C','o','n','v','e','r','s','i','o',
+  'n',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s',
+  'h','i','m','_','v','k','D','e','s','t','r','o','y','S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n','v','e','r',
+  's','i','o','n','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','S','a','m','p','l','e','r',
+  'Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n',' ','y','c','b','c','r','C','o','n','v','e','r','s','i','o','n',
+  ',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c',
+  'k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F',
+  'N','_','v','k','D','e','s','t','r','o','y','S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i',
+  'o','n',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','D','e','s','t','r','o','y','S','a','m',
+  'p','l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n',')',' ','v','k','G','e','t','D','e','v','i','c',
+  'e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','D','e',
+  's','t','r','o','y','S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n','"',')',';','\r',
+  '\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','y','c','b','c','r','C','o','n','v','e','r','s','i','o','n',',',
+  ' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n',
+  '\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','S','a','m','p','l','e','r','Y','c',
+  'b','c','r','C','o','n','v','e','r','s','i','o','n','K','H','R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c',
+  'e',',','\r','\n',' ',' ','V','k','S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n',
+  ' ','y','c','b','c','r','C','o','n','v','e','r','s','i','o','n',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A',
+  'l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',
+  ' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','D','e','s','t','r','o','y','S','a','m','p',
+  'l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',
+  ' ',' ','(','P','F','N','_','v','k','D','e','s','t','r','o','y','S','a','m','p','l','e','r','Y','c','b','c','r','C','o','n',
+  'v','e','r','s','i','o','n','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r',
+  '(','\r','\n',' ',' ',' ',' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','D','e','s','t','r','o','y','S','a','m',
+  'p','l','e','r','Y','c','b','c','r','C','o','n','v','e','r','s','i','o','n','K','H','R','"',')',';','\r','\n',' ',' ','f',
+  'n','(','d','e','v','i','c','e',',',' ','y','c','b','c','r','C','o','n','v','e','r','s','i','o','n',',',' ','p','A','l','l',
+  'o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i',
+  'd',' ','s','h','i','m','_','v','k','G','e','t','D','e','v','i','c','e','Q','u','e','u','e','2','(','V','k','D','e','v','i',
+  'c','e',' ','d','e','v','i','c','e',',',' ','c','o','n','s','t',' ','V','k','D','e','v','i','c','e','Q','u','e','u','e','I',
+  'n','f','o','2',' ','*','p','Q','u','e','u','e','I','n','f','o',',',' ','V','k','Q','u','e','u','e',' ','*','p','Q','u','e',
+  'u','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','D','e','v','i','c',
+  'e','Q','u','e','u','e','2',' ','f','n',' ','=',' ','v','k','G','e','t','D','e','v','i','c','e','Q','u','e','u','e','2',';',
+  '\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','p','Q','u','e','u','e','I','n','f','o',',',' ','p','Q','u',
+  'e','u','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u',
+  'l','t',' ','s','h','i','m','_','v','k','C','r','e','a','t','e','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e',
+  'E','X','T','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ',
+  'V','k','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e','C','r','e','a','t','e','I','n','f','o','E','X','T',' ',
+  '*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c',
+  'a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',','\r','\n',' ',
+  ' ','V','k','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e','E','X','T',' ','*','p','V','a','l','i','d','a','t',
+  'i','o','n','C','a','c','h','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','r',
+  'e','a','t','e','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e','E','X','T',' ','f','n',' ','=','\r','\n',' ',
+  ' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e',
+  'E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',
+  ',',' ','"','v','k','C','r','e','a','t','e','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e','E','X','T','"',')',
+  ';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p',
+  'C','r','e','a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','V','a','l','i','d','a',
+  't','i','o','n','C','a','c','h','e',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n',
+  '\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','D','e','s','t','r','o','y','V','a','l','i','d','a','t','i','o',
+  'n','C','a','c','h','e','E','X','T','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','V','a',
+  'l','i','d','a','t','i','o','n','C','a','c','h','e','E','X','T',' ','v','a','l','i','d','a','t','i','o','n','C','a','c','h',
+  'e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a',
+  'c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P',
+  'F','N','_','v','k','D','e','s','t','r','o','y','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e','E','X','T',' ',
+  'f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','D','e','s','t','r','o','y','V','a','l','i','d','a',
+  't','i','o','n','C','a','c','h','e','E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d',
+  'd','r','(','d','e','v','i','c','e',',',' ','"','v','k','D','e','s','t','r','o','y','V','a','l','i','d','a','t','i','o','n',
+  'C','a','c','h','e','E','X','T','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i','c','e',',',' ','v','a','l','i',
+  'd','a','t','i','o','n','C','a','c','h','e',',',' ','p','A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r',
+  'e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k',
+  'G','e','t','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e','D','a','t','a','E','X','T','(','V','k','D','e','v',
+  'i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e','E','X',
+  'T',' ','v','a','l','i','d','a','t','i','o','n','C','a','c','h','e',',','\r','\n',' ',' ','s','i','z','e','_','t',' ','*',
+  'p','D','a','t','a','S','i','z','e',',',' ','v','o','i','d',' ','*','p','D','a','t','a',')',' ','{','\r','\n',' ',' ','s',
+  't','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e','D',
+  'a','t','a','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','V','a','l',
+  'i','d','a','t','i','o','n','C','a','c','h','e','D','a','t','a','E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c',
+  'e','P','r','o','c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','V','a','l','i','d','a','t',
+  'i','o','n','C','a','c','h','e','D','a','t','a','E','X','T','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',
+  ' ','r',' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','v','a','l','i','d','a','t','i','o','n','C','a','c','h','e',
+  ',',' ','p','D','a','t','a','S','i','z','e',',',' ','p','D','a','t','a',')',';','\r','\n',' ',' ','r','e','t','u','r','n',
+  ' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k','M','e','r',
+  'g','e','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e','s','E','X','T','(','V','k','D','e','v','i','c','e',' ',
+  'd','e','v','i','c','e',',',' ','V','k','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e','E','X','T',' ','d','s',
+  't','C','a','c','h','e',',','\r','\n',' ',' ','u','i','n','t','3','2','_','t',' ','s','r','c','C','a','c','h','e','C','o',
+  'u','n','t',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','V','a','l','i','d','a','t','i','o','n','C','a','c','h',
+  'e','E','X','T',' ','*','p','S','r','c','C','a','c','h','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ',
+  'P','F','N','_','v','k','M','e','r','g','e','V','a','l','i','d','a','t','i','o','n','C','a','c','h','e','s','E','X','T',' ',
+  'f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','M','e','r','g','e','V','a','l','i','d','a','t','i',
+  'o','n','C','a','c','h','e','s','E','X','T',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d',
+  'r','(','d','e','v','i','c','e',',',' ','"','v','k','M','e','r','g','e','V','a','l','i','d','a','t','i','o','n','C','a','c',
+  'h','e','s','E','X','T','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d',
+  'e','v','i','c','e',',',' ','d','s','t','C','a','c','h','e',',',' ','s','r','c','C','a','c','h','e','C','o','u','n','t',',',
+  ' ','p','S','r','c','C','a','c','h','e','s',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','G','e','t','D','e','s','c','r','i','p','t','o','r','S','e',
+  't','L','a','y','o','u','t','S','u','p','p','o','r','t','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',
+  '\r','\n',' ',' ','c','o','n','s','t',' ','V','k','D','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u',
+  't','C','r','e','a','t','e','I','n','f','o',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','V',
+  'k','D','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t','S','u','p','p','o','r','t',' ','*','p','S',
+  'u','p','p','o','r','t',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','D',
+  'e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t','S','u','p','p','o','r','t',' ','f','n',' ','=','\r',
+  '\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','D','e','s','c','r','i','p','t','o','r','S','e','t','L','a',
+  'y','o','u','t','S','u','p','p','o','r','t',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d',
+  'r','(','d','e','v','i','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','G','e','t','D','e','s','c','r','i','p',
+  't','o','r','S','e','t','L','a','y','o','u','t','S','u','p','p','o','r','t','"',')',';','\r','\n',' ',' ','f','n','(','d',
+  'e','v','i','c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','S','u','p','p','o','r','t',')',';','\r',
+  '\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k',
+  'G','e','t','D','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t','S','u','p','p','o','r','t','K','H',
+  'R','(','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k',
+  'D','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t','C','r','e','a','t','e','I','n','f','o',' ','*',
+  'p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','V','k','D','e','s','c','r','i','p','t','o','r','S','e',
+  't','L','a','y','o','u','t','S','u','p','p','o','r','t',' ','*','p','S','u','p','p','o','r','t',')',' ','{','\r','\n',' ',
+  ' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','D','e','s','c','r','i','p','t','o','r','S','e','t','L',
+  'a','y','o','u','t','S','u','p','p','o','r','t','K','H','R',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N',
+  '_','v','k','G','e','t','D','e','s','c','r','i','p','t','o','r','S','e','t','L','a','y','o','u','t','S','u','p','p','o','r',
+  't','K','H','R',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',
+  ' ',' ',' ',' ','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','D','e','s','c','r','i','p','t','o','r','S','e','t',
+  'L','a','y','o','u','t','S','u','p','p','o','r','t','K','H','R','"',')',';','\r','\n',' ',' ','f','n','(','d','e','v','i',
+  'c','e',',',' ','p','C','r','e','a','t','e','I','n','f','o',',',' ','p','S','u','p','p','o','r','t',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_',
+  'v','k','G','e','t','S','h','a','d','e','r','I','n','f','o','A','M','D','(','V','k','D','e','v','i','c','e',' ','d','e','v',
+  'i','c','e',',',' ','V','k','P','i','p','e','l','i','n','e',' ','p','i','p','e','l','i','n','e',',','\r','\n',' ',' ','V',
+  'k','S','h','a','d','e','r','S','t','a','g','e','F','l','a','g','B','i','t','s',' ','s','h','a','d','e','r','S','t','a','g',
+  'e',',',' ','V','k','S','h','a','d','e','r','I','n','f','o','T','y','p','e','A','M','D',' ','i','n','f','o','T','y','p','e',
+  ',','\r','\n',' ',' ','s','i','z','e','_','t',' ','*','p','I','n','f','o','S','i','z','e',',',' ','v','o','i','d',' ','*',
+  'p','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','G','e','t','S','h',
+  'a','d','e','r','I','n','f','o','A','M','D',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G',
+  'e','t','S','h','a','d','e','r','I','n','f','o','A','M','D',')',' ','v','k','G','e','t','D','e','v','i','c','e','P','r','o',
+  'c','A','d','d','r','(','d','e','v','i','c','e',',',' ','"','v','k','G','e','t','S','h','a','d','e','r','I','n','f','o','A',
+  'M','D','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c',
+  'e',',',' ','p','i','p','e','l','i','n','e',',',' ','s','h','a','d','e','r','S','t','a','g','e',',',' ','i','n','f','o','T',
+  'y','p','e',',',' ','p','I','n','f','o','S','i','z','e',',',' ','p','I','n','f','o',')',';','\r','\n',' ',' ','r','e','t',
+  'u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_','v','k',
+  'S','e','t','D','e','b','u','g','U','t','i','l','s','O','b','j','e','c','t','N','a','m','e','E','X','T','(','V','k','D','e',
+  'v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','D','e','b','u','g','U',
+  't','i','l','s','O','b','j','e','c','t','N','a','m','e','I','n','f','o','E','X','T',' ','*','p','N','a','m','e','I','n','f',
+  'o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','S','e','t','D','e','b','u','g','U',
+  't','i','l','s','O','b','j','e','c','t','N','a','m','e','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P',
+  'F','N','_','v','k','S','e','t','D','e','b','u','g','U','t','i','l','s','O','b','j','e','c','t','N','a','m','e','E','X','T',
+  ')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','i','n','s',
+  't','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','S','e','t','D','e','b','u','g','U','t','i','l','s',
+  'O','b','j','e','c','t','N','a','m','e','E','X','T','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',
+  ' ','=',' ','f','n','(','d','e','v','i','c','e',',',' ','p','N','a','m','e','I','n','f','o',')',';','\r','\n',' ',' ','r',
+  'e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_',
+  'v','k','S','e','t','D','e','b','u','g','U','t','i','l','s','O','b','j','e','c','t','T','a','g','E','X','T','(','V','k','D',
+  'e','v','i','c','e',' ','d','e','v','i','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','D','e','b','u','g',
+  'U','t','i','l','s','O','b','j','e','c','t','T','a','g','I','n','f','o','E','X','T',' ','*','p','T','a','g','I','n','f','o',
+  ')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','S','e','t','D','e','b','u','g','U','t',
+  'i','l','s','O','b','j','e','c','t','T','a','g','E','X','T',' ','f','n',' ','=',' ','(','P','F','N','_','v','k','S','e','t',
+  'D','e','b','u','g','U','t','i','l','s','O','b','j','e','c','t','T','a','g','E','X','T',')',' ','v','k','G','e','t','I','n',
+  's','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a',
+  'n','c','e',',',' ','"','v','k','S','e','t','D','e','b','u','g','U','t','i','l','s','O','b','j','e','c','t','T','a','g','E',
+  'X','T','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d','e','v','i','c',
+  'e',',',' ','p','T','a','g','I','n','f','o',')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r',
+  '\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','Q','u','e','u','e','B','e','g','i','n','D','e','b','u','g',
+  'U','t','i','l','s','L','a','b','e','l','E','X','T','(','V','k','Q','u','e','u','e',' ','q','u','e','u','e',',',' ','c','o',
+  'n','s','t',' ','V','k','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T',' ','*','p','L','a','b','e',
+  'l','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','Q','u','e','u','e',
+  'B','e','g','i','n','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T',' ','f','n',' ','=','\r','\n',
+  ' ',' ',' ',' ','(','P','F','N','_','v','k','Q','u','e','u','e','B','e','g','i','n','D','e','b','u','g','U','t','i','l','s',
+  'L','a','b','e','l','E','X','T',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r',
+  '(','a','u','x','.','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','Q','u','e','u','e',
+  'B','e','g','i','n','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T','"',')',';','\r','\n',' ',' ',
+  'f','n','(','q','u','e','u','e',',',' ','p','L','a','b','e','l','I','n','f','o',')',';','\r','\n',' ',' ','r','e','t','u',
+  'r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','Q','u','e','u','e','E','n',
+  'd','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T','(','V','k','Q','u','e','u','e',' ','q','u','e',
+  'u','e',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','Q','u','e','u','e','E','n','d',
+  'D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(',
+  'P','F','N','_','v','k','Q','u','e','u','e','E','n','d','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X',
+  'T',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','i','n',
+  's','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','Q','u','e','u','e','E','n','d','D','e','b','u',
+  'g','U','t','i','l','s','L','a','b','e','l','E','X','T','"',')',';','\r','\n',' ',' ','f','n','(','q','u','e','u','e',')',
+  ';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_',
+  'v','k','Q','u','e','u','e','I','n','s','e','r','t','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T',
+  '(','V','k','Q','u','e','u','e',' ','q','u','e','u','e',',',' ','c','o','n','s','t',' ','V','k','D','e','b','u','g','U','t',
+  'i','l','s','L','a','b','e','l','E','X','T',' ','*','p','L','a','b','e','l','I','n','f','o',')',' ','{','\r','\n',' ',' ',
+  's','t','a','t','i','c',' ','P','F','N','_','v','k','Q','u','e','u','e','I','n','s','e','r','t','D','e','b','u','g','U','t',
+  'i','l','s','L','a','b','e','l','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','Q',
+  'u','e','u','e','I','n','s','e','r','t','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T',')',' ','v',
+  'k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','i','n','s','t','a','n',
+  'c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','Q','u','e','u','e','I','n','s','e','r','t','D','e','b','u','g',
+  'U','t','i','l','s','L','a','b','e','l','E','X','T','"',')',';','\r','\n',' ',' ','f','n','(','q','u','e','u','e',',',' ',
+  'p','L','a','b','e','l','I','n','f','o',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r',
+  '\n','v','o','i','d',' ','s','h','i','m','_','v','k','C','m','d','B','e','g','i','n','D','e','b','u','g','U','t','i','l',
+  's','L','a','b','e','l','E','X','T','(','V','k','C','o','m','m','a','n','d','B','u','f','f','e','r',' ','c','o','m','m','a',
+  'n','d','B','u','f','f','e','r',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','D','e','b','u','g','U','t','i','l',
+  's','L','a','b','e','l','E','X','T',' ','*','p','L','a','b','e','l','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t',
+  'a','t','i','c',' ','P','F','N','_','v','k','C','m','d','B','e','g','i','n','D','e','b','u','g','U','t','i','l','s','L','a',
+  'b','e','l','E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','m','d','B','e','g',
+  'i','n','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T',')',' ','v','k','G','e','t','I','n','s','t',
+  'a','n','c','e','P','r','o','c','A','d','d','r','(','a','u','x','.','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',
+  ' ',' ',' ',' ','"','v','k','C','m','d','B','e','g','i','n','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E',
+  'X','T','"',')',';','\r','\n',' ',' ','f','n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','p','L','a',
+  'b','e','l','I','n','f','o',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o',
+  'i','d',' ','s','h','i','m','_','v','k','C','m','d','E','n','d','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l',
+  'E','X','T','(','V','k','C','o','m','m','a','n','d','B','u','f','f','e','r',' ','c','o','m','m','a','n','d','B','u','f','f',
+  'e','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','E','n','d','D','e',
+  'b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T',' ','f','n',' ','=',' ','(','P','F','N','_','v','k','C','m',
+  'd','E','n','d','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T',')',' ','v','k','G','e','t','I','n',
+  's','t','a','n','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ','a','u','x','.','i','n','s','t','a',
+  'n','c','e',',',' ','"','v','k','C','m','d','E','n','d','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X',
+  'T','"',')',';','\r','\n',' ',' ','f','n','(','c','o','m','m','a','n','d','B','u','f','f','e','r',')',';','\r','\n',' ',' ',
+  'r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h','i','m','_','v','k','C','m','d',
+  'I','n','s','e','r','t','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T','(','V','k','C','o','m','m',
+  'a','n','d','B','u','f','f','e','r',' ','c','o','m','m','a','n','d','B','u','f','f','e','r',',','\r','\n',' ',' ','c','o',
+  'n','s','t',' ','V','k','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T',' ','*','p','L','a','b','e',
+  'l','I','n','f','o',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k','C','m','d','I','n',
+  's','e','r','t','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T',' ','f','n',' ','=','\r','\n',' ',
+  ' ',' ',' ','(','P','F','N','_','v','k','C','m','d','I','n','s','e','r','t','D','e','b','u','g','U','t','i','l','s','L','a',
+  'b','e','l','E','X','T',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o','c','A','d','d','r','(','a',
+  'u','x','.','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','C','m','d','I','n','s','e',
+  'r','t','D','e','b','u','g','U','t','i','l','s','L','a','b','e','l','E','X','T','"',')',';','\r','\n',' ',' ','f','n','(',
+  'c','o','m','m','a','n','d','B','u','f','f','e','r',',',' ','p','L','a','b','e','l','I','n','f','o',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_',
+  'v','k','C','r','e','a','t','e','D','e','b','u','g','U','t','i','l','s','M','e','s','s','e','n','g','e','r','E','X','T','(',
+  'V','k','I','n','s','t','a','n','c','e',' ','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ','c','o','n','s','t',' ',
+  'V','k','D','e','b','u','g','U','t','i','l','s','M','e','s','s','e','n','g','e','r','C','r','e','a','t','e','I','n','f','o',
+  'E','X','T',' ','*','p','C','r','e','a','t','e','I','n','f','o',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','A',
+  'l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',' ','*','p','A','l','l','o','c','a','t','o','r',',',
+  '\r','\n',' ',' ','V','k','D','e','b','u','g','U','t','i','l','s','M','e','s','s','e','n','g','e','r','E','X','T',' ','*',
+  'p','M','e','s','s','e','n','g','e','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v','k',
+  'C','r','e','a','t','e','D','e','b','u','g','U','t','i','l','s','M','e','s','s','e','n','g','e','r','E','X','T',' ','f','n',
+  ' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','C','r','e','a','t','e','D','e','b','u','g','U','t','i','l',
+  's','M','e','s','s','e','n','g','e','r','E','X','T',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o',
+  'c','A','d','d','r','(','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','C','r','e','a',
+  't','e','D','e','b','u','g','U','t','i','l','s','M','e','s','s','e','n','g','e','r','E','X','T','"',')',';','\r','\n',' ',
+  ' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','i','n','s','t','a','n','c','e',',',' ','p','C','r','e',
+  'a','t','e','I','n','f','o',',',' ','p','A','l','l','o','c','a','t','o','r',',',' ','p','M','e','s','s','e','n','g','e','r',
+  ')',';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n','\r','\n','v','o','i','d',' ','s','h',
+  'i','m','_','v','k','D','e','s','t','r','o','y','D','e','b','u','g','U','t','i','l','s','M','e','s','s','e','n','g','e','r',
+  'E','X','T','(','V','k','I','n','s','t','a','n','c','e',' ','i','n','s','t','a','n','c','e',',',' ','V','k','D','e','b','u',
+  'g','U','t','i','l','s','M','e','s','s','e','n','g','e','r','E','X','T',' ','m','e','s','s','e','n','g','e','r',',','\r',
+  '\n',' ',' ','c','o','n','s','t',' ','V','k','A','l','l','o','c','a','t','i','o','n','C','a','l','l','b','a','c','k','s',
+  ' ','*','p','A','l','l','o','c','a','t','o','r',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_',
+  'v','k','D','e','s','t','r','o','y','D','e','b','u','g','U','t','i','l','s','M','e','s','s','e','n','g','e','r','E','X','T',
+  ' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','D','e','s','t','r','o','y','D','e','b','u','g',
+  'U','t','i','l','s','M','e','s','s','e','n','g','e','r','E','X','T',')',' ','v','k','G','e','t','I','n','s','t','a','n','c',
+  'e','P','r','o','c','A','d','d','r','(','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k',
+  'D','e','s','t','r','o','y','D','e','b','u','g','U','t','i','l','s','M','e','s','s','e','n','g','e','r','E','X','T','"',')',
+  ';','\r','\n',' ',' ','f','n','(','i','n','s','t','a','n','c','e',',',' ','m','e','s','s','e','n','g','e','r',',',' ','p',
+  'A','l','l','o','c','a','t','o','r',')',';','\r','\n',' ',' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n',
+  'v','o','i','d',' ','s','h','i','m','_','v','k','S','u','b','m','i','t','D','e','b','u','g','U','t','i','l','s','M','e','s',
+  's','a','g','e','E','X','T','(','V','k','I','n','s','t','a','n','c','e',' ','i','n','s','t','a','n','c','e',',','\r','\n',
+  ' ',' ','V','k','D','e','b','u','g','U','t','i','l','s','M','e','s','s','a','g','e','S','e','v','e','r','i','t','y','F','l',
+  'a','g','B','i','t','s','E','X','T',' ','m','e','s','s','a','g','e','S','e','v','e','r','i','t','y',',','\r','\n',' ',' ',
+  'V','k','D','e','b','u','g','U','t','i','l','s','M','e','s','s','a','g','e','T','y','p','e','F','l','a','g','s','E','X','T',
+  ' ','m','e','s','s','a','g','e','T','y','p','e','s',',','\r','\n',' ',' ','c','o','n','s','t',' ','V','k','D','e','b','u',
+  'g','U','t','i','l','s','M','e','s','s','e','n','g','e','r','C','a','l','l','b','a','c','k','D','a','t','a','E','X','T',' ',
+  '*','p','C','a','l','l','b','a','c','k','D','a','t','a',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F',
+  'N','_','v','k','S','u','b','m','i','t','D','e','b','u','g','U','t','i','l','s','M','e','s','s','a','g','e','E','X','T',' ',
+  'f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','S','u','b','m','i','t','D','e','b','u','g','U','t',
+  'i','l','s','M','e','s','s','a','g','e','E','X','T',')',' ','v','k','G','e','t','I','n','s','t','a','n','c','e','P','r','o',
+  'c','A','d','d','r','(','i','n','s','t','a','n','c','e',',','\r','\n',' ',' ',' ',' ',' ',' ','"','v','k','S','u','b','m',
+  'i','t','D','e','b','u','g','U','t','i','l','s','M','e','s','s','a','g','e','E','X','T','"',')',';','\r','\n',' ',' ','f',
+  'n','(','i','n','s','t','a','n','c','e',',',' ','m','e','s','s','a','g','e','S','e','v','e','r','i','t','y',',',' ','m','e',
+  's','s','a','g','e','T','y','p','e','s',',',' ','p','C','a','l','l','b','a','c','k','D','a','t','a',')',';','\r','\n',' ',
+  ' ','r','e','t','u','r','n',';','\r','\n','}','\r','\n','\r','\n','V','k','R','e','s','u','l','t',' ','s','h','i','m','_',
+  'v','k','G','e','t','M','e','m','o','r','y','H','o','s','t','P','o','i','n','t','e','r','P','r','o','p','e','r','t','i','e',
+  's','E','X','T','(','\r','\n',' ',' ','V','k','D','e','v','i','c','e',' ','d','e','v','i','c','e',',',' ','V','k','E','x',
+  't','e','r','n','a','l','M','e','m','o','r','y','H','a','n','d','l','e','T','y','p','e','F','l','a','g','B','i','t','s',' ',
+  'h','a','n','d','l','e','T','y','p','e',',',' ','c','o','n','s','t',' ','v','o','i','d',' ','*','p','H','o','s','t','P','o',
+  'i','n','t','e','r',',','\r','\n',' ',' ','V','k','M','e','m','o','r','y','H','o','s','t','P','o','i','n','t','e','r','P',
+  'r','o','p','e','r','t','i','e','s','E','X','T',' ','*','p','M','e','m','o','r','y','H','o','s','t','P','o','i','n','t','e',
+  'r','P','r','o','p','e','r','t','i','e','s',')',' ','{','\r','\n',' ',' ','s','t','a','t','i','c',' ','P','F','N','_','v',
+  'k','G','e','t','M','e','m','o','r','y','H','o','s','t','P','o','i','n','t','e','r','P','r','o','p','e','r','t','i','e','s',
+  'E','X','T',' ','f','n',' ','=','\r','\n',' ',' ',' ',' ','(','P','F','N','_','v','k','G','e','t','M','e','m','o','r','y',
+  'H','o','s','t','P','o','i','n','t','e','r','P','r','o','p','e','r','t','i','e','s','E','X','T',')',' ','v','k','G','e','t',
+  'D','e','v','i','c','e','P','r','o','c','A','d','d','r','(','\r','\n',' ',' ',' ',' ',' ',' ','d','e','v','i','c','e',',',
+  ' ','"','v','k','G','e','t','M','e','m','o','r','y','H','o','s','t','P','o','i','n','t','e','r','P','r','o','p','e','r','t',
+  'i','e','s','E','X','T','"',')',';','\r','\n',' ',' ','V','k','R','e','s','u','l','t',' ','r',' ','=',' ','f','n','(','d',
+  'e','v','i','c','e',',',' ','h','a','n','d','l','e','T','y','p','e',',',' ','p','H','o','s','t','P','o','i','n','t','e','r',
+  ',',' ','p','M','e','m','o','r','y','H','o','s','t','P','o','i','n','t','e','r','P','r','o','p','e','r','t','i','e','s',')',
+  ';','\r','\n',' ',' ','r','e','t','u','r','n',' ','r',';','\r','\n','}','\r','\n',
+  };
+const char fileData_41[] =
+  "#include \"utils.h\"\r\n#include \"helper/helper.h\"\r\n#include \"shim_vulkan.h\"\r\n\r\n\r\nuint32_t ShimVkTraceResourc"
+  "es::cmdCount(VkCommandBuffer cb) {\r\n  return cbCommandInfo[cb].size();\r\n}\r\nuint32_t ShimVkTraceResources::queryCoun"
+  "t(VkCommandBuffer cb) {\r\n  uint32_t count = cbCommandInfo[cb].size();\r\n  // Command buffer queries are written like t"
+  "his:\r\n  // vkBeginCommandBuffer\r\n  // vkCmd* Start Timestamp\r\n  // vkCmd* End Timestamp\r\n  // vkEndCommandBuffer\r"
+  "\n  // Therefore for each command there are 2 timestamp queries\r\n  // except for Begin/End command buffers which have j"
+  "ust 1.\r\n  count = (count - 1) * 2;\r\n  return count;\r\n}\r\nuint32_t ShimVkTraceResources::totalQueryCount() {\r\n  u"
+  "int32_t totalCount = 0;\r\n  for (auto cbQuery : cbCommandInfo) {\r\n    totalCount += queryCount(cbQuery.first);\r\n  }\r"
+  "\n  return totalCount;\r\n}\r\nuint32_t ShimVkTraceResources::assignQueryRange() {\r\n  uint32_t totalCount = totalQueryC"
+  "ount();\r\n  uint32_t offset = 0;\r\n  for (auto cbQuery : cbCommandInfo) {\r\n    uint32_t count = queryCount(cbQuery.fi"
+  "rst);\r\n    cbQueryRange[cbQuery.first][0] = offset;\r\n    cbQueryRange[cbQuery.first][1] = count;\r\n    offset += cou"
+  "nt;\r\n  }\r\n  assert(offset == totalCount);\r\n  return totalCount;\r\n}\r\n\r\nuint32_t ShimVkTraceResources::queryOff"
+  "set(VkCommandBuffer cb) {\r\n  return cbQueryRange[cb][0];\r\n}\r\n\r\nuint32_t ShimVkTraceResources::resetQueries(VkComm"
+  "andBuffer cb) {\r\n  return cbQueryRange[cb][2] = 0;\r\n}\r\nuint32_t ShimVkTraceResources::queryInc(VkCommandBuffer cb) "
+  "{\r\n  return cbQueryRange[cb][2]++;\r\n}\r\n\r\nvoid ShimVkTraceResources::queueSubmit(VkQueue queue, uint32_t cbCount, "
+  "VkCommandBuffer * cbList) {\r\n  ExecCmdBufVec & exec = cbSubmitOrder[queue];\r\n  for (uint32_t cbi = 0; cbi < cbCount; "
+  "cbi++) {\r\n    VkCommandBuffer currentCB = cbList[cbi];\r\n    cbContext[currentCB].queue = queue;\r\n    uint32_t idx ="
+  " exec.size();\r\n    exec.push_back(ExecuteCommandBuffer{currentCB, idx});\r\n  }\r\n}\r\n\r\nvoid ShimVkTraceResources::"
+  "addExecCmdBufRelation(VkCommandBuffer cb, VkCommandBuffer exec, uint32_t offset) {\r\n  cbExecCmdBufs[cb].push_back(Execu"
+  "teCommandBuffer{exec, offset});\r\n}\r\n\r\nbool ShimVkTraceResources::isPresent(VkCommandBuffer cb) {\r\n  return cbComm"
+  "andInfo.find(cb) != cbCommandInfo.end();\r\n}\r\n\r\ndouble ShimVkTraceResources::accumTimestamps(VkCommandBuffer cb, con"
+  "st std::vector<uint64_t> &data, uint64_t frameID) {\r\n  TimestampContext &context = cbContext[cb];\r\n  if (cbAccumTimes"
+  "tamps[cb].empty()) {\r\n    cbAccumTimestamps[cb].resize(cbCommandInfo[cb].size(), {0.0, 0.0f});\r\n    context.mask = ge"
+  "tTimestampValidBits(context.queue);\r\n    context.period = physDeviceProperties.limits.timestampPeriod;\r\n    context.a"
+  "ccum = 0;\r\n  }\r\n\r\n  double elapsedTimeNsec = (data.back() & context.mask -\r\n    data.front() & context.mask) * co"
+  "ntext.period;\r\n  uint32_t accum = frameID % 2;\r\n  cbAccumTimestamps[cb].front()[accum] += elapsedTimeNsec; // this is"
+  " the total time for the command buffer submission.\r\n  cbAccumTimestamps[cb].back()[accum] += elapsedTimeNsec;\r\n\r\n  "
+  "for (uint32_t i = 1; i < data.size() - 1; i += 2) {\r\n    double elapsedTimeNsec = (data[i + 1] & context.mask -\r\n    "
+  "  data[i] & context.mask) * context.period;\r\n    cbAccumTimestamps[cb][(i + 1) / 2][accum] += elapsedTimeNsec;\r\n  }\r"
+  "\n\r\n  context.accum++;\r\n\r\n  return elapsedTimeNsec;\r\n}\r\n\r\nvoid ShimVkTraceResources::accumulateAllTimestamps("
+  "VkCommandBuffer cb, uint64_t frameID) {\r\n  std::vector<VkCommandBuffer> todo(1, cb);\r\n\r\n  // If command buffer had "
+  "indirect buffers, add them to\r\n  // todo list of work.\r\n  for (auto execCB : cbExecCmdBufs[cb])\r\n    todo.push_back"
+  "(execCB.cb);\r\n\r\n  for (VkCommandBuffer cbi : todo) {\r\n    uint32_t offset = queryOffset(cbi);\r\n    uint32_t count"
+  " = queryCount(cbi);\r\n    std::vector<uint64_t> data(count);\r\n    VkResult pollResult = vkGetQueryPoolResults(\r\n    "
+  "  device, queryPool(cbi), offset, count,\r\n      sizeof(uint64_t) * count, data.data(), sizeof(uint64_t),\r\n      VK_QU"
+  "ERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);\r\n    assert(pollResult == VK_SUCCESS);\r\n    accumTimestamps(cbi, data,"
+  " frameID);\r\n  }\r\n}\r\n\r\nVkQueryPool ShimVkTraceResources::queryPool(VkCommandBuffer cb) {\r\n  return cbContext[cb]"
+  ".pool;\r\n}\r\n\r\nVkQueue ShimVkTraceResources::queryQueue(VkCommandBuffer cb) {\r\n  return cbContext[cb].queue;\r\n}\r"
+  "\n\r\nVkResult ShimVkTraceResources::createQueryPools() {\r\n  for (auto cbQuery : cbCommandInfo) {\r\n    VkQueryPoolCre"
+  "ateInfo ci = {};\r\n    ci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;\r\n    ci.queryType = VK_QUERY_TYPE_TIMESTAM"
+  "P;\r\n    ci.queryCount = queryCount(cbQuery.first);\r\n    cbQueryRange[cbQuery.first][0] = 0;\r\n    cbQueryRange[cbQue"
+  "ry.first][1] = ci.queryCount;\r\n    VkQueryPool & qp = cbContext[cbQuery.first].pool;\r\n    VK_CHECK_RESULT(vkCreateQue"
+  "ryPool(device, &ci, NULL, &qp));\r\n  }\r\n  return VK_SUCCESS;\r\n}\r\n\r\nvoid ShimVkTraceResources::writeCSV(const cha"
+  "r *name) {\r\n  FILE *csv = fopen(name, \"wt\");\r\n\r\n  fprintf(csv, \"%s\\n\", \"Command Buffer Index, Command Name, C"
+  "ommand Info, Command Index, Elapsed Time (ms)\");\r\n\r\n  for (auto submit : cbSubmitOrder) {\r\n    ExecCmdBufVec & ord"
+  "er = submit.second;\r\n    for (uint32_t i = 0; i < order.size(); i++) {\r\n      VkCommandBuffer cb = order[i].cb;\r\n  "
+  "    TupleVec accum = cbAccumTimestamps[cb];\r\n      for (uint32_t j = 0; j < cbCommandInfo[cb].size(); j++) {\r\n       "
+  " double ts = (accum[j][1] + accum[j][0]) / (1000000.0 * cbContext[cb].accum);\r\n        fprintf(csv, \"%d, %s, %s, %d, %"
+  "f\\n\",\r\n          i, cbCommandInfo[cb][j].name.c_str(),\r\n          cbCommandInfo[cb][j].info.c_str(), j, ts);\r\n   "
+  "   }\r\n    }\r\n  }\r\n\r\n  fclose(csv);\r\n}";
+const char fileData_42[] =
+  "#pragma once\r\n#include <array>\r\n#include <cmath>\r\n#include <fstream>\r\n#include <string>\r\n\r\n#include <assert.h"
+  ">\r\n\r\n#include \"helper/helper.h\"\r\n\r\nstruct ExecuteCommandBuffer {\r\n  VkCommandBuffer cb;\r\n  uint32_t id;\r\n"
+  "};\r\n\r\nstruct TimestampContext {\r\n  VkQueue queue;\r\n  VkQueryPool pool;\r\n  uint64_t mask;\r\n  uint64_t period;\r"
+  "\n  uint32_t accum;\r\n};\r\n\r\nstruct CommandInfo {\r\n  std::string name;\r\n  std::string info;\r\n};\r\n\r\ntypedef "
+  "std::array<uint32_t, 3> TripleU32;\r\ntypedef std::vector<std::array<double, 2>> TupleVec;\r\ntypedef std::vector<Command"
+  "Info> CommandInfoVec;\r\ntypedef std::vector<ExecuteCommandBuffer> ExecCmdBufVec;\r\n\r\nstruct ShimVkTraceResources: pub"
+  "lic AuxVkTraceResources {\r\n  std::map<VkQueue, ExecCmdBufVec> cbSubmitOrder;\r\n  std::map<VkCommandBuffer, CommandInfo"
+  "Vec> cbCommandInfo;\r\n  std::map<VkCommandBuffer, TupleVec> cbAccumTimestamps;\r\n  std::map<VkCommandBuffer, TripleU32 "
+  "> cbQueryRange;\r\n  std::map<VkCommandBuffer, ExecCmdBufVec> cbExecCmdBufs;\r\n  std::map<VkCommandBuffer, TimestampCont"
+  "ext > cbContext;\r\n\r\n  uint32_t cmdCount(VkCommandBuffer cb);\r\n  uint32_t queryCount(VkCommandBuffer cb);\r\n  uint3"
+  "2_t totalQueryCount();\r\n  uint32_t assignQueryRange();\r\n  uint32_t queryOffset(VkCommandBuffer cb);\r\n  uint32_t res"
+  "etQueries(VkCommandBuffer cb);\r\n  uint32_t queryInc(VkCommandBuffer cb);\r\n\r\n  void queueSubmit(VkQueue queue, uint3"
+  "2_t cbCount, VkCommandBuffer * cbList);\r\n  void addExecCmdBufRelation(VkCommandBuffer cb, VkCommandBuffer exec, uint32_"
+  "t offset);\r\n  bool isPresent(VkCommandBuffer cb);\r\n  double accumTimestamps(VkCommandBuffer cb, const std::vector<uin"
+  "t64_t> &data, uint64_t frameID);\r\n  void accumulateAllTimestamps(VkCommandBuffer cb, uint64_t frameID);\r\n\r\n  VkQuer"
+  "yPool queryPool(VkCommandBuffer cb);\r\n  VkQueue queryQueue(VkCommandBuffer cb);\r\n  VkResult createQueryPools();\r\n\r"
+  "\n  void writeCSV(const char *name);\r\n};\r\n\r\nextern ShimVkTraceResources aux;\r\nextern int presentIndex;";
 }    // namespace
 
 TemplateFileDesc CodeWriter::TemplateFiles[] = {
-  {R"(CMakeLists.txt)", 4761, fileData_1},
+  {R"(CMakeLists.txt)", 4892, fileData_1},
   {R"(Template.user)", 944, fileData_2},
   {R"(build_vs2015.bat)", 204, fileData_3},
   {R"(build_vs2015_ninja.bat)", 346, fileData_4},
@@ -18862,11 +22510,11 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(gold_reference_shim/shim_vulkan.h)", 63486, fileData_17},
   {R"(gold_reference_shim/utils.cpp)", 15368, fileData_18},
   {R"(gold_reference_shim/utils.h)", 4897, fileData_19},
-  {R"(helper/CMakeLists.txt)", 894, fileData_20},
-  {R"(helper/format_helper.h)", 2353, fileData_21},
-  {R"(helper/format_size_and_aspect.cpp)", 39138, fileData_22},
-  {R"(helper/helper.cpp)", 32551, fileData_23},
-  {R"(helper/helper.h)", 6626, fileData_24},
+  {R"(helper/CMakeLists.txt)", 895, fileData_20},
+  {R"(helper/format_helper.h)", 2437, fileData_21},
+  {R"(helper/format_size_and_aspect.cpp)", 39416, fileData_22},
+  {R"(helper/helper.cpp)", 32921, fileData_23},
+  {R"(helper/helper.h)", 9840, fileData_24},
   {R"(sample_cpp_shim/CMakeLists.txt)", 1066, fileData_25},
   {R"(sample_cpp_shim/shim_vulkan.cpp)", 110372, fileData_26},
   {R"(sample_cpp_shim/shim_vulkan.h)", 63508, fileData_27},
@@ -18879,6 +22527,12 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(rdoc_auto_capture_shim/renderdoc_app.h)", 26597, fileData_34},
   {R"(rdoc_auto_capture_shim/shim_vulkan.cpp)", 113095, fileData_35},
   {R"(rdoc_auto_capture_shim/shim_vulkan.h)", 63508, fileData_36},
+  {R"(timestamp_profiling_shim/CMakeLists.txt)", 1279, fileData_37},
+  {R"(timestamp_profiling_shim/shim_vulkan.cpp)", 54117, fileData_38},
+  {R"(timestamp_profiling_shim/shim_vulkan.h)", 62147, fileData_39},
+  {R"(timestamp_profiling_shim/shim_vulkan_base.cpp)", 76733, fileData_40},
+  {R"(timestamp_profiling_shim/utils.cpp)", 5525, fileData_41},
+  {R"(timestamp_profiling_shim/utils.h)", 1919, fileData_42},
   {nullptr, 0, nullptr},
 };
 }    // namespace vk_cpp_codec
