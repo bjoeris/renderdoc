@@ -80,7 +80,7 @@ void CodeWriter::Open()
     files[ID_VAR]->PrintLnH("#include \"sample_cpp_shim/shim_vulkan.h\"");
   }
 
-  for (const TemplateFileDesc* desc = TemplateFiles; desc->filename; desc++)
+  for(const TemplateFileDesc *desc = TemplateFiles; desc->filename; desc++)
     WriteTemplateFile(desc->filename, desc->contents, desc->size);
 }
 
@@ -92,7 +92,7 @@ void CodeWriter::WriteTemplateFile(const char *file, const char *contents, size_
   FileIO::CreateParentDirectory(path);
 
   FILE *templateFile = FileIO::fopen(path.c_str(), "wb");
-  if (size == std::string::npos)
+  if(size == std::string::npos)
     size = strlen(contents);
   FileIO::fwrite(contents, 1, size, templateFile);
   fclose(templateFile);
@@ -150,11 +150,11 @@ void CodeWriter::Close()
     files[i] = NULL;
   }
 
-  if (files[ID_MAIN])
+  if(files[ID_MAIN])
   {
     files[ID_MAIN]->PrintLn("bool main_should_quit_now() {");
     // If we are using shims, call into the shim to check if the main message loop should quit now.
-    if (*shimPrefix)
+    if(*shimPrefix)
     {
       files[ID_MAIN]->PrintLn("return ShimShouldQuitNow();");
     }
@@ -381,8 +381,8 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
             ai->Name(), ai->At(3)->Name(), ai->At(3)->ValueStr().c_str(), tracker->PhysDevID(),
             tracker->PhysDevID())
         .PrintLn("%s = %s;", ai_name, ai->Name())
-        .PrintLn("VkResult result = %s%s(%s, &%s, NULL, &%s);", 
-          shimPrefix, o->Name(), device_name, ai->Name(), memory_name)
+        .PrintLn("VkResult result = %s%s(%s, &%s, NULL, &%s);", shimPrefix, o->Name(), device_name,
+                 ai->Name(), memory_name)
         .PrintLn("assert(result == VK_SUCCESS);")
         .PrintLn("}");
   }
@@ -1967,9 +1967,11 @@ void CodeWriter::FlushMappedMemoryRanges(ExtObject *o, uint32_t pass)
     files[pass]
         ->PrintLn("uint8_t* data = NULL;")
         .PrintLn(
-            "VkResult result = %svkMapMemory(%s, %s, 0, VK_WHOLE_SIZE, 0, (void** ) &data); // RDOC: "
-            "map the whole thing, but only copy the right subregions later", shimPrefix,
-            tracker->GetResourceVar(device->U64()), tracker->GetResourceVar(memory->U64()))
+            "VkResult result = %svkMapMemory(%s, %s, 0, VK_WHOLE_SIZE, 0, (void** ) &data); // "
+            "RDOC: "
+            "map the whole thing, but only copy the right subregions later",
+            shimPrefix, tracker->GetResourceVar(device->U64()),
+            tracker->GetResourceVar(memory->U64()))
         .PrintLn("assert(result == VK_SUCCESS);")
         .PrintLn("%s(aux, data, buffer_%" PRIu64 ".data(), %s, %s, %s, %s);", map_update_func,
                  buffer->U64(), regions->Name(), tracker->GetMemAllocInfoVar(memory->U64()),
@@ -2440,7 +2442,8 @@ void CodeWriter::CmdDebugMarkerBeginEXT(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
   LocalVariable(o->At(1), "", pass);
   files[pass]
-      ->PrintLn("vkCmdDebugMarkerBegin(%s, &%s);", tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
+      ->PrintLn("vkCmdDebugMarkerBegin(%s, &%s);", tracker->GetResourceVar(o->At(0)->U64()),
+                o->At(1)->Name())
       .PrintLn("}");
 }
 
@@ -2449,7 +2452,8 @@ void CodeWriter::CmdDebugMarkerInsertEXT(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
   LocalVariable(o->At(1), "", pass);
   files[pass]
-      ->PrintLn("vkCmdDebugMarkerInsert(%s, &%s);", tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
+      ->PrintLn("vkCmdDebugMarkerInsert(%s, &%s);", tracker->GetResourceVar(o->At(0)->U64()),
+                o->At(1)->Name())
       .PrintLn("}");
 }
 
@@ -2463,20 +2467,19 @@ void CodeWriter::CmdDebugMarkerEndEXT(ExtObject *o, uint32_t pass)
 
 void CodeWriter::DebugMarkerSetObjectNameEXT(ExtObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {")
-    .PrintLn("VkDebugMarkerObjectNameInfoEXT ObjectNI = {")
-    .PrintLn("/* sType = */ VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT,")
-    .PrintLn("/* pNext = */ NULL,")
-    .PrintLn("/* objectType = */ %s,",
-      tracker->GetResourceVarIt(o->At("Object")->U64())->second.debugType.c_str())
-    .PrintLn("/* object = */ (uint64_t) %s,", 
-      tracker->GetResourceVar(o->At("Object")->U64()))
-    .PrintLn("/* pObjectName = */ %s,", 
-      o->At("ObjectName")->ValueStr().c_str())
-    .PrintLn("};")
-    .PrintLn("VkResult result = vkDebugMarkerSetObjectName(%s, &%s);",
-              tracker->GetDeviceVar(), "ObjectNI")
-    .PrintLn("assert(result == VK_SUCCESS);")
-    .PrintLn("}");
+  files[pass]
+      ->PrintLn("if (isDebugMarkerEXTEnabled) {")
+      .PrintLn("VkDebugMarkerObjectNameInfoEXT ObjectNI = {")
+      .PrintLn("/* sType = */ VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT,")
+      .PrintLn("/* pNext = */ NULL,")
+      .PrintLn("/* objectType = */ %s,",
+               tracker->GetResourceVarIt(o->At("Object")->U64())->second.debugType.c_str())
+      .PrintLn("/* object = */ (uint64_t) %s,", tracker->GetResourceVar(o->At("Object")->U64()))
+      .PrintLn("/* pObjectName = */ %s,", o->At("ObjectName")->ValueStr().c_str())
+      .PrintLn("};")
+      .PrintLn("VkResult result = vkDebugMarkerSetObjectName(%s, &%s);", tracker->GetDeviceVar(),
+               "ObjectNI")
+      .PrintLn("assert(result == VK_SUCCESS);")
+      .PrintLn("}");
 }
 }    // namespace vk_cpp_codec

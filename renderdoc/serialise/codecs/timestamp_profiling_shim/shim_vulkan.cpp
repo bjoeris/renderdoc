@@ -21,7 +21,8 @@ const double DELTA = 0.001;
 ShimVkTraceResources aux;
 int presentIndex = 0;
 
-std::ofstream avrgExeTimeFile = std::ofstream("avrgExecuteTimes.txt", std::ios::out | std::ios::binary);
+std::ofstream avrgExeTimeFile =
+    std::ofstream("avrgExecuteTimes.txt", std::ios::out | std::ios::binary);
 std::ofstream timeFile = std::ofstream("time.txt", std::ios::out | std::ios::binary);
 
 /* The list of all Vulkan commands and what we query timestamps on:
@@ -126,60 +127,75 @@ VkResult shim_vkBeginCommandBuffer(VkCommandBuffer commandBuffer,
   assert((pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) == 0);
   static PFN_vkBeginCommandBuffer fn = vkBeginCommandBuffer;
   VkResult r = fn(commandBuffer, pBeginInfo);
-  if (presentIndex == 0) {
+  if(presentIndex == 0)
+  {
     // Currently all command buffers are uniquely recorded in a frame. Is this
     // always true?
-    assert(aux.cbQueries.find(commandBuffer) == aux.cbQueries.end());
+    assert(aux.cbCommandInfo.find(commandBuffer) == aux.cbCommandInfo.end());
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return r;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     uint32_t offset = aux.queryOffset(commandBuffer);
     uint32_t count = aux.queryCount(commandBuffer);
     aux.resetQueries(commandBuffer);
     vkCmdResetQueryPool(commandBuffer, aux.queryPool(commandBuffer), offset, count);
-    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE,
-      aux.queryPool(commandBuffer), aux.queryInc(commandBuffer));
+    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
+                        aux.queryInc(commandBuffer));
   }
   return r;
 }
 
-VkResult shim_vkEndCommandBuffer(VkCommandBuffer commandBuffer) {
+VkResult shim_vkEndCommandBuffer(VkCommandBuffer commandBuffer)
+{
   static PFN_vkEndCommandBuffer fn = vkEndCommandBuffer;
-  if (presentIndex == 0) {
+  if(presentIndex == 0)
+  {
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     VkResult r = fn(commandBuffer);
     return r;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
-    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE,
-      aux.queryPool(commandBuffer), aux.queryInc(commandBuffer));
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
+    vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
+                        aux.queryInc(commandBuffer));
   }
   VkResult r = fn(commandBuffer);
   return r;
 }
 
 VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
-  VkFence fence) {
+                            VkFence fence)
+{
   static PFN_vkQueueSubmit fn = vkQueueSubmit;
   VkResult r = fn(queue, submitCount, pSubmits, fence);
-  if (presentIndex == 0) {
-    for (uint32_t i = 0; i < submitCount; i++) {
-      aux.queueSubmit(queue, pSubmits[i].commandBufferCount, 
-        const_cast<VkCommandBuffer*>(pSubmits[i].pCommandBuffers));
+  if(presentIndex == 0)
+  {
+    for(uint32_t i = 0; i < submitCount; i++)
+    {
+      aux.queueSubmit(queue, pSubmits[i].commandBufferCount,
+                      const_cast<VkCommandBuffer *>(pSubmits[i].pCommandBuffers));
     }
     return r;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
-     vkQueueWaitIdle(queue);
-     for (uint32_t i = 0; i < submitCount; i++) {
-       for (uint32_t cbi = 0; cbi < pSubmits[i].commandBufferCount; cbi++) {
-         VkCommandBuffer currentCB = pSubmits[i].pCommandBuffers[cbi];
-         if (!aux.isPresent(currentCB)) {
-           assert(0);
-           continue; // this should really never happen.
-         }
-     
-         aux.accumulateAllTimestamps(currentCB, presentIndex);
-       }
-     }
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
+    vkQueueWaitIdle(queue);
+    for(uint32_t i = 0; i < submitCount; i++)
+    {
+      for(uint32_t cbi = 0; cbi < pSubmits[i].commandBufferCount; cbi++)
+      {
+        VkCommandBuffer currentCB = pSubmits[i].pCommandBuffers[cbi];
+        if(!aux.isPresent(currentCB))
+        {
+          assert(0);
+          continue;    // this should really never happen.
+        }
+
+        aux.accumulateAllTimestamps(currentCB, presentIndex);
+      }
+    }
   }
   return r;
 }
@@ -199,17 +215,19 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
 
   if(presentIndex == END_TS_FRAME)
   {
-     for (auto it : aux.cbAccumTimestamps) {
-       std::string cbTime = "Command Buffer Time = "
-         + std::to_string((it.second[0][0] + it.second[0][1]) / (1000000.0 * (END_TS_FRAME - START_TS_FRAME)))
-         + " (ms)\n";
+    for(auto it : aux.cbAccumTimestamps)
+    {
+      std::string cbTime = "Command Buffer Time = " +
+                           std::to_string((it.second[0][0] + it.second[0][1]) /
+                                          (1000000.0 * (END_TS_FRAME - START_TS_FRAME))) +
+                           " (ms)\n";
 #if defined(_WIN32) || defined(WIN32)
-       OutputDebugStringA(cbTime.c_str());
-#else 
-       fprintf(stdout, "%s", cbTime.c_str());
+      OutputDebugStringA(cbTime.c_str());
+#else
+      fprintf(stdout, "%s", cbTime.c_str());
 #endif
-     }
-     aux.writeCSV("timestamps.csv");
+    }
+    aux.writeCSV("timestamps.csv");
   }
 
   presentIndex++;
@@ -227,17 +245,22 @@ void shim_vkCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBu
     fn(commandBuffer, commandBufferCount, pCommandBuffers);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     uint32_t offset = aux.queryOffset(commandBuffer);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, commandBufferCount, pCommandBuffers);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-    for (uint32_t cb = 0; cb < commandBufferCount; cb++) {
+                        aux.queryInc(commandBuffer));
+    for(uint32_t cb = 0; cb < commandBufferCount; cb++)
+    {
       aux.addExecCmdBufRelation(commandBuffer, pCommandBuffers[cb], offset);
     }
-  } else {
+  }
+  else
+  {
     fn(commandBuffer, commandBufferCount, pCommandBuffers);
   }
 }
@@ -251,13 +274,17 @@ void shim_vkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint p
     fn(commandBuffer, pipelineBindPoint, pipeline);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, pipelineBindPoint, pipeline);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, pipelineBindPoint, pipeline);
   }
   return;
@@ -272,13 +299,17 @@ void shim_vkCmdSetViewport(VkCommandBuffer commandBuffer, uint32_t firstViewport
     fn(commandBuffer, firstViewport, viewportCount, pViewports);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, firstViewport, viewportCount, pViewports);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, firstViewport, viewportCount, pViewports);
   }
   return;
@@ -293,13 +324,17 @@ void shim_vkCmdSetScissor(VkCommandBuffer commandBuffer, uint32_t firstScissor,
     fn(commandBuffer, firstScissor, scissorCount, pScissors);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, firstScissor, scissorCount, pScissors);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, firstScissor, scissorCount, pScissors);
   }
   return;
@@ -313,13 +348,17 @@ void shim_vkCmdSetLineWidth(VkCommandBuffer commandBuffer, float lineWidth)
     fn(commandBuffer, lineWidth);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, lineWidth);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, lineWidth);
   }
   return;
@@ -334,13 +373,17 @@ void shim_vkCmdSetDepthBias(VkCommandBuffer commandBuffer, float depthBiasConsta
     fn(commandBuffer, depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor);
   }
   return;
@@ -354,13 +397,17 @@ void shim_vkCmdSetBlendConstants(VkCommandBuffer commandBuffer, const float blen
     fn(commandBuffer, blendConstants);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, blendConstants);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, blendConstants);
   }
   return;
@@ -375,13 +422,17 @@ void shim_vkCmdSetDepthBounds(VkCommandBuffer commandBuffer, float minDepthBound
     fn(commandBuffer, minDepthBounds, maxDepthBounds);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, minDepthBounds, maxDepthBounds);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, minDepthBounds, maxDepthBounds);
   }
   return;
@@ -396,13 +447,17 @@ void shim_vkCmdSetStencilCompareMask(VkCommandBuffer commandBuffer, VkStencilFac
     fn(commandBuffer, faceMask, compareMask);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, faceMask, compareMask);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, faceMask, compareMask);
   }
   return;
@@ -417,13 +472,17 @@ void shim_vkCmdSetStencilWriteMask(VkCommandBuffer commandBuffer, VkStencilFaceF
     fn(commandBuffer, faceMask, writeMask);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, faceMask, writeMask);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, faceMask, writeMask);
   }
   return;
@@ -438,13 +497,17 @@ void shim_vkCmdSetStencilReference(VkCommandBuffer commandBuffer, VkStencilFaceF
     fn(commandBuffer, faceMask, reference);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, faceMask, reference);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, faceMask, reference);
   }
   return;
@@ -463,16 +526,20 @@ void shim_vkCmdBindDescriptorSets(VkCommandBuffer commandBuffer,
        dynamicOffsetCount, pDynamicOffsets);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount, pDescriptorSets,
-      dynamicOffsetCount, pDynamicOffsets);
+       dynamicOffsetCount, pDynamicOffsets);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount, pDescriptorSets,
-      dynamicOffsetCount, pDynamicOffsets);
+       dynamicOffsetCount, pDynamicOffsets);
   }
   return;
 }
@@ -486,13 +553,17 @@ void shim_vkCmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, V
     fn(commandBuffer, buffer, offset, indexType);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, buffer, offset, indexType);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, buffer, offset, indexType);
   }
   return;
@@ -508,13 +579,17 @@ void shim_vkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, uint32_t firstBi
     fn(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets);
   }
   return;
@@ -529,20 +604,24 @@ void shim_vkCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_
     fn(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
     char infoStr[256];
     sprintf(infoStr,
-      "Vertex Count: %d "
-      "Instance Count: %d " 
-      "First Vertex: %d "
-      "First Instance: %d ",
-      vertexCount, instanceCount, firstVertex, firstInstance);
+            "Vertex Count: %d "
+            "Instance Count: %d "
+            "First Vertex: %d "
+            "First Instance: %d ",
+            vertexCount, instanceCount, firstVertex, firstInstance);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
   }
   return;
@@ -557,21 +636,25 @@ void shim_vkCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, u
     fn(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     char infoStr[256];
     sprintf(infoStr,
-      "Index Count: %d "
-      "Instance Count: %d "
-      "First Index: %d "
-      "Vertex Offset: %d "
-      "First Instance: %d ",
-      indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+            "Index Count: %d "
+            "Instance Count: %d "
+            "First Index: %d "
+            "Vertex Offset: %d "
+            "First Instance: %d ",
+            indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
   }
   return;
@@ -586,18 +669,22 @@ void shim_vkCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDe
     fn(commandBuffer, buffer, offset, drawCount, stride);
     char infoStr[256];
     sprintf(infoStr,
-      "Draw Count: %d "
-      "Stride Count: %d ",
-      drawCount, stride);
+            "Draw Count: %d "
+            "Stride Count: %d ",
+            drawCount, stride);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, buffer, offset, drawCount, stride);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, buffer, offset, drawCount, stride);
   }
   return;
@@ -612,19 +699,31 @@ void shim_vkCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffe
     fn(commandBuffer, buffer, offset, drawCount, stride);
     char infoStr[256];
     sprintf(infoStr,
-      "Offset: %" PRIu64 " "
-      "Draw Count: %u "
-      "Stride Count: %u ",
-      offset, drawCount, stride);
-    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
-    return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+<<<<<<< HEAD
+            "Offset: %" PRIu64
+            " "
+            "Draw Count: %u "
+            "Stride Count: %u ",
+            offset, drawCount, stride);
+=======
+            "Offset: %d "
+            "Draw Count: %d "
+            "Stride Count: %d ",
+            offset, drawCount, stride);
+>>>>>>> Minor fixes for timestamp_profiling_shim.
+aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
+return;
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, buffer, offset, drawCount, stride);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, buffer, offset, drawCount, stride);
   }
   return;
@@ -639,19 +738,23 @@ void shim_vkCmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uin
     fn(commandBuffer, groupCountX, groupCountY, groupCountZ);
     char infoStr[256];
     sprintf(infoStr,
-      "Groups X: %d "
-      "Groups Y: %d "
-      "Groups Z: %d ",
-      groupCountX, groupCountY, groupCountZ);
+            "Groups X: %d "
+            "Groups Y: %d "
+            "Groups Z: %d ",
+            groupCountX, groupCountY, groupCountZ);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, groupCountX, groupCountY, groupCountZ);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, groupCountX, groupCountY, groupCountZ);
   }
   return;
@@ -664,18 +767,23 @@ void shim_vkCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, 
   {
     fn(commandBuffer, buffer, offset);
     char infoStr[256];
-    sprintf(infoStr,
-      "Offset: %" PRIu64 " ",
-      offset);
+<<<<<<< HEAD
+    sprintf(infoStr, "Offset: %" PRIu64 " ", offset);
+    == == == = sprintf(infoStr, "Offset: %d ", offset);
+>>>>>>> Minor fixes for timestamp_profiling_shim.
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, buffer, offset);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, buffer, offset);
   }
   return;
@@ -690,13 +798,17 @@ void shim_vkCmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkB
     fn(commandBuffer, srcBuffer, dstBuffer, regionCount, pRegions);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, srcBuffer, dstBuffer, regionCount, pRegions);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, srcBuffer, dstBuffer, regionCount, pRegions);
   }
   return;
@@ -712,13 +824,17 @@ void shim_vkCmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage,
     fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
   }
   return;
@@ -735,16 +851,20 @@ void shim_vkCmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage,
        filter);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions,
-      filter);
+       filter);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions,
-      filter);
+       filter);
   }
   return;
 }
@@ -759,13 +879,17 @@ void shim_vkCmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuff
     fn(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions);
   }
   return;
@@ -781,13 +905,17 @@ void shim_vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage
     fn(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions);
   }
   return;
@@ -802,13 +930,17 @@ void shim_vkCmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
     fn(commandBuffer, dstBuffer, dstOffset, dataSize, pData);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, dstBuffer, dstOffset, dataSize, pData);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, dstBuffer, dstOffset, dataSize, pData);
   }
   return;
@@ -823,13 +955,17 @@ void shim_vkCmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkD
     fn(commandBuffer, dstBuffer, dstOffset, size, data);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, dstBuffer, dstOffset, size, data);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, dstBuffer, dstOffset, size, data);
   }
   return;
@@ -845,13 +981,17 @@ void shim_vkCmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image,
     fn(commandBuffer, image, imageLayout, pColor, rangeCount, pRanges);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, image, imageLayout, pColor, rangeCount, pRanges);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, image, imageLayout, pColor, rangeCount, pRanges);
   }
   return;
@@ -868,13 +1008,17 @@ void shim_vkCmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage ima
     fn(commandBuffer, image, imageLayout, pDepthStencil, rangeCount, pRanges);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, image, imageLayout, pDepthStencil, rangeCount, pRanges);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, image, imageLayout, pDepthStencil, rangeCount, pRanges);
   }
   return;
@@ -890,13 +1034,17 @@ void shim_vkCmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachme
     fn(commandBuffer, attachmentCount, pAttachments, rectCount, pRects);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, attachmentCount, pAttachments, rectCount, pRects);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, attachmentCount, pAttachments, rectCount, pRects);
   }
   return;
@@ -913,13 +1061,17 @@ void shim_vkCmdResolveImage(VkCommandBuffer commandBuffer, VkImage srcImage,
     fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
   }
   return;
@@ -941,18 +1093,22 @@ void shim_vkCmdWaitEvents(VkCommandBuffer commandBuffer, uint32_t eventCount,
        pImageMemoryBarriers);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, eventCount, pEvents, srcStageMask, dstStageMask, memoryBarrierCount,
-      pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,
-      pImageMemoryBarriers);
+       pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,
+       pImageMemoryBarriers);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, eventCount, pEvents, srcStageMask, dstStageMask, memoryBarrierCount,
-      pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,
-      pImageMemoryBarriers);
+       pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,
+       pImageMemoryBarriers);
   }
   return;
 }
@@ -973,16 +1129,22 @@ void shim_vkCmdPipelineBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFla
        pImageMemoryBarriers);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-    fn(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount, pMemoryBarriers,
-      bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers);
+                        aux.queryInc(commandBuffer));
+    fn(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount,
+       pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,
+       pImageMemoryBarriers);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
-    fn(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount, pMemoryBarriers,
-      bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers);
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
+    fn(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount,
+       pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,
+       pImageMemoryBarriers);
   }
   return;
 }
@@ -997,13 +1159,17 @@ void shim_vkCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout lay
     fn(commandBuffer, layout, stageFlags, offset, size, pValues);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, layout, stageFlags, offset, size, pValues);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, layout, stageFlags, offset, size, pValues);
   }
   return;
@@ -1019,13 +1185,17 @@ void shim_vkCmdBeginRenderPass(VkCommandBuffer commandBuffer,
     fn(commandBuffer, pRenderPassBegin, contents);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, pRenderPassBegin, contents);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, pRenderPassBegin, contents);
   }
   return;
@@ -1039,13 +1209,17 @@ void shim_vkCmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents cont
     fn(commandBuffer, contents);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, contents);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, contents);
   }
   return;
@@ -1059,13 +1233,17 @@ void shim_vkCmdEndRenderPass(VkCommandBuffer commandBuffer)
     fn(commandBuffer);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer);
   }
   return;
@@ -1083,13 +1261,17 @@ void shim_vkCmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buff
     fn(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
   }
   return;
@@ -1108,13 +1290,17 @@ void shim_vkCmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuff
     fn(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
   }
   return;
@@ -1132,13 +1318,17 @@ void shim_vkCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer,
     fn(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites);
   }
   return;
@@ -1153,13 +1343,17 @@ void shim_vkCmdSetDeviceMask(VkCommandBuffer commandBuffer, uint32_t deviceMask)
     fn(commandBuffer, deviceMask);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, deviceMask);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, deviceMask);
   }
   return;
@@ -1174,13 +1368,17 @@ void shim_vkCmdSetDeviceMaskKHR(VkCommandBuffer commandBuffer, uint32_t deviceMa
     fn(commandBuffer, deviceMask);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, deviceMask);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, deviceMask);
   }
   return;
@@ -1197,13 +1395,17 @@ void shim_vkCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX, 
     fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);
   }
   return;
@@ -1220,13 +1422,17 @@ void shim_vkCmdDispatchBaseKHR(VkCommandBuffer commandBuffer, uint32_t baseGroup
     fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);
   }
   return;
@@ -1245,13 +1451,17 @@ void shim_vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer,
     fn(commandBuffer, descriptorUpdateTemplate, layout, set, pData);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, descriptorUpdateTemplate, layout, set, pData);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, descriptorUpdateTemplate, layout, set, pData);
   }
   return;
@@ -1268,15 +1478,18 @@ void shim_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer,
     fn(commandBuffer, pipelineStage, dstBuffer, dstOffset, marker);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__});
     return;
-  } else if (presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME) {
+  }
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
+  {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
+                        aux.queryInc(commandBuffer));
     fn(commandBuffer, pipelineStage, dstBuffer, dstOffset, marker);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-      aux.queryInc(commandBuffer));
-  } else {
+                        aux.queryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, pipelineStage, dstBuffer, dstOffset, marker);
   }
   return;
 }
-

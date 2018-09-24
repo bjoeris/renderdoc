@@ -8,20 +8,23 @@
 
 #include "helper/helper.h"
 
-struct ExecuteCommandBuffer {
+struct ExecuteCommandBuffer
+{
   VkCommandBuffer cb;
   uint32_t id;
 };
 
-struct TimestampContext {
+struct TimestampContext
+{
   VkQueue queue;
   VkQueryPool pool;
   uint64_t mask;
-  uint64_t period;
+  float period;
   uint32_t accum;
 };
 
-struct CommandInfo {
+struct CommandInfo
+{
   std::string name;
   std::string info;
 };
@@ -31,13 +34,14 @@ typedef std::vector<std::array<double, 2>> TupleVec;
 typedef std::vector<CommandInfo> CommandInfoVec;
 typedef std::vector<ExecuteCommandBuffer> ExecCmdBufVec;
 
-struct ShimVkTraceResources: public AuxVkTraceResources {
+struct ShimVkTraceResources : public AuxVkTraceResources
+{
   std::map<VkQueue, ExecCmdBufVec> cbSubmitOrder;
   std::map<VkCommandBuffer, CommandInfoVec> cbCommandInfo;
   std::map<VkCommandBuffer, TupleVec> cbAccumTimestamps;
-  std::map<VkCommandBuffer, TripleU32 > cbQueryRange;
+  std::map<VkCommandBuffer, TripleU32> cbQueryRange;
   std::map<VkCommandBuffer, ExecCmdBufVec> cbExecCmdBufs;
-  std::map<VkCommandBuffer, TimestampContext > cbContext;
+  std::map<VkCommandBuffer, TimestampContext> cbContext;
 
   uint32_t cmdCount(VkCommandBuffer cb);
   uint32_t queryCount(VkCommandBuffer cb);
@@ -47,7 +51,7 @@ struct ShimVkTraceResources: public AuxVkTraceResources {
   uint32_t resetQueries(VkCommandBuffer cb);
   uint32_t queryInc(VkCommandBuffer cb);
 
-  void queueSubmit(VkQueue queue, uint32_t cbCount, VkCommandBuffer * cbList);
+  void queueSubmit(VkQueue queue, uint32_t cbCount, VkCommandBuffer *cbList);
   void addExecCmdBufRelation(VkCommandBuffer cb, VkCommandBuffer exec, uint32_t offset);
   bool isPresent(VkCommandBuffer cb);
   double accumTimestamps(VkCommandBuffer cb, const std::vector<uint64_t> &data, uint64_t frameID);
