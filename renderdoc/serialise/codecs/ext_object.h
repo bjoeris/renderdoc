@@ -163,19 +163,23 @@ struct ExtObject : public SDObject
       if(name == "pCode")
         result = "(const uint32_t*) " + result;
     }
-    if(IsNULL())
+    else if(IsNULL())
+    {
       result = "NULL";
-    if(IsU64())
+    }
+    else if(IsU64())
     {
       result = std::to_string(U64()) + "u";
     }
-    if(IsI64())
+    else if(IsI64())
+    {
       result = std::to_string(I64());
-    if(IsD64())
+    }
+    else if(IsD64())
     {
       result = std::to_string(D64()) + "f";
     }
-    if(IsEnum())
+    else if(IsEnum())
     {
       result = data.str;
       size_t open_bracket = result.find("<");
@@ -185,12 +189,47 @@ struct ExtObject : public SDObject
         result.replace(open_bracket, 1, "(");
         result.replace(close_bracket, 1, ")");
       }
-      return result.c_str();
     }
-    if(IsString())
-      result = std::string("\"") + data.str.c_str() + std::string("\"");
+    else if(IsString())
+    {
+      std::string escaped;
+      escaped.reserve(data.str.size());
+      for(char c : data.str)
+      {
+        switch(c)
+        {
+          case '\a': escaped += "\\a"; break;
+          case '\b': escaped += "\\b"; break;
+          case '\f': escaped += "\\f"; break;
+          case '\n': escaped += "\\n"; break;
+          case '\r': escaped += "\\r"; break;
+          case '\t': escaped += "\\t"; break;
+          case '\v': escaped += "\\v"; break;
 
-    return result.c_str();
+          case '"':
+          case '\\':
+            escaped.push_back('\\');
+            escaped.push_back(c);
+            break;
+
+          default:
+            if(c < 32 || c > 127)
+            {
+              char buf[8] = {};
+              snprintf(buf, sizeof(buf), "\\x%02X", c);
+              escaped += buf;
+            }
+            else
+            {
+              escaped.push_back(c);
+            }
+            break;
+        }
+      }
+      result = std::string("\"") + escaped + std::string("\"");
+    }
+
+    return result;
   }
   uint32_t ChunkID() const
   {

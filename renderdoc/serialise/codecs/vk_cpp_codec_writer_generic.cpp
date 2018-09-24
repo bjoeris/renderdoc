@@ -114,15 +114,12 @@ void CodeWriter::LocalVariable(ExtObject *o, std::string suffix, uint32_t pass)
                              (suffix + add_suffix).c_str());
       }
       else if(!node->IsSimpleType() && node->IsInlineable())
+      {
         InlineVariable(node, pass);
+      }
       else if(node->IsResource())
       {
         files[pass]->PrintLn("/* %s = */ %s,", node->Name(), tracker->GetResourceVar(node->U64()));
-      }
-      else if(node->IsString())
-      {
-        files[pass]->PrintLn("/* %s = */ R\"rdoccodegen(%s)rdoccodegen\",", node->Name(),
-                             node->ValueStr().substr(1, node->ValueStr().size() - 2).c_str());
       }
       else
       {
