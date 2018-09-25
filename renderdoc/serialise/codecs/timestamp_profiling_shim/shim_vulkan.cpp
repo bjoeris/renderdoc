@@ -202,7 +202,11 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
        std::string cbTime = "Command Buffer Time = "
          + std::to_string((it.second[0][0] + it.second[0][1]) / (1000000.0 * (END_TS_FRAME - START_TS_FRAME)))
          + " (ms)\n";
+#if defined(_WIN32) || defined(WIN32)
        OutputDebugStringA(cbTime.c_str());
+#else 
+       fprintf(stdout, "%s", cbTime.c_str());
+#endif
      }
      aux.writeCSV("timestamps.csv");
   }

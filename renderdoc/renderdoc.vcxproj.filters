@@ -154,6 +154,9 @@
     <Filter Include="Common\Serialise\Codecs\CPP\rdoc_auto_capture">
       <UniqueIdentifier>{10d4d65b-73c6-4b2e-af3a-b3daef5622c9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Common\Serialise\Codecs\CPP\timestamp">
+      <UniqueIdentifier>{81c400ce-4e33-4164-9fe6-d8edbd8f0cbd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="maths\camera.h">
@@ -530,6 +533,12 @@
     </ClInclude>
     <ClInclude Include="serialise\codecs\rdoc_auto_capture_shim\renderdoc_app.h">
       <Filter>Common\Serialise\Codecs\CPP\rdoc_auto_capture</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\timestamp_profiling_shim\shim_vulkan.h">
+      <Filter>Common\Serialise\Codecs\CPP\timestamp</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\timestamp_profiling_shim\utils.h">
+      <Filter>Common\Serialise\Codecs\CPP\timestamp</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -947,6 +956,15 @@
     <ClCompile Include="serialise\codecs\rdoc_auto_capture_shim\shim_vulkan.cpp">
       <Filter>Common\Serialise\Codecs\CPP\rdoc_auto_capture</Filter>
     </ClCompile>
+    <ClCompile Include="serialise\codecs\timestamp_profiling_shim\shim_vulkan.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\timestamp</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\timestamp_profiling_shim\shim_vulkan_base.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\timestamp</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\timestamp_profiling_shim\utils.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\timestamp</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="os\win32\comexport.def">
@@ -1081,6 +1099,9 @@
     </Text>
     <Text Include="serialise\codecs\rdoc_auto_capture_shim\CMakeLists.txt">
       <Filter>Common\Serialise\Codecs\CPP\rdoc_auto_capture</Filter>
+    </Text>
+    <Text Include="serialise\codecs\timestamp_profiling_shim\CMakeLists.txt">
+      <Filter>Common\Serialise\Codecs\CPP\timestamp</Filter>
     </Text>
   </ItemGroup>
 </Project>
