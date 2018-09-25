@@ -40,6 +40,7 @@ struct ShimVkTraceResources : public AuxVkTraceResources
   std::map<VkCommandBuffer, CommandInfoVec> cbCommandInfo;
   std::map<VkCommandBuffer, TupleVec> cbAccumTimestamps;
   std::map<VkCommandBuffer, TripleU32> cbQueryRange;
+  // Map of primary command buffers to secondary command buffers.
   std::map<VkCommandBuffer, ExecCmdBufVec> cbExecCmdBufs;
   std::map<VkCommandBuffer, TimestampContext> cbContext;
 
@@ -54,7 +55,7 @@ struct ShimVkTraceResources : public AuxVkTraceResources
   void queueSubmit(VkQueue queue, uint32_t cbCount, VkCommandBuffer *cbList);
   void addExecCmdBufRelation(VkCommandBuffer cb, VkCommandBuffer exec, uint32_t offset);
   bool isPresent(VkCommandBuffer cb);
-  double accumTimestamps(VkCommandBuffer cb, const std::vector<uint64_t> &data, uint64_t frameID);
+  double accumTimestamps(VkCommandBuffer cb, const std::vector<uint64_t> &data, uint64_t frameID, VkQueue queue);
   void accumulateAllTimestamps(VkCommandBuffer cb, uint64_t frameID);
 
   VkQueryPool queryPool(VkCommandBuffer cb);
