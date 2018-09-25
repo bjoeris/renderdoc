@@ -47,18 +47,29 @@ struct RDCThumb
   FileType format = FileType::JPG;
 };
 
+struct ExtThumbnailHeader
+{
+  uint16_t width;
+  uint16_t height;
+  uint32_t len;
+  uint32_t format;
+};
+
 class RDCFile
 {
 public:
   // version number of overall file format or chunk organisation. If the contents/meaning/order of
   // chunks have changed this does not need to be bumped, there are version numbers within each
   // API that interprets the stream that can be bumped.
-  static const uint32_t SERIALISE_VERSION = 0x00000101;
+  static const uint32_t SERIALISE_VERSION = 0x00000100;
 
   // this must never be changed - files before this were in the v0.x series and didn't have embedded
   // version numbers
   static const uint32_t V1_0_VERSION = 0x00000100;
-  static const uint32_t V1_1_VERSION = 0x00000101;    // Thumbnail can be stored in various formats.
+
+  // Yeti-specific: a file version produced by v1.19 SDK version of RenderDoc. This is maintained
+  // only for backward compatibility and is no longer supported for file creation going forward.
+  static const uint32_t V1_1_VERSION_YETI = 0x00000101;
 
   ~RDCFile();
 
