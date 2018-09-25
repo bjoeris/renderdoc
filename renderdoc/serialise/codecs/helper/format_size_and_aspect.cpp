@@ -424,6 +424,8 @@ uint32_t FixCompressedSizes(VkFormat fmt, VkExtent3D &dim, uint32_t &offset) {
     dim.depth = (uint32_t) AlignedSize(dim.depth, 1);
     offset = (uint32_t) AlignedSize(offset, 4);
     return 1;
+
+    default: break;
   }
 
   offset = (uint32_t) AlignedSize(offset, 4);
