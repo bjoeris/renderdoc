@@ -189,10 +189,13 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
           ReadbackInfo info = infos.attachments[a];
           char handleStr[32];
           sprintf(handleStr, "%p", info.srcImage);
-          std::string filename =
-              std::to_string(renderPassCount) + "_attachment_" + std::to_string(info.index) +
-              "_resource_" + std::string(handleStr) + "_" + FormatToString(info.format) + "_" +
-              std::to_string(info.width) + "x" + std::to_string(info.height) + ".ppm";
+          std::string filename;
+#if defined(__yeti__)
+          filename = "/var/game/";
+#endif
+          filename += std::to_string(renderPassCount) + "_attachment_" + std::to_string(info.index) +
+                      "_resource_" + std::string(handleStr) + "_" + FormatToString(info.format) +
+                      "_" + std::to_string(info.width) + "x" + std::to_string(info.height) + ".ppm";
           bufferToPpm(info.buffer, info.bufferDeviceMem, filename, info.width, info.height,
                       info.format);
           info.Clear(aux.device);
