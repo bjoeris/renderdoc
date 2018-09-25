@@ -1,6 +1,7 @@
 #ifndef SHIM_VK_COMPILE_STATIC_LIB
 #define SHIM_VK_EXPORT
 #endif
+#include <cinttypes>
 #include <map>
 #include <set>
 
@@ -611,9 +612,9 @@ void shim_vkCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffe
     fn(commandBuffer, buffer, offset, drawCount, stride);
     char infoStr[256];
     sprintf(infoStr,
-      "Offset: %d "
-      "Draw Count: %d "
-      "Stride Count: %d ",
+      "Offset: %" PRIu64 " "
+      "Draw Count: %u "
+      "Stride Count: %u ",
       offset, drawCount, stride);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
@@ -664,7 +665,7 @@ void shim_vkCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, 
     fn(commandBuffer, buffer, offset);
     char infoStr[256];
     sprintf(infoStr,
-      "Offset: %d ",
+      "Offset: %" PRIu64 " ",
       offset);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
