@@ -207,9 +207,18 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
   ExtObject *memory = o->At(3);
   const char *mem_remap = tracker->GetMemRemapVar(memory->U64());
 
-  std::vector<size_t> order = alloc_it->second.BoundResourcesOrderByResetRequiremnet();
-  if((tracker->Optimizations() & CODE_GEN_OPT_REORDER_MEMORY_BINDINGS_BIT) == 0)
+  std::vector<size_t> order;
+  bool reorder = (!alloc_it->second.HasAliasedResources()) &&
+                 ((tracker->Optimizations() & CODE_GEN_OPT_REORDER_MEMORY_BINDINGS_BIT) != 0);
+  if(reorder)
   {
+    files[pass]->PrintLn("%s.resize(%u);", mem_remap,
+                         (uint32_t)alloc_it->second.BoundResourceCount());
+    order = alloc_it->second.BoundResourcesOrderByResetRequiremnet();
+  }
+  else
+  {
+    order.resize(alloc_it->second.boundResources.size());
     for(size_t i = 0; i < order.size(); i++)
     {
       order[i] = i;
@@ -225,7 +234,7 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
   for(uint32_t resource_idx = 0; resource_idx < order.size(); resource_idx++)
   {
     const BoundResource &abr = alloc_it->second.boundResources[order[resource_idx]];
-    if(tracker->Optimizations() & CODE_GEN_OPT_REORDER_MEMORY_BINDINGS_BIT)
+    if(reorder)
     {
       switch(reset)
       {
@@ -276,7 +285,7 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
 
     // If there are no aliased resources we can recompute allocation size requirements
     // and new binding offsets for every resource correctly.
-    if(!alloc_it->second.HasAliasedResources())
+    if(reorder)
     {
       files[pass]
           ->PrintLn("%s[%u].replay.offset = %s;", mem_remap, resource_idx, mem_bind_offset)
@@ -322,7 +331,6 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
     const char *device_name = tracker->GetResourceVar(device->U64());
     const char *memory_name = tracker->GetResourceVar(memory->Type(), memory->U64());
     const char *ai_name = tracker->GetMemAllocInfoVar(memory->U64(), true);
-    const char *mem_remap = tracker->GetMemRemapVar(memory->U64());
 
     files[pass]->PrintLn("{");
     LocalVariable(ai, "", pass);
@@ -351,11 +359,6 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
     if(alloc_it->second.BoundResourceCount() > 0)
     {    // akharlamov: Why is there a device memory that has no resources bound to it?
          // We are not going to fill the Remap vector if there are aliased resources.
-      if(!alloc_it->second.HasAliasedResources())
-      {
-        files[pass]->PrintLn("%s.resize(%u);", mem_remap,
-                             (uint32_t)alloc_it->second.BoundResourceCount());
-      }
       RemapMemAlloc(pass, alloc_it);
     }
 

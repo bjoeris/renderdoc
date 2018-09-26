@@ -87,6 +87,10 @@ bool MemoryAllocationWithBoundResources::HasAliasedResources()
 
 bool MemoryAllocationWithBoundResources::NeedsReset()
 {
+  // allocations that have aliased resources need full reset.
+  if (HasAliasedResources())
+    return true;
+
   // Loop through the resources, looking for one that needs a reset.
   for(BoundResourcesIter it = FirstBoundResource(); it != EndOfBoundResources(); it++)
   {
@@ -102,6 +106,10 @@ bool MemoryAllocationWithBoundResources::NeedsReset()
 
 bool MemoryAllocationWithBoundResources::NeedsInit()
 {
+  // allocations that have aliased resources don't need initialization, only reset.
+  if (HasAliasedResources())
+    return false;
+
   // Loop through the resources, looking for one that needs an init.
   for(BoundResourcesIter it = FirstBoundResource(); it != EndOfBoundResources(); it++)
   {
