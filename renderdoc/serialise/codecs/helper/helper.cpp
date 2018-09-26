@@ -517,7 +517,7 @@ VkResult CheckMemoryAllocationCompatibility(uint32_t type,
 
 void ReadBuffer(const char *name, std::vector<uint8_t> &buf)
 {
-  FILE *f = fopen(name, "rb");
+  FILE *f = OpenFile(name, "rb");
   if(f == NULL)
   {
     return;
@@ -731,4 +731,42 @@ std::string StageProgressString(const char *stage, uint32_t i, uint32_t N)
 {
   return std::string("RenderDoc Frame Loop: " + std::string(stage) + " part " + std::to_string(i) +
                      " of " + std::to_string(N));
+}
+
+std::string GetEnvString(const char* envVarName)
+{
+  std::string val;
+#ifdef _WIN32
+  char* buf = NULL;
+  if (_dupenv_s(&buf, NULL, envVarName) == 0 && buf)
+  {
+    val = buf;
+    free(buf);
+  }
+#else
+  char *p = getenv(envVarName);
+  if (p)
+  {
+    val = p;
+  }
+#endif
+  return val;
+}
+
+int GetEnvInt(const char* envVarName, int defVal)
+{
+  std::string val = GetEnvString(envVarName);
+  return val.empty() ? defVal : atoi(val.c_str());
+}
+
+FILE *OpenFile(char const* fileName, char const* mode)
+{
+  FILE *fp = NULL;
+#ifdef _WIN32
+  if (fopen_s(&fp, fileName, mode) != 0)
+    fp = NULL;
+#else
+  fp = fopen(fileName, mode);
+#endif
+  return fp;
 }

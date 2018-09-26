@@ -32,9 +32,9 @@
 #include "shim_vulkan.h"
 #include "utils.h"
 
-const char *RDOC_ENV_VAR =
-    "RDOC_GOLD_FRAME_INDEX";    // environment variable for to-be-captured frame.
-int captureFrame = 5;           // default frame index if RDOC_GOLD_FRAME_INDEX is not set.
+const char RDOC_ENV_VAR[] = "RDOC_GOLD_FRAME_INDEX";    // env variable for to-be-captured frame.
+const int kDefaultCaptureFrame = 5;    // default frame index if RDOC_GOLD_FRAME_INDEX is not set.
+int captureFrame = kDefaultCaptureFrame;
 int presentIndex = 0;
 bool IsTargetFrame = true;    // default value doesn't matter. It's properly set in CreateInstance.
 
@@ -188,7 +188,7 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
         {
           ReadbackInfo info = infos.attachments[a];
           char handleStr[32];
-          sprintf(handleStr, "%p", info.srcImage);
+          snprintf(handleStr, sizeof(handleStr), "%p", info.srcImage);
           std::string filename;
 #if defined(__yeti__)
           filename = "/var/game/";
@@ -220,13 +220,13 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
     {
       VkImage srcImage =
           swapchainImageMap[(*pPresentInfo).pSwapchains[i]][(*pPresentInfo).pImageIndices[i]];
-      char filename[128];
+      std::string filename;
 #if defined(__yeti__)
-      sprintf(filename, "/var/game/screenshot_f%d_sw%d.ppm", presentIndex, i);
-#else
-      sprintf(filename, "screenshot_f%d_sw%d.ppm", presentIndex, i);
+      filename = "/var/game/";
 #endif
-      screenshot(srcImage, filename);
+      filename +=
+          "screenshot_f" + std::to_string(presentIndex) + "_sw" + std::to_string(i) + ".ppm";
+      screenshot(srcImage, filename.c_str());
     }
     quitNow = true;
   }
@@ -287,11 +287,9 @@ VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
 {
   VkResult r = vkCreateInstance(pCreateInfo, pAllocator, pInstance);
   aux.instance = *pInstance;
-  char *envVal = getenv(RDOC_ENV_VAR);
-  if(envVal != NULL)
-    captureFrame = atoi(envVal);
-  IsTargetFrame =
-      presentIndex == captureFrame;    // if captureFrame is '0', first frame needs to save images.
+  captureFrame = GetEnvInt(RDOC_ENV_VAR, kDefaultCaptureFrame);
+  // if captureFrame is '0', first frame needs to save images.
+  IsTargetFrame = presentIndex == captureFrame;
   return r;
 }
 

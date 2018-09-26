@@ -99,7 +99,7 @@ double ShimVkTraceResources::accumTimestamps(VkCommandBuffer cb, const std::vect
   }
 
   double elapsedTimeNsec =
-      ((data.back() & context.mask) - (data.front() & context.mask)) * context.period;
+      double(((data.back() & context.mask) - (data.front() & context.mask)) * context.period);
   uint32_t accum = frameID % 2;
   cbAccumTimestamps[cb].front()[accum] +=
       elapsedTimeNsec;    // this is the total time for the command buffer submission.
@@ -107,7 +107,8 @@ double ShimVkTraceResources::accumTimestamps(VkCommandBuffer cb, const std::vect
 
   for(uint32_t i = 1; i < data.size() - 1; i += 2)
   {
-    double elapsedTimeNsec = ((data[i + 1] & context.mask) - (data[i] & context.mask)) * context.period;
+    double elapsedTimeNsec =
+        double(((data[i + 1] & context.mask) - (data[i] & context.mask)) * context.period);
     cbAccumTimestamps[cb][(i + 1) / 2][accum] += elapsedTimeNsec;
   }
 
@@ -171,7 +172,7 @@ VkResult ShimVkTraceResources::createQueryPools()
 
 void ShimVkTraceResources::writeCSV(const char *name)
 {
-  FILE *csv = fopen(name, "wt");
+  FILE *csv = OpenFile(name, "wt");
 
   fprintf(csv, "%s\n",
           "Command Buffer Index, Command Name, Command Info, Command Index, Elapsed Time (ms)");

@@ -144,12 +144,12 @@ static bool ParseCommandLine(int argc, char **argv)
 //-----------------------------------------------------------------------------
 static void Usage()
 {
-  const char *usage =
+  const char usage[] =
       "Options:\n"
       "-repeat N    -- Number of frames to run\n"
       "-reset       -- Perform a state reset in between frames\n";
 
-  fprintf(stderr, usage);
+  fprintf(stderr, "%s", usage);
 }
 
 int main(int argc, char **argv)

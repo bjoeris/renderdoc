@@ -27,11 +27,11 @@
 #include "shim_vulkan.h"
 #include "helper/helper.h"
 
-const char *RDOC_ENV_VAR =
-"RDOC_GOLD_FRAME_INDEX";    // environment variable for to-be-captured frame.
-int captureFrame = 5;           // default frame index if RDOC_GOLD_FRAME_INDEX is not set.
+const char RDOC_ENV_VAR[] = "RDOC_GOLD_FRAME_INDEX";    // env variable for to-be-captured frame.
+const int kDefaultCaptureFrame = 5;    // default frame index if RDOC_GOLD_FRAME_INDEX is not set.
+int captureFrame = kDefaultCaptureFrame;
 int presentIndex = 0;
-bool IsTargetFrame = true;      // default value doesn't matter. It's properly set in CreateInstance.
+bool IsTargetFrame = true;    // default value doesn't matter. It's properly set in CreateInstance.
 
 AuxVkTraceResources aux;
 
@@ -90,15 +90,13 @@ void IsRenderDocLoaded() {
   capture.loaded = (rdoc != NULL);
 #elif defined(__linux)
   const char* renderdoc = "librenderdoc.so";
-  const char* ld_preload = getenv("LD_PRELOAD");
-  if (ld_preload == NULL) ld_preload = "";
-  printf("$LD_PRELOAD is %s", ld_preload);
+  std::string ld_preload = GetEnvString("LD_PRELOAD");
+  printf("$LD_PRELOAD is %s", ld_preload.c_str());
   void* rdoc = dlopen(renderdoc, RTLD_NOLOAD);
   const char* dl_error = dlerror();
   if (dl_error != NULL) printf("RenderDoc dlopen error: %s", dl_error);
   if (rdoc == NULL) {
-    const char* find = strstr(ld_preload, renderdoc);
-    if (find != NULL) capture.loaded = true;
+    capture.loaded = (ld_preload.find(renderdoc) != std::string::npos);
   } else {
     capture.loaded = true;
   }
@@ -157,10 +155,9 @@ void DelayedCaptureCheck() {
 VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkInstance *pInstance)
 {
-  char *envVal = getenv(RDOC_ENV_VAR);
-  if (envVal != NULL)
-    captureFrame = atoi(envVal);
-  IsTargetFrame = presentIndex == captureFrame; // if captureFrame is '0', first frame needs to save images.
+  captureFrame = GetEnvInt(RDOC_ENV_VAR, kDefaultCaptureFrame);
+  // if captureFrame is '0', first frame needs to save images.
+  IsTargetFrame = presentIndex == captureFrame;
 
   IsRenderDocLoaded();
 

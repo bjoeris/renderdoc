@@ -606,12 +606,12 @@ void shim_vkCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_
   {
     fn(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
     char infoStr[256];
-    sprintf(infoStr,
-            "Vertex Count: %d "
-            "Instance Count: %d "
-            "First Vertex: %d "
-            "First Instance: %d ",
-            vertexCount, instanceCount, firstVertex, firstInstance);
+    snprintf(infoStr, sizeof(infoStr),
+             "Vertex Count: %d "
+             "Instance Count: %d "
+             "First Vertex: %d "
+             "First Instance: %d ",
+             vertexCount, instanceCount, firstVertex, firstInstance);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
   }
@@ -638,13 +638,13 @@ void shim_vkCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, u
   {
     fn(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     char infoStr[256];
-    sprintf(infoStr,
-            "Index Count: %d "
-            "Instance Count: %d "
-            "First Index: %d "
-            "Vertex Offset: %d "
-            "First Instance: %d ",
-            indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    snprintf(infoStr, sizeof(infoStr),
+             "Index Count: %d "
+             "Instance Count: %d "
+             "First Index: %d "
+             "Vertex Offset: %d "
+             "First Instance: %d ",
+             indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
   }
@@ -671,10 +671,10 @@ void shim_vkCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDe
   {
     fn(commandBuffer, buffer, offset, drawCount, stride);
     char infoStr[256];
-    sprintf(infoStr,
-            "Draw Count: %d "
-            "Stride Count: %d ",
-            drawCount, stride);
+    snprintf(infoStr, sizeof(infoStr),
+             "Draw Count: %d "
+             "Stride Count: %d ",
+             drawCount, stride);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
   }
@@ -701,14 +701,14 @@ void shim_vkCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffe
   {
     fn(commandBuffer, buffer, offset, drawCount, stride);
     char infoStr[256];
-    sprintf(infoStr,
-            "Offset: %" PRIu64
-            " "
-            "Draw Count: %u "
-            "Stride Count: %u ",
-            offset, drawCount, stride);
-aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
-return;
+    snprintf(infoStr, sizeof(infoStr),
+             "Offset: %" PRIu64
+             " "
+             "Draw Count: %u "
+             "Stride Count: %u ",
+             offset, drawCount, stride);
+    aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
+    return;
   }
   else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
   {
@@ -733,11 +733,11 @@ void shim_vkCmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uin
   {
     fn(commandBuffer, groupCountX, groupCountY, groupCountZ);
     char infoStr[256];
-    sprintf(infoStr,
-            "Groups X: %d "
-            "Groups Y: %d "
-            "Groups Z: %d ",
-            groupCountX, groupCountY, groupCountZ);
+    snprintf(infoStr, sizeof(infoStr),
+             "Groups X: %d "
+             "Groups Y: %d "
+             "Groups Z: %d ",
+             groupCountX, groupCountY, groupCountZ);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
   }
@@ -763,7 +763,7 @@ void shim_vkCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, 
   {
     fn(commandBuffer, buffer, offset);
     char infoStr[256];
-    sprintf(infoStr, "Offset: %" PRIu64 " ", offset);
+    snprintf(infoStr, sizeof(infoStr), "Offset: %" PRIu64 " ", offset);
     aux.cbCommandInfo[commandBuffer].push_back({__FUNCTION__, infoStr});
     return;
   }

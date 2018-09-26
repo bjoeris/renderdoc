@@ -216,3 +216,7 @@ bool IsExtEnabled(const char *const *extList, uint32_t count, const char *ext);
 bool IsExtSupported(VkPhysicalDevice physicalDevice, const char *ext);
 
 std::string StageProgressString(const char *stage, uint32_t i, uint32_t N);
+
+std::string GetEnvString(const char* envVarName);
+int GetEnvInt(const char* envVarName, int defVal = 0);
+FILE *OpenFile(char const* fileName, char const* mode);

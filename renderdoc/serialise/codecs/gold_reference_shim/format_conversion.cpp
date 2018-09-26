@@ -202,7 +202,7 @@ void histogramEqualization(T *data, uint32_t w, uint32_t h, uint32_t channels, L
   for(uint32_t c = 0; c < channels; c++)
   {
     denom[c] = maxV[c] - minV[c];
-    if(abs((long double)denom[c]) < FLT_EPSILON)
+    if(std::abs((long double)denom[c]) < FLT_EPSILON)
       denom[c] = LargeType(1.0);
   }
 
