@@ -1373,8 +1373,10 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
   std::string buffer_size = AddVar("uint64_t", "BufferSize", bufferID);
   if(size == "nullptr" || size == "NULL")
   {
+    // For images, no resource size will have been set.
+    // The stored buffer should just contain the image data, so load all of it.
+    RDCASSERT(img_it != tracker->ImageStateEnd());
     size = tracker->GetDataBlobVar(bufferID) + std::string(".size()");
-    RDCASSERT(0);    // TODO(akharlamov) when does this happen?
   }
   else if(hasAliasedResources)
   {
