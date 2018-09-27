@@ -19,35 +19,36 @@ const char fileData_1[] =
   "rors\" FALSE)\r\nOPTION(ENABLE_YETI \"Enable Yeti support\" OFF)\r\n\r\nIF (MSVC)\r\n  SET (CMAKE_CXX_FLAGS \"${CMAKE_CXX"
   "_FLAGS} /bigobj\")\r\n  IF (OPTION_TREAT_WARNINGS_AS_ERRORS)\r\n    SET (CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} /WX\")\r\n "
   " ENDIF (OPTION_TREAT_WARNINGS_AS_ERRORS)\r\nELSEIF (UNIX)\r\n  SET (CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} -Wno-narrowing\""
-  ")\r\nENDIF()\r\n\r\nSET (EXECUTABLE_OUTPUT_PATH \"${CMAKE_SOURCE_DIR}/Build${MACHINE_POSTFIX}\")\r\nSET (LIBRARY_OUTPUT_P"
-  "ATH    \"${CMAKE_SOURCE_DIR}/Build${MACHINE_POSTFIX}\")\r\n\r\nSET (DEBUG_POSTFIX \"_DEBUG\" CACHE STRING \"Debug Postfit"
-  "x\")\r\nSET (CMAKE_RELEASE_POSTFIX \"\" CACHE STRING \"Release Postfitx\")\r\nSET (CMAKE_MINSIZEREL_POSTFIX \"_MINSIZEREL"
-  "\" CACHE STRING \"Minimum Size Release Postfitx\")\r\nSET (CMAKE_RELWITHDEBINFO_POSTFIX \"_RELWITHDEBINFO\" CACHE STRING "
-  "\"Release With Debug Info Postfitx\")\r\n\r\n############################################################################"
-  "###\r\n# Function that changes output names, adding the prefix and postfix\r\n###########################################"
-  "####################################\r\nFUNCTION (SETUP_PROJECT target)\r\n  SET_TARGET_PROPERTIES (${target} PROPERTIES\r"
-  "\n                         OUTPUT_NAME_DEBUG   ${target}${MACHINE_POSTFIX}${DEBUG_POSTFIX}\r\n                         OU"
-  "TPUT_NAME_RELEASE ${target}${MACHINE_POSTFIX})\r\n  SET (USER_FILE ${target}.vcxproj.user)\r\n  SET (USERFILE_WORKING_DIR"
-  "ECTORY_DEBUG   ${WORKING_DIRECTORY_DEBUG}${target})\r\n  SET (USERFILE_WORKING_DIRECTORY_RELEASE ${WORKING_DIRECTORY_RELE"
-  "ASE}${target})\r\n  SET (OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR}/${USER_FILE})\r\n  CONFIGURE_FILE (${MSVS_USERFILE} ${OU"
-  "TPUT_PATH} @ONLY)\r\nENDFUNCTION ()\r\n\r\n##############################################################################"
-  "#\r\n# Search for Vulkan\r\n###############################################################################\r\nFIND_PACKA"
-  "GE (Vulkan)\r\n  MESSAGE (STATUS \"Vulkan SDK                : $ENV{VULKAN_SDK}\")\r\nIF (Vulkan_FOUND)\r\n  MESSAGE (STA"
-  "TUS \"Vulkan Includes           : ${Vulkan_INCLUDE_DIRS}\")\r\n  MESSAGE (STATUS \"Vulkan Libraries          : ${Vulkan_L"
-  "IBRARIES}\")\r\nELSE ()\r\n  MESSAGE (FATAL_ERROR \"Vulkan not found at $ENV{VULKAN_SDK}!\")\r\nENDIF ()\r\n\r\nADD_LIBRA"
-  "RY (vulkan STATIC IMPORTED)\r\n\r\nSET_TARGET_PROPERTIES (vulkan PROPERTIES\r\n                       INTERFACE_INCLUDE_D"
-  "IRECTORIES ${Vulkan_INCLUDE_DIRS}\r\n                       IMPORTED_LOCATION             ${Vulkan_LIBRARIES})\r\n\r\nSET"
-  "_PROPERTY(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT sample_cpp_trace)\r\n\r\n####################"
-  "###########################################################\r\n# List Cmake projects\r\n#################################"
-  "##############################################\r\nINCLUDE_DIRECTORIES(\"${CMAKE_SOURCE_DIR}\")\r\n\r\nADD_SUBDIRECTORY(\""
-  "${CMAKE_SOURCE_DIR}/sample_cpp_trace\"\r\n                 \"${CMAKE_BINARY_DIR}/sample_cpp_trace\")\r\nADD_SUBDIRECTORY("
-  "\"${CMAKE_SOURCE_DIR}/helper\"\r\n                 \"${CMAKE_BINARY_DIR}/helper\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_D"
-  "IR}/sample_cpp_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/sample_cpp_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_D"
-  "IR}/gold_reference_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/gold_reference_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_"
-  "SOURCE_DIR}/timestamp_profiling_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/timestamp_profiling_shim\")\r\nADD_SUBDI"
-  "RECTORY(\"${CMAKE_SOURCE_DIR}/amd_shader_info_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/amd_shader_info_shim\")\r\n"
-  "ADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/rdoc_auto_capture_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/rdoc_auto_captu"
-  "re_shim\")\r\n";
+  ")\r\nENDIF()\r\n\r\nIF (WIN32)\r\n  SET (PLATFORM_OUT_DIR \"win\")\r\nELSEIF (ENABLE_YETI)\r\n  SET (PLATFORM_OUT_DIR \"y"
+  "eti\")\r\nELSE ()\r\n  SET (PLATFORM_OUT_DIR \"linux\")\r\nENDIF()\r\n\r\nSET (EXECUTABLE_OUTPUT_PATH \"${CMAKE_SOURCE_DI"
+  "R}/_out/${PLATFORM_OUT_DIR}${MACHINE_POSTFIX}\")\r\nSET (LIBRARY_OUTPUT_PATH    \"${CMAKE_SOURCE_DIR}/_out/${PLATFORM_OUT"
+  "_DIR}${MACHINE_POSTFIX}\")\r\n\r\nSET (DEBUG_POSTFIX \"_DEBUG\" CACHE STRING \"Debug Postfix\")\r\nSET (CMAKE_RELEASE_POS"
+  "TFIX \"\" CACHE STRING \"Release Postfix\")\r\nSET (CMAKE_MINSIZEREL_POSTFIX \"_MINSIZEREL\" CACHE STRING \"Minimum Size "
+  "Release Postfix\")\r\nSET (CMAKE_RELWITHDEBINFO_POSTFIX \"_RELWITHDEBINFO\" CACHE STRING \"Release With Debug Info Postfi"
+  "x\")\r\n\r\n###############################################################################\r\n# Function that changes ou"
+  "tput names, adding the prefix and postfix\r\n############################################################################"
+  "###\r\nFUNCTION (SETUP_PROJECT target)\r\n  SET_TARGET_PROPERTIES (${target} PROPERTIES\r\n                         OUTPU"
+  "T_NAME_DEBUG   ${target}${MACHINE_POSTFIX}${DEBUG_POSTFIX}\r\n                         OUTPUT_NAME_RELEASE ${target}${MAC"
+  "HINE_POSTFIX})\r\n  SET (USER_FILE ${target}.vcxproj.user)\r\n  SET (USERFILE_WORKING_DIRECTORY_DEBUG   ${WORKING_DIRECTO"
+  "RY_DEBUG}${target})\r\n  SET (USERFILE_WORKING_DIRECTORY_RELEASE ${WORKING_DIRECTORY_RELEASE}${target})\r\n  SET (OUTPUT_"
+  "PATH ${CMAKE_CURRENT_BINARY_DIR}/${USER_FILE})\r\n  CONFIGURE_FILE (${MSVS_USERFILE} ${OUTPUT_PATH} @ONLY)\r\nENDFUNCTION"
+  " ()\r\n\r\n###############################################################################\r\n# Search for Vulkan\r\n####"
+  "###########################################################################\r\nFIND_PACKAGE (Vulkan)\r\n  MESSAGE (STATUS"
+  " \"Vulkan SDK                : $ENV{VULKAN_SDK}\")\r\nIF (Vulkan_FOUND)\r\n  MESSAGE (STATUS \"Vulkan Includes           "
+  ": ${Vulkan_INCLUDE_DIRS}\")\r\n  MESSAGE (STATUS \"Vulkan Libraries          : ${Vulkan_LIBRARIES}\")\r\nELSE ()\r\n  MES"
+  "SAGE (FATAL_ERROR \"Vulkan not found at $ENV{VULKAN_SDK}!\")\r\nENDIF ()\r\n\r\nADD_LIBRARY (vulkan STATIC IMPORTED)\r\n\r"
+  "\nSET_TARGET_PROPERTIES (vulkan PROPERTIES\r\n                       INTERFACE_INCLUDE_DIRECTORIES ${Vulkan_INCLUDE_DIRS}"
+  "\r\n                       IMPORTED_LOCATION             ${Vulkan_LIBRARIES})\r\n\r\nSET_PROPERTY(DIRECTORY ${CMAKE_CURRE"
+  "NT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT sample_cpp_trace)\r\n\r\n#####################################################"
+  "##########################\r\n# List Cmake projects\r\n##################################################################"
+  "#############\r\nINCLUDE_DIRECTORIES(\"${CMAKE_SOURCE_DIR}\")\r\n\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/sample_cpp_tr"
+  "ace\"\r\n                 \"${CMAKE_BINARY_DIR}/sample_cpp_trace\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/helper\"\r\n"
+  "                 \"${CMAKE_BINARY_DIR}/helper\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/sample_cpp_shim\"\r\n         "
+  "        \"${CMAKE_BINARY_DIR}/sample_cpp_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/gold_reference_shim\"\r\n     "
+  "            \"${CMAKE_BINARY_DIR}/gold_reference_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/timestamp_profiling_sh"
+  "im\"\r\n                 \"${CMAKE_BINARY_DIR}/timestamp_profiling_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/amd_"
+  "shader_info_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/amd_shader_info_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE"
+  "_DIR}/rdoc_auto_capture_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/rdoc_auto_capture_shim\")\r\n";
 const char fileData_2[] =
   "\xef\xbb\xbf<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Project ToolsVersion=\"4.0\" xmlns=\"http://schemas.microsoft."
   "com/developer/msbuild/2003\">\r\n  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|@USERFILE_PLATFORM@'"
@@ -59,28 +60,29 @@ const char fileData_2[] =
   "DIRECTORY_RELEASE@</LocalDebuggerWorkingDirectory>\r\n    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>\r\n  </Pr"
   "opertyGroup>\r\n</Project>";
 const char fileData_3[] =
-  "rd /s /q Win_VS2015x64\r\nmkdir Win_VS2015x64\r\nrd /s /q build_x64\r\nmkdir build_x64\\Debug\r\nmkdir build_x64\\Release"
-  "\r\ncmake.exe -Wno-dev -G \"Visual Studio 14 2015 Win64\" --build \"\" -H. -BWin_VS2015x64\r\npause\r\n";
+  "@echo off\r\nsetlocal enableextensions\r\nrd /s /q _build_files\\win_vs2015x64 2>nul\r\nmkdir _build_files\\win_vs2015x64"
+  "\r\ncmake.exe -Wno-dev -G \"Visual Studio 14 2015 Win64\" -B_build_files\\win_vs2015x64\r\nexit /b %errorlevel%\r\n";
 const char fileData_4[] =
-  "rd /s /q Win_VS2015x64_Ninja\r\nmkdir Win_VS2015x64_Ninja\r\nrd /s /q build_x64\r\nmkdir build_x64\\Debug\r\nmkdir build_"
-  "x64\\Release\r\ncall \"C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat\" x64\r\ncmake.exe -Wno-d"
-  "ev -G Ninja --build \"\" -H. -BWin_VS2015x64_Ninja -DCMAKE_BUILD_TYPE=Release\r\ncd Win_VS2015x64_Ninja\r\nninja\r\ncd .."
-  " /\r\npause\r\n";
+  "@echo off\r\nsetlocal enableextensions\r\nrd /s /q _build_files\\win_vs2015x64_ninja 2>nul\r\nmkdir _build_files\\win_vs2"
+  "015x64_ninja\r\ncall \"C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat\" x64\r\ncmake.exe -Wno-d"
+  "ev -G Ninja --build \"\" -H. -B_build_files\\win_vs2015x64_ninja -DCMAKE_BUILD_TYPE=Release\r\nninja -C _build_files\\win"
+  "_vs2015x64_ninja\r\nexit /b %errorlevel%\r\n";
 const char fileData_5[] =
-  "rd /s /q Win_VS2017x64\r\nmkdir Win_VS2017x64\r\nrd /s /q build_x64\r\nmkdir build_x64\\Debug\r\nmkdir build_x64\\Release"
-  "\r\ncmake.exe -Wno-dev -G \"Visual Studio 15 2017 Win64\" --build \"\" -H. -BWin_VS2017x64\r\npause";
+  "@echo off\r\nsetlocal enableextensions\r\nrd /s /q _build_files\\win_vs2017x64 2>nul\r\nmkdir _build_files\\win_vs2017x64"
+  "\r\ncmake.exe -Wno-dev -G \"Visual Studio 15 2017 Win64\" -B_build_files\\win_vs2017x64\r\nexit /b %errorlevel%\r\n";
 const char fileData_6[] =
-  "rd /s /q Win_VS2017x64_Ninja\r\nmkdir Win_VS2017x64_Ninja\r\nrd /s /q build_x64\r\nmkdir build_x64\\Debug\r\nmkdir build_"
-  "x64\\Release\r\ncall \"C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Professional\\VC\\Auxiliary\\Build\\vcvars"
-  "all.bat\" x64\r\ncmake.exe -Wno-dev -G Ninja --build \"\" -H. -BWin_VS2017x64_Ninja -DCMAKE_BUILD_TYPE=Release\r\ncd Win_"
-  "VS2017x64_Ninja\r\nninja\r\ncd .. /\r\npause\r\n";
+  "@echo off\r\nsetlocal enableextensions\r\nrd /s /q _build_files\\win_vs2017x64_ninja 2>nul\r\nmkdir _build_files\\win_vs2"
+  "017x64_ninja\r\ncall \"C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Professional\\VC\\Auxiliary\\Build\\vcvars"
+  "all.bat\" x64\r\ncmake.exe -Wno-dev -G Ninja --build \"\" -H. -B_build_files\\win_vs2017x64_ninja -DCMAKE_BUILD_TYPE=Rele"
+  "ase\r\nninja -C _build_files\\win_vs2017x64_ninja\r\nexit /b %errorlevel%\r\n";
 const char fileData_7[] =
-  "which cmake && which ninja && export CC=clang && export CXX=clang++ && rm -rf linux_build && mkdir linux_build && cd linu"
-  "x_build && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release .. && ninja && echo \"Build complete\"\r\n";
+  "which cmake && which ninja && export CC=clang && export CXX=clang++ && rm -rf _build_files/linux_build && mkdir -p _build"
+  "_files/linux_build && cmake -G Ninja --build \"\" -B_build_files/linux_build -H. -DCMAKE_BUILD_TYPE=Release && ninja -C _"
+  "build_files/linux_build && echo \"Build complete\"\r\n";
 const char fileData_8[] =
-  "which cmake && which ninja && rm -rf yeti_build && mkdir yeti_build && cd yeti_build && cmake -G Ninja -DCMAKE_BUILD_TYPE"
-  "=Release -DENABLE_YETI=ON -DCMAKE_TOOLCHAIN_FILE=\"$YETI_SDK_PATH/cmake/yeti.cmake\" .. && ninja && echo \"Build complete"
-  "\"";
+  "which cmake && which ninja && rm -rf _build_files/yeti_build && mkdir -p _build_files/yeti_build && cmake -G Ninja --buil"
+  "d \"\" -B_build_files/yeti_build -H. -DCMAKE_BUILD_TYPE=Release -DENABLE_YETI=ON -DCMAKE_TOOLCHAIN_FILE=\"$YETI_SDK_PATH/"
+  "cmake/yeti.cmake\" && ninja -C _build_files/yeti_build && echo \"Build complete\"\r\n";
 const char fileData_9[] =
   "SET (THIS_PROJECT_NAME amd_shader_info_shim)\r\nPROJECT(${THIS_PROJECT_NAME})\r\n\r\nADD_LIBRARY(${THIS_PROJECT_NAME} SHA"
   "RED \"shim_vulkan.h\" \"shim_vulkan.cpp\" \"utils.h\" \"utils.cpp\")\r\n\r\nTARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAM"
@@ -9980,9 +9982,7 @@ const char fileData_25[] =
   "      vulkan\r\n                      helper)\r\n\r\nSET_TARGET_PROPERTIES(${THIS_PROJECT_NAME} PROPERTIES\r\n           "
   "           OUTPUT_NAME shim_vulkan\r\n                      ARCHIVE_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJ"
   "ECT_NAME}\"\r\n                      RUNTIME_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n        "
-  "              LIBRARY_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\")\r\n\r\nADD_CUSTOM_COMMAND(TARGET "
-  "${THIS_PROJECT_NAME} POST_BUILD\r\n    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${THIS_PROJECT_NAME}> ${WORKING_DIR"
-  "ECTORY_DEBUG}sample_cpp_trace)\r\n";
+  "              LIBRARY_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\")\r\n";
 const char fileData_26[] = {
   '/','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*',
   '*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*',
@@ -18896,9 +18896,7 @@ const char fileData_37[] =
   "                helper)\r\n\r\nSET_TARGET_PROPERTIES(${THIS_PROJECT_NAME} PROPERTIES\r\n                      OUTPUT_NAME"
   " shim_vulkan\r\n                      ARCHIVE_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n       "
   "               RUNTIME_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      LIBRARY_"
-  "OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\")\r\n\r\nADD_CUSTOM_COMMAND(TARGET ${THIS_PROJECT_NAME} P"
-  "OST_BUILD\r\n    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${THIS_PROJECT_NAME}> ${WORKING_DIRECTORY_DEBUG}sample_cp"
-  "p_trace)\r\n";
+  "OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\")\r\n";
 const char fileData_38[] =
   "#ifndef SHIM_VK_COMPILE_STATIC_LIB\r\n#define SHIM_VK_EXPORT\r\n#endif\r\n#include <cinttypes>\r\n#include <map>\r\n#incl"
   "ude <unordered_map>\r\n#include <set>\r\n\r\n#include <assert.h>\r\n\r\n#include \"helper/helper.h\"\r\n#include \"shim_v"
@@ -22968,14 +22966,14 @@ const char fileData_42[] =
 }    // namespace
 
 TemplateFileDesc CodeWriter::TemplateFiles[] = {
-  {R"(CMakeLists.txt)", 4892, fileData_1},
+  {R"(CMakeLists.txt)", 5079, fileData_1},
   {R"(Template.user)", 944, fileData_2},
-  {R"(build_vs2015.bat)", 204, fileData_3},
-  {R"(build_vs2015_ninja.bat)", 346, fileData_4},
-  {R"(build_vs2017.bat)", 202, fileData_5},
-  {R"(build_vs2017_ninja.bat)", 375, fileData_6},
-  {R"(build_xlib.sh)", 212, fileData_7},
-  {R"(build_yeti.sh)", 240, fileData_8},
+  {R"(build_vs2015.bat)", 219, fileData_3},
+  {R"(build_vs2015_ninja.bat)", 379, fileData_4},
+  {R"(build_vs2017.bat)", 219, fileData_5},
+  {R"(build_vs2017_ninja.bat)", 408, fileData_6},
+  {R"(build_xlib.sh)", 290, fileData_7},
+  {R"(build_yeti.sh)", 319, fileData_8},
   {R"(amd_shader_info_shim/CMakeLists.txt)", 914, fileData_9},
   {R"(amd_shader_info_shim/shim_vulkan.cpp)", 115077, fileData_10},
   {R"(amd_shader_info_shim/shim_vulkan.h)", 63508, fileData_11},
@@ -22992,7 +22990,7 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(helper/format_size_and_aspect.cpp)", 39439, fileData_22},
   {R"(helper/helper.cpp)", 33608, fileData_23},
   {R"(helper/helper.h)", 10008, fileData_24},
-  {R"(sample_cpp_shim/CMakeLists.txt)", 1066, fileData_25},
+  {R"(sample_cpp_shim/CMakeLists.txt)", 887, fileData_25},
   {R"(sample_cpp_shim/shim_vulkan.cpp)", 110372, fileData_26},
   {R"(sample_cpp_shim/shim_vulkan.h)", 63508, fileData_27},
   {R"(sample_cpp_trace/CMakeLists.txt)", 2306, fileData_28},
@@ -23004,7 +23002,7 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(rdoc_auto_capture_shim/renderdoc_app.h)", 26597, fileData_34},
   {R"(rdoc_auto_capture_shim/shim_vulkan.cpp)", 113047, fileData_35},
   {R"(rdoc_auto_capture_shim/shim_vulkan.h)", 63508, fileData_36},
-  {R"(timestamp_profiling_shim/CMakeLists.txt)", 1279, fileData_37},
+  {R"(timestamp_profiling_shim/CMakeLists.txt)", 1100, fileData_37},
   {R"(timestamp_profiling_shim/shim_vulkan.cpp)", 60641, fileData_38},
   {R"(timestamp_profiling_shim/shim_vulkan.h)", 62188, fileData_39},
   {R"(timestamp_profiling_shim/shim_vulkan_base.cpp)", 89186, fileData_40},
