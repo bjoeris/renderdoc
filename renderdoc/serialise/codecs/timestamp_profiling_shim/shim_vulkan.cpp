@@ -727,8 +727,8 @@ void shim_vkCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffe
             "Draw Count: %u "
             "Stride Count: %u ",
             offset, drawCount, stride);
-aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
-return;
+    aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
+    return;
   }
   else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
   {
@@ -1248,11 +1248,11 @@ void shim_vkCmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents cont
   {
     if (wasInline)
       vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-                        aux.queryInc(commandBuffer));
+                          aux.queryInc(commandBuffer));
     fn(commandBuffer, contents);
     if (isInline)
       vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-                        aux.queryInc(commandBuffer));
+                          aux.queryInc(commandBuffer));
 
     aux.isInline(commandBuffer, isInline);
   }

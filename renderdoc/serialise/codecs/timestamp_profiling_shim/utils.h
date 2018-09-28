@@ -30,8 +30,8 @@ struct TimestampContext
 
 struct CommandInfo
 {
-  std::string name = "";
-  std::string info = "";
+  std::string name;
+  std::string info;
   uint32_t timestamps = 2;
   bool isInlinedSubpass = true;
 
@@ -62,8 +62,6 @@ typedef std::vector<ExecuteCommandBuffer> ExecCmdBufVec;
 
 struct ShimVkTraceResources : public AuxVkTraceResources
 {
-public:
-
   std::map<VkQueue, ExecCmdBufVec> cbSubmitOrder;
   std::map<VkCommandBuffer, CommandInfoDesc> cbCommandInfo;
   std::map<VkCommandBuffer, TupleVec> cbAccumTimestamps;
