@@ -900,6 +900,7 @@ void RenderDoc::BecomeRemoteServer(const char *listenhost, uint16_t port,
   while(!killReplay())
   {
     Network::Socket *client = sock->AcceptClient(false);
+    client->SetTimeout(90000);
 
     if(activeClientData && activeClientData->killServer)
       break;
@@ -1837,7 +1838,7 @@ RENDERDOC_CreateRemoteServerConnection(const char *host, uint32_t port, IRemoteS
       port += RenderDoc_AndroidPortOffset * (index + 1);
   }
 
-  Network::Socket *sock = Network::CreateClientSocket(s.c_str(), (uint16_t)port, 750);
+  Network::Socket *sock = Network::CreateClientSocket(s.c_str(), (uint16_t)port, 90000);
 
   if(sock == NULL)
     return ReplayStatus::NetworkIOFailed;
