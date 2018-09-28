@@ -15,6 +15,7 @@ readonly BUILD_TARGETS=(
   "//cloud/yeti:yeti_internal_sdk_headers"
   "//cloud/yeti_c:yeti_c_internal_sdk_headers"
   "//common/libs/version:version_internal_sdk_headers"
+  "//graphics/packaging:sysroot_pkg"
 )
 readonly RENDERDOC_ARTIFACTS=(
   "renderdoccmd"
@@ -70,6 +71,9 @@ function build_yeti_components() {
     "${BASE_SDK_HEADERS}/"
   cp -a "${bazel_genfiles}/common/libs/version/internal_sdk/yeti_c/version.h" \
     "${BASE_SDK_HEADERS}/yeti_c/"
+  tar -C "${BASE_SDK_HEADERS}/" -zxvf \
+    "${bazel_bin}/graphics/packaging/sysroot_pkg.tar.gz" \
+    ./usr/include/vulkan --strip-components=3
 
   popd &> /dev/null
 }
