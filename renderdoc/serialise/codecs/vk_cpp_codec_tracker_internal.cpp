@@ -49,19 +49,22 @@ void TraceTracker::CreateDeviceInternal(ExtObject *o)
   ExtObject *ci = o->At(1);
   ExtObject *extensions = ci->At(8);
   // Reorder extensions and move VK_EXT_debug_marker to the end if needed.
-  std::string debug_marker("VK_EXT_debug_marker");
+  std::string debug_marker(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
   ExtObject *debugMarker = NULL;
   for(uint64_t i = 0; i < extensions->Size(); i++)
   {
     if(debug_marker == extensions->At(i)->Str())
     {
-      debugMarker = extensions->At(i);
-      extensions->RemoveOne(i);
-      break;
+      if (debugMarker == NULL)
+        debugMarker = as_ext(extensions->At(i)->Duplicate());
+      extensions->RemoveOne(i); // continue, there can be more than one!
     }
   }
   if(debugMarker)
     extensions->PushOne(debugMarker);
+  ExtObject *extensionCount = ci->At(7);
+  extensionCount->U64() = extensions->Size();
+
   TrackVarInMap(resources, "VkSemaphore", "aux.semaphore", ACQUIRE_SEMAPHORE_VAR_ID);
 
   queueFamilyPropertiesStr = code->MakeVarName("VkQueueFamilyProperties", PhysDevID());
