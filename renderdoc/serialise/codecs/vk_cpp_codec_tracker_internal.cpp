@@ -51,13 +51,15 @@ void TraceTracker::CreateDeviceInternal(ExtObject *o)
   // Reorder extensions and move VK_EXT_debug_marker to the end if needed.
   std::string debug_marker(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
   ExtObject *debugMarker = NULL;
-  for(uint64_t i = 0; i < extensions->Size(); i++)
+  for(uint64_t i = 0; i < extensions->Size();)
   {
     if(debug_marker == extensions->At(i)->Str())
     {
       if (debugMarker == NULL)
         debugMarker = as_ext(extensions->At(i)->Duplicate());
       extensions->RemoveOne(i); // continue, there can be more than one!
+    } else {
+      i++;
     }
   }
   if(debugMarker)
