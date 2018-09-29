@@ -61,7 +61,8 @@ const char fileData_2[] =
   "opertyGroup>\r\n</Project>";
 const char fileData_3[] =
   "@echo off\r\nsetlocal enableextensions\r\nrd /s /q _build_files\\win_vs2015x64 2>nul\r\nmkdir _build_files\\win_vs2015x64"
-  "\r\ncmake.exe -Wno-dev -G \"Visual Studio 14 2015 Win64\" -B_build_files\\win_vs2015x64\r\nexit /b %errorlevel%\r\n";
+  "\r\ncmake.exe -Wno-dev -G \"Visual Studio 14 2015 Win64\" \"\" -H. -B_build_files\\win_vs2015x64\r\nexit /b %errorlevel%\r"
+  "\n";
 const char fileData_4[] =
   "@echo off\r\nsetlocal enableextensions\r\nrd /s /q _build_files\\win_vs2015x64_ninja 2>nul\r\nmkdir _build_files\\win_vs2"
   "015x64_ninja\r\ncall \"C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat\" x64\r\ncmake.exe -Wno-d"
@@ -23007,7 +23008,7 @@ const char fileData_42[] =
 TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(CMakeLists.txt)", 5079, fileData_1},
   {R"(Template.user)", 944, fileData_2},
-  {R"(build_vs2015.bat)", 219, fileData_3},
+  {R"(build_vs2015.bat)", 226, fileData_3},
   {R"(build_vs2015_ninja.bat)", 379, fileData_4},
   {R"(build_vs2017.bat)", 219, fileData_5},
   {R"(build_vs2017_ninja.bat)", 408, fileData_6},
