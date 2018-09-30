@@ -90,13 +90,13 @@ struct D3D12QuadOverdrawCallback : public D3D12DrawcallCallback
         {
           if(modsig.params[i].ParameterType == D3D12_ROOT_PARAMETER_TYPE_UAV)
           {
-            modsig.params[i].Descriptor.RegisterSpace = modsig.numSpaces;
+            modsig.params[i].Descriptor.RegisterSpace = modsig.maxSpaceIndex;
           }
           else if(modsig.params[i].ParameterType == D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE)
           {
             for(size_t r = 0; r < modsig.params[i].ranges.size(); r++)
             {
-              modsig.params[i].ranges[r].RegisterSpace = modsig.numSpaces;
+              modsig.params[i].ranges[r].RegisterSpace = modsig.maxSpaceIndex;
             }
           }
         }
@@ -480,6 +480,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
       psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = 0xf;
       psoDesc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
+      RDCEraseEl(psoDesc.RTVFormats.RTFormats);
       psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
       psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;
@@ -554,6 +555,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
       psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = 0xf;
       psoDesc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
+      RDCEraseEl(psoDesc.RTVFormats.RTFormats);
       psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
       psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;
@@ -648,6 +650,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
       psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = 0xf;
       psoDesc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
+      RDCEraseEl(psoDesc.RTVFormats.RTFormats);
       psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
       psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;
@@ -833,6 +836,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       pipeDesc.SampleDesc.Count = 1;
       pipeDesc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
 
+      RDCEraseEl(pipeDesc.RTVFormats.RTFormats);
       pipeDesc.RTVFormats.NumRenderTargets = 1;
       pipeDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
       pipeDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
@@ -1160,6 +1164,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
         psoDesc.DepthStencilState.DepthBoundsTestEnable = FALSE;
       }
 
+      RDCEraseEl(psoDesc.RTVFormats.RTFormats);
       psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
       psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;

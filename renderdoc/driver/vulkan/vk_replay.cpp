@@ -549,7 +549,7 @@ void VulkanReplay::PickPixel(ResourceId texture, uint32_t x, uint32_t y, uint32_
       // only write stencil to .y
       if(pass == 1)
       {
-        pixel[1] = ((uint32_t *)pData)[1] / 255.0f;
+        pixel[1] = ((uint32_t *)pData)[0] / 255.0f;
       }
       else
       {
@@ -2033,9 +2033,7 @@ bool VulkanReplay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t m
 
   uint32_t *buckets = (uint32_t *)m_Histogram.m_HistogramReadback.Map(NULL);
 
-  histogram.resize(HGRAM_NUM_BUCKETS);
-  for(size_t i = 0; i < HGRAM_NUM_BUCKETS; i++)
-    histogram[i] = buckets[i * 4];
+  histogram.assign(buckets, buckets + HGRAM_NUM_BUCKETS);
 
   m_Histogram.m_HistogramReadback.Unmap();
 
@@ -2837,6 +2835,9 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
   }
   else
   {
+    if(imInfo.type == VK_IMAGE_TYPE_3D)
+      copyregion[0].imageSubresource.baseArrayLayer = 0;
+
     // copy from desired subresource in srcImage to buffer
     vt->CmdCopyImageToBuffer(Unwrap(cmd), srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                              readbackBuf, 1, copyregion);
@@ -3405,7 +3406,7 @@ ReplayStatus Vulkan_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
 
   Process::ApplyEnvironmentModification();
 
-  void *module = Process::LoadModule(VulkanLibraryName);
+  void *module = LoadVulkanLibrary();
 
   if(module == NULL)
   {

@@ -830,6 +830,9 @@
     <ClCompile Include="3rdparty\miniz\miniz.c">
       <Filter>3rdparty\miniz</Filter>
     </ClCompile>
+    <ClCompile Include="common\threading_tests.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
     <ClCompile Include="serialise\codecs\vk_cpp_codec.cpp">
       <Filter>Common\Serialise\Codecs\CPP</Filter>
     </ClCompile>

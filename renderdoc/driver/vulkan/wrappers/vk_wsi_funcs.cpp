@@ -646,7 +646,7 @@ VkResult WrappedVulkan::vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR 
   unwrappedInfo.pWaitSemaphores = unwrappedInfo.waitSemaphoreCount ? &unwrappedSems[0] : NULL;
 
   // Don't support any extensions for present info
-  const VkGenericStruct *next = (const VkGenericStruct *)pPresentInfo->pNext;
+  const VkBaseInStructure *next = (const VkBaseInStructure *)pPresentInfo->pNext;
   while(next)
   {
     // allowed (and ignored) pNext structs
@@ -1000,6 +1000,40 @@ VkResult WrappedVulkan::vkGetPhysicalDeviceSurfaceFormats2KHR(
   return ObjDisp(physicalDevice)
       ->GetPhysicalDeviceSurfaceFormats2KHR(Unwrap(physicalDevice), &unwrapped, pSurfaceFormatCount,
                                             pSurfaceFormats);
+}
+
+VkResult WrappedVulkan::vkGetPhysicalDeviceDisplayProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                                 uint32_t *pPropertyCount,
+                                                                 VkDisplayProperties2KHR *pProperties)
+{
+  return ObjDisp(physicalDevice)
+      ->GetPhysicalDeviceDisplayProperties2KHR(Unwrap(physicalDevice), pPropertyCount, pProperties);
+}
+
+VkResult WrappedVulkan::vkGetPhysicalDeviceDisplayPlaneProperties2KHR(
+    VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount,
+    VkDisplayPlaneProperties2KHR *pProperties)
+{
+  return ObjDisp(physicalDevice)
+      ->GetPhysicalDeviceDisplayPlaneProperties2KHR(Unwrap(physicalDevice), pPropertyCount,
+                                                    pProperties);
+}
+
+VkResult WrappedVulkan::vkGetDisplayModeProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                       VkDisplayKHR display, uint32_t *pPropertyCount,
+                                                       VkDisplayModeProperties2KHR *pProperties)
+{
+  // displays are not wrapped
+  return ObjDisp(physicalDevice)
+      ->GetDisplayModeProperties2KHR(Unwrap(physicalDevice), display, pPropertyCount, pProperties);
+}
+
+VkResult WrappedVulkan::vkGetDisplayPlaneCapabilities2KHR(
+    VkPhysicalDevice physicalDevice, const VkDisplayPlaneInfo2KHR *pDisplayPlaneInfo,
+    VkDisplayPlaneCapabilities2KHR *pCapabilities)
+{
+  return ObjDisp(physicalDevice)
+      ->GetDisplayPlaneCapabilities2KHR(Unwrap(physicalDevice), pDisplayPlaneInfo, pCapabilities);
 }
 
 INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateSwapchainKHR, VkDevice device,

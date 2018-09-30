@@ -202,8 +202,7 @@ std::vector<ResourceId> GLReplay::GetTextures()
     auto &res = m_pDriver->m_Textures[it->first];
 
     // skip textures that aren't from the log (except the 'default backbuffer' textures)
-    if(res.resource.name != m_pDriver->m_FakeBB_Color &&
-       res.resource.name != m_pDriver->m_FakeBB_DepthStencil &&
+    if(!(res.creationFlags & TextureCategory::SwapBuffer) &&
        m_pDriver->GetResourceManager()->GetOriginalID(it->first) == it->first)
       continue;
 
@@ -489,8 +488,6 @@ void GLReplay::CacheTexture(ResourceId id)
   }
 
   tex.creationFlags = res.creationFlags;
-  if(res.resource.name == drv.m_FakeBB_Color || res.resource.name == drv.m_FakeBB_DepthStencil)
-    tex.creationFlags |= TextureCategory::SwapBuffer;
 
   // surely this will be the same for each level... right? that would be insane if it wasn't
   GLint fmt = 0;
@@ -1911,6 +1908,11 @@ void GLReplay::FillCBufferVariables(GLuint prog, bool bufferBacked, std::string 
   {
     const ShaderVariableDescriptor &desc = variables[i].type.descriptor;
 
+    // remove implicit '.' for recursing through "structs" if it's actually a multi-dimensional
+    // array.
+    if(!prefix.empty() && prefix.back() == '.' && variables[i].name[0] == '[')
+      prefix.pop_back();
+
     ShaderVariable var;
     var.name = variables[i].name;
     var.rows = desc.rows;
@@ -1988,7 +1990,12 @@ void GLReplay::FillCBufferVariables(GLuint prog, bool bufferBacked, std::string 
           for(uint32_t a = 0; a < desc.elements; a++)
           {
             ShaderVariable el = var;
-            el.name = StringFormat::Fmt("%s[%u]", var.name.c_str(), a);
+
+            // if this is the last part of a multidimensional array, don't include the variable name
+            if(var.name[0] != '[')
+              el.name = StringFormat::Fmt("%s[%u]", var.name.c_str(), a);
+            else
+              el.name = StringFormat::Fmt("[%u]", a);
 
             FillCBufferValue(prog, bufferBacked, values[0] + values[2] * a, values[1], data, el);
 
@@ -3429,7 +3436,7 @@ ReplayStatus GL_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
 
   if(!load_ok)
   {
-    RDCERR("Couldn't find required GLX function addresses");
+    RDCERR("Couldn't find required platform GL function addresses");
     return ReplayStatus::APIInitFailed;
   }
 

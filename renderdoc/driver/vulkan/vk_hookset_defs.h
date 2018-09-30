@@ -69,6 +69,18 @@
   HookDefine3(VkResult, vkGetFenceWin32HandleKHR, VkDevice, device,                              \
               const VkFenceGetWin32HandleInfoKHR *, pGetWin32HandleInfo, HANDLE *, pHandle);
 
+#elif defined(VK_USE_PLATFORM_MACOS_MVK)
+
+#define HookInitInstance_PlatformSpecific() \
+  HookInitExtension(VK_MVK_macos_surface, CreateMacOSSurfaceMVK);
+
+#define HookInitDevice_PlatformSpecific()
+
+#define HookDefine_PlatformSpecific()                                                          \
+  HookDefine4(VkResult, vkCreateMacOSSurfaceMVK, VkInstance, instance,                         \
+              const VkMacOSSurfaceCreateInfoMVK *, pCreateInfo, const VkAllocationCallbacks *, \
+              pAllocator, VkSurfaceKHR *, pSurface);
+
 #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
 
 #define HookInitInstance_PlatformSpecific() \
@@ -285,6 +297,7 @@
   CheckExt(KHR_xcb_surface, VKXX);                     \
   CheckExt(KHR_win32_surface, VKXX);                   \
   CheckExt(KHR_android_surface, VKXX);                 \
+  CheckExt(MVK_macos_surface, VKXX);                   \
   CheckExt(KHR_surface, VKXX);                         \
   CheckExt(EXT_debug_report, VKXX);                    \
   CheckExt(KHR_display, VKXX);                         \
@@ -299,7 +312,8 @@
   CheckExt(EXT_debug_utils, VKXX);                     \
   CheckExt(KHR_device_group_creation, VK11);           \
   CheckExt(protected_memory, VK11);                    \
-  CheckExt(KHR_get_surface_capabilities2, VKXX);
+  CheckExt(KHR_get_surface_capabilities2, VKXX);       \
+  CheckExt(KHR_get_display_properties2, VKXX);
 
 #define CheckDeviceExts()                         \
   CheckExt(EXT_debug_marker, VKXX);               \
@@ -332,7 +346,8 @@
   CheckExt(EXT_vertex_attribute_divisor, VKXX);   \
   CheckExt(EXT_sampler_filter_minmax, VKXX);      \
   CheckExt(KHR_sampler_ycbcr_conversion, VK11);   \
-  CheckExt(KHR_device_group, VK11);
+  CheckExt(KHR_device_group, VK11);               \
+  CheckExt(MVK_moltenvk, VKXX);
 
 #define HookInitVulkanInstanceExts()                                                                 \
   HookInitExtension(KHR_surface, DestroySurfaceKHR);                                                 \
@@ -382,6 +397,10 @@
   HookInitExtension(KHR_device_group_creation &&KHR_surface, GetPhysicalDevicePresentRectanglesKHR); \
   HookInitExtension(KHR_get_surface_capabilities2, GetPhysicalDeviceSurfaceFormats2KHR);             \
   HookInitExtension(KHR_get_surface_capabilities2, GetPhysicalDeviceSurfaceCapabilities2KHR);        \
+  HookInitExtension(KHR_get_display_properties2, GetPhysicalDeviceDisplayProperties2KHR);            \
+  HookInitExtension(KHR_get_display_properties2, GetPhysicalDeviceDisplayPlaneProperties2KHR);       \
+  HookInitExtension(KHR_get_display_properties2, GetDisplayModeProperties2KHR);                      \
+  HookInitExtension(KHR_get_display_properties2, GetDisplayPlaneCapabilities2KHR);                   \
   HookInitInstance_PlatformSpecific()
 
 #define HookInitVulkanDeviceExts()                                                                 \
@@ -937,6 +956,17 @@
   HookDefine4(VkResult, vkGetPhysicalDeviceSurfaceFormats2KHR, VkPhysicalDevice, physicalDevice,     \
               const VkPhysicalDeviceSurfaceInfo2KHR *, pSurfaceInfo, uint32_t *,                     \
               pSurfaceFormatCount, VkSurfaceFormat2KHR *, pSurfaceFormats);                          \
+  HookDefine3(VkResult, vkGetPhysicalDeviceDisplayProperties2KHR, VkPhysicalDevice,                  \
+              physicalDevice, uint32_t *, pPropertyCount, VkDisplayProperties2KHR *, pProperties);   \
+  HookDefine3(VkResult, vkGetPhysicalDeviceDisplayPlaneProperties2KHR, VkPhysicalDevice,             \
+              physicalDevice, uint32_t *, pPropertyCount, VkDisplayPlaneProperties2KHR *,            \
+              pProperties);                                                                          \
+  HookDefine4(VkResult, vkGetDisplayModeProperties2KHR, VkPhysicalDevice, physicalDevice,            \
+              VkDisplayKHR, display, uint32_t *, pPropertyCount, VkDisplayModeProperties2KHR *,      \
+              pProperties);                                                                          \
+  HookDefine3(VkResult, vkGetDisplayPlaneCapabilities2KHR, VkPhysicalDevice, physicalDevice,         \
+              const VkDisplayPlaneInfo2KHR *, pDisplayPlaneInfo, VkDisplayPlaneCapabilities2KHR *,   \
+              pCapabilities);                                                                        \
   HookDefine_PlatformSpecific()
 
 struct VkLayerInstanceDispatchTableExtended : VkLayerInstanceDispatchTable

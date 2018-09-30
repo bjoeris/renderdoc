@@ -1121,7 +1121,7 @@ void TextureViewer::UI_OnTextureSelectionChanged(bool newdraw)
   float curArea = area(curSize);
   float prevArea = area(m_PrevSize);
 
-  if(prevArea > 0.0f)
+  if(prevArea > 0.0f && m_PrevSize.width() > 0.0f)
   {
     float prevX = m_TexDisplay.xOffset;
     float prevY = m_TexDisplay.yOffset;
@@ -1965,18 +1965,18 @@ void TextureViewer::InitResourcePreview(ResourcePreview *prev, ResourceId id, Co
 
     prev->setResourceName(fullname);
 
-    WId handle = prev->thumbWinId();
+    WindowingData winData = m_Ctx.CreateWindowingData(prev->thumbWidget());
 
     if(m_Ctx.GetTexture(id))
     {
-      m_Ctx.Replay().AsyncInvoke([this, handle, id, typeHint](IReplayController *) {
-        m_Output->AddThumbnail(m_Ctx.CreateWindowingData(handle), id, typeHint);
+      m_Ctx.Replay().AsyncInvoke([this, winData, id, typeHint](IReplayController *) {
+        m_Output->AddThumbnail(winData, id, typeHint);
       });
     }
     else
     {
-      m_Ctx.Replay().AsyncInvoke([this, handle](IReplayController *) {
-        m_Output->AddThumbnail(m_Ctx.CreateWindowingData(handle), ResourceId(), CompType::Typeless);
+      m_Ctx.Replay().AsyncInvoke([this, winData](IReplayController *) {
+        m_Output->AddThumbnail(winData, ResourceId(), CompType::Typeless);
       });
     }
 
@@ -1991,9 +1991,9 @@ void TextureViewer::InitResourcePreview(ResourcePreview *prev, ResourceId id, Co
     prev->setActive(true);
     prev->setSelected(true);
 
-    WId handle = prev->thumbWinId();
-    m_Ctx.Replay().AsyncInvoke([this, handle](IReplayController *) {
-      m_Output->AddThumbnail(m_Ctx.CreateWindowingData(handle), ResourceId(), CompType::Typeless);
+    WindowingData winData = m_Ctx.CreateWindowingData(prev->thumbWidget());
+    m_Ctx.Replay().AsyncInvoke([this, winData](IReplayController *) {
+      m_Output->AddThumbnail(winData, ResourceId(), CompType::Typeless);
     });
   }
   else
@@ -2504,8 +2504,8 @@ void TextureViewer::OnCaptureLoaded()
 {
   Reset();
 
-  WId renderID = ui->render->winId();
-  WId contextID = ui->pixelContext->winId();
+  WindowingData renderData = m_Ctx.CreateWindowingData(ui->render);
+  WindowingData contextData = m_Ctx.CreateWindowingData(ui->pixelContext);
 
   ui->saveTex->setEnabled(true);
   ui->locationGoto->setEnabled(true);
@@ -2541,10 +2541,10 @@ void TextureViewer::OnCaptureLoaded()
       backCol.isValid() ? FloatVector(backCol.redF(), backCol.greenF(), backCol.blueF(), 1.0f)
                         : FloatVector();
 
-  m_Ctx.Replay().BlockInvoke([renderID, contextID, this](IReplayController *r) {
-    m_Output = r->CreateOutput(m_Ctx.CreateWindowingData(renderID), ReplayOutputType::Texture);
+  m_Ctx.Replay().BlockInvoke([renderData, contextData, this](IReplayController *r) {
+    m_Output = r->CreateOutput(renderData, ReplayOutputType::Texture);
 
-    m_Output->SetPixelContext(m_Ctx.CreateWindowingData(contextID));
+    m_Output->SetPixelContext(contextData);
 
     ui->render->setOutput(m_Output);
     ui->pixelContext->setOutput(m_Output);
@@ -3871,13 +3871,16 @@ void TextureViewer::on_customEdit_clicked()
   rdcstrpairs files;
   files.push_back(make_rdcpair<rdcstr, rdcstr>(filename, src));
 
+  QPointer<TextureViewer> thisPointer(this);
+
   IShaderViewer *s = m_Ctx.EditShader(
       true, ShaderStage::Fragment, lit("main"), files,
       IsD3D(m_Ctx.APIProps().localRenderer) ? ShaderEncoding::HLSL : ShaderEncoding::GLSL,
       ShaderCompileFlags(),
       // Save Callback
-      [this, key, filename, path](ICaptureContext *ctx, IShaderViewer *viewer, ShaderEncoding encoding,
-                                  ShaderCompileFlags flags, rdcstr entryFunc, bytebuf bytes) {
+      [thisPointer, key, filename, path](ICaptureContext *ctx, IShaderViewer *viewer,
+                                         ShaderEncoding encoding, ShaderCompileFlags flags,
+                                         rdcstr entryFunc, bytebuf bytes) {
         {
           QFile fileHandle(path);
           if(fileHandle.open(QFile::WriteOnly | QIODevice::Truncate | QIODevice::Text))
@@ -3886,18 +3889,25 @@ void TextureViewer::on_customEdit_clicked()
             fileHandle.close();
 
             // watcher doesn't trigger on internal modifications
-            reloadCustomShaders(filename);
+            if(thisPointer)
+              thisPointer->reloadCustomShaders(filename);
           }
           else
           {
-            RDDialog::critical(
-                this, tr("Cannot save shader"),
-                tr("Couldn't save file for shader %1\n%2").arg(filename).arg(fileHandle.errorString()));
+            if(thisPointer)
+            {
+              RDDialog::critical(
+                  thisPointer, tr("Cannot save shader"),
+                  tr("Couldn't save file for shader %1\n%2").arg(filename).arg(fileHandle.errorString()));
+            }
           }
         }
       },
 
-      [this, key](ICaptureContext *ctx) { m_CustomShaderEditor.remove(key); });
+      [thisPointer, key](ICaptureContext *ctx) {
+        if(thisPointer)
+          thisPointer->m_CustomShaderEditor.remove(key);
+      });
 
   m_CustomShaderEditor[key] = s;
 

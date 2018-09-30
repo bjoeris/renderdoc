@@ -621,6 +621,12 @@ static const VkExtensionProperties supportedExtensions[] = {
         VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME, VK_EXT_GLOBAL_PRIORITY_SPEC_VERSION,
     },
     {
+        VK_EXT_POST_DEPTH_COVERAGE_EXTENSION_NAME, VK_EXT_POST_DEPTH_COVERAGE_SPEC_VERSION,
+    },
+    {
+        VK_EXT_QUEUE_FAMILY_FOREIGN_EXTENSION_NAME, VK_EXT_QUEUE_FAMILY_FOREIGN_SPEC_VERSION,
+    },
+    {
         VK_EXT_SAMPLER_FILTER_MINMAX_EXTENSION_NAME, VK_EXT_SAMPLER_FILTER_MINMAX_SPEC_VERSION,
     },
     {
@@ -649,6 +655,9 @@ static const VkExtensionProperties supportedExtensions[] = {
 #endif
     {
         VK_KHR_16BIT_STORAGE_EXTENSION_NAME, VK_KHR_16BIT_STORAGE_SPEC_VERSION,
+    },
+    {
+        VK_KHR_8BIT_STORAGE_EXTENSION_NAME, VK_KHR_8BIT_STORAGE_SPEC_VERSION,
     },
 #ifdef VK_KHR_android_surface
     {
@@ -727,6 +736,9 @@ static const VkExtensionProperties supportedExtensions[] = {
     },
 #endif
     {
+        VK_KHR_GET_DISPLAY_PROPERTIES_2_EXTENSION_NAME, VK_KHR_GET_DISPLAY_PROPERTIES_2_SPEC_VERSION,
+    },
+    {
         VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, VK_KHR_GET_MEMORY_REQUIREMENTS_2_SPEC_VERSION,
     },
     {
@@ -781,6 +793,9 @@ static const VkExtensionProperties supportedExtensions[] = {
     {
         VK_KHR_VARIABLE_POINTERS_EXTENSION_NAME, VK_KHR_VARIABLE_POINTERS_SPEC_VERSION,
     },
+    {
+        VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME, VK_KHR_VULKAN_MEMORY_MODEL_SPEC_VERSION,
+    },
 #ifdef VK_KHR_win32_keyed_mutex
     {
         VK_KHR_WIN32_KEYED_MUTEX_EXTENSION_NAME, VK_KHR_WIN32_KEYED_MUTEX_SPEC_VERSION,
@@ -799,6 +814,11 @@ static const VkExtensionProperties supportedExtensions[] = {
 #ifdef VK_KHR_xlib_surface
     {
         VK_KHR_XLIB_SURFACE_EXTENSION_NAME, VK_KHR_XLIB_SURFACE_SPEC_VERSION,
+    },
+#endif
+#ifdef VK_MVK_macos_surface
+    {
+        VK_MVK_MACOS_SURFACE_EXTENSION_NAME, VK_MVK_MACOS_SURFACE_SPEC_VERSION,
     },
 #endif
     {
@@ -1261,44 +1281,30 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
 
     const SwapchainInfo &swapInfo = *swaprecord->swapInfo;
 
-    // since this happens during capture, we don't want to start serialising extra image creates,
+    // since this happens during capture, we don't want to start serialising extra buffer creates,
     // so we manually create & then just wrap.
-    VkImage readbackIm = VK_NULL_HANDLE;
+    VkBuffer readbackBuf = VK_NULL_HANDLE;
 
     VkResult vkr = VK_SUCCESS;
 
-    // create identical image
-    VkImageCreateInfo imInfo = {
-        VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+    // create readback buffer
+    VkBufferCreateInfo bufInfo = {
+        VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         NULL,
         0,
-        VK_IMAGE_TYPE_2D,
-        swapInfo.format,
-        {swapInfo.extent.width, swapInfo.extent.height, 1},
-        1,
-        1,
-        VK_SAMPLE_COUNT_1_BIT,
-        VK_IMAGE_TILING_LINEAR,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        VK_SHARING_MODE_EXCLUSIVE,
-        0,
-        NULL,
-        VK_IMAGE_LAYOUT_UNDEFINED,
+        GetByteSize(swapInfo.extent.width, swapInfo.extent.height, 1, swapInfo.format, 0),
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT,
     };
-    vt->CreateImage(Unwrap(device), &imInfo, NULL, &readbackIm);
+    vt->CreateBuffer(Unwrap(device), &bufInfo, NULL, &readbackBuf);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
-    GetResourceManager()->WrapResource(Unwrap(device), readbackIm);
-
-    VkImageSubresource subr = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0};
-    VkSubresourceLayout layout = {0};
-    vt->GetImageSubresourceLayout(Unwrap(device), Unwrap(readbackIm), &subr, &layout);
+    GetResourceManager()->WrapResource(Unwrap(device), readbackBuf);
 
     MemoryAllocation readbackMem =
-        AllocateMemoryForResource(readbackIm, MemoryScope::InitialContents, MemoryType::Readback);
+        AllocateMemoryForResource(readbackBuf, MemoryScope::InitialContents, MemoryType::Readback);
 
-    vkr = vt->BindImageMemory(Unwrap(device), Unwrap(readbackIm), Unwrap(readbackMem.mem),
-                              readbackMem.offs);
+    vkr = vt->BindBufferMemory(Unwrap(device), Unwrap(readbackBuf), Unwrap(readbackMem.mem),
+                               readbackMem.offs);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
     VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
@@ -1308,10 +1314,17 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
     vkr = vt->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
-    VkImageCopy cpy = {
-        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},           {0, 0, 0},
-        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},           {0, 0, 0},
-        {imInfo.extent.width, imInfo.extent.height, 1},
+    uint32_t rowPitch = GetByteSize(swapInfo.extent.width, 1, 1, swapInfo.format, 0);
+
+    VkBufferImageCopy cpy = {
+        0,
+        0,
+        0,
+        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        {
+            0, 0, 0,
+        },
+        {swapInfo.extent.width, swapInfo.extent.height, 1},
     };
 
     uint32_t swapQueueIndex = m_ImageLayouts[GetResID(backbuffer)].queueFamilyIndex;
@@ -1329,21 +1342,7 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
         {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
     };
 
-    VkImageMemoryBarrier readBarrier = {
-        VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        NULL,
-        0,
-        VK_ACCESS_TRANSFER_WRITE_BIT,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_QUEUE_FAMILY_IGNORED,
-        VK_QUEUE_FAMILY_IGNORED,
-        Unwrap(readbackIm),
-        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
-    };
-
     DoPipelineBarrier(cmd, 1, &bbBarrier);
-    DoPipelineBarrier(cmd, 1, &readBarrier);
 
     if(swapQueueIndex != m_QueueFamilyIdx)
     {
@@ -1359,21 +1358,28 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
       SubmitAndFlushExtQueue(swapQueueIndex);
     }
 
-    vt->CmdCopyImage(Unwrap(cmd), Unwrap(backbuffer), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                     Unwrap(readbackIm), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &cpy);
+    vt->CmdCopyImageToBuffer(Unwrap(cmd), Unwrap(backbuffer), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             Unwrap(readbackBuf), 1, &cpy);
 
     // barrier to switch backbuffer back to present layout
     std::swap(bbBarrier.oldLayout, bbBarrier.newLayout);
     std::swap(bbBarrier.srcAccessMask, bbBarrier.dstAccessMask);
     std::swap(bbBarrier.srcQueueFamilyIndex, bbBarrier.dstQueueFamilyIndex);
 
-    readBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    readBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
-    readBarrier.oldLayout = readBarrier.newLayout;
-    readBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    VkBufferMemoryBarrier bufBarrier = {
+        VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        NULL,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_ACCESS_HOST_READ_BIT,
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_QUEUE_FAMILY_IGNORED,
+        Unwrap(readbackBuf),
+        0,
+        bufInfo.size,
+    };
 
     DoPipelineBarrier(cmd, 1, &bbBarrier);
-    DoPipelineBarrier(cmd, 1, &readBarrier);
+    DoPipelineBarrier(cmd, 1, &bufBarrier);
 
     vkr = vt->EndCommandBuffer(Unwrap(cmd));
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
@@ -1416,13 +1422,14 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
 
     // point sample info into raw buffer
     {
-      ResourceFormat fmt = MakeResourceFormat(imInfo.format);
+      ResourceFormat fmt = MakeResourceFormat(swapInfo.format);
 
       byte *data = (byte *)pData;
 
-      data += layout.offset;
+      float widthf = float(swapInfo.extent.width);
+      float heightf = float(swapInfo.extent.height);
 
-      thwidth = (uint16_t)RDCMIN(maxSize, imInfo.extent.width);
+      thwidth = (uint16_t)RDCMIN(maxSize, swapInfo.extent.width);
       thwidth &= ~0x7;    // align down to multiple of 8
       thheight = uint16_t(thwidth * imInfo.extent.height / imInfo.extent.width);
 
@@ -1531,8 +1538,8 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
     vt->UnmapMemory(Unwrap(device), Unwrap(readbackMem.mem));
 
     // delete all
-    vt->DestroyImage(Unwrap(device), Unwrap(readbackIm), NULL);
-    GetResourceManager()->ReleaseWrappedResource(readbackIm);
+    vt->DestroyBuffer(Unwrap(device), Unwrap(readbackBuf), NULL);
+    GetResourceManager()->ReleaseWrappedResource(readbackBuf);
   }
 
   byte *buf = NULL;

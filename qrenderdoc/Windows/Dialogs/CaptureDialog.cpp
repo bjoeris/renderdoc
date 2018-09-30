@@ -568,7 +568,6 @@ bool CaptureDialog::checkAllowClose()
 void CaptureDialog::on_exePathBrowse_clicked()
 {
   QString initDir;
-  QString file;
 
   QFileInfo f(ui->exePath->text());
   QDir dir = f.dir();
@@ -576,18 +575,20 @@ void CaptureDialog::on_exePathBrowse_clicked()
   {
     initDir = dir.absolutePath();
   }
+  else if(m_Ctx.Replay().CurrentRemote())
+  {
+    initDir = m_Ctx.Replay().CurrentRemote()->lastCapturePath;
+  }
   else if(!m_Ctx.Config().LastCapturePath.isEmpty())
   {
     initDir = m_Ctx.Config().LastCapturePath;
-    if(!m_Ctx.Config().LastCaptureExe.isEmpty())
-      file = m_Ctx.Config().LastCaptureExe;
   }
 
   QString filename;
 
   if(m_Ctx.Replay().CurrentRemote())
   {
-    VirtualFileDialog vfd(m_Ctx, this);
+    VirtualFileDialog vfd(m_Ctx, initDir, this);
     RDDialog::show(&vfd);
     filename = vfd.chosenPath();
   }
@@ -609,26 +610,31 @@ void CaptureDialog::on_exePathBrowse_clicked()
 
 void CaptureDialog::on_workDirBrowse_clicked()
 {
-  QString initDir;
+  QString initDir = ui->workDirPath->text();
 
-  if(QDir(ui->workDirPath->text()).exists())
+  if(initDir.isEmpty())
   {
-    initDir = ui->workDirPath->text();
-  }
-  else
-  {
-    QDir dir = QFileInfo(ui->exePath->text()).dir();
-    if(dir.exists())
-      initDir = dir.absolutePath();
-    else if(!m_Ctx.Config().LastCapturePath.isEmpty())
-      initDir = m_Ctx.Config().LastCapturePath;
+    if(m_Ctx.Replay().CurrentRemote())
+    {
+      initDir = m_Ctx.Replay().CurrentRemote()->lastCapturePath;
+    }
+    else if(!QDir(initDir).exists())
+    {
+      QDir dir = QFileInfo(ui->exePath->text()).dir();
+      if(dir.exists())
+        initDir = dir.absolutePath();
+      else if(!m_Ctx.Config().LastCapturePath.isEmpty())
+        initDir = m_Ctx.Config().LastCapturePath;
+      else
+        initDir = QString();
+    }
   }
 
   QString dir;
 
   if(m_Ctx.Replay().CurrentRemote())
   {
-    VirtualFileDialog vfd(m_Ctx, this);
+    VirtualFileDialog vfd(m_Ctx, initDir, this);
     vfd.setDirBrowse();
     RDDialog::show(&vfd);
     dir = vfd.chosenPath();
@@ -924,11 +930,33 @@ void CaptureDialog::SetExecutableFilename(const rdcstr &filename)
 
   ui->exePath->setText(fn);
 
-  if(!m_Ctx.Replay().CurrentRemote())
+  if(m_Ctx.Replay().CurrentRemote())
+  {
+    // remove the filename itself before setting the last capture path. Try /, then \ as path
+    // separator. If no separators are found, there is no path to set.
+    int idx = fn.lastIndexOf(QLatin1Char('/'));
+    if(idx >= 0)
+    {
+      fn = fn.mid(0, idx);
+    }
+    else
+    {
+      idx = fn.lastIndexOf(QLatin1Char('\\'));
+
+      if(idx >= 0)
+        fn = fn.mid(0, idx);
+      else
+        fn = QString();
+    }
+
+    m_Ctx.Replay().CurrentRemote()->lastCapturePath = fn;
+  }
+  else
   {
     m_Ctx.Config().LastCapturePath = QFileInfo(fn).absolutePath();
-    m_Ctx.Config().LastCaptureExe = QFileInfo(fn).completeBaseName();
   }
+
+  m_Ctx.Config().Save();
 }
 
 void CaptureDialog::SetWorkingDirectory(const rdcstr &dir)
