@@ -6,49 +6,49 @@ namespace
 const char fileData_1[] =
   "CMAKE_MINIMUM_REQUIRED (VERSION 3.9)\r\n# Disable some of the default cmake build targets, keep debug and release\r\nSET "
   "(CMAKE_CONFIGURATION_TYPES Debug Release CACHE TYPE INTERNAL FORCE)\r\nPROJECT(renderdoc_gen_frame)\r\n\r\nSET (WORKING_D"
-  "IRECTORY_DEBUG      \"../../\")\r\nSET (WORKING_DIRECTORY_RELEASE    \"../../\")\r\nSET (MSVS_USERFILE                \"$"
-  "{PROJECT_SOURCE_DIR}/Template.user\")\r\n\r\nSET (PROJECT_PREFIX               \"\")\r\nSET (MACHINE_POSTFIX             "
-  " \"\")\r\nSET (USERFILE_PLATFORM            \"\")\r\n\r\nSET (MACHINE_IS_X64               TRUE)\r\nSET (CMAKE_CXX_STANDA"
-  "RD           11)\r\n\r\nIF (\"${CMAKE_SIZEOF_VOID_P}\"      EQUAL \"8\")\r\n  SET (MACHINE_IS_X64  TRUE)\r\nELSEIF (\"${C"
-  "MAKE_SIZEOF_VOID_P}\"  EQUAL \"4\")\r\n  SET (MACHINE_IS_X64 FALSE)\r\nENDIF ()\r\n\r\nIF (WIN32)\r\n  IF (MACHINE_IS_X64"
-  ")\r\n    SET (MACHINE_POSTFIX            \"_x64\")\r\n    SET (USERFILE_PLATFORM          \"x64\")\r\n  ELSE ()\r\n    SE"
-  "T (MACHINE_POSTFIX            \"_x86\")\r\n    SET (USERFILE_PLATFORM          \"Win32\")\r\n  ENDIF ()\r\n  IF (MSVC)\r\n"
-  "    SET (PROJECT_PREFIX               \"vs${MSVC_TOOLSET_VERSION}_\")\r\n  ENDIF ()\r\nENDIF ()\r\n\r\nGET_FILENAME_COMPO"
-  "NENT(Trace ${CMAKE_CURRENT_SOURCE_DIR} NAME)\r\nSTRING(REPLACE \" \" \"_\" Trace ${Trace})\r\nPROJECT(${PROJECT_PREFIX}${"
-  "Trace}${MACHINE_POSTFIX})\r\n\r\nOPTION (OPTION_TREAT_WARNINGS_AS_ERRORS\r\n  \"Check if you want to treat warnings as er"
-  "rors\" FALSE)\r\nOPTION(ENABLE_YETI \"Enable Yeti support\" OFF)\r\n\r\nIF (MSVC)\r\n  SET (CMAKE_CXX_FLAGS \"${CMAKE_CXX"
-  "_FLAGS} /bigobj\")\r\n  IF (OPTION_TREAT_WARNINGS_AS_ERRORS)\r\n    SET (CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} /WX\")\r\n "
-  " ENDIF (OPTION_TREAT_WARNINGS_AS_ERRORS)\r\nELSEIF (UNIX)\r\n  SET (CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} -Wno-narrowing\""
-  ")\r\nENDIF()\r\n\r\nIF (WIN32)\r\n  SET (PLATFORM_OUT_DIR \"win\")\r\nELSEIF (ENABLE_YETI)\r\n  SET (PLATFORM_OUT_DIR \"y"
-  "eti\")\r\nELSE ()\r\n  SET (PLATFORM_OUT_DIR \"linux\")\r\nENDIF()\r\n\r\nSET (EXECUTABLE_OUTPUT_PATH \"${CMAKE_SOURCE_DI"
-  "R}/_out/${PLATFORM_OUT_DIR}${MACHINE_POSTFIX}\")\r\nSET (LIBRARY_OUTPUT_PATH    \"${CMAKE_SOURCE_DIR}/_out/${PLATFORM_OUT"
-  "_DIR}${MACHINE_POSTFIX}\")\r\n\r\nSET (DEBUG_POSTFIX \"_DEBUG\" CACHE STRING \"Debug Postfix\")\r\nSET (CMAKE_RELEASE_POS"
-  "TFIX \"\" CACHE STRING \"Release Postfix\")\r\nSET (CMAKE_MINSIZEREL_POSTFIX \"_MINSIZEREL\" CACHE STRING \"Minimum Size "
-  "Release Postfix\")\r\nSET (CMAKE_RELWITHDEBINFO_POSTFIX \"_RELWITHDEBINFO\" CACHE STRING \"Release With Debug Info Postfi"
-  "x\")\r\n\r\n###############################################################################\r\n# Function that changes ou"
-  "tput names, adding the prefix and postfix\r\n############################################################################"
-  "###\r\nFUNCTION (SETUP_PROJECT target)\r\n  SET_TARGET_PROPERTIES (${target} PROPERTIES\r\n                         OUTPU"
-  "T_NAME_DEBUG   ${target}${MACHINE_POSTFIX}${DEBUG_POSTFIX}\r\n                         OUTPUT_NAME_RELEASE ${target}${MAC"
-  "HINE_POSTFIX})\r\n  SET (USER_FILE ${target}.vcxproj.user)\r\n  SET (USERFILE_WORKING_DIRECTORY_DEBUG   ${WORKING_DIRECTO"
-  "RY_DEBUG}${target})\r\n  SET (USERFILE_WORKING_DIRECTORY_RELEASE ${WORKING_DIRECTORY_RELEASE}${target})\r\n  SET (OUTPUT_"
-  "PATH ${CMAKE_CURRENT_BINARY_DIR}/${USER_FILE})\r\n  CONFIGURE_FILE (${MSVS_USERFILE} ${OUTPUT_PATH} @ONLY)\r\nENDFUNCTION"
-  " ()\r\n\r\n###############################################################################\r\n# Search for Vulkan\r\n####"
-  "###########################################################################\r\nFIND_PACKAGE (Vulkan)\r\n  MESSAGE (STATUS"
-  " \"Vulkan SDK                : $ENV{VULKAN_SDK}\")\r\nIF (Vulkan_FOUND)\r\n  MESSAGE (STATUS \"Vulkan Includes           "
-  ": ${Vulkan_INCLUDE_DIRS}\")\r\n  MESSAGE (STATUS \"Vulkan Libraries          : ${Vulkan_LIBRARIES}\")\r\nELSE ()\r\n  MES"
-  "SAGE (FATAL_ERROR \"Vulkan not found at $ENV{VULKAN_SDK}!\")\r\nENDIF ()\r\n\r\nADD_LIBRARY (vulkan STATIC IMPORTED)\r\n\r"
-  "\nSET_TARGET_PROPERTIES (vulkan PROPERTIES\r\n                       INTERFACE_INCLUDE_DIRECTORIES ${Vulkan_INCLUDE_DIRS}"
-  "\r\n                       IMPORTED_LOCATION             ${Vulkan_LIBRARIES})\r\n\r\nSET_PROPERTY(DIRECTORY ${CMAKE_CURRE"
-  "NT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT sample_cpp_trace)\r\n\r\n#####################################################"
-  "##########################\r\n# List Cmake projects\r\n##################################################################"
-  "#############\r\nINCLUDE_DIRECTORIES(\"${CMAKE_SOURCE_DIR}\")\r\n\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/sample_cpp_tr"
-  "ace\"\r\n                 \"${CMAKE_BINARY_DIR}/sample_cpp_trace\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/helper\"\r\n"
-  "                 \"${CMAKE_BINARY_DIR}/helper\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/sample_cpp_shim\"\r\n         "
-  "        \"${CMAKE_BINARY_DIR}/sample_cpp_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/gold_reference_shim\"\r\n     "
-  "            \"${CMAKE_BINARY_DIR}/gold_reference_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/timestamp_profiling_sh"
-  "im\"\r\n                 \"${CMAKE_BINARY_DIR}/timestamp_profiling_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/amd_"
-  "shader_info_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/amd_shader_info_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE"
-  "_DIR}/rdoc_auto_capture_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/rdoc_auto_capture_shim\")\r\n";
+  "IRECTORY_DEBUG      \"../../../\")\r\nSET (WORKING_DIRECTORY_RELEASE    \"../../../\")\r\nSET (MSVS_USERFILE             "
+  "   \"${PROJECT_SOURCE_DIR}/Template.user\")\r\n\r\nSET (PROJECT_PREFIX               \"\")\r\nSET (MACHINE_POSTFIX       "
+  "       \"\")\r\nSET (USERFILE_PLATFORM            \"\")\r\n\r\nSET (MACHINE_IS_X64               TRUE)\r\nSET (CMAKE_CXX_"
+  "STANDARD           11)\r\n\r\nIF (\"${CMAKE_SIZEOF_VOID_P}\"      EQUAL \"8\")\r\n  SET (MACHINE_IS_X64  TRUE)\r\nELSEIF "
+  "(\"${CMAKE_SIZEOF_VOID_P}\"  EQUAL \"4\")\r\n  SET (MACHINE_IS_X64 FALSE)\r\nENDIF ()\r\n\r\nIF (WIN32)\r\n  IF (MACHINE_"
+  "IS_X64)\r\n    SET (MACHINE_POSTFIX            \"_x64\")\r\n    SET (USERFILE_PLATFORM          \"x64\")\r\n  ELSE ()\r\n"
+  "    SET (MACHINE_POSTFIX            \"_x86\")\r\n    SET (USERFILE_PLATFORM          \"Win32\")\r\n  ENDIF ()\r\n  IF (MS"
+  "VC)\r\n    SET (PROJECT_PREFIX               \"vs${MSVC_TOOLSET_VERSION}_\")\r\n  ENDIF ()\r\nENDIF ()\r\n\r\nGET_FILENAM"
+  "E_COMPONENT(Trace ${CMAKE_CURRENT_SOURCE_DIR} NAME)\r\nSTRING(REPLACE \" \" \"_\" Trace ${Trace})\r\nPROJECT(${PROJECT_PR"
+  "EFIX}${Trace}${MACHINE_POSTFIX})\r\n\r\nOPTION (OPTION_TREAT_WARNINGS_AS_ERRORS\r\n  \"Check if you want to treat warning"
+  "s as errors\" FALSE)\r\nOPTION(ENABLE_YETI \"Enable Yeti support\" OFF)\r\n\r\nIF (MSVC)\r\n  SET (CMAKE_CXX_FLAGS \"${CM"
+  "AKE_CXX_FLAGS} /bigobj\")\r\n  IF (OPTION_TREAT_WARNINGS_AS_ERRORS)\r\n    SET (CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} /WX\""
+  ")\r\n  ENDIF (OPTION_TREAT_WARNINGS_AS_ERRORS)\r\nELSEIF (UNIX)\r\n  SET (CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} -Wno-narro"
+  "wing\")\r\nENDIF()\r\n\r\nIF (WIN32)\r\n  SET (PLATFORM_OUT_DIR \"win\")\r\nELSEIF (ENABLE_YETI)\r\n  SET (PLATFORM_OUT_D"
+  "IR \"yeti\")\r\nELSE ()\r\n  SET (PLATFORM_OUT_DIR \"linux\")\r\nENDIF()\r\n\r\nSET (EXECUTABLE_OUTPUT_PATH \"${CMAKE_SOU"
+  "RCE_DIR}/_out/${PLATFORM_OUT_DIR}${MACHINE_POSTFIX}\")\r\nSET (LIBRARY_OUTPUT_PATH    \"${CMAKE_SOURCE_DIR}/_out/${PLATFO"
+  "RM_OUT_DIR}${MACHINE_POSTFIX}\")\r\n\r\nSET (DEBUG_POSTFIX \"_DEBUG\" CACHE STRING \"Debug Postfix\")\r\nSET (CMAKE_RELEA"
+  "SE_POSTFIX \"\" CACHE STRING \"Release Postfix\")\r\nSET (CMAKE_MINSIZEREL_POSTFIX \"_MINSIZEREL\" CACHE STRING \"Minimum"
+  " Size Release Postfix\")\r\nSET (CMAKE_RELWITHDEBINFO_POSTFIX \"_RELWITHDEBINFO\" CACHE STRING \"Release With Debug Info "
+  "Postfix\")\r\n\r\n###############################################################################\r\n# Function that chan"
+  "ges output names, adding the prefix and postfix\r\n######################################################################"
+  "#########\r\nFUNCTION (SETUP_PROJECT target)\r\n  SET_TARGET_PROPERTIES (${target} PROPERTIES\r\n                        "
+  " OUTPUT_NAME_DEBUG   ${target}${MACHINE_POSTFIX}${DEBUG_POSTFIX}\r\n                         OUTPUT_NAME_RELEASE ${target"
+  "}${MACHINE_POSTFIX})\r\n  SET (USER_FILE ${target}.vcxproj.user)\r\n  SET (USERFILE_WORKING_DIRECTORY_DEBUG   ${WORKING_D"
+  "IRECTORY_DEBUG}${target})\r\n  SET (USERFILE_WORKING_DIRECTORY_RELEASE ${WORKING_DIRECTORY_RELEASE}${target})\r\n  SET (O"
+  "UTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR}/${USER_FILE})\r\n  CONFIGURE_FILE (${MSVS_USERFILE} ${OUTPUT_PATH} @ONLY)\r\nENDFU"
+  "NCTION ()\r\n\r\n###############################################################################\r\n# Search for Vulkan\r"
+  "\n###############################################################################\r\nFIND_PACKAGE (Vulkan)\r\n  MESSAGE ("
+  "STATUS \"Vulkan SDK                : $ENV{VULKAN_SDK}\")\r\nIF (Vulkan_FOUND)\r\n  MESSAGE (STATUS \"Vulkan Includes     "
+  "      : ${Vulkan_INCLUDE_DIRS}\")\r\n  MESSAGE (STATUS \"Vulkan Libraries          : ${Vulkan_LIBRARIES}\")\r\nELSE ()\r\n"
+  "  MESSAGE (FATAL_ERROR \"Vulkan not found at $ENV{VULKAN_SDK}!\")\r\nENDIF ()\r\n\r\nADD_LIBRARY (vulkan STATIC IMPORTED)"
+  "\r\n\r\nSET_TARGET_PROPERTIES (vulkan PROPERTIES\r\n                       INTERFACE_INCLUDE_DIRECTORIES ${Vulkan_INCLUDE"
+  "_DIRS}\r\n                       IMPORTED_LOCATION             ${Vulkan_LIBRARIES})\r\n\r\nSET_PROPERTY(DIRECTORY ${CMAKE"
+  "_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT sample_cpp_trace)\r\n\r\n###############################################"
+  "################################\r\n# List Cmake projects\r\n############################################################"
+  "###################\r\nINCLUDE_DIRECTORIES(\"${CMAKE_SOURCE_DIR}\")\r\n\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/sample_"
+  "cpp_trace\"\r\n                 \"${CMAKE_BINARY_DIR}/sample_cpp_trace\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/helpe"
+  "r\"\r\n                 \"${CMAKE_BINARY_DIR}/helper\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/sample_cpp_shim\"\r\n  "
+  "               \"${CMAKE_BINARY_DIR}/sample_cpp_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/gold_reference_shim\"\r"
+  "\n                 \"${CMAKE_BINARY_DIR}/gold_reference_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DIR}/timestamp_profi"
+  "ling_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/timestamp_profiling_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE_SOURCE_DI"
+  "R}/amd_shader_info_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/amd_shader_info_shim\")\r\nADD_SUBDIRECTORY(\"${CMAKE"
+  "_SOURCE_DIR}/rdoc_auto_capture_shim\"\r\n                 \"${CMAKE_BINARY_DIR}/rdoc_auto_capture_shim\")\r\n";
 const char fileData_2[] =
   "\xef\xbb\xbf<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Project ToolsVersion=\"4.0\" xmlns=\"http://schemas.microsoft."
   "com/developer/msbuild/2003\">\r\n  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|@USERFILE_PLATFORM@'"
@@ -4477,24 +4477,24 @@ const char fileData_13[] =
   "gBits stage, const char *disassembly, size_t size);\r\nvoid printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage,\r\n"
   "                     VkShaderStatisticsInfoAMD &statistics);";
 const char fileData_14[] =
-  "SET (THIS_PROJECT_NAME gold_reference)\r\nPROJECT(${THIS_PROJECT_NAME})\r\n\r\n# Full gold_reference shim\r\nADD_LIBRARY("
-  "${THIS_PROJECT_NAME} SHARED \"shim_vulkan.h\" \"shim_vulkan.cpp\" \"utils.h\" \"utils.cpp\" \"format_conversion.cpp\")\r\n"
-  "\r\nTARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME} PRIVATE\r\n                           UNICODE\r\n                    "
-  "       _UNICODE\r\n                           SAVE_RENDERPASS_BUFFERS)\r\n\r\nIF (NOT WIN32)\r\n  SET_TARGET_PROPERTIES($"
-  "{THIS_PROJECT_NAME} PROPERTIES\r\n                        CXX_VISIBILITY_PRESET hidden)\r\nENDIF ()\r\n\r\nTARGET_LINK_LI"
-  "BRARIES(${THIS_PROJECT_NAME}\r\n                      vulkan\r\n                      helper)\r\n\r\nSET_TARGET_PROPERTIE"
-  "S(${THIS_PROJECT_NAME} PROPERTIES\r\n                      OUTPUT_NAME shim_vulkan\r\n                      ARCHIVE_OUTPU"
-  "T_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      RUNTIME_OUTPUT_DIRECTORY \"${LIBRARY"
-  "_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      LIBRARY_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PR"
-  "OJECT_NAME}\")\r\n\r\n# Screenshot only shim\r\nSET (SCREENSHOT_SHIM_NAME screenshot)\r\nADD_LIBRARY(${SCREENSHOT_SHIM_NA"
-  "ME} SHARED \"shim_vulkan.h\" \"shim_vulkan.cpp\" \"utils.h\" \"utils.cpp\" \"format_conversion.cpp\")\r\n\r\nTARGET_COMPI"
-  "LE_DEFINITIONS(${SCREENSHOT_SHIM_NAME} PRIVATE\r\n                           UNICODE\r\n                           _UNICO"
-  "DE)\r\n\r\nIF (NOT WIN32)\r\n  SET_TARGET_PROPERTIES(${SCREENSHOT_SHIM_NAME} PROPERTIES\r\n                        CXX_VI"
-  "SIBILITY_PRESET hidden)\r\nENDIF ()\r\n\r\nTARGET_LINK_LIBRARIES(${SCREENSHOT_SHIM_NAME}\r\n                      vulkan\r"
-  "\n                      helper)\r\n\r\nSET_TARGET_PROPERTIES(${SCREENSHOT_SHIM_NAME} PROPERTIES\r\n                      "
-  "OUTPUT_NAME shim_vulkan\r\n                      ARCHIVE_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${SCREENSHOT_SHIM_NAME"
-  "}\"\r\n                      RUNTIME_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${SCREENSHOT_SHIM_NAME}\"\r\n             "
-  "         LIBRARY_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${SCREENSHOT_SHIM_NAME}\")\r\n";
+  "SET (THIS_PROJECT_NAME gold_reference_shim)\r\nPROJECT(${THIS_PROJECT_NAME})\r\n\r\n# Full gold_reference shim\r\nADD_LIB"
+  "RARY(${THIS_PROJECT_NAME} SHARED \"shim_vulkan.h\" \"shim_vulkan.cpp\" \"utils.h\" \"utils.cpp\" \"format_conversion.cpp\""
+  ")\r\n\r\nTARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME} PRIVATE\r\n                           UNICODE\r\n               "
+  "            _UNICODE\r\n                           SAVE_RENDERPASS_BUFFERS)\r\n\r\nIF (NOT WIN32)\r\n  SET_TARGET_PROPERT"
+  "IES(${THIS_PROJECT_NAME} PROPERTIES\r\n                        CXX_VISIBILITY_PRESET hidden)\r\nENDIF ()\r\n\r\nTARGET_LI"
+  "NK_LIBRARIES(${THIS_PROJECT_NAME}\r\n                      vulkan\r\n                      helper)\r\n\r\nSET_TARGET_PROP"
+  "ERTIES(${THIS_PROJECT_NAME} PROPERTIES\r\n                      OUTPUT_NAME shim_vulkan\r\n                      ARCHIVE_"
+  "OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      RUNTIME_OUTPUT_DIRECTORY \"${LI"
+  "BRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n                      LIBRARY_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${TH"
+  "IS_PROJECT_NAME}\")\r\n\r\n# Screenshot only shim\r\nSET (SCREENSHOT_SHIM_NAME screenshot)\r\nADD_LIBRARY(${SCREENSHOT_SH"
+  "IM_NAME} SHARED \"shim_vulkan.h\" \"shim_vulkan.cpp\" \"utils.h\" \"utils.cpp\" \"format_conversion.cpp\")\r\n\r\nTARGET_"
+  "COMPILE_DEFINITIONS(${SCREENSHOT_SHIM_NAME} PRIVATE\r\n                           UNICODE\r\n                           _"
+  "UNICODE)\r\n\r\nIF (NOT WIN32)\r\n  SET_TARGET_PROPERTIES(${SCREENSHOT_SHIM_NAME} PROPERTIES\r\n                        C"
+  "XX_VISIBILITY_PRESET hidden)\r\nENDIF ()\r\n\r\nTARGET_LINK_LIBRARIES(${SCREENSHOT_SHIM_NAME}\r\n                      vu"
+  "lkan\r\n                      helper)\r\n\r\nSET_TARGET_PROPERTIES(${SCREENSHOT_SHIM_NAME} PROPERTIES\r\n                "
+  "      OUTPUT_NAME shim_vulkan\r\n                      ARCHIVE_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${SCREENSHOT_SHI"
+  "M_NAME}\"\r\n                      RUNTIME_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${SCREENSHOT_SHIM_NAME}\"\r\n       "
+  "               LIBRARY_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${SCREENSHOT_SHIM_NAME}\")\r\n";
 const char fileData_15[] =
   "/******************************************************************************\r\n* The MIT License (MIT)\r\n*\r\n* Copy"
   "right (c) 2018 Google LLC\r\n*\r\n* Permission is hereby granted, free of charge, to any person obtaining a copy\r\n* of "
@@ -9983,7 +9983,9 @@ const char fileData_25[] =
   "      vulkan\r\n                      helper)\r\n\r\nSET_TARGET_PROPERTIES(${THIS_PROJECT_NAME} PROPERTIES\r\n           "
   "           OUTPUT_NAME shim_vulkan\r\n                      ARCHIVE_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJ"
   "ECT_NAME}\"\r\n                      RUNTIME_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\"\r\n        "
-  "              LIBRARY_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\")\r\n";
+  "              LIBRARY_OUTPUT_DIRECTORY \"${LIBRARY_OUTPUT_PATH}/${THIS_PROJECT_NAME}\")\r\n\r\nADD_CUSTOM_COMMAND(TARGET "
+  "${THIS_PROJECT_NAME} POST_BUILD\r\n    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${THIS_PROJECT_NAME}> ${WORKING_DIR"
+  "ECTORY_DEBUG}sample_cpp_trace)\r\n";
 const char fileData_26[] = {
   '/','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*',
   '*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*','*',
@@ -23006,7 +23008,7 @@ const char fileData_42[] =
 }    // namespace
 
 TemplateFileDesc CodeWriter::TemplateFiles[] = {
-  {R"(CMakeLists.txt)", 5079, fileData_1},
+  {R"(CMakeLists.txt)", 5085, fileData_1},
   {R"(Template.user)", 944, fileData_2},
   {R"(build_vs2015.bat)", 226, fileData_3},
   {R"(build_vs2015_ninja.bat)", 379, fileData_4},
@@ -23019,7 +23021,7 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(amd_shader_info_shim/shim_vulkan.h)", 63508, fileData_11},
   {R"(amd_shader_info_shim/utils.cpp)", 4493, fileData_12},
   {R"(amd_shader_info_shim/utils.h)", 1685, fileData_13},
-  {R"(gold_reference_shim/CMakeLists.txt)", 2020, fileData_14},
+  {R"(gold_reference_shim/CMakeLists.txt)", 2025, fileData_14},
   {R"(gold_reference_shim/format_conversion.cpp)", 28644, fileData_15},
   {R"(gold_reference_shim/shim_vulkan.cpp)", 114095, fileData_16},
   {R"(gold_reference_shim/shim_vulkan.h)", 63486, fileData_17},
@@ -23030,7 +23032,7 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(helper/format_size_and_aspect.cpp)", 39439, fileData_22},
   {R"(helper/helper.cpp)", 33608, fileData_23},
   {R"(helper/helper.h)", 10008, fileData_24},
-  {R"(sample_cpp_shim/CMakeLists.txt)", 887, fileData_25},
+  {R"(sample_cpp_shim/CMakeLists.txt)", 1066, fileData_25},
   {R"(sample_cpp_shim/shim_vulkan.cpp)", 110372, fileData_26},
   {R"(sample_cpp_shim/shim_vulkan.h)", 63508, fileData_27},
   {R"(sample_cpp_trace/CMakeLists.txt)", 2306, fileData_28},

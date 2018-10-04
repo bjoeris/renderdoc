@@ -1,4 +1,4 @@
-SET (THIS_PROJECT_NAME gold_reference)
+SET (THIS_PROJECT_NAME gold_reference_shim)
 PROJECT(${THIS_PROJECT_NAME})
 
 # Full gold_reference shim
