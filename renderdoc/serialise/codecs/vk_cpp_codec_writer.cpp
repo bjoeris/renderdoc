@@ -82,6 +82,9 @@ void CodeWriter::Open()
 
   for(const TemplateFileDesc *desc = TemplateFiles; desc->filename; desc++)
     WriteTemplateFile(desc->filename, desc->contents, desc->size);
+
+  if (*shimPrefix)
+    WriteTemplateFile("shim.enable", "", 0);
 }
 
 void CodeWriter::WriteTemplateFile(const char *file, const char *contents, size_t size)

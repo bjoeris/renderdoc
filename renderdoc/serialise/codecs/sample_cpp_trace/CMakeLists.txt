@@ -24,6 +24,11 @@ SETUP_PROJECT(${THIS_PROJECT_NAME})
 TARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME} PRIVATE
                            UNICODE _UNICODE)
 
+SET(SHIM_DEPS )
+IF (ENABLE_SHIM)
+  SET(SHIM_DEPS sample_cpp_shim)
+ENDIF()
+
 IF (WIN32)
   TARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME} PRIVATE
                              VK_USE_PLATFORM_WIN32_KHR
@@ -31,13 +36,13 @@ IF (WIN32)
   TARGET_LINK_LIBRARIES(${THIS_PROJECT_NAME}
                         vulkan
                         helper
-                        sample_cpp_shim
                         comctl32
                         rpcrt4
                         winmm
                         advapi32
                         wsock32
-                        Dbghelp)
+                        Dbghelp
+                        ${SHIM_DEPS})
   SET_TARGET_PROPERTIES(${THIS_PROJECT_NAME} PROPERTIES
                         LINK_FLAGS_RELEASE "/SUBSYSTEM:WINDOWS /STACK:67108864"
                         LINK_FLAGS_DEBUG   "/SUBSYSTEM:WINDOWS /STACK:67108864")
@@ -50,7 +55,7 @@ ELSEIF (ENABLE_YETI)
                         libdl.so
                         vulkan
                         helper
-                        sample_cpp_shim)
+                        ${SHIM_DEPS})
 ELSE ()
   TARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME} PRIVATE
                              VK_USE_PLATFORM_XLIB_KHR
@@ -60,5 +65,5 @@ ELSE ()
                         libdl.so
                         helper
                         vulkan
-                        sample_cpp_shim)
+                        ${SHIM_DEPS})
 ENDIF ()

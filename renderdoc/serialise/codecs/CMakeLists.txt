@@ -41,6 +41,17 @@ OPTION (OPTION_TREAT_WARNINGS_AS_ERRORS
   "Check if you want to treat warnings as errors" FALSE)
 OPTION(ENABLE_YETI "Enable Yeti support" OFF)
 
+OPTION(ENABLE_SHIM "Enable shim_vulkan dependency" OFF)
+
+IF(EXISTS ${CMAKE_SOURCE_DIR}/shim.enable)
+  MESSAGE(STATUS "shim_vulkan dependency was enabled")
+  SET(ENABLE_SHIM ON)
+ELSE()
+  MESSAGE(STATUS "${CMAKE_SOURCE_DIR}/shim.enable not present")
+  MESSAGE(STATUS "shim_vulkan dependency was disabled")
+  SET(ENABLE_SHIM OFF)
+ENDIF()
+
 IF (MSVC)
   SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
   IF (OPTION_TREAT_WARNINGS_AS_ERRORS)
