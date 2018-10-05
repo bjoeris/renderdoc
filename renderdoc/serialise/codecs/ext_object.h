@@ -133,15 +133,27 @@ struct ExtObject : public SDObject
   }
 
   // Is it possible to fully inline the data structure declaration?
-  bool IsInlineable()
+  bool IsInlineable(bool forAssign)
   {
+    if(forAssign)
+    {
+      if(IsStruct() || IsArray())
+        for(uint64_t i = 0; i < Size(); i++)
+          if(!At(i)->IsInlineable(forAssign))
+            return false;
+      if(IsPointer() && !IsNULL())
+        return false;
+      return true;
+    }
     if(IsVariableArray() && !IsNULL())
       return false;
     if(IsStruct() && IsPointer() && !IsNULL())
       return false;
+    if(IsUnion())
+      return false;
 
     for(uint64_t i = 0; i < Size(); i++)
-      if(!At(i)->IsInlineable())
+      if(!At(i)->IsInlineable(forAssign))
         return false;
 
     return true;
@@ -236,6 +248,24 @@ struct ExtObject : public SDObject
     RDCASSERT(type.basetype == SDBasic::Chunk);
     SDChunk *chunk = (SDChunk *)(this);
     return chunk->metadata.chunkID;
+  }
+
+  uint64_t CanonicalUnionBranch()
+  {
+    if(type.name == "VkClearValue")
+    {
+      return 0;    // Use `color`
+    }
+    else if(type.name == "VkClearColorValue")
+    {
+      return 2;    // Use `uint32`
+    }
+    // Attempting to output an unknown union type.
+    // This function must be modified to return the index of the canonical branch, which should be
+    // chosen so that it's size is equal to the size of the entire union, and so that the values can
+    // be represented exactly (e.g., not floating point).
+    RDCASSERT(0);
+    return 0;
   }
 };
 
