@@ -836,7 +836,7 @@ void TraceTracker::AnalyzeMemoryResetRequirements()
           }
           if((optimizations & CODE_GEN_OPT_IMAGE_MEMORY_BIT) == 0)
           {
-            abr.reset = RESET_REQUIREMENT_INIT;
+            abr.reset = RESET_REQUIREMENT_RESET;
           }
           break;
         }
