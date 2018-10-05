@@ -74,7 +74,8 @@ const char fileData_4[] =
   "_vs2015x64_ninja\r\nexit /b %errorlevel%\r\n";
 const char fileData_5[] =
   "@echo off\r\nsetlocal enableextensions\r\nrd /s /q _build_files\\win_vs2017x64 2>nul\r\nmkdir _build_files\\win_vs2017x64"
-  "\r\ncmake.exe -Wno-dev -G \"Visual Studio 15 2017 Win64\" -B_build_files\\win_vs2017x64\r\nexit /b %errorlevel%\r\n";
+  "\r\ncmake.exe -Wno-dev -G \"Visual Studio 15 2017 Win64\" \"\" -H. -B_build_files\\win_vs2017x64\r\nexit /b %errorlevel%\r"
+  "\n";
 const char fileData_6[] =
   "@echo off\r\nsetlocal enableextensions\r\nrd /s /q _build_files\\win_vs2017x64_ninja 2>nul\r\nmkdir _build_files\\win_vs2"
   "017x64_ninja\r\ncall \"C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Professional\\VC\\Auxiliary\\Build\\vcvars"
