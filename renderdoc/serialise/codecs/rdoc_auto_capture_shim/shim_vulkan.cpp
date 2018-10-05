@@ -26,12 +26,15 @@
 #endif
 #include "shim_vulkan.h"
 #include "helper/helper.h"
+#include <chrono>
 
 const char RDOC_ENV_VAR[] = "RDOC_GOLD_FRAME_INDEX";    // env variable for to-be-captured frame.
 const int kDefaultCaptureFrame = 5;    // default frame index if RDOC_GOLD_FRAME_INDEX is not set.
 int captureFrame = kDefaultCaptureFrame;
 int presentIndex = 0;
 bool IsTargetFrame = true;    // default value doesn't matter. It's properly set in CreateInstance.
+bool shouldQuit = false;
+std::chrono::time_point<std::chrono::system_clock> quitAfter;
 
 AuxVkTraceResources aux;
 
@@ -49,7 +52,10 @@ AuxVkTraceResources aux;
 
 #include "renderdoc_app.h"
 
-bool ShimShouldQuitNow() { return false; }
+bool ShimShouldQuitNow()
+{
+  return shouldQuit && std::chrono::system_clock::now() > quitAfter;
+}
 
 typedef struct Versions {
   union {
@@ -91,10 +97,10 @@ void IsRenderDocLoaded() {
 #elif defined(__linux)
   const char* renderdoc = "librenderdoc.so";
   std::string ld_preload = GetEnvString("LD_PRELOAD");
-  printf("$LD_PRELOAD is %s", ld_preload.c_str());
+  printf("$LD_PRELOAD is %s\n", ld_preload.c_str());
   void* rdoc = dlopen(renderdoc, RTLD_NOLOAD);
   const char* dl_error = dlerror();
-  if (dl_error != NULL) printf("RenderDoc dlopen error: %s", dl_error);
+  if (dl_error != NULL) printf("RenderDoc dlopen error: %s\n", dl_error);
   if (rdoc == NULL) {
     capture.loaded = (ld_preload.find(renderdoc) != std::string::npos);
   } else {
@@ -147,6 +153,8 @@ void DelayedCaptureCheck() {
     } else {
       printf("RenderDoc capturing failed");
     }
+    shouldQuit = true;
+    quitAfter = std::chrono::system_clock::now() + std::chrono::seconds(30);
   }
 }
 
@@ -156,13 +164,8 @@ VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkInstance *pInstance)
 {
   captureFrame = GetEnvInt(RDOC_ENV_VAR, kDefaultCaptureFrame);
-  // if captureFrame is '0', first frame needs to save images.
-  IsTargetFrame = presentIndex == captureFrame;
 
   IsRenderDocLoaded();
-
-  if (IsTargetFrame)
-    DelayedCapture();
 
   VkResult r = vkCreateInstance(pCreateInfo, pAllocator, pInstance);
   aux.instance = *pInstance;
@@ -183,17 +186,15 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
     DelayedCaptureCheck();
   }
 
-  static PFN_vkQueuePresentKHR fn =
-    (PFN_vkQueuePresentKHR) vkGetDeviceProcAddr(aux.device, "vkQueuePresentKHR");
-  VkResult r = fn(queue, pPresentInfo);
-
   IsTargetFrame = (++presentIndex == captureFrame);
 
   if (IsTargetFrame) {
     DelayedCapture();
   }
 
-  return r;
+  static PFN_vkQueuePresentKHR fn =
+    (PFN_vkQueuePresentKHR) vkGetDeviceProcAddr(aux.device, "vkQueuePresentKHR");
+  return fn(queue, pPresentInfo);
 }
 
 /************************* boilerplates *******************************/
