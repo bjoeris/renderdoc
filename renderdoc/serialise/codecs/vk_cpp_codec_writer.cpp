@@ -237,6 +237,7 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
   for(uint32_t resource_idx = 0; resource_idx < order.size(); resource_idx++)
   {
     const BoundResource &abr = alloc_it->second.boundResources[order[resource_idx]];
+    const char *mem_bind_offset = tracker->GetReplayBindOffsetVar(abr.resource->U64());
     if(reorder)
     {
       switch(reset)
@@ -276,20 +277,13 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
         default: break;
       }
       RDCASSERT(abr.reset >= reset);
-    }
 
-    const char *mem_bind_offset = tracker->GetReplayBindOffsetVar(abr.resource->U64());
-    // Calculate the correct memory bits and correct memory size.
-    files[pass]
-        ->PrintLn("memory_bits = memory_bits & %s.memoryTypeBits;", abr.requirement->Name())
-        .PrintLn("%s = AlignedSize(memory_size, %s.alignment);", mem_bind_offset,
-                 abr.requirement->Name())
-        .PrintLn("memory_size = %s + %s.size;", mem_bind_offset, abr.requirement->Name());
+      // Calculate the correct memory size.
+      files[pass]
+          ->PrintLn("%s = AlignedSize(memory_size, %s.alignment);", mem_bind_offset,
+                   abr.requirement->Name())
+          .PrintLn("memory_size = %s + %s.size;", mem_bind_offset, abr.requirement->Name());
 
-    // If there are no aliased resources we can recompute allocation size requirements
-    // and new binding offsets for every resource correctly.
-    if(reorder)
-    {
       files[pass]
           ->PrintLn("%s[%u].replay.offset = %s;", mem_remap, resource_idx, mem_bind_offset)
           .PrintLn("%s[%u].replay.size = %s.size;", mem_remap, resource_idx, abr.requirement->Name())
@@ -298,6 +292,17 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
           .PrintLn("%s[%u].capture.size = VkMemoryRequirements_captured_%" PRIu64 ".size;",
                    mem_remap, resource_idx, abr.resource->U64());
     }
+    else
+    {
+      // No memory reordering. Use the captured offsets.
+      // Calculate the correct memory size.
+      files[pass]
+        ->PrintLn("%s = %s;", mem_bind_offset, abr.offset->ValueStr().c_str())
+        .PrintLn("memory_size = std::max<uint64_t>(memory_size, %s + %s.size);", mem_bind_offset, abr.requirement->Name());
+    }
+    // Calculate the correct memory bits.
+    files[pass]
+      ->PrintLn("memory_bits = memory_bits & %s.memoryTypeBits;", abr.requirement->Name());
   }
   switch(reset)
   {
