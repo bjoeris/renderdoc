@@ -23020,7 +23020,7 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(Template.user)", 944, fileData_2},
   {R"(build_vs2015.bat)", 226, fileData_3},
   {R"(build_vs2015_ninja.bat)", 379, fileData_4},
-  {R"(build_vs2017.bat)", 219, fileData_5},
+  {R"(build_vs2017.bat)", 226, fileData_5},
   {R"(build_vs2017_ninja.bat)", 408, fileData_6},
   {R"(build_xlib.sh)", 290, fileData_7},
   {R"(build_yeti.sh)", 319, fileData_8},
