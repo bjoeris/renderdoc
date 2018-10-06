@@ -124,7 +124,7 @@ protected:
   void BufferOrImageMemoryReqs(ExtObject *o, const char *get_mem_req_func, uint32_t pass);
 
   void InlineVariable(ExtObject *o, uint32_t pass);
-  void Assign(std::string path, ExtObject *o, bool comment, uint32_t pass);
+  void AssignUnion(std::string path, ExtObject *o, bool comment, uint32_t pass);
   void LocalVariable(ExtObject *o, std::string suffix, uint32_t pass);
 
   void InitSrcBuffer(ExtObject *o, uint32_t pass);

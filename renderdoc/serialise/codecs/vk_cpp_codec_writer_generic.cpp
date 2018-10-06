@@ -54,52 +54,47 @@ void CodeWriter::InlineVariable(ExtObject *o, uint32_t pass)
     {
       InlineVariable(node, pass);
     }
-    else if(node->IsResource())
-    {
-      const char *name = tracker->GetResourceVar(node->U64());
-      files[pass]->PrintLn("/* %s = */ %s,", node->Name(), name);
+    else if(node->IsResource()) {
+      files[pass]->PrintLn("/* %s = */ %s,", node->Name(), tracker->GetResourceVar(node->U64()));
     }
-    else
+    else {
       files[pass]->PrintLn("/* %s = */ %s,", node->Name(), node->ValueStr().c_str());
+    }
   }
   files[pass]->PrintLn("},");
 }
 
-void CodeWriter::Assign(std::string path, ExtObject *o, bool comment, uint32_t pass)
+void CodeWriter::AssignUnion(std::string path, ExtObject *o, bool comment, uint32_t pass)
 {
-  if(o->IsArray() || o->IsStruct())
-  {
-    for(uint64_t i = 0; i < o->Size(); i++)
-    {
+  if (o->IsStruct() || o->IsArray() || o->IsUnion()) {
+    for (uint64_t i = 0; i < o->Size(); i++) {
       ExtObject *child = o->At(i);
       std::string childPath(path);
       bool childComment = false;
-      if(o->IsArray())
-      {
+      if (o->IsArray()) {
         childPath += "[" + std::to_string(i) + "]";
-      }
-      else if(o->IsStruct())
-      {
-        if(o->IsPointer())
-        {
+      } else if (o->IsStruct()) {
+        if (o->IsPointer()) {
           childPath += "->";
-        }
-        else
-        {
+        } else {
           childPath += ".";
         }
         childPath += std::string(child->Name());
-        if(o->IsUnion())
-        {
-          if(i != o->CanonicalUnionBranch())
-          {
+        if (o->IsUnion()) {
+          if (i != o->CanonicalUnionBranch()) {
             childComment = true;
           }
         }
       }
-      Assign(childPath, child, comment | childComment, pass);
+      AssignUnion(childPath, child, comment | childComment, pass);
     }
     return;
+  }
+
+  if (o->IsPointer() && !o->IsNULL()) {
+    // This would be a non-null, non-array pointer to non-struct;
+    // This should never happen.
+    RDCASSERT(0);
   }
 
   std::string commentStr, value;
@@ -108,17 +103,7 @@ void CodeWriter::Assign(std::string path, ExtObject *o, bool comment, uint32_t p
     commentStr = "// ";
   }
 
-  if(o->IsPointer())
-  {
-    // This would be a non-null, non-array pointer to non-struct;
-    // This appears to never happen.
-    RDCASSERT(0);
-  }
-  if(o->IsNULL())
-  {
-    value = "NULL";
-  }
-  else if(o->IsResource())
+  if(o->IsResource())
   {
     value = tracker->GetResourceVar(o->U64());
   }
@@ -131,17 +116,25 @@ void CodeWriter::Assign(std::string path, ExtObject *o, bool comment, uint32_t p
 
 void CodeWriter::LocalVariable(ExtObject *o, std::string suffix, uint32_t pass)
 {
-  if(o->IsUnion() || o->IsStruct() || o->IsArray())
+  //Unions have multiple elements in them, which is why they need to be
+  // handled first, ahead of structs and arrays.
+  if (o->IsUnion())
+  {
+    std::string name(o->Name());
+    name += suffix;
+    files[pass]->PrintLn("%s %s;", o->Type(), name.c_str());
+    AssignUnion(name, o, false, pass);
+    return;
+  }
+  else
   {
     uint64_t size = o->Size();
     // Go through all the children and look for complex structures or variable-
-    // size array. For each of those, declare and initialize them separately.
-    for(uint64_t i = 0; i < size; i++)
-    {
+    // size arrays. For each of those, declare and initialize them separately.
+    for (uint64_t i = 0; i < size; i++) {
       // Handle cases when the member is a complex data type, such as a complex
       // structure or a variable sized array.
-      if(!o->At(i)->IsInlineable(o->IsUnion()))
-      {
+      if (!o->At(i)->IsInlineable()) {
         std::string add_suffix;
         ExtObject *node = tracker->CopiesAdd(o, i, add_suffix);
         LocalVariable(node, suffix + add_suffix, pass);
@@ -149,54 +142,32 @@ void CodeWriter::LocalVariable(ExtObject *o, std::string suffix, uint32_t pass)
     }
     // Now, declare and initialize the data type. Simple members get inlined.
     // Complex structures or variable arrays get referenced by name.
-    if(o->IsNULL())
-    {
+    if (o->IsNULL()) {
       files[pass]->PrintLn("%s* %s%s = NULL;", o->Type(), o->Name(), suffix.c_str());
-    }
-    else if(o->IsUnion())
-    {
-      std::string name(o->Name());
-      name += suffix;
-      files[pass]->PrintLn("%s %s;", o->Type(), name.c_str());
-      Assign(name, o, false, pass);
-      return;
-    }
-    else if(o->IsStruct() && !o->IsPointer())
-    {
+    } else if (o->IsStruct() && !o->IsPointer()) {
       files[pass]->PrintLn("%s %s%s = {", o->Type(), o->Name(), suffix.c_str());
-    }
-    else if(o->IsStruct() && o->IsPointer())
-    {
+    } else if (o->IsStruct() && o->IsPointer()) {
       files[pass]->PrintLn("%s %s%s[1] = {", o->Type(), o->Name(), suffix.c_str());
-    }
-    else if(o->IsArray())
-    {
+    } else if (o->IsArray()) {
       files[pass]->PrintLn("%s %s%s[%llu] = {", o->Type(), o->Name(), suffix.c_str(), size);
     }
-    for(uint64_t i = 0; i < size; i++)
-    {
+
+    for (uint64_t i = 0; i < size; i++) {
       std::string add_suffix;
       ExtObject *node = tracker->CopiesAdd(o, i, add_suffix);
-      bool isInlineable = node->IsInlineable(o->IsUnion());
-      if(!isInlineable)
-      {
+      if (!node->IsInlineable()) {
         files[pass]->PrintLn("/* %s = */ %s%s,", node->Name(), node->Name(),
-                             (suffix + add_suffix).c_str());
-      }
-      else if(!node->IsSimpleType() && isInlineable)
-      {
+          (suffix + add_suffix).c_str());
+      } else if (!node->IsSimpleType() && node->IsInlineable()) {
         InlineVariable(node, pass);
-      }
-      else if(node->IsResource())
-      {
+      } else if (node->IsResource()) {
         files[pass]->PrintLn("/* %s = */ %s,", node->Name(), tracker->GetResourceVar(node->U64()));
-      }
-      else
-      {
+      } else {
         files[pass]->PrintLn("/* %s = */ %s,", node->Name(), node->ValueStr().c_str());
       }
     }
-    if(!o->IsNULL())
+
+    if (!o->IsNULL())
       files[pass]->PrintLn("};");
   }
 }

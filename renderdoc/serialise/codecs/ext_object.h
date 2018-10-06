@@ -129,32 +129,23 @@ struct ExtObject : public SDObject
   {
     if(IsNULL())
       return true;
-    return !IsStruct() && !IsArray() && !IsPointer();
+    return !IsStruct() && !IsArray() && !IsPointer() && !IsUnion();
   }
 
   // Is it possible to fully inline the data structure declaration?
-  bool IsInlineable(bool forAssign)
+  bool IsInlineable()
   {
-    if(forAssign)
-    {
-      if(IsStruct() || IsArray())
-        for(uint64_t i = 0; i < Size(); i++)
-          if(!At(i)->IsInlineable(forAssign))
-            return false;
-      if(IsPointer() && !IsNULL())
+    // No matter what's inside, if it has elements that are not
+    // inlineable, return false.
+    for (uint64_t i = 0; i < Size(); i++)
+      if (!At(i)->IsInlineable())
         return false;
-      return true;
-    }
-    if(IsVariableArray() && !IsNULL())
+    if (IsPointer() && !IsNULL())
       return false;
-    if(IsStruct() && IsPointer() && !IsNULL())
+    if (IsVariableArray() && !IsNULL())
       return false;
-    if(IsUnion())
+    if (IsUnion())
       return false;
-
-    for(uint64_t i = 0; i < Size(); i++)
-      if(!At(i)->IsInlineable(forAssign))
-        return false;
 
     return true;
   }
