@@ -68,27 +68,30 @@ const char fileData_3[] =
   "\r\ncmake.exe -Wno-dev -G \"Visual Studio 14 2015 Win64\" \"\" -H. -B_build_files\\win_vs2015x64\r\nexit /b %errorlevel%\r"
   "\n";
 const char fileData_4[] =
-  "@echo off\r\nsetlocal enableextensions\r\nrd /s /q _build_files\\win_vs2015x64_ninja 2>nul\r\nmkdir _build_files\\win_vs2"
-  "015x64_ninja\r\ncall \"C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\VC\\vcvarsall.bat\" x64\r\ncmake.exe -Wno-d"
-  "ev -G Ninja --build \"\" -H. -B_build_files\\win_vs2015x64_ninja -DCMAKE_BUILD_TYPE=Release\r\nninja -C _build_files\\win"
-  "_vs2015x64_ninja\r\nexit /b %errorlevel%\r\n";
+  "@echo off\r\nsetlocal enableextensions\r\nset BUILD_TYPE=Release\r\nif NOT \"%1\" == \"\" set BUILD_TYPE=%~1\r\nrd /s /q "
+  "_build_files\\win_vs2015x64_ninja 2>nul\r\nmkdir _build_files\\win_vs2015x64_ninja\r\ncall \"C:\\Program Files (x86)\\Mic"
+  "rosoft Visual Studio 14.0\\VC\\vcvarsall.bat\" x64\r\ncmake.exe -Wno-dev -G Ninja --build \"\" -H. -B_build_files\\win_vs"
+  "2015x64_ninja -DCMAKE_BUILD_TYPE=%BUILD_TYPE%\r\nninja -C _build_files\\win_vs2015x64_ninja\r\nexit /b %errorlevel%\r\n";
 const char fileData_5[] =
   "@echo off\r\nsetlocal enableextensions\r\nrd /s /q _build_files\\win_vs2017x64 2>nul\r\nmkdir _build_files\\win_vs2017x64"
   "\r\ncmake.exe -Wno-dev -G \"Visual Studio 15 2017 Win64\" \"\" -H. -B_build_files\\win_vs2017x64\r\nexit /b %errorlevel%\r"
   "\n";
 const char fileData_6[] =
-  "@echo off\r\nsetlocal enableextensions\r\nrd /s /q _build_files\\win_vs2017x64_ninja 2>nul\r\nmkdir _build_files\\win_vs2"
-  "017x64_ninja\r\ncall \"C:\\Program Files (x86)\\Microsoft Visual Studio\\2017\\Professional\\VC\\Auxiliary\\Build\\vcvars"
-  "all.bat\" x64\r\ncmake.exe -Wno-dev -G Ninja --build \"\" -H. -B_build_files\\win_vs2017x64_ninja -DCMAKE_BUILD_TYPE=Rele"
-  "ase\r\nninja -C _build_files\\win_vs2017x64_ninja\r\nexit /b %errorlevel%\r\n";
+  "@echo off\r\nsetlocal enableextensions\r\nset BUILD_TYPE=Release\r\nif NOT \"%1\" == \"\" set BUILD_TYPE=%~1\r\nrd /s /q "
+  "_build_files\\win_vs2017x64_ninja 2>nul\r\nmkdir _build_files\\win_vs2017x64_ninja\r\ncall \"C:\\Program Files (x86)\\Mic"
+  "rosoft Visual Studio\\2017\\Professional\\VC\\Auxiliary\\Build\\vcvarsall.bat\" x64\r\ncmake.exe -Wno-dev -G Ninja --buil"
+  "d \"\" -H. -B_build_files\\win_vs2017x64_ninja -DCMAKE_BUILD_TYPE=%BUILD_TYPE%\r\nninja -C _build_files\\win_vs2017x64_ni"
+  "nja\r\nexit /b %errorlevel%\r\n";
 const char fileData_7[] =
-  "which cmake && which ninja && export CC=clang && export CXX=clang++ && rm -rf _build_files/linux_build && mkdir -p _build"
-  "_files/linux_build && cmake -G Ninja --build \"\" -B_build_files/linux_build -H. -DCMAKE_BUILD_TYPE=Release && ninja -C _"
-  "build_files/linux_build && echo \"Build complete\"\r\n";
+  "BUILD_TYPE=Release\nif [ -n \"$1\" ]; then\n  BUILD_TYPE=$1\nfi\nwhich cmake && which ninja && export CC=clang && export "
+  "CXX=clang++ && rm -rf _build_files/linux_build && mkdir -p _build_files/linux_build && cmake -G Ninja --build \"\" -B_bui"
+  "ld_files/linux_build -H. -DCMAKE_BUILD_TYPE=$BUILD_TYPE && ninja -C _build_files/linux_build && echo \"Build complete\"\n"
+;
 const char fileData_8[] =
-  "which cmake && which ninja && rm -rf _build_files/yeti_build && mkdir -p _build_files/yeti_build && cmake -G Ninja --buil"
-  "d \"\" -B_build_files/yeti_build -H. -DCMAKE_BUILD_TYPE=Release -DENABLE_YETI=ON -DCMAKE_TOOLCHAIN_FILE=\"$YETI_SDK_PATH/"
-  "cmake/yeti.cmake\" && ninja -C _build_files/yeti_build && echo \"Build complete\"\r\n";
+  "BUILD_TYPE=Release\nif [ -n \"$1\" ]; then\n  BUILD_TYPE=$1\nfi\nwhich cmake && which ninja && rm -rf _build_files/yeti_b"
+  "uild && mkdir -p _build_files/yeti_build && cmake -G Ninja --build \"\" -B_build_files/yeti_build -H. -DCMAKE_BUILD_TYPE="
+  "$BUILD_TYPE -DENABLE_YETI=ON -DCMAKE_TOOLCHAIN_FILE=\"$YETI_SDK_PATH/cmake/yeti.cmake\" && ninja -C _build_files/yeti_bui"
+  "ld && echo \"Build complete\"\n";
 const char fileData_9[] =
   "SET (THIS_PROJECT_NAME amd_shader_info_shim)\r\nPROJECT(${THIS_PROJECT_NAME})\r\n\r\nADD_LIBRARY(${THIS_PROJECT_NAME} SHA"
   "RED \"shim_vulkan.h\" \"shim_vulkan.cpp\" \"utils.h\" \"utils.cpp\")\r\n\r\nTARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAM"
@@ -23019,11 +23022,11 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(CMakeLists.txt)", 5432, fileData_1},
   {R"(Template.user)", 944, fileData_2},
   {R"(build_vs2015.bat)", 226, fileData_3},
-  {R"(build_vs2015_ninja.bat)", 379, fileData_4},
+  {R"(build_vs2015_ninja.bat)", 446, fileData_4},
   {R"(build_vs2017.bat)", 226, fileData_5},
-  {R"(build_vs2017_ninja.bat)", 408, fileData_6},
-  {R"(build_xlib.sh)", 290, fileData_7},
-  {R"(build_yeti.sh)", 319, fileData_8},
+  {R"(build_vs2017_ninja.bat)", 475, fileData_6},
+  {R"(build_xlib.sh)", 352, fileData_7},
+  {R"(build_yeti.sh)", 381, fileData_8},
   {R"(amd_shader_info_shim/CMakeLists.txt)", 914, fileData_9},
   {R"(amd_shader_info_shim/shim_vulkan.cpp)", 115077, fileData_10},
   {R"(amd_shader_info_shim/shim_vulkan.h)", 63508, fileData_11},

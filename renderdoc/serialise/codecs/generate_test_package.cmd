@@ -1,6 +1,27 @@
 @echo off
 setlocal enableextensions
 
+rem ESC below has a non-printable character after =...
+set ESC=
+set GREEN=%ESC%[0;32m
+set YELLOW=%ESC%[1;33m
+set BOLD=%ESC%[1m
+set RESET=%ESC%[0m
+
+if not "%1"=="--help" goto cont
+echo.
+echo %YELLOW%generate_test_package trace.rdc out_dir [package_name]%RESET%
+echo.
+echo    %BOLD%Creates Yeti RenderDoc codegen project%RESET%
+echo    - %GREEN%trace.rdc%RESET%    - Source RenderDoc trace file to process.
+echo    - %GREEN%out_dir%RESET%      - Output directory to write all the package data to. Individual packages go into subsirectories.
+echo    - %GREEN%package_name%RESET% - Name of the output package to generate. If omitted, the file name of .RDC file is used.
+goto :eof
+
+
+:cont
+if "%1"=="" echo 'package_name' is not specified && goto :eof
+if "%2"=="" echo 'out_dir' is not specified && goto :eof
 set package_name=%3
 if "%3"=="" set package_name=%~n1
 
@@ -23,12 +44,6 @@ set screenshot_file=%package_name%.tgz
 set rdoc_auto_capture_dir=%reference_dir%\rdoc_auto_capture
 
 set thumbnails_dir=%~2\thumbnails
-
-rem ESC below has a non-printable character after =...
-set ESC=
-set GREEN=%ESC%[0;32m
-set YELLOW=%ESC%[1;33m
-set RESET=%ESC%[0m
 
 echo %GREEN%Copying RDC file from %YELLOW%'%1'%GREEN% to %YELLOW%'%rdc_file%'...%RESET%
 mkdir "%~2\traces" 2>nul
