@@ -709,7 +709,7 @@ void CodeWriter::CreateInstance(ExtObject *o, uint32_t pass, bool global_ci)
                instance_name)
       .PrintLn("assert(r == VK_SUCCESS);")
       .PrintLn(
-          "RegisterDebugCallback(aux, %s, VkDebugReportFlagBitsEXT(VK_DEBUG_REPORT_ERROR_BIT_EXT | "
+          "RegisterDebugCallback(&aux, %s, VkDebugReportFlagBitsEXT(VK_DEBUG_REPORT_ERROR_BIT_EXT | "
           "VK_DEBUG_REPORT_DEBUG_BIT_EXT));",
           instance_name);
 

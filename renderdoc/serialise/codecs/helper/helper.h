@@ -142,21 +142,21 @@ void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
                            VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
                            uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQueueFamily);
 
-void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dst, VkImageCreateInfo dst_ci,
+void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dst, VkImageCreateInfo dst_ci,
                            VkImageLayout final_layout,
                            VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED);
-void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dst,
+void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dst,
                            VkImageSubresourceRange subresourceRange, VkImageLayout final_layout,
                            VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED);
-void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImg, uint32_t arrayLayer,
+void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dstImg, uint32_t arrayLayer,
                            uint32_t mipLevel, VkImageAspectFlagBits aspect, VkImageLayout newLayout,
                            VkImageLayout oldLayout);
 
-void CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageCreateInfo dst_ci);
-void CopyResetBuffer(AuxVkTraceResources aux, VkBuffer dst, VkBuffer src, VkDeviceSize size);
+void CopyResetImage(const AuxVkTraceResources& aux, VkImage dst, VkBuffer src, VkImageCreateInfo dst_ci);
+void CopyResetBuffer(const AuxVkTraceResources& aux, VkBuffer dst, VkBuffer src, VkDeviceSize size);
 
-void CopyImageToBuffer(AuxVkTraceResources aux, VkImage src, VkBuffer dst, VkImageCreateInfo src_ci);
-void DiffDeviceMemory(AuxVkTraceResources aux, VkDeviceMemory expected,
+void CopyImageToBuffer(const AuxVkTraceResources& aux, VkImage src, VkBuffer dst, VkImageCreateInfo src_ci);
+void DiffDeviceMemory(const AuxVkTraceResources& aux, VkDeviceMemory expected,
                       VkDeviceSize expected_offset, VkDeviceMemory actual,
                       VkDeviceSize actual_offset, VkDeviceSize size, const char *name);
 void InitializeDiffBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *memory, size_t size,
@@ -165,9 +165,9 @@ void InitializeDiffBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *mem
 void MakePhysicalDeviceFeaturesMatch(const VkPhysicalDeviceFeatures &available,
                                      VkPhysicalDeviceFeatures *captured_request);
 
-void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance, uint32_t flags);
+void RegisterDebugCallback(AuxVkTraceResources* aux, VkInstance instance, uint32_t flags);
 
-void MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,
+void MapUpdate(const AuxVkTraceResources& aux, uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,
                VkMemoryAllocateInfo &ai, MemoryRemapVec &remap, VkDevice dev);
 
 inline uint64_t AlignedSize(uint64_t size, uint64_t alignment)

@@ -47,7 +47,7 @@ VkBool32 VKAPI_PTR DebugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjec
   return VK_FALSE;
 }
 
-void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance, uint32_t flags)
+void RegisterDebugCallback(AuxVkTraceResources* aux, VkInstance instance, uint32_t flags)
 {
   PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallback = VK_NULL_HANDLE;
   CreateDebugReportCallback = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
@@ -57,7 +57,7 @@ void RegisterDebugCallback(AuxVkTraceResources aux, VkInstance instance, uint32_
                                            0, VkDebugReportFlagsEXT(flags), DebugCallback, NULL};
   if(CreateDebugReportCallback != NULL)
   {
-    VkResult result = CreateDebugReportCallback(instance, &ci, NULL, &aux.callback);
+    VkResult result = CreateDebugReportCallback(instance, &ci, NULL, &aux->callback);
     assert(result == VK_SUCCESS);
   }
 }
@@ -101,7 +101,7 @@ void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
 }
 
-void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImage,
+void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dstImage,
                            VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
                            VkImageLayout oldLayout)
 {
@@ -109,7 +109,7 @@ void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImage,
                         VK_QUEUE_FAMILY_IGNORED, oldLayout, VK_QUEUE_FAMILY_IGNORED);
 }
 
-void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImage, VkImageCreateInfo dstCI,
+void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dstImage, VkImageCreateInfo dstCI,
                            VkImageLayout newLayout, VkImageLayout oldLayout)
 {
   VkImageSubresourceRange subresourceRange = {
@@ -118,7 +118,7 @@ void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImage, VkImageCre
   ImageLayoutTransition(aux, dstImage, subresourceRange, newLayout, oldLayout);
 }
 
-void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImg, uint32_t arrayLayer,
+void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dstImg, uint32_t arrayLayer,
                            uint32_t mipLevel, VkImageAspectFlagBits aspect, VkImageLayout newLayout,
                            VkImageLayout oldLayout)
 {
@@ -127,7 +127,7 @@ void ImageLayoutTransition(AuxVkTraceResources aux, VkImage dstImg, uint32_t arr
   ImageLayoutTransition(aux, dstImg, subresourceRange, newLayout, oldLayout);
 }
 
-void CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageCreateInfo dst_ci)
+void CopyResetImage(const AuxVkTraceResources& aux, VkImage dst, VkBuffer src, VkImageCreateInfo dst_ci)
 {
   ImageLayoutTransition(aux, dst, dst_ci, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
@@ -192,7 +192,7 @@ void CopyResetImage(AuxVkTraceResources aux, VkImage dst, VkBuffer src, VkImageC
 #endif
   }
 }
-void CopyResetBuffer(AuxVkTraceResources aux, VkBuffer dst, VkBuffer src, VkDeviceSize size)
+void CopyResetBuffer(const AuxVkTraceResources& aux, VkBuffer dst, VkBuffer src, VkDeviceSize size)
 {
   if(size == 0)
     return;
@@ -200,7 +200,7 @@ void CopyResetBuffer(AuxVkTraceResources aux, VkBuffer dst, VkBuffer src, VkDevi
   vkCmdCopyBuffer(aux.command_buffer, src, dst, 1, &region);
 }
 
-void CopyImageToBuffer(AuxVkTraceResources aux, VkImage src, VkBuffer dst, VkImageCreateInfo src_ci)
+void CopyImageToBuffer(const AuxVkTraceResources& aux, VkImage src, VkBuffer dst, VkImageCreateInfo src_ci)
 {
   if(src_ci.samples == VK_SAMPLE_COUNT_1_BIT)
   {
@@ -258,7 +258,7 @@ void CopyImageToBuffer(AuxVkTraceResources aux, VkImage src, VkBuffer dst, VkIma
   }
 }
 
-void DiffDeviceMemory(AuxVkTraceResources aux, VkDeviceMemory expected,
+void DiffDeviceMemory(const AuxVkTraceResources& aux, VkDeviceMemory expected,
                       VkDeviceSize expected_offset, VkDeviceMemory actual,
                       VkDeviceSize actual_offset, VkDeviceSize size, const char *name)
 {
@@ -646,7 +646,7 @@ Region RegionsIntersect(const Region &r1, const Region &r2)
   return r;
 }
 
-void MapUpdate(AuxVkTraceResources aux, uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,
+void MapUpdate(const AuxVkTraceResources& aux, uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,
                VkMemoryAllocateInfo &ai, MemoryRemapVec &remap, VkDevice dev)
 {
   if(dst != NULL)
