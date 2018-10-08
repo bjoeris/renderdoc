@@ -279,6 +279,9 @@ DOCUMENT(R"(This is an opaque identifier that uniquely locates a resource.
 struct ResourceId
 {
   ResourceId() : id() {}
+#if defined(SWIG)
+  ResourceId(const ResourceId &other) : id(other.id) {}
+#endif
   DOCUMENT("A helper function that explicitly creates an empty/invalid/null :class:`ResourceId`.");
   inline static ResourceId Null() { return ResourceId(); }
   DOCUMENT("Compares two ``ResourceId`` objects for equality.");
@@ -308,6 +311,7 @@ DOCUMENT(R"(Specifies a windowing system to use for creating an output window.
 .. data:: Unknown
 
   No windowing data is passed and no native window is described.
+  See :func:`CreateHeadlessWindowingData`.
 
 .. data:: Win32
 
@@ -407,6 +411,20 @@ struct WindowingData
 DECLARE_REFLECTION_ENUM(WindowingData);
 
 #endif
+
+DOCUMENT(R"(Create a :class:`WindowingData` for no backing window, it will be headless.
+
+:return: A :class:`WindowingData` corresponding to an 'empty' backing window.
+:rtype: WindowingData
+)");
+inline const WindowingData CreateHeadlessWindowingData()
+{
+  WindowingData ret = {};
+
+  ret.system = WindowingSystem::Unknown;
+
+  return ret;
+}
 
 DOCUMENT(R"(Create a :class:`WindowingData` for a Win32 ``HWND`` handle.
 
@@ -510,6 +528,10 @@ DECLARE_REFLECTION_STRUCT(ResourceId);
 DOCUMENT(R"(Internal structure used for initialising environment in a replay application.)");
 struct GlobalEnvironment
 {
+  DOCUMENT("");
+  GlobalEnvironment() = default;
+  GlobalEnvironment(const GlobalEnvironment &) = default;
+
   DOCUMENT("The handle to the X display to use internally. If left ``NULL``, one will be opened.");
   Display *xlibDisplay = NULL;
 };
@@ -517,6 +539,10 @@ struct GlobalEnvironment
 DOCUMENT("The result of executing or injecting into a program.")
 struct ExecuteResult
 {
+  DOCUMENT("");
+  ExecuteResult() = default;
+  ExecuteResult(const ExecuteResult &) = default;
+
   DOCUMENT(
       "The :class:`ReplayStatus` resulting from the operation, indicating success or failure.");
   ReplayStatus status;
@@ -591,6 +617,17 @@ outputs.
 
   DOCUMENT("Sets the :class:`MeshDisplay` configuration for a mesh output.");
   virtual void SetMeshDisplay(const MeshDisplay &o) = 0;
+
+  DOCUMENT(R"(Sets the dimensions of the output, useful only for headless outputs that don't have a
+backing window which don't have any implicit dimensions. This allows configuring a virtual viewport
+which is useful for operations like picking vertices that depends on the output dimensions.
+
+.. note:: For outputs with backing windows, this will be ignored.
+
+:param int width: The width to use.
+:param int height: The height to use.
+)");
+  virtual void SetDimensions(int32_t width, int32_t height) = 0;
 
   DOCUMENT(
       "Clear and release all thumbnails associated with this output. See :meth:`AddThumbnail`.");

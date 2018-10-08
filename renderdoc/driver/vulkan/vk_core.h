@@ -526,6 +526,8 @@ private:
     uint32_t drawCount;              // similar to above
   };
 
+  bool HasNonMarkerEvents(ResourceId cmdBuffer);
+
   // on replay, the current command buffer for the last chunk we
   // handled.
   ResourceId m_LastCmdBufferID;
@@ -626,7 +628,7 @@ private:
 
   bool InRerecordRange(ResourceId cmdid);
   bool HasRerecordCmdBuf(ResourceId cmdid);
-  bool IsPartialCmdBuf(ResourceId cmdid);
+  bool ShouldUpdateRenderState(ResourceId cmdid, bool forcePrimary = false);
   VkCommandBuffer RerecordCmdBuf(ResourceId cmdid, PartialReplayIndex partialType = ePartialNum);
 
   // this info is stored in the record on capture, but we
@@ -878,7 +880,8 @@ public:
     return m_PhysicalDevice;
   }
   VkCommandBuffer GetNextCmd();
-  void SubmitCmds();
+  void SubmitCmds(VkSemaphore *unwrappedWaitSemaphores = NULL,
+                  VkPipelineStageFlags *waitStageMask = NULL, uint32_t waitSemaphoreCount = 0);
   VkSemaphore GetNextSemaphore();
   void SubmitSemaphores();
   void FlushQ();

@@ -1024,7 +1024,7 @@ bool WrappedOpenGL::Serialise_ContextConfiguration(SerialiserType &ser, void *ct
 
   SERIALISE_CHECK_READ_ERRORS();
 
-  if(IsReplayingAndReading())
+  if(IsReplayingAndReading() && FBO != ResourceId())
   {
     // we might encounter multiple instances of this chunk per frame, so only do work on the first
     // one
@@ -2674,6 +2674,20 @@ void WrappedOpenGL::AddResourceInitChunk(GLResource res)
     GLResourceManager *rm = GetResourceManager();
     AddResourceCurChunk(rm->GetOriginalID(rm->GetID(res)));
   }
+}
+
+bool WrappedOpenGL::HasNonDebugMarkers()
+{
+  for(const APIEvent &ev : m_CurEvents)
+  {
+    GLChunk chunk = (GLChunk)m_StructuredFile->chunks[ev.chunkIndex]->metadata.chunkID;
+    if(chunk != GLChunk::glPushGroupMarkerEXT && chunk != GLChunk::glPopGroupMarkerEXT &&
+       chunk != GLChunk::glPushDebugGroupKHR && chunk != GLChunk::glPopDebugGroupKHR &&
+       chunk != GLChunk::glPushDebugGroup && chunk != GLChunk::glPopDebugGroup)
+      return true;
+  }
+
+  return false;
 }
 
 ReplayStatus WrappedOpenGL::ReadLogInitialisation(RDCFile *rdc, bool storeStructuredBuffers)

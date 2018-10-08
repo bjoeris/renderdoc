@@ -234,7 +234,8 @@ VkCommandBuffer WrappedVulkan::GetNextCmd()
   return ret;
 }
 
-void WrappedVulkan::SubmitCmds()
+void WrappedVulkan::SubmitCmds(VkSemaphore *unwrappedWaitSemaphores,
+                               VkPipelineStageFlags *waitStageMask, uint32_t waitSemaphoreCount)
 {
   // nothing to do
   if(m_InternalCmds.pendingcmds.empty())
@@ -247,9 +248,9 @@ void WrappedVulkan::SubmitCmds()
   VkSubmitInfo submitInfo = {
       VK_STRUCTURE_TYPE_SUBMIT_INFO,
       NULL,
-      0,
-      NULL,
-      NULL,    // wait semaphores
+      waitSemaphoreCount,
+      unwrappedWaitSemaphores,
+      waitStageMask,
       (uint32_t)cmds.size(),
       &cmds[0],    // command buffers
       0,
@@ -3014,6 +3015,21 @@ VkBool32 WrappedVulkan::DebugCallback(VkDebugReportFlagsEXT flags,
   return false;
 }
 
+bool WrappedVulkan::HasNonMarkerEvents(ResourceId cmdBuffer)
+{
+  for(const APIEvent &ev : m_BakedCmdBufferInfo[m_LastCmdBufferID].curEvents)
+  {
+    VulkanChunk chunk = (VulkanChunk)m_StructuredFile->chunks[ev.chunkIndex]->metadata.chunkID;
+    if(chunk != VulkanChunk::vkCmdDebugMarkerBeginEXT &&
+       chunk != VulkanChunk::vkCmdDebugMarkerEndEXT &&
+       chunk != VulkanChunk::vkCmdBeginDebugUtilsLabelEXT &&
+       chunk != VulkanChunk::vkCmdEndDebugUtilsLabelEXT)
+      return true;
+  }
+
+  return false;
+}
+
 bool WrappedVulkan::InRerecordRange(ResourceId cmdid)
 {
   // if we have an outside command buffer, assume the range is valid and we're replaying all events
@@ -3045,16 +3061,24 @@ bool WrappedVulkan::HasRerecordCmdBuf(ResourceId cmdid)
   return m_RerecordCmds.find(cmdid) != m_RerecordCmds.end();
 }
 
-bool WrappedVulkan::IsPartialCmdBuf(ResourceId cmdid)
+bool WrappedVulkan::ShouldUpdateRenderState(ResourceId cmdid, bool forcePrimary)
 {
   if(m_OutsideCmdBuffer != VK_NULL_HANDLE)
     return true;
 
-  for(int p = 0; p < ePartialNum; p++)
-    if(cmdid == m_Partial[p].partialParent)
-      return true;
+  // if forcePrimary is set we're tracking renderpass activity that only happens in the primary
+  // command buffer. So even if a secondary is partial, we still want to check it.
+  if(forcePrimary)
+    return m_Partial[Primary].partialParent == cmdid;
 
-  return false;
+  // otherwise, if a secondary command buffer is partial we want to *ignore* any state setting
+  // happening in the primary buffer as fortunately no state is inherited (so we don't need to
+  // worry about any state before the execute) and any state setting recorded afterwards would
+  // incorrectly override what we have.
+  if(m_Partial[Secondary].partialParent != ResourceId())
+    return cmdid == m_Partial[Secondary].partialParent;
+
+  return cmdid == m_Partial[Primary].partialParent;
 }
 
 VkCommandBuffer WrappedVulkan::RerecordCmdBuf(ResourceId cmdid, PartialReplayIndex partialType)

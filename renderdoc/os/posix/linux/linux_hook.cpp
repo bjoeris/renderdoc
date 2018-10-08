@@ -45,6 +45,8 @@ void plthook_lib(void *handle);
 typedef void *(*DLOPENPROC)(const char *, int);
 DLOPENPROC realdlopen = NULL;
 
+static volatile int32_t tlsbusyflag = 0;
+
 __attribute__((visibility("default"))) void *dlopen(const char *filename, int flag)
 {
   if(!realdlopen)
@@ -59,7 +61,10 @@ __attribute__((visibility("default"))) void *dlopen(const char *filename, int fl
     return ret;
   }
 
+  // don't do any hook processing inside here even if we call dlopen again
+  Atomic::Inc32(&tlsbusyflag);
   void *ret = realdlopen(filename, flag);
+  Atomic::Dec32(&tlsbusyflag);
 
   if(filename && ret)
   {
@@ -85,6 +90,10 @@ void plthook_lib(void *handle)
 
 static void CheckLoadedLibraries()
 {
+  // don't process anything if the busy flag was set, otherwise set it ourselves
+  if(Atomic::CmpExch32(&tlsbusyflag, 0, 1) != 0)
+    return;
+
   // iterate over the libraries and see which ones are already loaded, process function hooks for
   // them and call callbacks.
   for(auto it = libraryHooks.begin(); it != libraryHooks.end(); ++it)
@@ -100,14 +109,19 @@ static void CheckLoadedLibraries()
           *hook.orig = dlsym(handle, hook.function.c_str());
       }
 
-      for(FunctionLoadCallback cb : libraryCallbacks[libName])
-        if(cb)
-          cb(handle);
+      std::vector<FunctionLoadCallback> callbacks;
 
       // don't call callbacks again if the library is dlopen'd again
-      libraryCallbacks[libName].clear();
+      libraryCallbacks[libName].swap(callbacks);
+
+      for(FunctionLoadCallback cb : callbacks)
+        if(cb)
+          cb(handle);
     }
   }
+
+  // decrement the flag counter
+  Atomic::Dec32(&tlsbusyflag);
 }
 
 void *intercept_dlopen(const char *filename, int flag, void *ret)
@@ -133,12 +147,14 @@ void *intercept_dlopen(const char *filename, int flag, void *ret)
           *hook.orig = dlsym(ret, hook.function.c_str());
       }
 
-      for(FunctionLoadCallback cb : libraryCallbacks[libName])
+      std::vector<FunctionLoadCallback> callbacks;
+
+      // don't call callbacks again if the library is dlopen'd again
+      libraryCallbacks[libName].swap(callbacks);
+
+      for(FunctionLoadCallback cb : callbacks)
         if(cb)
           cb(ret);
-
-      // don't call the callbacks again
-      libraryCallbacks[libName].clear();
 
       ret = realdlopen("librenderdoc.so", flag);
       break;
