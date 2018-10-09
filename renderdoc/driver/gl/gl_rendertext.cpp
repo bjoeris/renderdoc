@@ -155,7 +155,7 @@ void WrappedOpenGL::ContextData::CreateDebugData()
 
         ShaderType shaderType;
         int glslVersion;
-        string fragDefines;
+        std::string vertDefines, fragDefines;
 
         if(IsGLES)
         {
@@ -167,10 +167,23 @@ void WrappedOpenGL::ContextData::CreateDebugData()
         {
           shaderType = eShaderGLSL;
           glslVersion = 110;
+
+#if ENABLED(RDOC_APPLE)
+          // on mac we need to define a more modern version and use modern texture sampling
+          glslVersion = GLCoreVersion * 10;
+          fragDefines =
+              "#define varying in\n"
+              "#define texture2D texture\n"
+              "#define gl_FragColor outcol\n"
+              "out vec4 outcol;";
+          vertDefines =
+              "#define varying out\n"
+              "#define attribute in";
+#endif
         }
 
-        GenerateGLSLShader(vs, shaderType, "", GetEmbeddedResource(glsl_gltext_vert), glslVersion,
-                           false);
+        GenerateGLSLShader(vs, shaderType, vertDefines.c_str(),
+                           GetEmbeddedResource(glsl_gltext_vert), glslVersion, false);
         GenerateGLSLShader(fs, shaderType, fragDefines.c_str(),
                            GetEmbeddedResource(glsl_gltext_frag), glslVersion, false);
 
@@ -257,7 +270,7 @@ void WrappedOpenGL::ContextData::CreateDebugData()
   }
 }
 
-void WrappedOpenGL::RenderOverlayText(float x, float y, bool yflipped, const char *fmt, ...)
+void WrappedOpenGL::RenderOverlayText(float x, float y, const char *fmt, ...)
 {
   static char tmpBuf[4096];
 
@@ -273,18 +286,18 @@ void WrappedOpenGL::RenderOverlayText(float x, float y, bool yflipped, const cha
 
   textState.Push(ctxdata.Modern());
 
-  RenderOverlayStr(x, y, yflipped, tmpBuf);
+  RenderOverlayStr(x, y, tmpBuf);
 
   textState.Pop(ctxdata.Modern());
 }
 
-void WrappedOpenGL::RenderOverlayStr(float x, float y, bool yflipped, const char *text)
+void WrappedOpenGL::RenderOverlayStr(float x, float y, const char *text)
 {
   if(char *t = strchr((char *)text, '\n'))
   {
     *t = 0;
-    RenderOverlayStr(x, y, yflipped, text);
-    RenderOverlayStr(x, y + 1.0f, yflipped, t + 1);
+    RenderOverlayStr(x, y, text);
+    RenderOverlayStr(x, y + 1.0f, t + 1);
     *t = '\n';
     return;
   }
@@ -325,8 +338,8 @@ void WrappedOpenGL::RenderOverlayStr(float x, float y, bool yflipped, const char
         Vec2f(1.0, 0.0), Vec2f(0.0, 1.0), Vec2f(1.0, 1.0),
     };
 
-    const Vec2f FontScreenAspect(ctxdata.CharAspect / RDCMAX(1.0f, float(m_InitParams.width)),
-                                 1.0f / RDCMAX(1.0f, float(m_InitParams.height)));
+    const Vec2f FontScreenAspect(ctxdata.CharAspect / RDCMAX(1.0f, float(ctxdata.initParams.width)),
+                                 1.0f / RDCMAX(1.0f, float(ctxdata.initParams.height)));
 
     float *vertexData = new float[5 * len * 6];
 
@@ -347,7 +360,7 @@ void WrappedOpenGL::RenderOverlayStr(float x, float y, bool yflipped, const char
         pos.y -= 1.0f;
 
         vertexData[(i * 6 + ch) * 5 + 0] = pos.x;
-        vertexData[(i * 6 + ch) * 5 + 1] = yflipped ? pos.y : -pos.y;
+        vertexData[(i * 6 + ch) * 5 + 1] = ctxdata.initParams.isYFlipped ? pos.y : -pos.y;
         vertexData[(i * 6 + ch) * 5 + 2] = uv.x;
         vertexData[(i * 6 + ch) * 5 + 3] = uv.y;
         vertexData[(i * 6 + ch) * 5 + 4] = float(text[i] - FONT_FIRST_CHAR);
@@ -398,12 +411,13 @@ void WrappedOpenGL::RenderOverlayStr(float x, float y, bool yflipped, const char
     // set viewport & scissor
     if(HasExt[ARB_viewport_array])
     {
-      GL.glViewportIndexedf(0, 0.0f, 0.0f, (float)m_InitParams.width, (float)m_InitParams.height);
+      GL.glViewportIndexedf(0, 0.0f, 0.0f, (float)ctxdata.initParams.width,
+                            (float)ctxdata.initParams.height);
       GL.glDisablei(eGL_SCISSOR_TEST, 0);
     }
     else
     {
-      GL.glViewport(0, 0, m_InitParams.width, m_InitParams.height);
+      GL.glViewport(0, 0, ctxdata.initParams.width, ctxdata.initParams.height);
       GL.glDisable(eGL_SCISSOR_TEST);
     }
 
@@ -460,7 +474,7 @@ void WrappedOpenGL::RenderOverlayStr(float x, float y, bool yflipped, const char
     GL.glDisable(eGL_CULL_FACE);
 
     // set viewport & scissor
-    GL.glViewport(0, 0, (GLsizei)m_InitParams.width, (GLsizei)m_InitParams.height);
+    GL.glViewport(0, 0, (GLsizei)ctxdata.initParams.width, (GLsizei)ctxdata.initParams.height);
     GL.glDisable(eGL_SCISSOR_TEST);
     if(!IsGLES)
       GL.glPolygonMode(eGL_FRONT_AND_BACK, eGL_FILL);
@@ -529,7 +543,7 @@ void WrappedOpenGL::RenderOverlayStr(float x, float y, bool yflipped, const char
       vertices.push_back(Vec4f(maxx, miny, 0.0f, 0.0f));
       vertices.push_back(Vec4f(minx, miny, 0.0f, 0.0f));
 
-      float mul = yflipped ? -1.0f : 1.0f;
+      float mul = ctxdata.initParams.isYFlipped ? -1.0f : 1.0f;
 
       while(*text)
       {
@@ -554,6 +568,6 @@ void WrappedOpenGL::RenderOverlayStr(float x, float y, bool yflipped, const char
         ++text;
       }
     }
-    m_Platform.DrawQuads((float)m_InitParams.width, (float)m_InitParams.height, vertices);
+    m_Platform.DrawQuads((float)ctxdata.initParams.width, (float)ctxdata.initParams.height, vertices);
   }
 }

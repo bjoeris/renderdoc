@@ -22,32 +22,107 @@
  * THE SOFTWARE.
  ******************************************************************************/
 
+#include "strings/string_utils.h"
 #include "vk_core.h"
 #include "vk_replay.h"
 
+#include <dlfcn.h>
+
+// helpers defined in vk_apple.mm
+extern "C" int getCALayerWidth(void *handle);
+extern "C" int getCALayerHeight(void *handle);
+
+VkResult WrappedVulkan::vkCreateMacOSSurfaceMVK(VkInstance instance,
+                                                const VkMacOSSurfaceCreateInfoMVK *pCreateInfo,
+                                                const VkAllocationCallbacks *pAllocator,
+                                                VkSurfaceKHR *pSurface)
+{
+  // should not come in here at all on replay
+  RDCASSERT(IsCaptureMode(m_State));
+
+  VkResult ret =
+      ObjDisp(instance)->CreateMacOSSurfaceMVK(Unwrap(instance), pCreateInfo, pAllocator, pSurface);
+
+  if(ret == VK_SUCCESS)
+  {
+    GetResourceManager()->WrapResource(Unwrap(instance), *pSurface);
+
+    WrappedVkSurfaceKHR *wrapped = GetWrapped(*pSurface);
+
+    // since there's no point in allocating a full resource record and storing the window
+    // handle under there somewhere, we just cast. We won't use the resource record for anything
+    wrapped->record = (VkResourceRecord *)(uintptr_t)pCreateInfo->pView;
+  }
+
+  return ret;
+}
+
 void VulkanReplay::OutputWindow::SetWindowHandle(WindowingData window)
 {
-  RDCUNIMPLEMENTED("SetWindowHandle");
+  RDCASSERT(window.system == WindowingSystem::MacOS, window.system);
+  wnd = window.macOS.layer;
 }
 
 void VulkanReplay::OutputWindow::CreateSurface(VkInstance inst)
 {
-  RDCUNIMPLEMENTED("CreateSurface");
+  VkMacOSSurfaceCreateInfoMVK createInfo;
+
+  createInfo.sType = VK_STRUCTURE_TYPE_MACOS_SURFACE_CREATE_INFO_MVK;
+  createInfo.pNext = NULL;
+  createInfo.flags = 0;
+  createInfo.pView = wnd;
+
+  VkResult vkr = ObjDisp(inst)->CreateMacOSSurfaceMVK(Unwrap(inst), &createInfo, NULL, &surface);
+  RDCASSERTEQUAL(vkr, VK_SUCCESS);
 }
 
 void VulkanReplay::GetOutputWindowDimensions(uint64_t id, int32_t &w, int32_t &h)
 {
-  RDCUNIMPLEMENTED("GetOutputWindowDimensions");
+  if(id == 0 || m_OutputWindows.find(id) == m_OutputWindows.end())
+    return;
+
+  OutputWindow &outw = m_OutputWindows[id];
+
+  w = getCALayerWidth(outw.wnd);
+  h = getCALayerHeight(outw.wnd);
 }
 
-const char *VulkanLibraryName = "libvulkan.so";
+static const char *VulkanLibraryName = "libvulkan.1.dylib";
 
-bool VulkanReplay::CheckVulkanLayer(VulkanLayerFlags &flags, std::vector<std::string> &myJSONs,
-                                    std::vector<std::string> &otherJSONs)
+string GetThisLibPath()
 {
-  return false;
+  Dl_info info;
+  if(dladdr(&VulkanLibraryName, &info))
+  {
+    RDCDEBUG("GetThisLibPath = '%s'", info.dli_fname);
+    return info.dli_fname;
+  }
+  return "";
 }
 
-void VulkanReplay::InstallVulkanLayer(bool systemLevel)
+void *LoadVulkanLibrary()
 {
+  // first try to load the module globally. If so we assume the user has a global (or at least
+  // user-wide) configuration that we should use.
+  void *ret = Process::LoadModule(VulkanLibraryName);
+
+  if(ret)
+  {
+    RDCLOG("Loaded global libvulkan.1.dylib, using default MoltenVK environment");
+    return ret;
+  }
+
+  // if not, we fall back to our embedded libvulkan and also force use of our embedded ICD.
+  std::string libpath = GetThisLibPath();
+  libpath = dirname(libpath) + "/../MoltenVK/";
+
+  RDCLOG("Couldn't load global libvulkan.1.dylib, falling back to bundled MoltenVK in %s",
+         libpath.c_str());
+
+  Process::RegisterEnvironmentModification(EnvironmentModification(
+      EnvMod::Set, EnvSep::NoSep, "VK_ICD_FILENAMES", (libpath + "MoltenVK_icd.json").c_str()));
+
+  Process::ApplyEnvironmentModification();
+
+  return Process::LoadModule((libpath + VulkanLibraryName).c_str());
 }

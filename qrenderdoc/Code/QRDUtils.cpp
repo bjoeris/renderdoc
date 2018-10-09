@@ -48,6 +48,7 @@
 #include <QTextBlock>
 #include <QTextDocument>
 #include <QtMath>
+#include "Code/Resources.h"
 #include "Widgets/Extended/RDTreeWidget.h"
 
 // normally this is in the renderdoc core library, but it's needed for the 'unknown enum' path,
@@ -107,6 +108,8 @@ struct RichResourceText
 
     int i = 0;
 
+    bool highdpi = widget->devicePixelRatioF() > 1.0;
+
     QVector<int> fragmentIndexFromBlockIndex;
 
     // there's an empty block at the start.
@@ -119,7 +122,9 @@ struct RichResourceText
       if(v.userType() == qMetaTypeId<ResourceId>())
       {
         QString resname = QString(ctx.GetResourceName(v.value<ResourceId>())).toHtmlEscaped();
-        html += lit("<td><b>%1</b></td><td><img src=':/link.png'></td>").arg(resname);
+        html += lit("<td><b>%1</b></td><td><img width=\"16\" src=':/link%3.png'></td>")
+                    .arg(resname)
+                    .arg(highdpi ? lit("@2x") : QString());
         text += resname;
 
         // these generate two blocks (one for each cell)
@@ -900,6 +905,8 @@ void RDDialog::show(QMenu *menu, QPoint pos)
 
 int RDDialog::show(QDialog *dialog)
 {
+// workaround for QTBUG-56382 needed on windows only - it can break on other platforms
+#if defined(Q_OS_WIN32)
   dialog->setWindowModality(Qt::ApplicationModal);
   dialog->show();
   QEventLoop loop;
@@ -908,6 +915,9 @@ int RDDialog::show(QDialog *dialog)
     loop.processEvents(QEventLoop::WaitForMoreEvents);
     QCoreApplication::sendPostedEvents();
   }
+#else
+  dialog->exec();
+#endif
 
   return dialog->result();
 }
@@ -1453,6 +1463,10 @@ bool RunProcessAsAdmin(const QString &fullExecutablePath, const QStringList &par
     QProcess *process = new QProcess;
 
     QStringList sudoParams;
+    // these programs need a -- to indicate the end of their options, before the program
+    if(sudo == lit("kdesudo") || sudo == lit("gksudo"))
+      sudoParams << lit("--");
+
     sudoParams << fullExecutablePath;
     for(const QString &p : params)
       sudoParams << p;
@@ -1629,6 +1643,9 @@ QStringList ParseArgsList(const QString &args)
 void ShowProgressDialog(QWidget *window, const QString &labelText, ProgressFinishedMethod finished,
                         ProgressUpdateMethod update)
 {
+  if(finished())
+    return;
+
   RDProgressDialog dialog(labelText, window);
 
   // if we don't have an update function, set the progress display to be 'infinite spinner'

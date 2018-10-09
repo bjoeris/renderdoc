@@ -442,6 +442,10 @@ void FetchEnabledExtensions()
       int mn = int(version[12] - '0');
       GLCoreVersion = RDCMAX(GLCoreVersion, mj * 10 + mn);
     }
+    else
+    {
+      IsGLES = false;
+    }
   }
 
   if(GL.glGetIntegerv)
@@ -1123,6 +1127,10 @@ bool GLInitParams::IsSupportedVersion(uint64_t ver)
 
   // 0x1C -> 0x1D - added isYFlipped init parameter for backbuffers on ANGLE.
   if(ver == 0x1C)
+    return true;
+
+  // 0x1D -> 0x1E - added new chunk for context parameters and per-context tracking of backbuffers
+  if(ver == 0x1D)
     return true;
 
   return false;

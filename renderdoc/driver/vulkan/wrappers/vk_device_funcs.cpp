@@ -152,10 +152,10 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
   {
     if(*it == "VK_KHR_xlib_surface" || *it == "VK_KHR_xcb_surface" ||
        *it == "VK_KHR_wayland_surface" || *it == "VK_KHR_mir_surface" ||
-       *it == "VK_KHR_android_surface" || *it == "VK_KHR_win32_surface" ||
-       *it == "VK_KHR_display" || *it == "VK_EXT_direct_mode_display" ||
-       *it == "VK_EXT_acquire_xlib_display" || *it == "VK_EXT_display_surface_counter" ||
-       *it == "VK_GOOGLE_yeti_surface")
+       *it == "VK_MVK_macos_surface " || *it == "VK_KHR_android_surface" ||
+       *it == "VK_KHR_win32_surface" || *it == "VK_KHR_display" ||
+       *it == "VK_EXT_direct_mode_display" || *it == "VK_EXT_acquire_xlib_display" ||
+       *it == "VK_EXT_display_surface_counter" || *it == "VK_GOOGLE_yeti_surface")
     {
       it = params.Extensions.erase(it);
     }
@@ -300,14 +300,12 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
 
   VkResult ret = GetInstanceDispatchTable(NULL)->CreateInstance(&instinfo, NULL, &m_Instance);
 
-  InstanceDeviceInfo extInfo;
-
 #undef CheckExt
 #define CheckExt(name, ver)                                       \
   if(!strcmp(instinfo.ppEnabledExtensionNames[i], "VK_" #name) || \
      (int)renderdocAppInfo.apiVersion >= ver)                     \
   {                                                               \
-    extInfo.ext_##name = true;                                    \
+    m_EnabledExtensions.ext_##name = true;                        \
   }
 
   for(uint32_t i = 0; i < instinfo.enabledExtensionCount; i++)
@@ -330,7 +328,7 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
   AddResource(params.InstanceID, ResourceType::Device, "Instance");
   GetReplay()->GetResourceDesc(params.InstanceID).initialisationChunks.clear();
 
-  InitInstanceExtensionTables(m_Instance, &extInfo);
+  InitInstanceExtensionTables(m_Instance, &m_EnabledExtensions);
 
   m_DbgMsgCallback = VK_NULL_HANDLE;
   m_PhysicalDevice = VK_NULL_HANDLE;
@@ -357,6 +355,9 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
 
   VkResult vkr = ObjDisp(m_Instance)->EnumeratePhysicalDevices(Unwrap(m_Instance), &count, NULL);
   RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+  if(count == 0)
+    return ReplayStatus::APIHardwareUnsupported;
 
   m_ReplayPhysicalDevices.resize(count);
   m_ReplayPhysicalDevicesUsed.resize(count);
@@ -445,17 +446,30 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
       hasDebugReport = true;
   }
 
+  std::vector<VkExtensionProperties> supportedExts;
+
   // enumerate what instance extensions are available
-  void *module = Process::LoadModule(VulkanLibraryName);
-  PFN_vkEnumerateInstanceExtensionProperties enumInstExts =
-      (PFN_vkEnumerateInstanceExtensionProperties)Process::GetFunctionAddress(
-          module, "vkEnumerateInstanceExtensionProperties");
+  void *module = LoadVulkanLibrary();
+  if(module)
+  {
+    PFN_vkEnumerateInstanceExtensionProperties enumInstExts =
+        (PFN_vkEnumerateInstanceExtensionProperties)Process::GetFunctionAddress(
+            module, "vkEnumerateInstanceExtensionProperties");
 
-  uint32_t numSupportedExts = 0;
-  enumInstExts(NULL, &numSupportedExts, NULL);
+    if(enumInstExts)
+    {
+      uint32_t numSupportedExts = 0;
+      enumInstExts(NULL, &numSupportedExts, NULL);
 
-  std::vector<VkExtensionProperties> supportedExts(numSupportedExts);
-  enumInstExts(NULL, &numSupportedExts, &supportedExts[0]);
+      supportedExts.resize(numSupportedExts);
+      enumInstExts(NULL, &numSupportedExts, &supportedExts[0]);
+    }
+  }
+
+  if(supportedExts.empty())
+    RDCWARN(
+        "Couldn't load vkEnumerateInstanceExtensionProperties in vkCreateInstance to enumerate "
+        "instance extensions");
 
   // always enable debug report, if it's available
   if(!hasDebugReport)
@@ -1069,6 +1083,15 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       RDCLOG("Enabling VK_AMD_gpa_interface");
     }
 
+    // enable VK_AMD_gpa_interface if it's available, for detecting/controlling moltenvk.
+    // Currently this is used opaquely (extension present or not) rather than using anything the
+    // extension provides.
+    if(supportedExtensions.find("VK_MVK_moltenvk") != supportedExtensions.end())
+    {
+      Extensions.push_back("VK_MVK_moltenvk");
+      RDCLOG("Enabling VK_MVK_moltenvk");
+    }
+
     createInfo.enabledLayerCount = (uint32_t)Layers.size();
 
     const char **layerArray = NULL;
@@ -1581,14 +1604,12 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
     AddResource(Device, ResourceType::Device, "Device");
     DerivedResource(origPhysDevice, Device);
 
-    InstanceDeviceInfo extInfo;
-
 #undef CheckExt
 #define CheckExt(name, ver)                                         \
   if(!strcmp(createInfo.ppEnabledExtensionNames[i], "VK_" #name) || \
      (int)renderdocAppInfo.apiVersion >= ver)                       \
   {                                                                 \
-    extInfo.ext_##name = true;                                      \
+    m_EnabledExtensions.ext_##name = true;                          \
   }
 
     for(uint32_t i = 0; i < createInfo.enabledExtensionCount; i++)
@@ -1596,7 +1617,7 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       CheckDeviceExts();
     }
 
-    InitDeviceExtensionTables(device, &extInfo);
+    InitDeviceExtensionTables(device, &m_EnabledExtensions);
 
     RDCASSERT(m_Device == VK_NULL_HANDLE);    // MULTIDEVICE
 
@@ -1664,8 +1685,10 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
     ObjDisp(physicalDevice)
         ->GetPhysicalDeviceFeatures(Unwrap(physicalDevice), &m_PhysicalDeviceData.features);
 
+    // MoltenVK reports 0x3fffffff for this limit so just ignore that value if it comes up
     RDCASSERT(m_PhysicalDeviceData.props.limits.maxBoundDescriptorSets <
-                  ARRAY_COUNT(BakedCmdBufferInfo::pushDescriptorID),
+                      ARRAY_COUNT(BakedCmdBufferInfo::pushDescriptorID) ||
+                  m_PhysicalDeviceData.props.limits.maxBoundDescriptorSets >= 0x10000000,
               m_PhysicalDeviceData.props.limits.maxBoundDescriptorSets);
 
     for(int i = VK_FORMAT_BEGIN_RANGE + 1; i < VK_FORMAT_END_RANGE; i++)

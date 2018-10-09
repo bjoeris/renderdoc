@@ -56,7 +56,8 @@ rdcarray<rdcstr> convertArgs(const std::vector<std::string> &args)
   return ret;
 }
 
-void DisplayRendererPreview(IReplayController *renderer, uint32_t width, uint32_t height)
+void DisplayRendererPreview(IReplayController *renderer, uint32_t width, uint32_t height,
+                            uint32_t numLoops)
 {
   if(renderer == NULL)
     return;
@@ -100,7 +101,7 @@ void DisplayRendererPreview(IReplayController *renderer, uint32_t width, uint32_
       d.resourceId = id;
   }
 
-  DisplayRendererPreview(renderer, d, width, height);
+  DisplayRendererPreview(renderer, d, width, height, numLoops);
 }
 
 std::map<std::string, Command *> commands;
@@ -523,6 +524,8 @@ struct ReplayCommand : public Command
     parser.set_footer("<capture.rdc>");
     parser.add<uint32_t>("width", 'w', "The preview window width.", false, 1280);
     parser.add<uint32_t>("height", 'h', "The preview window height.", false, 720);
+    parser.add<uint32_t>("loops", 'l', "How many times to loop the replay, or 0 for indefinite.",
+                         false, 0);
     parser.add<string>("remote-host", 0,
                        "Instead of replaying locally, replay on this host over the network.", false);
     parser.add<uint32_t>("remote-port", 0, "If --remote-host is set, use this port.", false,
@@ -580,7 +583,7 @@ struct ReplayCommand : public Command
       if(status == ReplayStatus::Succeeded)
       {
         DisplayRendererPreview(renderer, parser.get<uint32_t>("width"),
-                               parser.get<uint32_t>("height"));
+                               parser.get<uint32_t>("height"), parser.get<uint32_t>("loops"));
 
         remote->CloseCapture(renderer);
       }
@@ -612,7 +615,7 @@ struct ReplayCommand : public Command
       if(status == ReplayStatus::Succeeded)
       {
         DisplayRendererPreview(renderer, parser.get<uint32_t>("width"),
-                               parser.get<uint32_t>("height"));
+                               parser.get<uint32_t>("height"), parser.get<uint32_t>("loops"));
 
         renderer->Shutdown();
       }
@@ -836,7 +839,7 @@ struct CapAltBitCommand : public Command
   virtual void AddOptions(cmdline::parser &parser)
   {
     parser.add<uint32_t>("pid", 0, "");
-    parser.add<string>("log", 0, "");
+    parser.add<string>("capfile", 0, "");
     parser.add<string>("debuglog", 0, "");
     parser.add<string>("capopts", 0, "");
     parser.stop_at_rest(true);
@@ -931,7 +934,7 @@ struct CapAltBitCommand : public Command
     RENDERDOC_SetDebugLogFile(debuglog.c_str());
 
     ExecuteResult result = RENDERDOC_InjectIntoProcess(
-        parser.get<uint32_t>("pid"), env, parser.get<string>("log").c_str(), cmdopts, false);
+        parser.get<uint32_t>("pid"), env, parser.get<string>("capfile").c_str(), cmdopts, false);
 
     if(result.status == ReplayStatus::Succeeded)
       return result.ident;

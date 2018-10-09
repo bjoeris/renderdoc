@@ -184,7 +184,7 @@ WindowingData DisplayRemoteServerPreview(bool active, const rdcarray<WindowingSy
 }
 
 void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &displayCfg, uint32_t width,
-                            uint32_t height)
+                            uint32_t height, uint32_t numLoops)
 {
   RECT wr = {0, 0, (LONG)width, (LONG)height};
   AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
@@ -203,6 +203,8 @@ void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &display
       renderer->CreateOutput(CreateWin32WindowingData(wnd), ReplayOutputType::Texture);
 
   out->SetTextureDisplay(displayCfg);
+
+  uint32_t loopCount = 0;
 
   MSG msg;
   ZeroMemory(&msg, sizeof(msg));
@@ -225,6 +227,11 @@ void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &display
     out->Display();
 
     Sleep(40);
+
+    loopCount++;
+
+    if(numLoops > 0 && loopCount == numLoops)
+      break;
   }
 
   DestroyWindow(wnd);
@@ -596,7 +603,7 @@ struct GlobalHookCommand : public Command
   virtual void AddOptions(cmdline::parser &parser)
   {
     parser.add<string>("match", 0, "");
-    parser.add<string>("logfile", 0, "");
+    parser.add<string>("capfile", 0, "");
     parser.add<string>("debuglog", 0, "");
     parser.add<string>("capopts", 0, "");
   }
@@ -606,7 +613,7 @@ struct GlobalHookCommand : public Command
   virtual int Execute(cmdline::parser &parser, const CaptureOptions &)
   {
     wstring wpathmatch = conv(parser.get<string>("match"));
-    string logfile = parser.get<string>("logfile");
+    string capfile = parser.get<string>("capfile");
     string debuglog = parser.get<string>("debuglog");
 
     CaptureOptions cmdopts;
@@ -670,7 +677,7 @@ struct GlobalHookCommand : public Command
 
         wcsncpy_s(shimdata->pathmatchstring, wpathmatch.c_str(), _TRUNCATE);
         wcsncpy_s(shimdata->rdocpath, rdocpath, _TRUNCATE);
-        strncpy_s(shimdata->logfile, logfile.c_str(), _TRUNCATE);
+        strncpy_s(shimdata->capfile, capfile.c_str(), _TRUNCATE);
         strncpy_s(shimdata->debuglog, debuglog.c_str(), _TRUNCATE);
         memcpy(shimdata->opts, &cmdopts, sizeof(CaptureOptions));
 

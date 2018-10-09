@@ -17,6 +17,19 @@ elseif(APPLE)
     list(APPEND RDOC_LIBRARIES
         PRIVATE -lm
         PRIVATE -ldl)
+
+    if(ENABLE_VULKAN)
+        find_library(COCOA_LIBRARY Cocoa)
+        list(APPEND RDOC_LIBRARIES PRIVATE ${COCOA_LIBRARY})
+
+        find_library(QUARTZCORE_LIBRARY QuartzCore)
+        list(APPEND RDOC_LIBRARIES PRIVATE ${QUARTZCORE_LIBRARY})
+    endif()
+
+    if(ENABLE_GL)
+        find_library(OPENGL_LIBRARY OpenGL)
+        list(APPEND RDOC_LIBRARIES PRIVATE ${OPENGL_LIBRARY})
+    endif()
 elseif(UNIX)
     find_package(PkgConfig REQUIRED)
     find_package(Threads REQUIRED)
@@ -82,6 +95,7 @@ set(sources
     common/threading.h
     common/timing.h
     common/wrapped_pool.h
+    common/threading_tests.cpp
     core/core.cpp
     core/image_viewer.cpp
     core/core.h
@@ -296,7 +310,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR APPLE)
     # Need to add -Wno-unknown-warning-option since some clang versions don't have
     # -Wno-shift-negative-value available
     set_source_files_properties(3rdparty/jpeg-compressor/jpgd.cpp
-        PROPERTIES COMPILE_FLAGS "-Wno-unknown-warning-option -Wno-shift-negative-value")
+        PROPERTIES COMPILE_FLAGS "-Wno-unknown-warning-option -Wno-shift-negative-value -Wno-invalid-noreturn")
 
     if(CMAKE_COMPILER_IS_GNUCXX)
         set_property(SOURCE 3rdparty/jpeg-compressor/jpgd.cpp
@@ -305,9 +319,10 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR APPLE)
         set_property(SOURCE strings/utf8printf.cpp
             APPEND_STRING PROPERTY COMPILE_FLAGS " -Wno-unknown-warning -Wno-format-truncation")
     endif()
+
     # Need to add -Wno-unknown-warning-option since only newer clang versions have
     # -Wno-unused-lambda-capture available
-    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND APPLE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
            # Only clang has this warning. Fixing it in this file causes a compile error on windows
            set_source_files_properties(os/os_specific.cpp
                PROPERTIES COMPILE_FLAGS "-Wno-unknown-warning-option -Wno-unused-lambda-capture")
@@ -445,7 +460,14 @@ add_library(renderdoc_libentry STATIC os/posix/posix_libentry.cpp)
 target_compile_definitions(renderdoc_libentry ${RDOC_DEFINITIONS})
 target_include_directories(renderdoc_libentry ${RDOC_INCLUDES})
 link_directories(${CMAKE_CURRENT_BINARY_DIR})
-list(APPEND RDOC_LIBRARIES PRIVATE -lrenderdoc_libentry)
+
+# On apple we need to pass the force_load parameter here - if we set it with LINK_FLAGS below
+# it gets applied too early (even if the -lrenderdoc_libentry is later)
+if(APPLE)
+    list(APPEND RDOC_LIBRARIES PRIVATE "-Wl,-force_load,librenderdoc_libentry.a -lrenderdoc_libentry")
+else()
+    list(APPEND RDOC_LIBRARIES PRIVATE -lrenderdoc_libentry)
+endif()
 
 add_library(renderdoc SHARED ${renderdoc_objects})
 target_compile_definitions(renderdoc ${RDOC_DEFINITIONS})
@@ -456,6 +478,14 @@ add_dependencies(renderdoc renderdoc_libentry)
 
 if(UNIX AND NOT ANDROID AND NOT APPLE)
     set_target_properties(renderdoc PROPERTIES LINK_FLAGS "-Wl,--undefined,force_include_libentry -Wl,--version-script,${CMAKE_CURRENT_SOURCE_DIR}/renderdoc.version -Wl,--no-undefined")
+endif()
+
+# On macOS set the rpath so that linked libraries are relative to the executable, not absolute
+if(APPLE)
+    set_target_properties(renderdoc PROPERTIES MACOSX_RPATH 1)
+    set_target_properties(renderdoc PROPERTIES INSTALL_RPATH "@executable_path/../lib")
+    set_target_properties(renderdoc PROPERTIES INSTALL_NAME_DIR "@executable_path/../lib")
+    set_target_properties(renderdoc PROPERTIES BUILD_WITH_INSTALL_RPATH 1)
 endif()
 
 if(ANDROID)

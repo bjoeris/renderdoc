@@ -646,7 +646,7 @@ VkResult WrappedVulkan::vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR 
   unwrappedInfo.pWaitSemaphores = unwrappedInfo.waitSemaphoreCount ? &unwrappedSems[0] : NULL;
 
   // Don't support any extensions for present info
-  const VkGenericStruct *next = (const VkGenericStruct *)pPresentInfo->pNext;
+  const VkBaseInStructure *next = (const VkBaseInStructure *)pPresentInfo->pNext;
   while(next)
   {
     // allowed (and ignored) pNext structs
@@ -660,6 +660,7 @@ VkResult WrappedVulkan::vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR 
   }
   RDCASSERT(pPresentInfo->pNext == NULL);
 
+  // TODO support multiple swapchains here
   VkResourceRecord *swaprecord = GetRecord(pPresentInfo->pSwapchains[0]);
   RDCASSERT(swaprecord->swapInfo);
 
@@ -678,6 +679,9 @@ VkResult WrappedVulkan::vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR 
 
     if(overlay & eRENDERDOC_Overlay_Enabled)
     {
+      // we'll do the wait ourselves before rendering the overlay
+      unwrappedInfo.waitSemaphoreCount = 0;
+
       VkRenderPass rp = swapInfo.rp;
       VkImage im = swapInfo.images[pPresentInfo->pImageIndices[0]].im;
       VkFramebuffer fb = swapInfo.images[pPresentInfo->pImageIndices[0]].fb;
@@ -752,7 +756,9 @@ VkResult WrappedVulkan::vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR 
 
       ObjDisp(textstate.cmd)->EndCommandBuffer(Unwrap(textstate.cmd));
 
-      SubmitCmds();
+      std::vector<VkPipelineStageFlags> waitStage(unwrappedSems.size(),
+                                                  VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+      SubmitCmds(unwrappedSems.data(), waitStage.data(), (uint32_t)unwrappedSems.size());
 
       if(swapQueueIndex != m_QueueFamilyIdx)
       {
@@ -1000,6 +1006,40 @@ VkResult WrappedVulkan::vkGetPhysicalDeviceSurfaceFormats2KHR(
   return ObjDisp(physicalDevice)
       ->GetPhysicalDeviceSurfaceFormats2KHR(Unwrap(physicalDevice), &unwrapped, pSurfaceFormatCount,
                                             pSurfaceFormats);
+}
+
+VkResult WrappedVulkan::vkGetPhysicalDeviceDisplayProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                                 uint32_t *pPropertyCount,
+                                                                 VkDisplayProperties2KHR *pProperties)
+{
+  return ObjDisp(physicalDevice)
+      ->GetPhysicalDeviceDisplayProperties2KHR(Unwrap(physicalDevice), pPropertyCount, pProperties);
+}
+
+VkResult WrappedVulkan::vkGetPhysicalDeviceDisplayPlaneProperties2KHR(
+    VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount,
+    VkDisplayPlaneProperties2KHR *pProperties)
+{
+  return ObjDisp(physicalDevice)
+      ->GetPhysicalDeviceDisplayPlaneProperties2KHR(Unwrap(physicalDevice), pPropertyCount,
+                                                    pProperties);
+}
+
+VkResult WrappedVulkan::vkGetDisplayModeProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                       VkDisplayKHR display, uint32_t *pPropertyCount,
+                                                       VkDisplayModeProperties2KHR *pProperties)
+{
+  // displays are not wrapped
+  return ObjDisp(physicalDevice)
+      ->GetDisplayModeProperties2KHR(Unwrap(physicalDevice), display, pPropertyCount, pProperties);
+}
+
+VkResult WrappedVulkan::vkGetDisplayPlaneCapabilities2KHR(
+    VkPhysicalDevice physicalDevice, const VkDisplayPlaneInfo2KHR *pDisplayPlaneInfo,
+    VkDisplayPlaneCapabilities2KHR *pCapabilities)
+{
+  return ObjDisp(physicalDevice)
+      ->GetDisplayPlaneCapabilities2KHR(Unwrap(physicalDevice), pDisplayPlaneInfo, pCapabilities);
 }
 
 INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateSwapchainKHR, VkDevice device,

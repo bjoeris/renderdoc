@@ -214,6 +214,8 @@ void *GPUBuffer::Map(uint32_t *bindoffset, VkDeviceSize usedsize)
   if(bindoffset)
     *bindoffset = (uint32_t)offset;
 
+  mapoffset = offset;
+
   void *ptr = NULL;
   VkResult vkr = m_pDriver->vkMapMemory(device, mem, offset, size, 0, (void **)&ptr);
   RDCASSERTEQUAL(vkr, VK_SUCCESS);
@@ -247,7 +249,7 @@ void GPUBuffer::Unmap()
   if(!(createFlags & eGPUBufferReadback) && !(createFlags & eGPUBufferGPULocal))
   {
     VkMappedMemoryRange range = {
-        VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, mem, 0, VK_WHOLE_SIZE,
+        VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, mem, mapoffset, VK_WHOLE_SIZE,
     };
 
     VkResult vkr = m_pDriver->vkFlushMappedMemoryRanges(device, 1, &range);
@@ -284,8 +286,8 @@ bool VkInitParams::IsSupportedVersion(uint64_t ver)
 // lets us just copy across a struct unmodified into some temporary memory and
 // append it onto a pNext chain we're building
 template <typename VkStruct>
-void CopyNextChainedStruct(byte *&tempMem, const VkGenericStruct *nextInput,
-                           VkGenericStruct *&nextChainTail)
+void CopyNextChainedStruct(byte *&tempMem, const VkBaseInStructure *nextInput,
+                           VkBaseInStructure *&nextChainTail)
 {
   const VkStruct *instruct = (const VkStruct *)nextInput;
   VkStruct *outstruct = (VkStruct *)tempMem;
@@ -299,15 +301,15 @@ void CopyNextChainedStruct(byte *&tempMem, const VkGenericStruct *nextInput,
   outstruct->pNext = NULL;
 
   // append this onto the chain
-  nextChainTail->pNext = (const VkGenericStruct *)outstruct;
-  nextChainTail = (VkGenericStruct *)outstruct;
+  nextChainTail->pNext = (const VkBaseInStructure *)outstruct;
+  nextChainTail = (VkBaseInStructure *)outstruct;
 }
 
 // this is similar to the above function, but for use after we've modified a struct locally
 // e.g. to unwrap some members or patch flags, etc.
 template <typename VkStruct>
 void AppendModifiedChainedStruct(byte *&tempMem, VkStruct *outputStruct,
-                                 VkGenericStruct *&nextChainTail)
+                                 VkBaseInStructure *&nextChainTail)
 {
   tempMem = (byte *)(outputStruct + 1);
 
@@ -315,13 +317,13 @@ void AppendModifiedChainedStruct(byte *&tempMem, VkStruct *outputStruct,
   outputStruct->pNext = NULL;
 
   // append this onto the chain
-  nextChainTail->pNext = (const VkGenericStruct *)outputStruct;
-  nextChainTail = (VkGenericStruct *)outputStruct;
+  nextChainTail->pNext = (const VkBaseInStructure *)outputStruct;
+  nextChainTail = (VkBaseInStructure *)outputStruct;
 }
 
 size_t GetNextPatchSize(const void *pNext)
 {
-  const VkGenericStruct *next = (const VkGenericStruct *)pNext;
+  const VkBaseInStructure *next = (const VkBaseInStructure *)pNext;
   size_t memSize = 0;
 
   while(next)
@@ -472,7 +474,7 @@ size_t GetNextPatchSize(const void *pNext)
 }
 
 void UnwrapNextChain(CaptureState state, const char *structName, byte *&tempMem,
-                     VkGenericStruct *infoStruct)
+                     VkBaseInStructure *infoStruct)
 {
   // during capture, this walks the pNext chain and either copies structs that can be passed
   // straight through, or copies and modifies any with vulkan objects that need to be unwrapped.
@@ -482,8 +484,8 @@ void UnwrapNextChain(CaptureState state, const char *structName, byte *&tempMem,
   // serialised and available for future use and for user inspection, but isn't replayed when not
   // necesary.
 
-  VkGenericStruct *nextChainTail = infoStruct;
-  const VkGenericStruct *nextInput = (const VkGenericStruct *)infoStruct->pNext;
+  VkBaseInStructure *nextChainTail = infoStruct;
+  const VkBaseInStructure *nextInput = (const VkBaseInStructure *)infoStruct->pNext;
 
   // start with an empty chain. Every call to AppendModifiedChainedStruct / CopyNextChainedStruct
   // pushes on a new entry, but if there's only one entry in the list and it's one we want to skip,
@@ -1399,7 +1401,10 @@ ResourceFormat MakeResourceFormat(VkFormat fmt)
     case VK_FORMAT_R64G64B64A64_SFLOAT: ret.compType = CompType::Double; break;
     case VK_FORMAT_D16_UNORM:
     case VK_FORMAT_X8_D24_UNORM_PACK32:
-    case VK_FORMAT_D32_SFLOAT: ret.compType = CompType::Depth; break;
+    case VK_FORMAT_D32_SFLOAT:
+    case VK_FORMAT_D16_UNORM_S8_UINT:
+    case VK_FORMAT_D24_UNORM_S8_UINT:
+    case VK_FORMAT_D32_SFLOAT_S8_UINT: ret.compType = CompType::Depth; break;
     default: break;
   }
 
@@ -2181,7 +2186,7 @@ VkDriverInfo::VkDriverInfo(const VkPhysicalDeviceProperties &physProps)
   m_Vendor = GPUVendorFromPCIVendor(physProps.vendorID);
 
   // add non-PCI vendor IDs
-  if(physProps.vendorID == 0x10002)
+  if(physProps.vendorID == VK_VENDOR_ID_VSI)
     m_Vendor = GPUVendor::Verisilicon;
 
   m_Major = VK_VERSION_MAJOR(physProps.driverVersion);

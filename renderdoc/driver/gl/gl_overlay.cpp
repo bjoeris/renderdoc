@@ -213,12 +213,12 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
     DebugData.fixedcolFragShader = CreateShader(eGL_FRAGMENT_SHADER, sources);
   }
 
-  // this is not supported on GLES shading language 100
-  if(shaderType == eShaderGLSL || glslVer >= 300)
+  // this is not supported on GLES
+  if(shaderType == eShaderGLSL)
   {
     std::string defines = "";
 
-    if(glslVer < 450)
+    if(GLCoreVersion < 45)
     {
       // dFdx fine functions not available before GLSL 450. Use normal dFdx, which might be coarse,
       // so won't show quad overdraw properly
@@ -227,16 +227,20 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
 
       RDCWARN("Quad overdraw requires GLSL 4.50 for dFd(xy)fine, using possibly coarse dFd(xy).");
     }
+    else
+    {
+      glslVer = 450;
+    }
 
     std::vector<std::string> sources;
     GenerateGLSLShader(sources, shaderType, defines, GetEmbeddedResource(glsl_quadwrite_frag),
-                       glslVer);
+                       glslVer, false);
     DebugData.quadoverdrawFragShader = CreateShader(eGL_FRAGMENT_SHADER, sources);
   }
   else
   {
     if(overlay == DebugOverlay::QuadOverdrawDraw || overlay == DebugOverlay::QuadOverdrawPass)
-      RDCWARN("Quad overdraw shader not supported on GLES with %d shader", glslVer);
+      RDCWARN("Quad overdraw not supported on GLES", glslVer);
   }
 
   // we bind the separable program created for each shader, and copy
@@ -369,26 +373,48 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
 
       const DrawcallDescription *draw = m_pDriver->GetDrawcall(eventId);
 
-      // readback the index buffer data
-      std::vector<byte> idxs;
-      uint32_t offset = draw->indexOffset * draw->indexByteWidth;
-      uint32_t length = 1;
-      drv.glGetNamedBufferParameterivEXT(idxbuf, eGL_BUFFER_SIZE, (GLint *)&length);
-
-      idxs.resize(length);
-      drv.glGetBufferSubData(eGL_ELEMENT_ARRAY_BUFFER, offset,
-                             RDCMIN(GLsizeiptr(length - offset),
-                                    GLsizeiptr(draw->numIndices) * GLsizeiptr(draw->indexByteWidth)),
-                             &idxs[0]);
-
-      // unbind the real index buffer
-      drv.glBindBuffer(eGL_ELEMENT_ARRAY_BUFFER, 0);
-
       std::vector<uint32_t> patchedIndices;
-      PatchLineStripIndexBuffer(
-          draw, draw->indexByteWidth == 1 ? (uint8_t *)idxs.data() : (uint8_t *)NULL,
-          draw->indexByteWidth == 2 ? (uint16_t *)idxs.data() : (uint16_t *)NULL,
-          draw->indexByteWidth == 4 ? (uint32_t *)idxs.data() : (uint32_t *)NULL, patchedIndices);
+
+      // readback the index buffer data
+      if(idxbuf)
+      {
+        std::vector<byte> idxs;
+        uint32_t offset = draw->indexOffset * draw->indexByteWidth;
+        uint32_t length = 1;
+        drv.glGetNamedBufferParameterivEXT(idxbuf, eGL_BUFFER_SIZE, (GLint *)&length);
+
+        idxs.resize(length);
+        drv.glGetBufferSubData(
+            eGL_ELEMENT_ARRAY_BUFFER, offset,
+            RDCMIN(GLsizeiptr(length - offset),
+                   GLsizeiptr(draw->numIndices) * GLsizeiptr(draw->indexByteWidth)),
+            &idxs[0]);
+
+        // unbind the real index buffer
+        drv.glBindBuffer(eGL_ELEMENT_ARRAY_BUFFER, 0);
+
+        uint32_t expectedSize = draw->numIndices * draw->indexByteWidth;
+
+        if(idxs.size() < expectedSize)
+        {
+          RDCERR("Index buffer is as large as expected");
+          idxs.resize(expectedSize);
+        }
+
+        PatchLineStripIndexBuffer(
+            draw, draw->indexByteWidth == 1 ? (uint8_t *)idxs.data() : (uint8_t *)NULL,
+            draw->indexByteWidth == 2 ? (uint16_t *)idxs.data() : (uint16_t *)NULL,
+            draw->indexByteWidth == 4 ? (uint32_t *)idxs.data() : (uint32_t *)NULL, patchedIndices);
+      }
+      else
+      {
+        // generate 'index' list
+        std::vector<uint32_t> idxs;
+        idxs.resize(draw->numIndices);
+        for(uint32_t i = 0; i < draw->numIndices; i++)
+          idxs[i] = i;
+        PatchLineStripIndexBuffer(draw, NULL, NULL, idxs.data(), patchedIndices);
+      }
 
       GLboolean primRestart = drv.glIsEnabled(eGL_PRIMITIVE_RESTART_FIXED_INDEX);
       drv.glEnable(eGL_PRIMITIVE_RESTART_FIXED_INDEX);
@@ -1315,6 +1341,12 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
           CreateOverlayProgram(prog, pipe, DebugData.quadoverdrawFragShader);
           drv.glUseProgram(DebugData.overlayProg);
           drv.glBindProgramPipeline(0);
+
+          GLint loc = drv.glGetUniformLocation(DebugData.overlayProg, "overdrawImage");
+          if(loc != -1)
+            drv.glUniform1ui(loc, 0);
+          else
+            RDCERR("Couldn't get location of overdrawImage");
 
           drv.glBindFramebuffer(eGL_READ_FRAMEBUFFER, curdrawfbo);
           SafeBlitFramebuffer(0, 0, texDetails.width, texDetails.height, 0, 0, texDetails.width,

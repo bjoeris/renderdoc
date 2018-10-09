@@ -175,6 +175,11 @@ extern "C" RENDERDOC_API const char *RENDERDOC_CC RENDERDOC_GetVersionString()
   return MAJOR_MINOR_VERSION_STRING;
 }
 
+extern "C" RENDERDOC_API const char *RENDERDOC_CC RENDERDOC_GetCommitHash()
+{
+  return GitVersionHash;
+}
+
 extern "C" RENDERDOC_API const char *RENDERDOC_CC RENDERDOC_GetConfigSetting(const char *name)
 {
   return RenderDoc::Inst().GetConfigSetting(name).c_str();
@@ -303,10 +308,10 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_UnregisterMemoryRegion(void
 
 extern "C" RENDERDOC_API ExecuteResult RENDERDOC_CC
 RENDERDOC_ExecuteAndInject(const char *app, const char *workingDir, const char *cmdLine,
-                           const rdcarray<EnvironmentModification> &env, const char *logfile,
+                           const rdcarray<EnvironmentModification> &env, const char *capturefile,
                            const CaptureOptions &opts, bool waitForExit)
 {
-  return Process::LaunchAndInjectIntoProcess(app, workingDir, cmdLine, env, logfile, opts,
+  return Process::LaunchAndInjectIntoProcess(app, workingDir, cmdLine, env, capturefile, opts,
                                              waitForExit != 0);
 }
 
@@ -316,10 +321,10 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_GetDefaultCaptureOptions(Ca
 }
 
 extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_StartGlobalHook(const char *pathmatch,
-                                                                     const char *logfile,
+                                                                     const char *capturefile,
                                                                      const CaptureOptions &opts)
 {
-  return Process::StartGlobalHook(pathmatch, logfile, opts);
+  return Process::StartGlobalHook(pathmatch, capturefile, opts);
 }
 
 extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_StopGlobalHook()
@@ -339,9 +344,9 @@ extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_CanGlobalHook()
 
 extern "C" RENDERDOC_API ExecuteResult RENDERDOC_CC
 RENDERDOC_InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
-                            const char *logfile, const CaptureOptions &opts, bool waitForExit)
+                            const char *capturefile, const CaptureOptions &opts, bool waitForExit)
 {
-  return Process::InjectIntoProcess(pid, env, logfile, opts, waitForExit != 0);
+  return Process::InjectIntoProcess(pid, env, capturefile, opts, waitForExit != 0);
 }
 
 extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_FreeArrayMem(const void *mem)

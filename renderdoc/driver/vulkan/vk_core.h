@@ -333,6 +333,13 @@ private:
 
   PFN_vkSetDeviceLoaderData m_SetDeviceLoaderData;
 
+  InstanceDeviceInfo m_EnabledExtensions;
+
+  const InstanceDeviceInfo &GetExtensions(VkResourceRecord *record)
+  {
+    return record ? *record->instDevInfo : m_EnabledExtensions;
+  }
+
   // the instance corresponding to this WrappedVulkan
   VkInstance m_Instance;
   // the instance's dbg msg callback handle
@@ -519,6 +526,8 @@ private:
     uint32_t drawCount;              // similar to above
   };
 
+  bool HasNonMarkerEvents(ResourceId cmdBuffer);
+
   // on replay, the current command buffer for the last chunk we
   // handled.
   ResourceId m_LastCmdBufferID;
@@ -619,7 +628,7 @@ private:
 
   bool InRerecordRange(ResourceId cmdid);
   bool HasRerecordCmdBuf(ResourceId cmdid);
-  bool IsPartialCmdBuf(ResourceId cmdid);
+  bool ShouldUpdateRenderState(ResourceId cmdid, bool forcePrimary = false);
   VkCommandBuffer RerecordCmdBuf(ResourceId cmdid, PartialReplayIndex partialType = ePartialNum);
 
   // this info is stored in the record on capture, but we
@@ -871,7 +880,8 @@ public:
     return m_PhysicalDevice;
   }
   VkCommandBuffer GetNextCmd();
-  void SubmitCmds();
+  void SubmitCmds(VkSemaphore *unwrappedWaitSemaphores = NULL,
+                  VkPipelineStageFlags *waitStageMask = NULL, uint32_t waitSemaphoreCount = 0);
   VkSemaphore GetNextSemaphore();
   void SubmitSemaphores();
   void FlushQ();
@@ -1536,6 +1546,13 @@ public:
                                      const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface);
 #endif
 
+#if defined(VK_USE_PLATFORM_MACOS_MVK)
+  // VK_MVK_macos_surface
+  VkResult vkCreateMacOSSurfaceMVK(VkInstance instance,
+                                   const VkMacOSSurfaceCreateInfoMVK *pCreateInfo,
+                                   const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface);
+#endif
+
 #if defined(VK_USE_PLATFORM_XCB_KHR)
   // VK_KHR_xcb_surface
   VkResult vkCreateXcbSurfaceKHR(VkInstance instance, const VkXcbSurfaceCreateInfoKHR *pCreateInfo,
@@ -1833,4 +1850,21 @@ public:
                                                  const VkPhysicalDeviceSurfaceInfo2KHR *pSurfaceInfo,
                                                  uint32_t *pSurfaceFormatCount,
                                                  VkSurfaceFormat2KHR *pSurfaceFormats);
+
+  // VK_KHR_get_display_properties2
+  VkResult vkGetPhysicalDeviceDisplayProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                    uint32_t *pPropertyCount,
+                                                    VkDisplayProperties2KHR *pProperties);
+
+  VkResult vkGetPhysicalDeviceDisplayPlaneProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                         uint32_t *pPropertyCount,
+                                                         VkDisplayPlaneProperties2KHR *pProperties);
+
+  VkResult vkGetDisplayModeProperties2KHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display,
+                                          uint32_t *pPropertyCount,
+                                          VkDisplayModeProperties2KHR *pProperties);
+
+  VkResult vkGetDisplayPlaneCapabilities2KHR(VkPhysicalDevice physicalDevice,
+                                             const VkDisplayPlaneInfo2KHR *pDisplayPlaneInfo,
+                                             VkDisplayPlaneCapabilities2KHR *pCapabilities);
 };

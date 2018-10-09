@@ -1130,6 +1130,13 @@ void GLRenderState::FetchState(WrappedOpenGL *driver)
     GL.glGetIntegerv(eGL_READ_FRAMEBUFFER_BINDING, (GLint *)&read);
     DrawFBO = FramebufferRes(ctx, draw);
     ReadFBO = FramebufferRes(ctx, read);
+
+    // if the default FBO is bound, we must force the use of the context itself, rather than the
+    // sharegroup (if FBOs are normally shared).
+    if(draw == 0)
+      DrawFBO = FramebufferRes({ctx.ctx, ctx.ctx}, draw);
+    if(read == 0)
+      ReadFBO = FramebufferRes({ctx.ctx, ctx.ctx}, read);
   }
 
   GL.glBindFramebuffer(eGL_DRAW_FRAMEBUFFER, 0);
@@ -1605,23 +1612,28 @@ void GLRenderState::ApplyState(WrappedOpenGL *driver)
   // this work if we're on the replay context
   if(driver->GetReplay()->IsReplayContext(ctx.ctx))
   {
-    // apply drawbuffers/readbuffer to default framebuffer
-    GL.glBindFramebuffer(eGL_READ_FRAMEBUFFER, driver->GetFakeBBFBO());
-    GL.glBindFramebuffer(eGL_DRAW_FRAMEBUFFER, driver->GetFakeBBFBO());
-    GL.glDrawBuffers(numDBs, DBs);
+    GLuint fbo = driver->GetCurrentDefaultFBO();
 
-    // see above for reasoning for this
-    GL.glReadBuffer(eGL_COLOR_ATTACHMENT0);
+    if(fbo)
+    {
+      // apply drawbuffers/readbuffer to default framebuffer
+      GL.glBindFramebuffer(eGL_READ_FRAMEBUFFER, driver->GetCurrentDefaultFBO());
+      GL.glBindFramebuffer(eGL_DRAW_FRAMEBUFFER, driver->GetCurrentDefaultFBO());
+      GL.glDrawBuffers(numDBs, DBs);
+
+      // see above for reasoning for this
+      GL.glReadBuffer(eGL_COLOR_ATTACHMENT0);
+    }
 
     if(ReadFBO.name)
       GL.glBindFramebuffer(eGL_READ_FRAMEBUFFER, ReadFBO.name);
-    else
-      GL.glBindFramebuffer(eGL_READ_FRAMEBUFFER, driver->GetFakeBBFBO());
+    else if(fbo)
+      GL.glBindFramebuffer(eGL_READ_FRAMEBUFFER, fbo);
 
     if(DrawFBO.name)
       GL.glBindFramebuffer(eGL_DRAW_FRAMEBUFFER, DrawFBO.name);
-    else
-      GL.glBindFramebuffer(eGL_DRAW_FRAMEBUFFER, driver->GetFakeBBFBO());
+    else if(fbo)
+      GL.glBindFramebuffer(eGL_DRAW_FRAMEBUFFER, fbo);
   }
 
   GL.glHint(eGL_FRAGMENT_SHADER_DERIVATIVE_HINT, Hints.Derivatives);

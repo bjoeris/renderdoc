@@ -24,6 +24,7 @@
 
 #include "renderdoccmd.h"
 #include <EGL/egl.h>
+#include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <dlfcn.h>
 #include <locale.h>
@@ -342,7 +343,7 @@ WindowingData DisplayRemoteServerPreview(bool active, const rdcarray<WindowingSy
 }
 
 void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &displayCfg, uint32_t width,
-                            uint32_t height)
+                            uint32_t height, uint32_t numLoops)
 {
   ANativeWindow *connectionScreenWindow = android_state->window;
 
@@ -353,11 +354,14 @@ void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &display
 
   out->SetTextureDisplay(displayCfg);
 
-  for(int i = 0; i < 100; i++)
+  if(numLoops == 0)
+    numLoops = 100;
+
+  for(uint32_t i = 0; i < numLoops; i++)
   {
     renderer->SetFrameEvent(10000000, true);
 
-    ANDROID_LOG("Frame %i", i);
+    ANDROID_LOG("Frame %u", i);
     out->Display();
 
     usleep(100000);

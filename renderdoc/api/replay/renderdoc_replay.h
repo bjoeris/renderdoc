@@ -279,6 +279,9 @@ DOCUMENT(R"(This is an opaque identifier that uniquely locates a resource.
 struct ResourceId
 {
   ResourceId() : id() {}
+#if defined(SWIG)
+  ResourceId(const ResourceId &other) : id(other.id) {}
+#endif
   DOCUMENT("A helper function that explicitly creates an empty/invalid/null :class:`ResourceId`.");
   inline static ResourceId Null() { return ResourceId(); }
   DOCUMENT("Compares two ``ResourceId`` objects for equality.");
@@ -308,6 +311,7 @@ DOCUMENT(R"(Specifies a windowing system to use for creating an output window.
 .. data:: Unknown
 
   No windowing data is passed and no native window is described.
+  See :func:`CreateHeadlessWindowingData`.
 
 .. data:: Win32
 
@@ -324,6 +328,10 @@ DOCUMENT(R"(Specifies a windowing system to use for creating an output window.
 .. data:: Android
 
   The windowing data refers to an Android window. See :func:`CreateAndroidWindowingData`.
+
+.. data:: MacOS
+
+  The windowing data refers to a MacOS / OS X CALayer. See :func:`CreateMacOSWindowingData`.
 )");
 enum class WindowingSystem : uint32_t
 {
@@ -332,6 +340,7 @@ enum class WindowingSystem : uint32_t
   Xlib,
   XCB,
   Android,
+  MacOS,
   Yeti,
 };
 
@@ -392,12 +401,31 @@ struct WindowingData
     {
       ANativeWindow *window;
     } android;
+
+    struct
+    {
+      void *layer;
+    } macOS;
   };
 };
 
 DECLARE_REFLECTION_ENUM(WindowingData);
 
 #endif
+
+DOCUMENT(R"(Create a :class:`WindowingData` for no backing window, it will be headless.
+
+:return: A :class:`WindowingData` corresponding to an 'empty' backing window.
+:rtype: WindowingData
+)");
+inline const WindowingData CreateHeadlessWindowingData()
+{
+  WindowingData ret = {};
+
+  ret.system = WindowingSystem::Unknown;
+
+  return ret;
+}
 
 DOCUMENT(R"(Create a :class:`WindowingData` for a Win32 ``HWND`` handle.
 
@@ -480,6 +508,22 @@ inline const WindowingData CreateAndroidWindowingData(ANativeWindow *window)
   return ret;
 }
 
+DOCUMENT(R"(Create a :class:`WindowingData` for an macOS ``CALayer`` handle (as void pointer).
+
+:param CALayer window: The native ``CALayer`` handle for this window.
+:return: A :class:`WindowingData` corresponding to the given window.
+:rtype: WindowingData
+)");
+inline const WindowingData CreateMacOSWindowingData(void *view)
+{
+  WindowingData ret = {};
+
+  ret.system = WindowingSystem::MacOS;
+  ret.macOS.layer = view;
+
+  return ret;
+}
+
 // declare metatype/reflection for ResourceId here as the struct itself is declared before including
 // all relevant headers above
 #if defined(RENDERDOC_QT_COMPAT)
@@ -498,6 +542,10 @@ DECLARE_REFLECTION_STRUCT(ResourceId);
 DOCUMENT(R"(Internal structure used for initialising environment in a replay application.)");
 struct GlobalEnvironment
 {
+  DOCUMENT("");
+  GlobalEnvironment() = default;
+  GlobalEnvironment(const GlobalEnvironment &) = default;
+
   DOCUMENT("The handle to the X display to use internally. If left ``NULL``, one will be opened.");
   Display *xlibDisplay = NULL;
 };
@@ -505,6 +553,10 @@ struct GlobalEnvironment
 DOCUMENT("The result of executing or injecting into a program.")
 struct ExecuteResult
 {
+  DOCUMENT("");
+  ExecuteResult() = default;
+  ExecuteResult(const ExecuteResult &) = default;
+
   DOCUMENT(
       "The :class:`ReplayStatus` resulting from the operation, indicating success or failure.");
   ReplayStatus status;
@@ -579,6 +631,17 @@ outputs.
 
   DOCUMENT("Sets the :class:`MeshDisplay` configuration for a mesh output.");
   virtual void SetMeshDisplay(const MeshDisplay &o) = 0;
+
+  DOCUMENT(R"(Sets the dimensions of the output, useful only for headless outputs that don't have a
+backing window which don't have any implicit dimensions. This allows configuring a virtual viewport
+which is useful for operations like picking vertices that depends on the output dimensions.
+
+.. note:: For outputs with backing windows, this will be ignored.
+
+:param int width: The width to use.
+:param int height: The height to use.
+)");
+  virtual void SetDimensions(int32_t width, int32_t height) = 0;
 
   DOCUMENT(
       "Clear and release all thumbnails associated with this output. See :meth:`AddThumbnail`.");
@@ -1285,10 +1348,13 @@ The details of the types of messages that can be received are listed under
   This function will block but only to a limited degree. If no message is waiting after a small time
   it will return with a No-op message to allow further processing.
 
+:param ProgressCallback progress: A callback that will be repeatedly called with an updated progress
+  value when a long blocking message is coming through, e.g. a capture copy. Can be ``None`` if no
+  progress is desired.
 :return: The message that was received.
 :rtype: TargetControlMessage
 )");
-  virtual TargetControlMessage ReceiveMessage() = 0;
+  virtual TargetControlMessage ReceiveMessage(RENDERDOC_ProgressCallback progress) = 0;
 
 protected:
   ITargetControl() = default;
@@ -1984,10 +2050,11 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_BecomeRemoteServer(
 
 DOCUMENT(R"(Retrieve the default and recommended set of capture options.
 
-:param CaptureOptions opts: A reference to a :class:`CaptureOptions` where the options will be
-  stored.
+:return: The default capture options.
+:rtype: CaptureOptions
 )");
-extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_GetDefaultCaptureOptions(CaptureOptions *opts);
+extern "C" RENDERDOC_API void RENDERDOC_CC
+RENDERDOC_GetDefaultCaptureOptions(CaptureOptions *defaultOpts);
 
 DOCUMENT(R"(Begin injecting speculatively into all new processes started on the system. Where
 supported by platform, configuration, and setup begin injecting speculatively into all new processes
@@ -2041,6 +2108,7 @@ DOCUMENT(R"(Launch an application and inject into it to allow capturing.
 :param str cmdLine: The command line to use when running the application, it will be processed in a
   platform specific way to generate arguments.
 :param list env: Any :class:`EnvironmentModification` that should be made when running the program.
+:param str capturefile: The capture file path template, or blank to use a default location.
 :param CaptureOptions opts: The capture options to use when injecting into the program.
 :param bool waitForExit: If ``True`` this function will block until the process exits.
 :return: The :class:`ExecuteResult` indicating both the status of the operation (success or failure)
@@ -2050,13 +2118,14 @@ DOCUMENT(R"(Launch an application and inject into it to allow capturing.
 )");
 extern "C" RENDERDOC_API ExecuteResult RENDERDOC_CC
 RENDERDOC_ExecuteAndInject(const char *app, const char *workingDir, const char *cmdLine,
-                           const rdcarray<EnvironmentModification> &env, const char *logfile,
+                           const rdcarray<EnvironmentModification> &env, const char *capturefile,
                            const CaptureOptions &opts, bool waitForExit);
 
 DOCUMENT(R"(Where supported by operating system and permissions, inject into a running process.
 
 :param int pid: The Process ID (PID) to inject into.
 :param list env: Any :class:`EnvironmentModification` that should be made when running the program.
+:param str capturefile: The capture file path template, or blank to use a default location.
 :param CaptureOptions opts: The capture options to use when injecting into the program.
 :param bool waitForExit: If ``True`` this function will block until the process exits.
 :return: The :class:`ExecuteResult` indicating both the status of the operation (success or failure)
@@ -2066,7 +2135,7 @@ DOCUMENT(R"(Where supported by operating system and permissions, inject into a r
 )");
 extern "C" RENDERDOC_API ExecuteResult RENDERDOC_CC
 RENDERDOC_InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
-                            const char *logfile, const CaptureOptions &opts, bool waitForExit);
+                            const char *capturefile, const CaptureOptions &opts, bool waitForExit);
 
 DOCUMENT(R"(When debugging RenderDoc it can be useful to capture itself by doing a side-build with a
 temporary name. This function wraps up the use of the in-application API to start a capture.
@@ -2146,6 +2215,15 @@ This will be in the form "MAJOR.MINOR"
 :rtype: ``str``
 )");
 extern "C" RENDERDOC_API const char *RENDERDOC_CC RENDERDOC_GetVersionString();
+
+DOCUMENT(R"(Retrieves the commit hash used to build.
+
+This will be in the form "0123456789abcdef0123456789abcdef01234567"
+
+:return: The commit hash.
+:rtype: ``str``
+)");
+extern "C" RENDERDOC_API const char *RENDERDOC_CC RENDERDOC_GetCommitHash();
 
 DOCUMENT("Internal function for retrieving a config setting.");
 extern "C" RENDERDOC_API const char *RENDERDOC_CC RENDERDOC_GetConfigSetting(const char *name);

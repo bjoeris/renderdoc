@@ -844,6 +844,8 @@ bool WrappedOpenGL::Serialise_glNamedBufferSubDataEXT(SerialiserType &ser, GLuin
   if(IsReplayingAndReading())
   {
     GL.glNamedBufferSubDataEXT(buffer.name, (GLintptr)offset, (GLsizeiptr)bytesize, data);
+
+    AddResourceInitChunk(buffer);
   }
 
   return true;
@@ -2763,6 +2765,8 @@ bool WrappedOpenGL::Serialise_glTransformFeedbackBufferBase(SerialiserType &ser,
     // is necessary since these functions can be serialised even if ARB_dsa was not used originally,
     // and we need to support this case.
     GL.glTransformFeedbackBufferBase(xfb.name, index, buffer.name);
+
+    AddResourceInitChunk(xfb);
   }
 
   return true;
@@ -2817,6 +2821,8 @@ bool WrappedOpenGL::Serialise_glTransformFeedbackBufferRange(SerialiserType &ser
     // is necessary since these functions can be serialised even if ARB_dsa was not used originally,
     // and we need to support this case.
     GL.glTransformFeedbackBufferRange(xfb.name, index, buffer.name, (GLintptr)offset, (GLsizei)size);
+
+    AddResourceInitChunk(xfb);
   }
 
   return true;
@@ -3040,7 +3046,7 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribOffsetEXT(
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     // some intel drivers don't properly update query states (like GL_VERTEX_ATTRIB_ARRAY_SIZE)
     // unless the VAO is also bound when performing EXT_dsa functions :(
@@ -3071,6 +3077,8 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribOffsetEXT(
     GL.glVertexArrayBindVertexBufferEXT(vaobj.name, index, buffer.name, (GLintptr)offset, stride);
 
     GL.glBindVertexArray(prevVAO);
+
+    AddResourceInitChunk(vaobj);
   }
 
   return true;
@@ -3166,7 +3174,7 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribIOffsetEXT(SerialiserType
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     // some intel drivers don't properly update query states (like GL_VERTEX_ATTRIB_ARRAY_SIZE)
     // unless the VAO is also bound when performing EXT_dsa functions :(
@@ -3197,6 +3205,8 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribIOffsetEXT(SerialiserType
     GL.glVertexArrayBindVertexBufferEXT(vaobj.name, index, buffer.name, (GLintptr)offset, stride);
 
     GL.glBindVertexArray(prevVAO);
+
+    AddResourceInitChunk(vaobj);
   }
 
   return true;
@@ -3292,7 +3302,7 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribLOffsetEXT(SerialiserType
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     // some intel drivers don't properly update query states (like GL_VERTEX_ATTRIB_ARRAY_SIZE)
     // unless the VAO is also bound when performing EXT_dsa functions :(
@@ -3323,6 +3333,8 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribLOffsetEXT(SerialiserType
     GL.glVertexArrayBindVertexBufferEXT(vaobj.name, index, buffer.name, (GLintptr)offset, stride);
 
     GL.glBindVertexArray(prevVAO);
+
+    AddResourceInitChunk(vaobj);
   }
 
   return true;
@@ -3413,10 +3425,13 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribBindingEXT(SerialiserType
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     GL.glVertexArrayVertexAttribBindingEXT(vaobj.name, attribindex, bindingindex);
+
+    AddResourceInitChunk(vaobj);
   }
+
   return true;
 }
 
@@ -3498,10 +3513,12 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribFormatEXT(SerialiserType 
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     GL.glVertexArrayVertexAttribFormatEXT(vaobj.name, attribindex, size, type, normalized,
                                           relativeoffset);
+
+    AddResourceInitChunk(vaobj);
   }
 
   return true;
@@ -3588,9 +3605,11 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribIFormatEXT(SerialiserType
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     GL.glVertexArrayVertexAttribIFormatEXT(vaobj.name, attribindex, size, type, relativeoffset);
+
+    AddResourceInitChunk(vaobj);
   }
 
   return true;
@@ -3675,9 +3694,11 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribLFormatEXT(SerialiserType
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     GL.glVertexArrayVertexAttribLFormatEXT(vaobj.name, attribindex, size, type, relativeoffset);
+
+    AddResourceInitChunk(vaobj);
   }
 
   return true;
@@ -3759,7 +3780,7 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribDivisorEXT(SerialiserType
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     // at the time of writing, AMD driver seems to not have this entry point
     if(GL.glVertexArrayVertexAttribDivisorEXT)
@@ -3774,6 +3795,8 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexAttribDivisorEXT(SerialiserType
       GL.glVertexAttribDivisor(index, divisor);
       GL.glBindVertexArray(VAO);
     }
+
+    AddResourceInitChunk(vaobj);
   }
 
   return true;
@@ -3849,7 +3872,7 @@ bool WrappedOpenGL::Serialise_glEnableVertexArrayAttribEXT(SerialiserType &ser, 
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     GLint prevVAO = 0;
     GL.glGetIntegerv(eGL_VERTEX_ARRAY_BINDING, &prevVAO);
@@ -3859,7 +3882,10 @@ bool WrappedOpenGL::Serialise_glEnableVertexArrayAttribEXT(SerialiserType &ser, 
     // nvidia bug seems to sometimes change VAO binding in glEnableVertexArrayAttribEXT, although it
     // seems like it only happens if GL_DEBUG_OUTPUT_SYNCHRONOUS is NOT enabled.
     GL.glBindVertexArray(prevVAO);
+
+    AddResourceInitChunk(vaobj);
   }
+
   return true;
 }
 
@@ -3932,7 +3958,7 @@ bool WrappedOpenGL::Serialise_glDisableVertexArrayAttribEXT(SerialiserType &ser,
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     GLint prevVAO = 0;
     GL.glGetIntegerv(eGL_VERTEX_ARRAY_BINDING, &prevVAO);
@@ -3942,7 +3968,10 @@ bool WrappedOpenGL::Serialise_glDisableVertexArrayAttribEXT(SerialiserType &ser,
     // nvidia bug seems to sometimes change VAO binding in glEnableVertexArrayAttribEXT, although it
     // seems like it only happens if GL_DEBUG_OUTPUT_SYNCHRONOUS is NOT enabled.
     GL.glBindVertexArray(prevVAO);
+
+    AddResourceInitChunk(vaobj);
   }
+
   return true;
 }
 
@@ -4131,7 +4160,7 @@ bool WrappedOpenGL::Serialise_glBindVertexArray(SerialiserType &ser, GLuint vaob
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     GL.glBindVertexArray(vaobj.name);
   }
@@ -4182,7 +4211,7 @@ bool WrappedOpenGL::Serialise_glVertexArrayElementBuffer(SerialiserType &ser, GL
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     // might not have the live resource if this is a pre-capture chunk, and the buffer was never
     // referenced at all in the actual frame
@@ -4197,6 +4226,8 @@ bool WrappedOpenGL::Serialise_glVertexArrayElementBuffer(SerialiserType &ser, GL
     // is necessary since these functions can be serialised even if ARB_dsa was not used originally,
     // and we need to support this case.
     GL.glVertexArrayElementBuffer(vaobj.name, buffer.name);
+
+    AddResourceInitChunk(vaobj);
   }
 
   return true;
@@ -4253,7 +4284,7 @@ bool WrappedOpenGL::Serialise_glVertexArrayBindVertexBufferEXT(SerialiserType &s
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     if(buffer.name)
     {
@@ -4263,6 +4294,8 @@ bool WrappedOpenGL::Serialise_glVertexArrayBindVertexBufferEXT(SerialiserType &s
 
     GL.glVertexArrayBindVertexBufferEXT(vaobj.name, bindingindex, buffer.name, (GLintptr)offset,
                                         (GLsizei)stride);
+
+    AddResourceInitChunk(vaobj);
   }
 
   return true;
@@ -4390,7 +4423,7 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexBuffers(SerialiserType &ser, GL
     }
 
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     // use ARB_direct_state_access functions here as we use EXT_direct_state_access elsewhere. If
     // we are running without ARB_dsa support, these functions are emulated in the obvious way. This
@@ -4407,6 +4440,8 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexBuffers(SerialiserType &ser, GL
         m_Buffers[GetResourceManager()->GetID(buffers[i])].creationFlags |= BufferCategory::Vertex;
       }
     }
+
+    AddResourceInitChunk(vaobj);
   }
 
   return true;
@@ -4518,9 +4553,11 @@ bool WrappedOpenGL::Serialise_glVertexArrayVertexBindingDivisorEXT(SerialiserTyp
   if(IsReplayingAndReading())
   {
     if(vaobj.name == 0)
-      vaobj.name = m_Fake_VAO0;
+      vaobj.name = m_Global_VAO0;
 
     GL.glVertexArrayVertexBindingDivisorEXT(vaobj.name, bindingindex, divisor);
+
+    AddResourceInitChunk(vaobj);
   }
 
   return true;

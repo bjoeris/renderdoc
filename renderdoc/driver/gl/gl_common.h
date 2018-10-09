@@ -306,6 +306,32 @@ GLPlatform &GetEGLPlatform();
 
 #endif
 
+// on macOS we used compile time interposing to hook
+#if ENABLED(RDOC_APPLE)
+
+// never declare the actual raw function name as an export, declare the functions with a suffix that
+// will be connected in the struct below
+#define GL_EXPORT_NAME(function) CONCAT(interposed_, function)
+
+// from dyld-interposing.h - DYLD_INTERPOSE
+#define DECL_GL_HOOK_EXPORT(function)                                                                 \
+  __attribute__((used)) static struct                                                                 \
+  {                                                                                                   \
+    const void *replacment;                                                                           \
+    const void *replacee;                                                                             \
+  } _interpose_def_##function __attribute__((section("__DATA,__interpose"))) = {                      \
+      (const void *)(unsigned long)&GL_EXPORT_NAME(function), (const void *)(unsigned long)&function, \
+  };
+
+#else
+
+// on all other platforms we just export functions with the bare name, and don't declare anything to
+// hook.
+#define GL_EXPORT_NAME(function) function
+#define DECL_GL_HOOK_EXPORT(function)
+
+#endif
+
 class RDCFile;
 class IReplayDriver;
 
@@ -629,7 +655,9 @@ extern bool IsGLES;
   EXT_TO_CHECK(43, 31, ARB_program_interface_query)              \
   EXT_TO_CHECK(43, 31, ARB_shader_storage_buffer_object)         \
   EXT_TO_CHECK(43, 31, ARB_stencil_texturing)                    \
-  EXT_TO_CHECK(43, 32, ARB_texture_storage_multisample)          \
+  /* See above with ARB_texture_multisample_no_array          */ \
+  EXT_TO_CHECK(43, 32, ARB_texture_storage_multisample_no_array) \
+  EXT_TO_CHECK(43, 99, ARB_texture_storage_multisample)          \
   EXT_TO_CHECK(43, 99, ARB_texture_view)                         \
   EXT_TO_CHECK(43, 31, ARB_vertex_attrib_binding)                \
   EXT_TO_CHECK(43, 32, KHR_debug)                                \
@@ -2027,6 +2055,8 @@ enum class GLChunk : uint32_t
   glImportSemaphoreWin32NameEXT,
   glAcquireKeyedMutexWin32EXT,
   glReleaseKeyedMutexWin32EXT,
+
+  ContextConfiguration,
 
   Max,
 };
