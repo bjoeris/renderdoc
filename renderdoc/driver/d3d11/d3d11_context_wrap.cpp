@@ -123,7 +123,7 @@ bool WrappedID3D11DeviceContext::Serialise_PopMarker(SerialiserType &ser)
     D3D11MarkerRegion::End();
     m_pDevice->ReplayPopEvent();
 
-    if(IsLoading(m_State) && !m_CurEvents.empty())
+    if(IsLoading(m_State) && HasNonMarkerEvents())
     {
       DrawcallDescription draw;
       draw.name = "API Calls";
@@ -5991,6 +5991,43 @@ bool WrappedID3D11DeviceContext::Serialise_CopyStructureCount(SerialiserType &se
   {
     m_pRealContext->CopyStructureCount(UNWRAP(WrappedID3D11Buffer, pDstBuffer), DstAlignedByteOffset,
                                        UNWRAP(WrappedID3D11UnorderedAccessView1, pSrcView));
+
+    if(IsLoading(m_State))
+    {
+      WrappedID3D11UnorderedAccessView1 *view = (WrappedID3D11UnorderedAccessView1 *)pSrcView;
+
+      ResourceId dstLiveID = GetIDForResource(pDstBuffer);
+      ResourceId srcLiveID = view->GetResourceResID();
+      ResourceId dstOrigID = GetResourceManager()->GetOriginalID(dstLiveID);
+      ResourceId srcOrigID = GetResourceManager()->GetOriginalID(srcLiveID);
+
+      AddEvent();
+
+      DrawcallDescription draw;
+      draw.name = "CopyStructureCount(" + ToStr(dstOrigID) + ", " + ToStr(srcOrigID) + ")";
+      draw.flags |= DrawFlags::Copy;
+
+      if(pDstBuffer && pSrcView)
+      {
+        draw.copySource = srcOrigID;
+        draw.copyDestination = dstOrigID;
+
+        if(m_CurEventID)
+        {
+          if(dstLiveID == srcLiveID)
+          {
+            m_ResourceUses[dstLiveID].push_back(EventUsage(m_CurEventID, ResourceUsage::Copy));
+          }
+          else
+          {
+            m_ResourceUses[dstLiveID].push_back(EventUsage(m_CurEventID, ResourceUsage::CopyDst));
+            m_ResourceUses[srcLiveID].push_back(EventUsage(m_CurEventID, ResourceUsage::CopySrc));
+          }
+        }
+      }
+
+      AddDrawcall(draw, true);
+    }
   }
 
   return true;
@@ -6011,6 +6048,7 @@ void WrappedID3D11DeviceContext::CopyStructureCount(ID3D11Buffer *pDstBuffer,
   if(IsActiveCapturing(m_State))
   {
     USE_SCRATCH_SERIALISER();
+    GET_SERIALISER.SetDrawChunk();
     SCOPED_SERIALISE_CHUNK(D3D11Chunk::CopyStructureCount);
     SERIALISE_ELEMENT(m_ResourceID).Named("Context").TypedAs("ID3D11DeviceContext *");
     Serialise_CopyStructureCount(GET_SERIALISER, pDstBuffer, DstAlignedByteOffset, pSrcView);
@@ -6814,7 +6852,8 @@ bool WrappedID3D11DeviceContext::Serialise_SetResourceMinLOD(SerialiserType &ser
   if(IsReplayingAndReading())
   {
     if(pResource)
-      m_pRealContext->SetResourceMinLOD(pResource, MinLOD);
+      m_pRealContext->SetResourceMinLOD(m_pDevice->GetResourceManager()->UnwrapResource(pResource),
+                                        MinLOD);
   }
 
   return true;
@@ -7483,6 +7522,22 @@ bool WrappedID3D11DeviceContext::Serialise_Unmap(SerialiserType &ser, ID3D11Reso
       bool found = FindDiffRange(MapWrittenData, record->GetShadowPtr(ctxMapID, 1), len, s, e);
       diffStart = (uint32_t)s;
       diffEnd = (uint32_t)e;
+
+      // structured buffers must have copies aligned to their structure width, so we align down and
+      // up the detected diff start/end region to match.
+      if(WrappedID3D11Buffer::IsAlloc(pResource))
+      {
+        D3D11_BUFFER_DESC bufdesc = {};
+        ((WrappedID3D11Buffer *)pResource)->GetDesc(&bufdesc);
+
+        if(bufdesc.StructureByteStride)
+        {
+          diffStart -= (diffStart % bufdesc.StructureByteStride);
+
+          if((diffEnd % bufdesc.StructureByteStride) != 0)
+            diffEnd += bufdesc.StructureByteStride - (diffEnd % bufdesc.StructureByteStride);
+        }
+      }
 
       if(found)
       {

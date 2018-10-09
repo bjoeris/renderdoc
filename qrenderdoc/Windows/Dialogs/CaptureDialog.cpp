@@ -26,6 +26,7 @@
 #include <QMouseEvent>
 #include <QSortFilterProxyModel>
 #include <QStandardItemModel>
+#include <QStandardPaths>
 #include "3rdparty/flowlayout/FlowLayout.h"
 #include "3rdparty/toolwindowmanager/ToolWindowManager.h"
 #include "Code/QRDUtils.h"
@@ -401,9 +402,43 @@ void CaptureDialog::vulkanLayerWarn_mouseClick()
     {
       if(admin)
       {
+// linux sometimes can't run GUI apps as root, so we have to run renderdoccmd. Check that it's
+// installed, error if not, then invoke it.
+#if defined(Q_OS_LINUX)
+        QDir binDir = QFileInfo(qApp->applicationFilePath()).absoluteDir();
+
+        QString cmd = lit("renderdoccmd");
+
+        if(binDir.exists(cmd))
+        {
+          // it's next to our exe, run that
+          cmd = binDir.absoluteFilePath(cmd);
+        }
+        else
+        {
+          QString inPath = QStandardPaths::findExecutable(cmd);
+
+          if(inPath.isEmpty())
+          {
+            RDDialog::critical(
+                this, tr("Can't locate renderdoccmd"),
+                tr("On linux we must run renderdoccmd as root to register the layer, because "
+                   "graphical applications like qrenderdoc may fail to launch.\n\n"
+                   "renderdoccmd could not be located either next to this qrenderdoc executable or "
+                   "in PATH."));
+            return;
+          }
+
+          // it's in the path, we can continue
+        }
+
+        RunProcessAsAdmin(cmd, QStringList() << lit("vulkanregister") << lit("--system"), this,
+                          [this]() { ui->vulkanLayerWarn->setVisible(false); });
+#else
         RunProcessAsAdmin(qApp->applicationFilePath(),
                           QStringList() << lit("--install_vulkan_layer") << lit("root"), this,
                           [this]() { ui->vulkanLayerWarn->setVisible(false); });
+#endif
         return;
       }
       else
@@ -568,7 +603,6 @@ bool CaptureDialog::checkAllowClose()
 void CaptureDialog::on_exePathBrowse_clicked()
 {
   QString initDir;
-  QString file;
 
   QFileInfo f(ui->exePath->text());
   QDir dir = f.dir();
@@ -576,18 +610,20 @@ void CaptureDialog::on_exePathBrowse_clicked()
   {
     initDir = dir.absolutePath();
   }
+  else if(m_Ctx.Replay().CurrentRemote())
+  {
+    initDir = m_Ctx.Replay().CurrentRemote()->lastCapturePath;
+  }
   else if(!m_Ctx.Config().LastCapturePath.isEmpty())
   {
     initDir = m_Ctx.Config().LastCapturePath;
-    if(!m_Ctx.Config().LastCaptureExe.isEmpty())
-      file = m_Ctx.Config().LastCaptureExe;
   }
 
   QString filename;
 
   if(m_Ctx.Replay().CurrentRemote())
   {
-    VirtualFileDialog vfd(m_Ctx, this);
+    VirtualFileDialog vfd(m_Ctx, initDir, this);
     RDDialog::show(&vfd);
     filename = vfd.chosenPath();
   }
@@ -609,26 +645,31 @@ void CaptureDialog::on_exePathBrowse_clicked()
 
 void CaptureDialog::on_workDirBrowse_clicked()
 {
-  QString initDir;
+  QString initDir = ui->workDirPath->text();
 
-  if(QDir(ui->workDirPath->text()).exists())
+  if(initDir.isEmpty())
   {
-    initDir = ui->workDirPath->text();
-  }
-  else
-  {
-    QDir dir = QFileInfo(ui->exePath->text()).dir();
-    if(dir.exists())
-      initDir = dir.absolutePath();
-    else if(!m_Ctx.Config().LastCapturePath.isEmpty())
-      initDir = m_Ctx.Config().LastCapturePath;
+    if(m_Ctx.Replay().CurrentRemote())
+    {
+      initDir = m_Ctx.Replay().CurrentRemote()->lastCapturePath;
+    }
+    else if(!QDir(initDir).exists())
+    {
+      QDir dir = QFileInfo(ui->exePath->text()).dir();
+      if(dir.exists())
+        initDir = dir.absolutePath();
+      else if(!m_Ctx.Config().LastCapturePath.isEmpty())
+        initDir = m_Ctx.Config().LastCapturePath;
+      else
+        initDir = QString();
+    }
   }
 
   QString dir;
 
   if(m_Ctx.Replay().CurrentRemote())
   {
-    VirtualFileDialog vfd(m_Ctx, this);
+    VirtualFileDialog vfd(m_Ctx, initDir, this);
     vfd.setDirBrowse();
     RDDialog::show(&vfd);
     dir = vfd.chosenPath();
@@ -924,11 +965,33 @@ void CaptureDialog::SetExecutableFilename(const rdcstr &filename)
 
   ui->exePath->setText(fn);
 
-  if(!m_Ctx.Replay().CurrentRemote())
+  if(m_Ctx.Replay().CurrentRemote())
+  {
+    // remove the filename itself before setting the last capture path. Try /, then \ as path
+    // separator. If no separators are found, there is no path to set.
+    int idx = fn.lastIndexOf(QLatin1Char('/'));
+    if(idx >= 0)
+    {
+      fn = fn.mid(0, idx);
+    }
+    else
+    {
+      idx = fn.lastIndexOf(QLatin1Char('\\'));
+
+      if(idx >= 0)
+        fn = fn.mid(0, idx);
+      else
+        fn = QString();
+    }
+
+    m_Ctx.Replay().CurrentRemote()->lastCapturePath = fn;
+  }
+  else
   {
     m_Ctx.Config().LastCapturePath = QFileInfo(fn).absolutePath();
-    m_Ctx.Config().LastCaptureExe = QFileInfo(fn).completeBaseName();
   }
+
+  m_Ctx.Config().Save();
 }
 
 void CaptureDialog::SetWorkingDirectory(const rdcstr &dir)

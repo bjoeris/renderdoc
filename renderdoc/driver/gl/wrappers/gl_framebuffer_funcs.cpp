@@ -164,7 +164,7 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTextureEXT(SerialiserType &ser,
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     GL.glNamedFramebufferTextureEXT(framebuffer.name, attachment, texture.name, level);
 
@@ -172,6 +172,8 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTextureEXT(SerialiserType &ser,
     {
       m_Textures[GetResourceManager()->GetID(texture)].creationFlags |= TextureCategory::ColorTarget;
     }
+
+    AddResourceInitChunk(framebuffer);
   }
 
   return true;
@@ -305,7 +307,7 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTexture1DEXT(SerialiserType &ser
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     GL.glNamedFramebufferTexture1DEXT(framebuffer.name, attachment, textarget, texture.name, level);
 
@@ -313,6 +315,8 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTexture1DEXT(SerialiserType &ser
     {
       m_Textures[GetResourceManager()->GetID(texture)].creationFlags |= TextureCategory::ColorTarget;
     }
+
+    AddResourceInitChunk(framebuffer);
   }
 
   return true;
@@ -449,7 +453,7 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTexture2DEXT(SerialiserType &ser
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     GL.glNamedFramebufferTexture2DEXT(framebuffer.name, attachment, textarget, texture.name, level);
 
@@ -457,6 +461,8 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTexture2DEXT(SerialiserType &ser
     {
       m_Textures[GetResourceManager()->GetID(texture)].creationFlags |= TextureCategory::ColorTarget;
     }
+
+    AddResourceInitChunk(framebuffer);
   }
 
   return true;
@@ -594,7 +600,7 @@ bool WrappedOpenGL::Serialise_glFramebufferTexture2DMultisampleEXT(
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     GLuint prevread = 0, prevdraw = 0;
     GL.glGetIntegerv(eGL_DRAW_FRAMEBUFFER_BINDING, (GLint *)&prevdraw);
@@ -612,6 +618,8 @@ bool WrappedOpenGL::Serialise_glFramebufferTexture2DMultisampleEXT(
     {
       m_Textures[GetResourceManager()->GetID(texture)].creationFlags |= TextureCategory::ColorTarget;
     }
+
+    AddResourceInitChunk(framebuffer);
   }
 
   return true;
@@ -702,7 +710,7 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTexture3DEXT(SerialiserType &ser
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     GL.glNamedFramebufferTexture3DEXT(framebuffer.name, attachment, textarget, texture.name, level,
                                       zoffset);
@@ -711,6 +719,8 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTexture3DEXT(SerialiserType &ser
     {
       m_Textures[GetResourceManager()->GetID(texture)].creationFlags |= TextureCategory::ColorTarget;
     }
+
+    AddResourceInitChunk(framebuffer);
   }
 
   return true;
@@ -850,7 +860,7 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferRenderbufferEXT(SerialiserType &
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     GL.glNamedFramebufferRenderbufferEXT(framebuffer.name, attachment, renderbuffertarget,
                                          renderbuffer.name);
@@ -860,6 +870,8 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferRenderbufferEXT(SerialiserType &
       m_Textures[GetResourceManager()->GetID(renderbuffer)].creationFlags |=
           TextureCategory::ColorTarget;
     }
+
+    AddResourceInitChunk(framebuffer);
   }
 
   return true;
@@ -979,7 +991,7 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTextureLayerEXT(SerialiserType &
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     GL.glNamedFramebufferTextureLayerEXT(framebuffer.name, attachment, texture.name, level, layer);
 
@@ -987,6 +999,8 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferTextureLayerEXT(SerialiserType &
     {
       m_Textures[GetResourceManager()->GetID(texture)].creationFlags |= TextureCategory::ColorTarget;
     }
+
+    AddResourceInitChunk(framebuffer);
   }
 
   return true;
@@ -1135,6 +1149,12 @@ bool WrappedOpenGL::Serialise_glFramebufferTextureMultiviewOVR(SerialiserType &s
         m_Textures[GetResourceManager()->GetID(texture)].creationFlags |=
             TextureCategory::ColorTarget;
     }
+
+    {
+      GLuint fbo = 0;
+      GL.glGetIntegerv(FramebufferBinding(target), (GLint *)&fbo);
+      AddResourceInitChunk(FramebufferRes(GetCtx(), fbo));
+    }
   }
 
   return true;
@@ -1175,6 +1195,18 @@ void WrappedOpenGL::glFramebufferTextureMultiviewOVR(GLenum target, GLenum attac
     if(m_HighTrafficResources.find(record->GetResourceID()) != m_HighTrafficResources.end() &&
        IsBackgroundCapturing(m_State))
       return;
+
+    // because there's no DSA variant of the OVR framebuffer functions we must ensure that while
+    // background capturing the correct framebuffer is bound. Normally we don't serialise
+    // glBindFramebuffer calls.
+    if(IsBackgroundCapturing(m_State))
+    {
+      USE_SCRATCH_SERIALISER();
+      SCOPED_SERIALISE_CHUNK(GLChunk::glBindFramebuffer);
+      Serialise_glBindFramebuffer(ser, target, record->Resource.name);
+
+      record->AddChunk(scope.Get());
+    }
 
     USE_SCRATCH_SERIALISER();
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
@@ -1233,6 +1265,12 @@ bool WrappedOpenGL::Serialise_glFramebufferTextureMultisampleMultiviewOVR(
         m_Textures[GetResourceManager()->GetID(texture)].creationFlags |=
             TextureCategory::ColorTarget;
     }
+
+    {
+      GLuint fbo = 0;
+      GL.glGetIntegerv(FramebufferBinding(target), (GLint *)&fbo);
+      AddResourceInitChunk(FramebufferRes(GetCtx(), fbo));
+    }
   }
 
   return true;
@@ -1274,6 +1312,18 @@ void WrappedOpenGL::glFramebufferTextureMultisampleMultiviewOVR(GLenum target, G
     if(m_HighTrafficResources.find(record->GetResourceID()) != m_HighTrafficResources.end() &&
        IsBackgroundCapturing(m_State))
       return;
+
+    // because there's no DSA variant of the OVR framebuffer functions we must ensure that while
+    // background capturing the correct framebuffer is bound. Normally we don't serialise
+    // glBindFramebuffer calls.
+    if(IsBackgroundCapturing(m_State))
+    {
+      USE_SCRATCH_SERIALISER();
+      SCOPED_SERIALISE_CHUNK(GLChunk::glBindFramebuffer);
+      Serialise_glBindFramebuffer(ser, target, record->Resource.name);
+
+      record->AddChunk(scope.Get());
+    }
 
     USE_SCRATCH_SERIALISER();
     SCOPED_SERIALISE_CHUNK(gl_CurChunk);
@@ -1319,10 +1369,12 @@ bool WrappedOpenGL::Serialise_glNamedFramebufferParameteriEXT(SerialiserType &se
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     if(framebuffer.name)
       GL.glNamedFramebufferParameteriEXT(framebuffer.name, pname, param);
+
+    AddResourceInitChunk(framebuffer);
   }
 
   return true;
@@ -1387,7 +1439,7 @@ bool WrappedOpenGL::Serialise_glFramebufferReadBufferEXT(SerialiserType &ser,
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     // since we are faking the default framebuffer with our own
     // to see the results, replace back/front/left/right with color attachment 0
@@ -1396,6 +1448,8 @@ bool WrappedOpenGL::Serialise_glFramebufferReadBufferEXT(SerialiserType &ser,
       mode = eGL_COLOR_ATTACHMENT0;
 
     GL.glFramebufferReadBufferEXT(framebuffer.name, mode);
+
+    AddResourceInitChunk(framebuffer);
   }
 
   return true;
@@ -1464,7 +1518,7 @@ bool WrappedOpenGL::Serialise_glBindFramebuffer(SerialiserType &ser, GLenum targ
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     GL.glBindFramebuffer(target, framebuffer.name);
   }
@@ -1508,7 +1562,7 @@ bool WrappedOpenGL::Serialise_glFramebufferDrawBufferEXT(SerialiserType &ser,
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     // since we are faking the default framebuffer with our own
     // to see the results, replace back/front/left/right with color attachment 0
@@ -1517,6 +1571,8 @@ bool WrappedOpenGL::Serialise_glFramebufferDrawBufferEXT(SerialiserType &ser,
       buf = eGL_COLOR_ATTACHMENT0;
 
     GL.glFramebufferDrawBufferEXT(framebuffer.name, buf);
+
+    AddResourceInitChunk(framebuffer);
   }
 
   return true;
@@ -1587,7 +1643,7 @@ bool WrappedOpenGL::Serialise_glFramebufferDrawBuffersEXT(SerialiserType &ser,
   if(IsReplayingAndReading())
   {
     if(framebuffer.name == 0)
-      framebuffer.name = m_FakeBB_FBO;
+      framebuffer.name = m_CurrentDefaultFBO;
 
     GLenum *buffers = (GLenum *)bufs;
 
@@ -1601,6 +1657,8 @@ bool WrappedOpenGL::Serialise_glFramebufferDrawBuffersEXT(SerialiserType &ser,
     }
 
     GL.glFramebufferDrawBuffersEXT(framebuffer.name, n, bufs);
+
+    AddResourceInitChunk(framebuffer);
   }
 
   return true;
@@ -1802,9 +1860,9 @@ bool WrappedOpenGL::Serialise_glBlitNamedFramebuffer(SerialiserType &ser,
   if(IsReplayingAndReading())
   {
     if(readFramebuffer.name == 0)
-      readFramebuffer.name = m_FakeBB_FBO;
+      readFramebuffer.name = m_CurrentDefaultFBO;
     if(drawFramebuffer.name == 0)
-      drawFramebuffer.name = m_FakeBB_FBO;
+      drawFramebuffer.name = m_CurrentDefaultFBO;
     // use ARB_direct_state_access functions here as we use EXT_direct_state_access elsewhere. If
     // we are running without ARB_dsa support, these functions are emulated in the obvious way. This
     // is necessary since these functions can be serialised even if ARB_dsa was not used originally,
@@ -2162,6 +2220,8 @@ bool WrappedOpenGL::Serialise_glNamedRenderbufferStorageEXT(SerialiserType &ser,
     ResourceId liveId = GetResourceManager()->GetID(renderbuffer);
     TextureData &texDetails = m_Textures[liveId];
 
+    GLenum fmt = GetBaseFormat(internalformat);
+
     texDetails.width = width;
     texDetails.height = height;
     texDetails.depth = 1;
@@ -2171,6 +2231,58 @@ bool WrappedOpenGL::Serialise_glNamedRenderbufferStorageEXT(SerialiserType &ser,
     texDetails.mipsValid = 1;
 
     GL.glNamedRenderbufferStorageEXT(renderbuffer.name, internalformat, width, height);
+
+    if(internalformat == eGL_DEPTH_COMPONENT || internalformat == eGL_DEPTH_STENCIL ||
+       internalformat == eGL_STENCIL || internalformat == eGL_STENCIL_INDEX)
+    {
+      // fetch the exact sized depth-stencil formats corresponding to whatever unsized format was
+      // specified.
+      GLint depth = 0;
+      GLint stencil = 0;
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_DEPTH_SIZE, &depth);
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_STENCIL_SIZE,
+                                              &stencil);
+
+      if(depth == 16 && stencil == 0)
+        internalformat = eGL_DEPTH_COMPONENT16;
+      else if(depth == 24 && stencil == 0)
+        internalformat = eGL_DEPTH_COMPONENT24;
+      else if(depth == 24 && stencil == 8)
+        internalformat = eGL_DEPTH24_STENCIL8;
+      else if(depth == 32 && stencil == 0)
+        internalformat = eGL_DEPTH_COMPONENT32F;
+      else if(depth == 32 && stencil == 8)
+        internalformat = eGL_DEPTH32F_STENCIL8;
+      else if(depth == 0 && stencil == 8)
+        internalformat = eGL_STENCIL_INDEX8;
+    }
+    else if(internalformat == eGL_RGBA || internalformat == eGL_RGBA_INTEGER ||
+            internalformat == eGL_RGB || internalformat == eGL_RGB_INTEGER ||
+            internalformat == eGL_RG || internalformat == eGL_RG_INTEGER ||
+            internalformat == eGL_RED || internalformat == eGL_RED_INTEGER)
+    {
+      // if the color format is unsized, find the corresponding sized format
+
+      GLint red = 0, green = 0, blue = 0, alpha = 0;
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_RED_SIZE, &red);
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_GREEN_SIZE, &green);
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_BLUE_SIZE, &blue);
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_ALPHA_SIZE, &alpha);
+
+      // we only handle a straight regular format here
+      RDCASSERT(red > 0);
+      RDCASSERT(green == 0 || green == red);
+      RDCASSERT(blue == 0 || green == red);
+      RDCASSERT(alpha == 0 || green == red);
+
+      // to start with, create resource format based on the unsized internalformat
+      ResourceFormat resfmt = MakeResourceFormat(eGL_TEXTURE_2D, internalformat);
+
+      // then set the byte size
+      resfmt.compByteWidth = uint8_t(red / 8);
+
+      internalformat = MakeGLFormat(resfmt);
+    }
 
     // create read-from texture for displaying this render buffer
     GL.glGenTextures(1, &texDetails.renderbufferReadTex);
@@ -2184,8 +2296,6 @@ bool WrappedOpenGL::Serialise_glNamedRenderbufferStorageEXT(SerialiserType &ser,
     GL.glGenFramebuffers(2, texDetails.renderbufferFBOs);
     GL.glBindFramebuffer(eGL_FRAMEBUFFER, texDetails.renderbufferFBOs[0]);
     GL.glBindFramebuffer(eGL_FRAMEBUFFER, texDetails.renderbufferFBOs[1]);
-
-    GLenum fmt = GetBaseFormat(internalformat);
 
     GLenum attach = eGL_COLOR_ATTACHMENT0;
     if(fmt == eGL_DEPTH_COMPONENT)
@@ -2296,6 +2406,8 @@ bool WrappedOpenGL::Serialise_glNamedRenderbufferStorageMultisampleEXT(Serialise
     ResourceId liveId = GetResourceManager()->GetID(renderbuffer);
     TextureData &texDetails = m_Textures[liveId];
 
+    GLenum fmt = GetBaseFormat(internalformat);
+
     texDetails.width = width;
     texDetails.height = height;
     texDetails.depth = 1;
@@ -2307,6 +2419,58 @@ bool WrappedOpenGL::Serialise_glNamedRenderbufferStorageMultisampleEXT(Serialise
     GL.glNamedRenderbufferStorageMultisampleEXT(renderbuffer.name, samples, internalformat, width,
                                                 height);
 
+    if(internalformat == eGL_DEPTH_COMPONENT || internalformat == eGL_DEPTH_STENCIL ||
+       internalformat == eGL_STENCIL || internalformat == eGL_STENCIL_INDEX)
+    {
+      // fetch the exact sized depth-stencil formats corresponding to whatever unsized format was
+      // specified.
+      GLint depth = 0;
+      GLint stencil = 0;
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_DEPTH_SIZE, &depth);
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_STENCIL_SIZE,
+                                              &stencil);
+
+      if(depth == 16 && stencil == 0)
+        internalformat = eGL_DEPTH_COMPONENT16;
+      else if(depth == 24 && stencil == 0)
+        internalformat = eGL_DEPTH_COMPONENT24;
+      else if(depth == 24 && stencil == 8)
+        internalformat = eGL_DEPTH24_STENCIL8;
+      else if(depth == 32 && stencil == 0)
+        internalformat = eGL_DEPTH_COMPONENT32F;
+      else if(depth == 32 && stencil == 8)
+        internalformat = eGL_DEPTH32F_STENCIL8;
+      else if(depth == 0 && stencil == 8)
+        internalformat = eGL_STENCIL_INDEX8;
+    }
+    else if(internalformat == eGL_RGBA || internalformat == eGL_RGBA_INTEGER ||
+            internalformat == eGL_RGB || internalformat == eGL_RGB_INTEGER ||
+            internalformat == eGL_RG || internalformat == eGL_RG_INTEGER ||
+            internalformat == eGL_RED || internalformat == eGL_RED_INTEGER)
+    {
+      // if the color format is unsized, find the corresponding sized format
+
+      GLint red = 0, green = 0, blue = 0, alpha = 0;
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_RED_SIZE, &red);
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_GREEN_SIZE, &green);
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_BLUE_SIZE, &blue);
+      GL.glGetNamedRenderbufferParameterivEXT(renderbuffer.name, eGL_RENDERBUFFER_ALPHA_SIZE, &alpha);
+
+      // we only handle a straight regular format here
+      RDCASSERT(red > 0);
+      RDCASSERT(green == 0 || green == red);
+      RDCASSERT(blue == 0 || green == red);
+      RDCASSERT(alpha == 0 || green == red);
+
+      // to start with, create resource format based on the unsized internalformat
+      ResourceFormat resfmt = MakeResourceFormat(eGL_TEXTURE_2D, internalformat);
+
+      // then set the byte size
+      resfmt.compByteWidth = uint8_t(red / 8);
+
+      internalformat = MakeGLFormat(resfmt);
+    }
+
     // create read-from texture for displaying this render buffer
     GL.glGenTextures(1, &texDetails.renderbufferReadTex);
     GL.glBindTexture(eGL_TEXTURE_2D_MULTISAMPLE, texDetails.renderbufferReadTex);
@@ -2316,8 +2480,6 @@ bool WrappedOpenGL::Serialise_glNamedRenderbufferStorageMultisampleEXT(Serialise
     GL.glGenFramebuffers(2, texDetails.renderbufferFBOs);
     GL.glBindFramebuffer(eGL_FRAMEBUFFER, texDetails.renderbufferFBOs[0]);
     GL.glBindFramebuffer(eGL_FRAMEBUFFER, texDetails.renderbufferFBOs[1]);
-
-    GLenum fmt = GetBaseFormat(internalformat);
 
     GLenum attach = eGL_COLOR_ATTACHMENT0;
     if(fmt == eGL_DEPTH_COMPONENT)

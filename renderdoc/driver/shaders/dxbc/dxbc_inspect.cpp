@@ -431,6 +431,8 @@ CBufferVariableType DXBCFile::ParseRDEFType(RDEFHeader *h, char *chunkContents, 
 
       ret.members.push_back(v);
     }
+
+    ret.descriptor.bytesize *= RDCMAX(1U, ret.descriptor.elements);
   }
   else
   {
@@ -881,12 +883,6 @@ DXBCFile::DXBCFile(const void *ByteCode, size_t ByteCodeLength)
     m_GuessedResources = true;
   }
 
-  // make sure to fetch the dispatch threads dimension from disassembly
-  if(!m_Disassembled && m_Type == D3D11_ShaderType_Compute)
-  {
-    FetchThreadDim();
-  }
-
   for(uint32_t chunkIdx = 0; chunkIdx < header->numChunks; chunkIdx++)
   {
     uint32_t *fourcc = (uint32_t *)(data + chunkOffsets[chunkIdx]);
@@ -1063,6 +1059,12 @@ DXBCFile::DXBCFile(const void *ByteCode, size_t ByteCodeLength)
       char *c = (char *)fourcc;
       RDCWARN("Unknown chunk: %c%c%c%c", c[0], c[1], c[2], c[3]);
     }
+  }
+
+  // make sure to fetch the dispatch threads dimension from disassembly
+  if(!m_Disassembled && m_Type == D3D11_ShaderType_Compute)
+  {
+    FetchComputeProperties();
   }
 
   // initialise debug chunks last

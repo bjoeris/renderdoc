@@ -56,12 +56,13 @@ void ApplyEnvironmentModification();
 const char *GetEnvVariable(const char *name);
 
 bool CanGlobalHook();
-bool StartGlobalHook(const char *pathmatch, const char *logfile, const CaptureOptions &opts);
+bool StartGlobalHook(const char *pathmatch, const char *capturefile, const CaptureOptions &opts);
 bool IsGlobalHookActive();
 void StopGlobalHook();
 
 ExecuteResult InjectIntoProcess(uint32_t pid, const rdcarray<EnvironmentModification> &env,
-                                const char *logfile, const CaptureOptions &opts, bool waitForExit);
+                                const char *capturefile, const CaptureOptions &opts,
+                                bool waitForExit);
 struct ProcessResult
 {
   string strStdout, strStderror;
@@ -73,11 +74,13 @@ uint32_t LaunchScript(const char *script, const char *workingDir, const char *ar
                       ProcessResult *result = NULL);
 ExecuteResult LaunchAndInjectIntoProcess(const char *app, const char *workingDir, const char *cmdLine,
                                          const rdcarray<EnvironmentModification> &env,
-                                         const char *logfile, const CaptureOptions &opts,
+                                         const char *capturefile, const CaptureOptions &opts,
                                          bool waitForExit);
 void *LoadModule(const char *module);
 void *GetFunctionAddress(void *module, const char *function);
 uint32_t GetCurrentPID();
+
+void Shutdown();
 };
 
 namespace Timing

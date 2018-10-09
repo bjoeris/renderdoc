@@ -22,8 +22,8 @@
  * THE SOFTWARE.
  ******************************************************************************/
 
-#include "driver/gl/gl_dispatch_table_defs.h"
 #include "gl_common.h"
+#include "gl_dispatch_table_defs.h"
 #include "gl_driver.h"
 
 template <>
@@ -40,6 +40,8 @@ std::string DoStringise(const GLChunk &el)
 
     STRINGISE_ENUM_CLASS(vrapi_CreateTextureSwapChain);
     STRINGISE_ENUM_CLASS(vrapi_CreateTextureSwapChain2);
+
+    STRINGISE_ENUM_CLASS_NAMED(ContextConfiguration, "Context Configuration");
 
 // re-use list of GL functions as chunks. Many of these will be aliased. This may not appear in the
 // same order as the definition, but that's OK.

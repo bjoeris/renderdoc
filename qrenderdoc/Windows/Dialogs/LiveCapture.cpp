@@ -125,8 +125,8 @@ LiveCapture::LiveCapture(ICaptureContext &ctx, const QString &hostname, const QS
 
   ui->target->setText(QString());
 
-  ui->captureProgressLabel->setVisible(false);
-  ui->captureProgress->setVisible(false);
+  ui->progressLabel->setVisible(false);
+  ui->progressBar->setVisible(false);
 
   ui->captures->setItemDelegate(new NameEditOnlyDelegate(this));
 
@@ -590,7 +590,7 @@ void LiveCapture::updateAPIStatus()
   for(QString api : m_APIs.keys())
   {
     if(m_APIs[api].supported && m_APIs[api].presenting)
-      apiStatus += lit(", <b>%1</b>").arg(api);
+      apiStatus += lit(", <b>%1 (Active)</b>").arg(api);
   }
 
   // then add any problem APIs
@@ -632,6 +632,12 @@ bool LiveCapture::checkAllowClose()
   m_IgnoreThreadClosed = true;
 
   bool suppressRemoteWarning = false;
+  bool notoall = false;
+
+  QMessageBox::StandardButtons msgFlags = RDDialog::YesNoCancel;
+
+  if(ui->captures->count() > 1)
+    msgFlags |= QMessageBox::NoToAll;
 
   for(int i = 0; i < ui->captures->count(); i++)
   {
@@ -648,13 +654,19 @@ bool LiveCapture::checkAllowClose()
 
     QMessageBox::StandardButton res = QMessageBox::No;
 
-    if(!suppressRemoteWarning)
+    if(!suppressRemoteWarning && !notoall)
     {
       res = RDDialog::question(this, tr("Unsaved capture"),
                                tr("Save this capture '%1' at %2?")
                                    .arg(cap->name)
                                    .arg(cap->timestamp.toString(lit("HH:mm:ss"))),
-                               RDDialog::YesNoCancel);
+                               msgFlags);
+
+      if(res == QMessageBox::NoToAll)
+      {
+        notoall = true;
+        res = QMessageBox::No;
+      }
     }
 
     if(res == QMessageBox::Cancel)
@@ -1140,7 +1152,23 @@ void LiveCapture::connectionThreadEntry()
       return;
     }
 
-    TargetControlMessage msg = m_Connection->ReceiveMessage();
+    TargetControlMessage msg = m_Connection->ReceiveMessage([this](float progress) {
+      GUIInvoke::call(this, [this, progress]() {
+        if(progress >= 0.0f && progress < 1.0f)
+        {
+          ui->progressLabel->setText(tr("Copy in Progress:"));
+          ui->progressLabel->setVisible(true);
+          ui->progressBar->setVisible(true);
+          ui->progressBar->setMaximum(1000);
+          ui->progressBar->setValue(1000 * progress);
+        }
+        else
+        {
+          ui->progressLabel->setVisible(false);
+          ui->progressBar->setVisible(false);
+        }
+      });
+    });
 
     if(msg.type == TargetControlMessageType::RegisterAPI)
     {
@@ -1168,15 +1196,16 @@ void LiveCapture::connectionThreadEntry()
 
         if(progress >= 0.0f && progress < 1.0f)
         {
-          ui->captureProgressLabel->setVisible(true);
-          ui->captureProgress->setVisible(true);
-          ui->captureProgress->setMaximum(1000);
-          ui->captureProgress->setValue(1000 * progress);
+          ui->progressLabel->setText(tr("Capture in Progress:"));
+          ui->progressLabel->setVisible(true);
+          ui->progressBar->setVisible(true);
+          ui->progressBar->setMaximum(1000);
+          ui->progressBar->setValue(1000 * progress);
         }
         else
         {
-          ui->captureProgressLabel->setVisible(false);
-          ui->captureProgress->setVisible(false);
+          ui->progressLabel->setVisible(false);
+          ui->progressBar->setVisible(false);
         }
 
       });

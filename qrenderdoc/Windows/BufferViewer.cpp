@@ -1373,10 +1373,10 @@ void BufferViewer::OnCaptureLoaded()
   if(!m_MeshView)
     return;
 
-  WId renderID = ui->render->winId();
+  WindowingData winData = m_Ctx.CreateWindowingData(ui->render);
 
-  m_Ctx.Replay().BlockInvoke([renderID, this](IReplayController *r) {
-    m_Output = r->CreateOutput(m_Ctx.CreateWindowingData(renderID), ReplayOutputType::Mesh);
+  m_Ctx.Replay().BlockInvoke([winData, this](IReplayController *r) {
+    m_Output = r->CreateOutput(winData, ReplayOutputType::Mesh);
 
     ui->render->setOutput(m_Output);
 
@@ -2177,7 +2177,7 @@ void BufferViewer::updatePreviewColumns()
         m_VSInPosition.instanced = el.perinstance;
         m_VSInPosition.instStepRate = el.instancerate;
 
-        if(el.buffer < vbs.count())
+        if(el.buffer < vbs.count() && !m_ModelVSIn->genericsEnabled[elIdx])
         {
           m_VSInPosition.vertexResourceId = vbs[el.buffer].resourceId;
           m_VSInPosition.vertexByteStride = vbs[el.buffer].byteStride;
@@ -2203,7 +2203,7 @@ void BufferViewer::updatePreviewColumns()
         m_VSInSecondary.instanced = el.perinstance;
         m_VSInSecondary.instStepRate = el.instancerate;
 
-        if(el.buffer < vbs.count())
+        if(el.buffer < vbs.count() && !m_ModelVSIn->genericsEnabled[elIdx])
         {
           m_VSInSecondary.vertexResourceId = vbs[el.buffer].resourceId;
           m_VSInSecondary.vertexByteStride = vbs[el.buffer].byteStride;
@@ -3340,41 +3340,52 @@ void BufferViewer::debugVertex()
   uint32_t index =
       m_CurView->model()->data(m_CurView->model()->index(idx.row(), 1), Qt::DisplayRole).toUInt();
 
-  m_Ctx.Replay().AsyncInvoke([this, vertid, index](IReplayController *r) {
-    ShaderDebugTrace *trace =
-        r->DebugVertex(vertid, m_Config.curInstance, index, m_Ctx.CurDrawcall()->instanceOffset,
-                       m_Ctx.CurDrawcall()->vertexOffset);
+  bool done = false;
+  ShaderDebugTrace *trace = NULL;
+
+  m_Ctx.Replay().AsyncInvoke([this, &done, &trace, vertid, index](IReplayController *r) {
+    trace = r->DebugVertex(vertid, m_Config.curInstance, index, m_Ctx.CurDrawcall()->instanceOffset,
+                           m_Ctx.CurDrawcall()->vertexOffset);
 
     if(trace->states.isEmpty())
     {
       r->FreeTrace(trace);
-
-      GUIInvoke::call(this, [this]() {
-        RDDialog::critical(this, tr("Error debugging"),
-                           tr("Error debugging vertex - make sure a valid vertex is selected"));
-      });
-      return;
+      trace = NULL;
     }
 
-    GUIInvoke::call(this, [this, vertid, trace]() {
-      QString debugContext = tr("Vertex %1").arg(vertid);
+    done = true;
 
-      if(m_Ctx.CurDrawcall()->numInstances > 1)
-        debugContext += tr(", Instance %1").arg(m_Config.curInstance);
-
-      const ShaderReflection *shaderDetails =
-          m_Ctx.CurPipelineState().GetShaderReflection(ShaderStage::Vertex);
-      const ShaderBindpointMapping &bindMapping =
-          m_Ctx.CurPipelineState().GetBindpointMapping(ShaderStage::Vertex);
-      ResourceId pipeline = m_Ctx.CurPipelineState().GetGraphicsPipelineObject();
-
-      // viewer takes ownership of the trace
-      IShaderViewer *s =
-          m_Ctx.DebugShader(&bindMapping, shaderDetails, pipeline, trace, debugContext);
-
-      m_Ctx.AddDockWindow(s->Widget(), DockReference::AddTo, this);
-    });
   });
+
+  QString debugContext = tr("Vertex %1").arg(vertid);
+
+  if(m_Ctx.CurDrawcall()->numInstances > 1)
+    debugContext += tr(", Instance %1").arg(m_Config.curInstance);
+
+  // wait a short while before displaying the progress dialog (which won't show if we're already
+  // done by the time we reach it)
+  for(int i = 0; !done && i < 100; i++)
+    QThread::msleep(5);
+
+  ShowProgressDialog(this, tr("Debugging %1").arg(debugContext), [&done]() { return done; });
+
+  if(!trace)
+  {
+    RDDialog::critical(this, tr("Error debugging"),
+                       tr("Error debugging vertex - make sure a valid vertex is selected"));
+    return;
+  }
+
+  const ShaderReflection *shaderDetails =
+      m_Ctx.CurPipelineState().GetShaderReflection(ShaderStage::Vertex);
+  const ShaderBindpointMapping &bindMapping =
+      m_Ctx.CurPipelineState().GetBindpointMapping(ShaderStage::Vertex);
+  ResourceId pipeline = m_Ctx.CurPipelineState().GetGraphicsPipelineObject();
+
+  // viewer takes ownership of the trace
+  IShaderViewer *s = m_Ctx.DebugShader(&bindMapping, shaderDetails, pipeline, trace, debugContext);
+
+  m_Ctx.AddDockWindow(s->Widget(), DockReference::AddTo, this);
 }
 
 void BufferViewer::changeEvent(QEvent *event)

@@ -158,7 +158,13 @@ bool D3D12InitParams::IsSupportedVersion(uint64_t ver)
   if(ver == CurrentVersion)
     return true;
 
-  // see header for explanation of version changes
+  // 0x5 -> 0x6 - Multiply by number of planes in format when serialising initial states -
+  //              i.e. stencil is saved with depth in initial states.
+  if(ver == 0x5)
+    return true;
+
+  // 0x4 -> 0x5 - CPU_DESCRIPTOR_HANDLE serialised inline as D3D12Descriptor in appropriate
+  //              list-recording functions
   if(ver == 0x4)
     return true;
 
@@ -952,7 +958,7 @@ D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC::D3D12_EXPANDED_PIPELINE_STATE_STREAM_
       }
       case D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_HS:
       {
-        GS = ptr->data.shader;
+        HS = ptr->data.shader;
         ITER_ADV(D3D12_SHADER_BYTECODE);
         break;
       }
@@ -970,7 +976,7 @@ D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC::D3D12_EXPANDED_PIPELINE_STATE_STREAM_
       }
       case D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_CS:
       {
-        GS = ptr->data.shader;
+        CS = ptr->data.shader;
         ITER_ADV(D3D12_SHADER_BYTECODE);
         break;
       }

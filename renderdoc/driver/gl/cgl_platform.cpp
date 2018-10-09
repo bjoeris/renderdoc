@@ -22,7 +22,8 @@
  * THE SOFTWARE.
  ******************************************************************************/
 
-#include "driver/gl/gl_common.h"
+#include "cgl_dispatch_table.h"
+#include "gl_common.h"
 
 class CGLPlatform : public GLPlatform
 {
@@ -55,7 +56,14 @@ class CGLPlatform : public GLPlatform
   void DrawQuads(float width, float height, const std::vector<Vec4f> &vertices) {}
 } cglPlatform;
 
+CGLDispatchTable CGL = {};
+
 GLPlatform &GetGLPlatform()
 {
   return cglPlatform;
+}
+
+bool CGLDispatchTable::PopulateForReplay()
+{
+  return false;
 }

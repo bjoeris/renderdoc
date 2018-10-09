@@ -1303,12 +1303,13 @@ void DoSerialise(SerialiserType &ser, D3D12Pipe::ConstantBuffer &el)
 template <typename SerialiserType>
 void DoSerialise(SerialiserType &ser, D3D12Pipe::RegisterSpace &el)
 {
+  SERIALISE_MEMBER(spaceIndex);
   SERIALISE_MEMBER(constantBuffers);
   SERIALISE_MEMBER(samplers);
   SERIALISE_MEMBER(srvs);
   SERIALISE_MEMBER(uavs);
 
-  SIZE_CHECK(64);
+  SIZE_CHECK(72);
 }
 
 template <typename SerialiserType>
@@ -1490,6 +1491,7 @@ void DoSerialise(SerialiserType &ser, GLPipe::VertexBuffer &el)
 template <typename SerialiserType>
 void DoSerialise(SerialiserType &ser, GLPipe::VertexInput &el)
 {
+  SERIALISE_MEMBER(vertexArrayObject);
   SERIALISE_MEMBER(attributes);
   SERIALISE_MEMBER(vertexBuffers);
   SERIALISE_MEMBER(indexBuffer);
@@ -1497,7 +1499,7 @@ void DoSerialise(SerialiserType &ser, GLPipe::VertexInput &el)
   SERIALISE_MEMBER(restartIndex);
   SERIALISE_MEMBER(provokingVertexLast);
 
-  SIZE_CHECK(56);
+  SIZE_CHECK(64);
 }
 
 template <typename SerialiserType>
@@ -1754,7 +1756,7 @@ void DoSerialise(SerialiserType &ser, GLPipe::State &el)
 
   SERIALISE_MEMBER(hints);
 
-  SIZE_CHECK(1568);
+  SIZE_CHECK(1576);
 }
 
 #pragma endregion OpenGL pipeline state

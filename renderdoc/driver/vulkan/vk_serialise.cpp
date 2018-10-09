@@ -333,7 +333,7 @@ static void SerialiseNext(SerialiserType &ser, VkStructureType &sType, const voi
   }
 
     // walk the pNext chain, skipping any structs we don't care about serialising.
-    VkGenericStruct *next = (VkGenericStruct *)pNext;
+    VkBaseInStructure *next = (VkBaseInStructure *)pNext;
 
     while(next)
     {
@@ -348,7 +348,7 @@ static void SerialiseNext(SerialiserType &ser, VkStructureType &sType, const voi
       }
 
       // walk to the next item if we didn't serialise the current one
-      next = (VkGenericStruct *)next->pNext;
+      next = (VkBaseInStructure *)next->pNext;
     }
 
     // if we got here, either pNext was NULL (common) or we skipped the whole chain. Serialise a
@@ -372,7 +372,7 @@ static inline void DeserialiseNext(const void *pNext)
     return;
 
   // walk the chain, deserialising from the tail back
-  const VkGenericStruct *gen = (const VkGenericStruct *)pNext;
+  const VkBaseInStructure *gen = (const VkBaseInStructure *)pNext;
   DeserialiseNext(gen->pNext);
   delete gen;
 }
@@ -2236,11 +2236,17 @@ void DoSerialise(SerialiserType &ser, VkDescriptorUpdateTemplateEntry &el)
   SERIALISE_MEMBER(descriptorCount);
   SERIALISE_MEMBER(descriptorType);
 
-  // these fields are size_t and should not be serialised as-is. They're not used so we can just
-  // serialise them as uint64_t. Unfortunately this wasn't correct initially and they were
-  // serialised as-is making a 32-bit/64-bit incompatibility, so for older versions all we can do is
-  // continue to serialise them as size_t as it's impossible to know which one was used.
+// these fields are size_t and should not be serialised as-is. They're not used so we can just
+// serialise them as uint64_t. Unfortunately this wasn't correct initially and they were
+// serialised as-is making a 32-bit/64-bit incompatibility, so for older versions all we can do is
+// continue to serialise them as size_t as it's impossible to know which one was used.
+//
+// On mac we can't compile a size_t serialise, which is good in general but makes this backwards
+// compatibility a bit more annoying. We just assume a 64-bit capture.
+
+#if DISABLED(RDOC_APPLE)
   if(ser.VersionAtLeast(0xE))
+#endif
   {
     uint64_t offset = el.offset;
     uint64_t stride = el.stride;
@@ -2249,11 +2255,13 @@ void DoSerialise(SerialiserType &ser, VkDescriptorUpdateTemplateEntry &el)
     el.offset = (size_t)offset;
     el.stride = (size_t)stride;
   }
+#if DISABLED(RDOC_APPLE)
   else
   {
     SERIALISE_MEMBER(offset);
     SERIALISE_MEMBER(stride);
   }
+#endif
 }
 
 template <typename SerialiserType>
@@ -3185,7 +3193,10 @@ void DoSerialise(SerialiserType &ser, VkImportMemoryWin32HandleInfoKHR &el)
   }
 
   {
-    std::string name = el.name ? StringFormat::Wide2UTF8(std::wstring(el.name)) : "";
+    std::string name;
+
+    if(ser.IsWriting())
+      name = el.name ? StringFormat::Wide2UTF8(std::wstring(el.name)) : "";
 
     ser.Serialise("name", name);
 
@@ -3226,7 +3237,10 @@ void DoSerialise(SerialiserType &ser, VkExportFenceWin32HandleInfoKHR &el)
   SERIALISE_MEMBER_TYPED(uint32_t, dwAccess);
 
   {
-    std::string name = StringFormat::Wide2UTF8(std::wstring(el.name));
+    std::string name;
+
+    if(ser.IsWriting())
+      name = el.name ? StringFormat::Wide2UTF8(std::wstring(el.name)) : "";
 
     ser.Serialise("name", name);
 
@@ -3265,7 +3279,10 @@ void DoSerialise(SerialiserType &ser, VkExportSemaphoreWin32HandleInfoKHR &el)
   SERIALISE_MEMBER_TYPED(uint32_t, dwAccess);
 
   {
-    std::string name = StringFormat::Wide2UTF8(std::wstring(el.name));
+    std::string name;
+
+    if(ser.IsWriting())
+      name = el.name ? StringFormat::Wide2UTF8(std::wstring(el.name)) : "";
 
     ser.Serialise("name", name);
 
