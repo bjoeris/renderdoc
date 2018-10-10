@@ -49,6 +49,9 @@ void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage, const char *disa
      << getStageStr(stage) << "_disassembly.txt";
   std::string filename;
   ss >> filename;
+#if defined(__yeti__)
+  filename = "/var/game/" + filename;
+#endif
   std::ofstream file(filename);
   file.write(disassembly, size);
   file.close();
@@ -61,6 +64,9 @@ void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage, VkShaderStatisti
      << getStageStr(stage) << "_statistics.txt";
   std::string filename;
   ss >> filename;
+#if defined(__yeti__)
+  filename = "/var/game/" + filename;
+#endif
   std::ofstream file(filename);
   file << "vkGetShaderInfoAMD" << std::endl
        << "{" << std::endl
