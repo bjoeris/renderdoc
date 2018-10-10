@@ -29,10 +29,9 @@
 #include "utils.h"
 
 AuxVkTraceResources aux;
-int presentIndex = 0;
 bool extAvailable = false;
-
-bool ShimShouldQuitNow() { return false; }
+bool quitNow = false;
+bool ShimShouldQuitNow() { return quitNow; }
 
 /************************* shimmed functions *******************************/
 VkResult shim_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
@@ -136,7 +135,7 @@ VkResult shim_vkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelin
 {
   static PFN_vkCreateGraphicsPipelines fn = vkCreateGraphicsPipelines;
   VkResult r = fn(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
-  if(presentIndex > 0 || r != VK_SUCCESS || !extAvailable)
+  if(r != VK_SUCCESS || !extAvailable)
     return r;
 
   // Get shader info.
@@ -184,7 +183,13 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
   static PFN_vkQueuePresentKHR fn =
       (PFN_vkQueuePresentKHR)vkGetDeviceProcAddr(aux.device, "vkQueuePresentKHR");
   VkResult r = fn(queue, pPresentInfo);
-  presentIndex++;
+#if defined(__yeti__)
+  // Create a trigger file to indicate that we have dumped all the shaders already
+  FILE *fp = OpenFile("/var/game/shader.trigger", "wb");
+  if (fp)
+    fclose(fp);
+#endif
+  quitNow = true;
   return r;
 }
 /************************* boilerplates *******************************/
