@@ -155,15 +155,33 @@ VkResult ShimVkTraceResources::createQueryPools()
   return VK_SUCCESS;
 }
 
-void ShimVkTraceResources::writeCSV(FILE * f, VkCommandBuffer cb, uint32_t cmd_index, uint32_t cb_index) {
+float ShimVkTraceResources::commandTime(VkCommandBuffer cb,
+  uint32_t cmd_index) {
   TupleVec accum = cbAccumTimestamps[cb];
-  float ts = float((accum[cmd_index][1] + accum[cmd_index][0]) / (1000000.0 * cbContext[cb].accum));
+  float ts = float((accum[cmd_index][1] + accum[cmd_index][0]) /
+                   (1000000.0 * cbContext[cb].accum));
+  return ts;
+}
+
+void ShimVkTraceResources::writeCSV(FILE * f, VkCommandBuffer cb, uint32_t cmd_index,
+  uint32_t cb_index, float cb_time) {
+  float ts = commandTime(cb, cmd_index);
   std::string primary = isSecondary(cb) ? "secondary" : "primary";
-  fprintf(f, "%d, %s, %s, %s, %d, %f\n",
-    cb_index, primary.c_str(),
+  fprintf(f, "%d, %s, %f, %s, %s, %d, %f\n",
+    cb_index, primary.c_str(), cb_time,
     cbCommandInfo[cb].vec[cmd_index].name.c_str(),
     cbCommandInfo[cb].vec[cmd_index].info.c_str(),
     cmd_index, ts);
+}
+
+uint32_t ShimVkTraceResources::commandCount(VkCommandBuffer cb) {
+  // If we have captured timestamps for more than just 2 vkCmd* commands
+  // then exclude vk[Begin|End]CommandBuffer from reporting.
+  // If we only have 2 commands, then report time for vkEndCommandBuffer
+  // which is equal to vkBeginCommandBuffer.
+  uint32_t commands = cbCommandInfo[cb].vec.size() > 2 ?
+    cbCommandInfo[cb].vec.size() - 1 : cbCommandInfo[cb].vec.size();
+  return commands;
 }
 
 void ShimVkTraceResources::writeAllCSV(const char *name)
@@ -171,7 +189,8 @@ void ShimVkTraceResources::writeAllCSV(const char *name)
   FILE *csv = OpenFile(name, "wt");
 
   fprintf(csv, "%s\n",
-          "Command Buffer Index, Command Buffer Type, Command Name, Command Info, Command Index, Elapsed Time (ms)");
+          "Command Buffer Index, Command Buffer Type, Command Buffer Total Time, "
+          "Command Name, Command Info, Command Index, Elapsed Time (ms)");
 
   for(auto submit : cbSubmitOrder)
   {
@@ -179,8 +198,9 @@ void ShimVkTraceResources::writeAllCSV(const char *name)
     for(uint32_t i = 0; i < order.size(); i++)
     {
       VkCommandBuffer cb = order[i].cb;
-      TupleVec accum = cbAccumTimestamps[cb];
-      for(uint32_t j = 0; j < cbCommandInfo[cb].vec.size(); j++)
+      float cb_time = commandTime(cb, 0); // time for command buffer total execution.
+      uint32_t commands = commandCount(cb);
+      for(uint32_t j = 1; j < commands; j++) // skips vkBeginCommandBuffer
       {
         if (cbCommandInfo[cb].vec[j].name == "shim_vkCmdExecuteCommands") {
           // Replace this command with the list of commands in secondary cmd buffer.
@@ -188,13 +208,15 @@ void ShimVkTraceResources::writeAllCSV(const char *name)
           uint32_t remaining = cbExecCmdBufs[cb][offset].remaining;
           for (uint32_t r = 0; r < remaining; r++) {
             VkCommandBuffer execCB = cbExecCmdBufs[cb][offset + r].cb;
-            for (uint32_t execj = 0; execj < cbCommandInfo[execCB].vec.size(); execj++) {
-              writeCSV(csv, execCB, execj, i);
+            float exec_cb_time = commandTime(execCB, 0); // time for command buffer total execution.
+            uint32_t exec_commands = commandCount(execCB);
+            for (uint32_t execj = 1; execj < exec_commands; execj++) {
+              writeCSV(csv, execCB, execj, i, exec_cb_time);
             }
           }
           offset += remaining;
         } else {
-          writeCSV(csv, cb, j, i);
+          writeCSV(csv, cb, j, i, cb_time);
         }
       }
     }
