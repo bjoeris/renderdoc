@@ -66,7 +66,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo %GREEN%Package successfully created at %YELLOW%'%package_tgz%'%RESET%
 
-if "run" == "" goto :eof
+if %run% == "" goto :eof
 
 echo %GREEN%Setting up gamelet to run the package...%RESET%
 yeti ssh put %package_tgz%

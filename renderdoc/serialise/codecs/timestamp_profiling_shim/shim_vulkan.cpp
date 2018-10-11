@@ -239,13 +239,18 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
       std::string cbTime = "Command Buffer Time = " +
                            std::to_string(ts) +
                            " (ms)\n";
-#if defined(_WIN32) || defined(WIN32)
+#if defined(_WIN32)
       OutputDebugStringA(cbTime.c_str());
 #else
       fprintf(stdout, "%s", cbTime.c_str());
 #endif
     }
-    aux.writeAllCSV("timestamps.csv");
+#if defined(__yeti__)
+    const char csvFileName[] = "/var/game/timestamps.csv";
+#else
+    const char csvFileName[] = "timestamps.csv";
+#endif
+    aux.writeAllCSV(csvFileName);
     quitNow = true;
   }
 
