@@ -99,8 +99,10 @@ struct ShimVkTraceResources : public AuxVkTraceResources
   VkQueue queryQueue(VkCommandBuffer cb);
   VkResult createQueryPools();
 
-  void writeCSV(FILE * f, VkCommandBuffer cb, 
-    uint32_t cmd_index, uint32_t cb_index);
+  uint32_t commandCount(VkCommandBuffer);
+  float commandTime(VkCommandBuffer cb, uint32_t cmd_index);
+  void writeCSV(FILE * f, VkCommandBuffer cb,
+    uint32_t cmd_index, uint32_t cb_index, float cb_time);
   void writeAllCSV(const char *name);
 };
 
