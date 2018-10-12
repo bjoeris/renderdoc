@@ -2,11 +2,11 @@
 #include "helper/helper.h"
 #include "shim_vulkan.h"
 
-uint32_t ShimVkTraceResources::cmdCount(VkCommandBuffer cb)
+uint32_t ShimVkTraceResources::timestampCollectCommandCount(VkCommandBuffer cb)
 {
   return static_cast<uint32_t>(cbCommandInfo[cb].vec.size());
 }
-uint32_t ShimVkTraceResources::queryCount(VkCommandBuffer cb)
+uint32_t ShimVkTraceResources::timestampQueryCount(VkCommandBuffer cb)
 {
   uint32_t count = 0;
   for (auto info : cbCommandInfo[cb].vec)
@@ -14,19 +14,57 @@ uint32_t ShimVkTraceResources::queryCount(VkCommandBuffer cb)
   return count;
 }
 
-uint32_t ShimVkTraceResources::queryOffset(VkCommandBuffer cb)
-{
-  return cbQueryRange[cb][0];
+VkQueryPool ShimVkTraceResources::timestampQueryPool(VkCommandBuffer cb) {
+  return cbTimestampContext[cb].pool;
 }
 
-uint32_t ShimVkTraceResources::resetQueries(VkCommandBuffer cb)
-{
-  return cbQueryRange[cb][2] = 0;
+VkQueryPool ShimVkTraceResources::pipelinestatsQueryPool(VkCommandBuffer cb) {
+  return cbPipelineStatsContext[cb].pool;
 }
 
-uint32_t ShimVkTraceResources::queryInc(VkCommandBuffer cb)
+uint32_t ShimVkTraceResources::timestampQueryOffset(VkCommandBuffer cb) {
+  return cbTimestampQueryRange[cb][0];
+}
+
+uint32_t ShimVkTraceResources::timestampQueryInc(VkCommandBuffer cb)
 {
-  return cbQueryRange[cb][2]++;
+  return cbTimestampQueryRange[cb][2]++;
+}
+
+uint32_t ShimVkTraceResources::resetTimestampQueries(VkCommandBuffer cb) {
+  return cbTimestampQueryRange[cb][2] = 0;
+}
+
+uint32_t ShimVkTraceResources::timestampReportCommandCount(VkCommandBuffer cb) {
+  // If we have captured timestamps for more than just 2 vkCmd* commands
+  // then exclude vk[Begin|End]CommandBuffer from reporting.
+  // If we only have 2 commands, then report time for vkEndCommandBuffer
+  // which is equal to vkBeginCommandBuffer.
+  uint32_t commands = cbCommandInfo[cb].vec.size() > 2 ?
+    cbCommandInfo[cb].vec.size() - 1 : cbCommandInfo[cb].vec.size();
+  return commands;
+}
+
+uint32_t ShimVkTraceResources::pipelinestatsQueryCount(VkCommandBuffer cb) {
+  return cbCommandInfo[cb].pipelineQueryCount;
+}
+
+uint32_t ShimVkTraceResources::pipelinestatsQueryUnitsCount(VkCommandBuffer cb) {
+  return cbCommandInfo[cb].pipelineQueryCount * cbPipelineStatsContext[cb].stats;
+}
+
+uint32_t ShimVkTraceResources::pipelinestatsQueryOffset(VkCommandBuffer cb) {
+  return cbPipelineStatQueryRange[cb][2];
+}
+
+uint32_t ShimVkTraceResources::pipelinestatsQueryInc(VkCommandBuffer cb) {
+  uint32_t old = cbPipelineStatQueryRange[cb][2];
+  cbPipelineStatQueryRange[cb][2]++;
+  return old;
+}
+
+uint32_t ShimVkTraceResources::resetPipelinestatsQueries(VkCommandBuffer cb) {
+  return cbPipelineStatQueryRange[cb][2] = 0;
 }
 
 // queueSubmit sets queue field in a cmdbuf's TimestampContext, and adds to be executed command
@@ -37,17 +75,20 @@ void ShimVkTraceResources::queueSubmit(VkQueue queue, uint32_t cbCount, VkComman
   for(uint32_t cbi = 0; cbi < cbCount; cbi++)
   {
     VkCommandBuffer currentCB = cbList[cbi];
-    cbContext[currentCB].queue = queue;
+    cbTimestampContext[currentCB].queue = queue;
+    cbPipelineStatsContext[currentCB].isGraphics = isGraphicsQueue(queue);
     uint32_t idx = static_cast<uint32_t>(exec.size());
     exec.push_back(ExecuteCommandBuffer(currentCB, idx));
     for(auto execCB : cbExecCmdBufs[currentCB])
     {
-      cbContext[execCB.cb].queue = queue;
+      cbTimestampContext[execCB.cb].queue = queue;
+      cbPipelineStatsContext[execCB.cb].isGraphics = cbPipelineStatsContext[currentCB].isGraphics;
     }
   }
 }
 
-void ShimVkTraceResources::markExecCmdBufRelation(VkCommandBuffer cb, VkCommandBuffer exec, uint32_t remaining)
+void ShimVkTraceResources::executeCommands(VkCommandBuffer cb, VkCommandBuffer exec,
+                                           uint32_t remaining)
 {
   aux.secondaryCB(exec);
   cbExecCmdBufs[cb].push_back(ExecuteCommandBuffer(exec, remaining));
@@ -61,7 +102,7 @@ bool ShimVkTraceResources::isPresent(VkCommandBuffer cb)
 double ShimVkTraceResources::accumTimestamps(VkCommandBuffer cb, const std::vector<uint64_t> &data,
                                              uint64_t frameID, VkQueue queue)
 {
-  TimestampContext &context = cbContext[cb];
+  TimestampContext &context = cbTimestampContext[cb];
   if(cbAccumTimestamps[cb].empty())
   {
     cbAccumTimestamps[cb].resize(cbCommandInfo[cb].vec.size(), {0.0, 0.0f});
@@ -112,45 +153,101 @@ void ShimVkTraceResources::accumulateAllTimestamps(VkCommandBuffer cb, uint64_t 
     todo.push_back(execCB.cb);
 
   // The primary command buffer is submitted on the queue
-  // that's been recorded in cbContext[cb], and all of it's
+  // that's been recorded in cbTimestampContext[cb], and all of it's
   // secondary command buffers were also submitted on the
   // same queue.
-  VkQueue queue = cbContext[cb].queue;
+  VkQueue queue = cbTimestampContext[cb].queue;
 
   for(VkCommandBuffer cbi : todo)
   {
-    uint32_t offset = queryOffset(cbi);
-    uint32_t count = queryCount(cbi);
+    uint32_t offset = timestampQueryOffset(cbi);
+    uint32_t count = timestampQueryCount(cbi);
     std::vector<uint64_t> data(count);
     VkResult pollResult = vkGetQueryPoolResults(
-        device, queryPool(cbi), offset, count, sizeof(uint64_t) * count, data.data(),
+        device, timestampQueryPool(cbi), offset, count,
+        sizeof(uint64_t) * count, data.data(),
         sizeof(uint64_t), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
     assert(pollResult == VK_SUCCESS);
     accumTimestamps(cbi, data, frameID, queue);
   }
 }
 
-VkQueryPool ShimVkTraceResources::queryPool(VkCommandBuffer cb)
-{
-  return cbContext[cb].pool;
-}
 
-VkQueue ShimVkTraceResources::queryQueue(VkCommandBuffer cb)
-{
-  return cbContext[cb].queue;
+void ShimVkTraceResources::fetchPipelineStats(uint64_t frameID) {
+
+  for (auto cb : cbCommandInfo) {
+    std::vector<VkCommandBuffer> todo(1, cb.first);
+
+    // If command buffer had secondary buffers, add them to todo list of work.
+    for (auto execCB : cbExecCmdBufs[cb.first])
+      todo.push_back(execCB.cb);
+
+    for (VkCommandBuffer cbi : todo) {
+      uint32_t offset = 0;
+      uint32_t count = pipelinestatsQueryCount(cbi);
+      std::vector<uint64_t> ps_data(pipelinestatsQueryUnitsCount(cbi));
+      VkResult pollResult = vkGetQueryPoolResults(
+        device, pipelinestatsQueryPool(cbi), offset, count,
+        sizeof(uint64_t) * ps_data.size(), ps_data.data(),
+        sizeof(uint64_t) * cbPipelineStatsContext[cbi].stats,
+        VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+      assert(pollResult == VK_SUCCESS);
+
+      uint32_t s = sizeof(AllPipelineStats);
+      uint32_t statsIndex = 0;
+      for (auto &cbInfo : aux.cbCommandInfo[cbi].vec)
+       if (cbInfo.hasStats) {
+         if (cbPipelineStatsContext[cbi].stats == 1)
+           cbInfo.stats.computeInvocations = ps_data[statsIndex++];
+         else
+           cbInfo.stats = (reinterpret_cast<AllPipelineStats*>(ps_data.data()))[statsIndex++];
+      }
+    }
+  }
 }
 
 VkResult ShimVkTraceResources::createQueryPools()
 {
   for(auto cbQuery : cbCommandInfo)
   {
-    VkQueryPoolCreateInfo ci = {};
-    ci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-    ci.queryType = VK_QUERY_TYPE_TIMESTAMP;
-    ci.queryCount = queryCount(cbQuery.first);
-    cbQueryRange[cbQuery.first][0] = 0;
-    cbQueryRange[cbQuery.first][1] = ci.queryCount;
-    VK_CHECK_RESULT(vkCreateQueryPool(device, &ci, NULL, &cbContext[cbQuery.first].pool));
+    VkQueryPoolCreateInfo tsci = {};
+    tsci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    tsci.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    tsci.queryCount = timestampQueryCount(cbQuery.first);
+    cbTimestampQueryRange[cbQuery.first][0] = 0;
+    cbTimestampQueryRange[cbQuery.first][1] = tsci.queryCount;
+    VK_CHECK_RESULT(vkCreateQueryPool(device, &tsci, NULL, &cbTimestampContext[cbQuery.first].pool));
+
+    if (cbQuery.second.pipelineQueryCount == 0)
+      continue;
+
+    // Account for compute stats only first.
+    cbPipelineStatsContext[cbQuery.first].stats = 1;
+
+    VkQueryPoolCreateInfo psci = {};
+    psci.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    psci.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
+    psci.pipelineStatistics =
+      VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT;
+    if (cbPipelineStatsContext[cbQuery.first].isGraphics) {
+      psci.pipelineStatistics |=
+        VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_VERTICES_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_INPUT_ASSEMBLY_PRIMITIVES_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_VERTEX_SHADER_INVOCATIONS_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_INVOCATIONS_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_GEOMETRY_SHADER_PRIMITIVES_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_CLIPPING_INVOCATIONS_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_FRAGMENT_SHADER_INVOCATIONS_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_CONTROL_SHADER_PATCHES_BIT |
+        VK_QUERY_PIPELINE_STATISTIC_TESSELLATION_EVALUATION_SHADER_INVOCATIONS_BIT;
+      cbPipelineStatsContext[cbQuery.first].stats += 10; // account for all graphics bits.
+    }
+    psci.queryCount = pipelinestatsQueryUnitsCount(cbQuery.first);
+    cbPipelineStatQueryRange[cbQuery.first][0] = 0;
+    cbPipelineStatQueryRange[cbQuery.first][1] = psci.queryCount;
+    VK_CHECK_RESULT(vkCreateQueryPool(device, &psci, NULL, &cbPipelineStatsContext[cbQuery.first].pool));
+
   }
   return VK_SUCCESS;
 }
@@ -159,64 +256,82 @@ float ShimVkTraceResources::commandTime(VkCommandBuffer cb,
   uint32_t cmd_index) {
   TupleVec accum = cbAccumTimestamps[cb];
   float ts = float((accum[cmd_index][1] + accum[cmd_index][0]) /
-                   (1000000.0 * cbContext[cb].accum));
+                   (1000000.0 * cbTimestampContext[cb].accum));
   return ts;
 }
 
-void ShimVkTraceResources::writeCSV(FILE * f, VkCommandBuffer cb, uint32_t cmd_index,
-  uint32_t cb_index, float cb_time) {
+void ShimVkTraceResources::writeCSV(FILE * f, VkCommandBuffer cb,
+  const char * cb_name, uint32_t cb_index, float cb_time,
+  uint32_t cmd_index) {
   float ts = commandTime(cb, cmd_index);
   std::string primary = isSecondary(cb) ? "secondary" : "primary";
-  fprintf(f, "%d, %s, %f, %s, %s, %d, %f\n",
-    cb_index, primary.c_str(), cb_time,
+  fprintf(f, "%d, %s, %s, %f, %s, %s, %d, %f",
+    cb_index, cb_name, primary.c_str(), cb_time,
     cbCommandInfo[cb].vec[cmd_index].name.c_str(),
     cbCommandInfo[cb].vec[cmd_index].info.c_str(),
     cmd_index, ts);
+  std::string str;
+  if (cbCommandInfo[cb].vec[cmd_index].hasStats) {
+    str =
+      ", " + std::to_string(cbCommandInfo[cb].vec[cmd_index].stats.inputAssemblyVertices) +
+      ", " + std::to_string(cbCommandInfo[cb].vec[cmd_index].stats.inputAssemblyPrimitive) +
+      ", " + std::to_string(cbCommandInfo[cb].vec[cmd_index].stats.vertexInvocations) +
+      ", " + std::to_string(cbCommandInfo[cb].vec[cmd_index].stats.geometryInvocations) +
+      ", " + std::to_string(cbCommandInfo[cb].vec[cmd_index].stats.geometryPrimitives) +
+      ", " + std::to_string(cbCommandInfo[cb].vec[cmd_index].stats.clippingInvocations) +
+      ", " + std::to_string(cbCommandInfo[cb].vec[cmd_index].stats.clippingPrimitives) +
+      ", " + std::to_string(cbCommandInfo[cb].vec[cmd_index].stats.fragmentInvocations) +
+      ", " + std::to_string(cbCommandInfo[cb].vec[cmd_index].stats.controlInvocations) +
+      ", " + std::to_string(cbCommandInfo[cb].vec[cmd_index].stats.evaluationInvocations) +
+      ", " + std::to_string(cbCommandInfo[cb].vec[cmd_index].stats.computeInvocations);
+  }
+  fprintf(f, "%s\n", str.c_str());
+
 }
 
-uint32_t ShimVkTraceResources::commandCount(VkCommandBuffer cb) {
-  // If we have captured timestamps for more than just 2 vkCmd* commands
-  // then exclude vk[Begin|End]CommandBuffer from reporting.
-  // If we only have 2 commands, then report time for vkEndCommandBuffer
-  // which is equal to vkBeginCommandBuffer.
-  uint32_t commands = cbCommandInfo[cb].vec.size() > 2 ?
-    cbCommandInfo[cb].vec.size() - 1 : cbCommandInfo[cb].vec.size();
-  return commands;
-}
 
 void ShimVkTraceResources::writeAllCSV(const char *name)
 {
   FILE *csv = OpenFile(name, "wt");
 
   fprintf(csv, "%s\n",
-          "Command Buffer Index, Command Buffer Type, Command Buffer Total Time, "
-          "Command Name, Command Info, Command Index, Elapsed Time (ms)");
+          "Command Buffer Index, Command Buffer Variable, Command Buffer Type, Command Buffer Total Time, "
+          "Command Name, Command Info, Command Index, Elapsed Time (ms), "
+          "IA Vertices, IA Primitives, VS Invocations, GS Invocations, GS Primitives, "
+          "Clipping Invocations, Clipping Primitives, FS Invocations, TCS Invocations, "
+          "TES Invocations, CS Invocations");
 
   for(auto submit : cbSubmitOrder)
   {
     ExecCmdBufVec &order = submit.second;
-    for(uint32_t i = 0; i < order.size(); i++)
+    for(uint32_t cb_i = 0; cb_i < order.size(); cb_i++)
     {
-      VkCommandBuffer cb = order[i].cb;
+      VkCommandBuffer cb = order[cb_i].cb;
+      const char * cb_name = "";// GetResourceName(VkHandle((uint64_t) cb, "VkCommandBuffer"));
       float cb_time = commandTime(cb, 0); // time for command buffer total execution.
-      uint32_t commands = commandCount(cb);
+      uint32_t commands = timestampReportCommandCount(cb);
       for(uint32_t j = 1; j < commands; j++) // skips vkBeginCommandBuffer
       {
-        if (cbCommandInfo[cb].vec[j].name == "shim_vkCmdExecuteCommands") {
+        if(cbCommandInfo[cb].vec[j].name == "shim_vkCmdExecuteCommands")
+        {
           // Replace this command with the list of commands in secondary cmd buffer.
           uint32_t &offset = cbCommandInfo[cb].executeCommands;
           uint32_t remaining = cbExecCmdBufs[cb][offset].remaining;
-          for (uint32_t r = 0; r < remaining; r++) {
+          for(uint32_t r = 0; r < remaining; r++)
+          {
             VkCommandBuffer execCB = cbExecCmdBufs[cb][offset + r].cb;
-            float exec_cb_time = commandTime(execCB, 0); // time for command buffer total execution.
-            uint32_t exec_commands = commandCount(execCB);
+            const char * execCB_name = "";// GetResourceName(VkHandle((uint64_t) cb, "VkCommandBuffer"));
+            float execCB_time = commandTime(execCB, 0); // time for command buffer total execution.
+            uint32_t exec_commands = timestampReportCommandCount(execCB);
             for (uint32_t execj = 1; execj < exec_commands; execj++) {
-              writeCSV(csv, execCB, execj, i, exec_cb_time);
+              writeCSV(csv, execCB, execCB_name, execCB_time, cb_i, execj);
             }
           }
           offset += remaining;
-        } else {
-          writeCSV(csv, cb, j, i, cb_time);
+        }
+        else
+        {
+          writeCSV(csv, cb, cb_name, cb_i, cb_time, j);
         }
       }
     }
@@ -225,7 +340,13 @@ void ShimVkTraceResources::writeAllCSV(const char *name)
 }
 
 void ShimVkTraceResources::addCommandInfo(VkCommandBuffer cb, const CommandInfo & info) {
-  aux.cbCommandInfo[cb].vec.push_back(info);
+  aux.cbCommandInfo[cb].vec.push_back(info); 
+  if (info.name.find("vkCmdDraw") != std::string::npos|| 
+      info.name.find("vkCmdDispatch") != std::string::npos) {
+    aux.cbCommandInfo[cb].vec.back().hasStats = true;
+    aux.cbCommandInfo[cb].pipelineQueryCount++;
+  }
+  
   isInline(cb, info.isInlinedSubpass);
 }
 
@@ -235,4 +356,14 @@ bool ShimVkTraceResources::isInline(VkCommandBuffer cb) {
 
 void ShimVkTraceResources::isInline(VkCommandBuffer cb, bool current) {
   cbCommandInfo[cb].isInlinedSubpass = current;
+}
+
+void ShimVkTraceResources::secondaryCB(VkCommandBuffer cb)
+{
+  cbSecondary[cb] = true;
+}
+
+bool ShimVkTraceResources::isSecondary(VkCommandBuffer cb)
+{
+  return cbSecondary.count(cb) > 0;
 }

@@ -29,12 +29,38 @@ struct TimestampContext
   uint32_t accum;
 };
 
+struct PipelineStatsContext {
+  bool isGraphics = false;
+  uint32_t stats = 1;
+  VkQueryPool pool = NULL;
+};
+
+struct AllPipelineStats {
+  uint64_t inputAssemblyVertices;
+  uint64_t inputAssemblyPrimitive;
+  uint64_t vertexInvocations;
+  uint64_t geometryInvocations;
+  uint64_t geometryPrimitives;
+  uint64_t clippingInvocations;
+  uint64_t clippingPrimitives;
+  uint64_t fragmentInvocations;
+  uint64_t controlInvocations;
+  uint64_t evaluationInvocations;
+  uint64_t computeInvocations;
+};
+
+struct AllComputePipelineStats {
+  uint64_t computeInvocations;
+};
+
 struct CommandInfo
 {
   std::string name;
   std::string info;
   uint32_t timestamps = 2;
   bool isInlinedSubpass = true;
+  bool hasStats = false;
+  AllPipelineStats stats = {};
 
   CommandInfo(std::string n) { name = n; }
   CommandInfo(std::string n, std::string i)
@@ -65,6 +91,7 @@ struct CommandInfoDesc
 {
   CommandInfoVec vec;
   bool isInlinedSubpass = false;
+  uint32_t pipelineQueryCount = 0;
   uint32_t executeCommands = 0;
 };
 typedef std::vector<ExecuteCommandBuffer> ExecCmdBufVec;
@@ -74,39 +101,49 @@ struct ShimVkTraceResources : public AuxVkTraceResources
   std::map<VkQueue, ExecCmdBufVec> cbSubmitOrder;
   std::map<VkCommandBuffer, CommandInfoDesc> cbCommandInfo;
   std::map<VkCommandBuffer, TupleVec> cbAccumTimestamps;
-  std::map<VkCommandBuffer, TripleU32> cbQueryRange;
+  std::map<VkCommandBuffer, TripleU32> cbTimestampQueryRange;
+  std::map<VkCommandBuffer, TripleU32> cbPipelineStatQueryRange;
   std::map<VkCommandBuffer, ExecCmdBufVec> cbExecCmdBufs;
-  std::map<VkCommandBuffer, TimestampContext> cbContext;
+  std::map<VkCommandBuffer, TimestampContext> cbTimestampContext;
+  std::map<VkCommandBuffer, PipelineStatsContext> cbPipelineStatsContext;
   std::map<VkCommandBuffer, bool> cbSecondary;
 
-  uint32_t cmdCount(VkCommandBuffer cb);
-  uint32_t queryCount(VkCommandBuffer cb);
+  uint32_t timestampReportCommandCount(VkCommandBuffer);
+  uint32_t timestampCollectCommandCount(VkCommandBuffer cb);
+  uint32_t timestampQueryCount(VkCommandBuffer cb);
+  uint32_t timestampQueryOffset(VkCommandBuffer cb);
+  uint32_t timestampQueryInc(VkCommandBuffer cb);
+  uint32_t resetTimestampQueries(VkCommandBuffer cb);
+  VkQueryPool timestampQueryPool(VkCommandBuffer cb);
 
-  uint32_t queryOffset(VkCommandBuffer cb);
-  uint32_t resetQueries(VkCommandBuffer cb);
-  uint32_t queryInc(VkCommandBuffer cb);
+  uint32_t pipelinestatsQueryCount(VkCommandBuffer cb);
+  uint32_t pipelinestatsQueryUnitsCount(VkCommandBuffer cb);
+  uint32_t pipelinestatsQueryOffset(VkCommandBuffer cb);
+  uint32_t pipelinestatsQueryInc(VkCommandBuffer cb);
+  uint32_t resetPipelinestatsQueries(VkCommandBuffer cb);
+  VkQueryPool pipelinestatsQueryPool(VkCommandBuffer cb);
+
+  bool isPresent(VkCommandBuffer cb);
 
   void addCommandInfo(VkCommandBuffer cb, const CommandInfo &info);
   bool isInline(VkCommandBuffer cb);
   void isInline(VkCommandBuffer cb, bool current);
+  void secondaryCB(VkCommandBuffer cb);
+  bool isSecondary(VkCommandBuffer cb);
 
   void queueSubmit(VkQueue queue, uint32_t cbCount, VkCommandBuffer *cbList);
-  void markExecCmdBufRelation(VkCommandBuffer cb, VkCommandBuffer exec, uint32_t offset);
-  bool isPresent(VkCommandBuffer cb);
+  void executeCommands(VkCommandBuffer cb, VkCommandBuffer exec, uint32_t offset);
+
+  float commandTime(VkCommandBuffer cb, uint32_t cmd_index);
   double accumTimestamps(VkCommandBuffer cb, const std::vector<uint64_t> &data, uint64_t frameID,
                          VkQueue queue);
   void accumulateAllTimestamps(VkCommandBuffer cb, uint64_t frameID);
+  void fetchPipelineStats(uint64_t frameID);
 
-  void secondaryCB(VkCommandBuffer cb) { cbSecondary[cb] = true; }
-  bool isSecondary(VkCommandBuffer cb) { return cbSecondary.count(cb) > 0; }
-  VkQueryPool queryPool(VkCommandBuffer cb);
-  VkQueue queryQueue(VkCommandBuffer cb);
   VkResult createQueryPools();
 
-  uint32_t commandCount(VkCommandBuffer);
-  float commandTime(VkCommandBuffer cb, uint32_t cmd_index);
-  void writeCSV(FILE * f, VkCommandBuffer cb,
-    uint32_t cmd_index, uint32_t cb_index, float cb_time);
+  void writeCSV(FILE * f, VkCommandBuffer cb, const char * cb_name,
+    uint32_t cb_index, float cb_time, uint32_t cmd_index);
   void writeAllCSV(const char *name);
 };
 

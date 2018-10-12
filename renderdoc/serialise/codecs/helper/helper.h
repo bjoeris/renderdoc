@@ -113,6 +113,37 @@ struct AuxVkTraceResources
     }
     return bits;
   }
+
+  int32_t queueBits(VkQueue queue, bool & isGraphics, bool & isCompute, bool & isTransfer) {
+    for (uint32_t i = 0; i < queueFamilyProperties.size(); i++) {
+      for (uint32_t j = 0; j < queueFamilyProperties[i].queueCount; j++) {
+        VkQueue q = NULL;
+        vkGetDeviceQueue(device, i, j, &q);
+        if (q == queue) {
+          isGraphics = queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT;
+          isCompute = (queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) && !isGraphics;
+          isTransfer = (queueFamilyProperties[i].queueFlags & VK_QUEUE_TRANSFER_BIT) && !isGraphics && !isCompute;
+          return i;
+        }
+      }
+    }
+    // this should be unreachable code for any valid queue.
+    assert(0);
+    return -1;
+  }
+
+  bool isGraphicsQueue(VkQueue queue) {
+    bool isGraphics, isCompute, isTransfer;
+    if (queueBits(queue, isGraphics, isCompute, isTransfer) >= 0)
+      return isGraphics;
+    else return false;
+  }
+  bool isComputeQueue(VkQueue queue) {
+    bool isGraphics, isCompute, isTransfer;
+    if (queueBits(queue, isGraphics, isCompute, isTransfer) >= 0)
+      return isCompute;
+    else return false;
+  }
 };
 
 struct Region
