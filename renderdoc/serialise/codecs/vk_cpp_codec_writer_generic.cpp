@@ -54,10 +54,12 @@ void CodeWriter::InlineVariable(ExtObject *o, uint32_t pass)
     {
       InlineVariable(node, pass);
     }
-    else if(node->IsResource()) {
+    else if(node->IsResource())
+    {
       files[pass]->PrintLn("/* %s = */ %s,", node->Name(), tracker->GetResourceVar(node->U64()));
     }
-    else {
+    else
+    {
       files[pass]->PrintLn("/* %s = */ %s,", node->Name(), node->ValueStr().c_str());
     }
   }
@@ -66,22 +68,32 @@ void CodeWriter::InlineVariable(ExtObject *o, uint32_t pass)
 
 void CodeWriter::AssignUnion(std::string path, ExtObject *o, bool comment, uint32_t pass)
 {
-  if (o->IsStruct() || o->IsArray() || o->IsUnion()) {
-    for (uint64_t i = 0; i < o->Size(); i++) {
+  if(o->IsStruct() || o->IsArray() || o->IsUnion())
+  {
+    for(uint64_t i = 0; i < o->Size(); i++)
+    {
       ExtObject *child = o->At(i);
       std::string childPath(path);
       bool childComment = false;
-      if (o->IsArray()) {
+      if(o->IsArray())
+      {
         childPath += "[" + std::to_string(i) + "]";
-      } else if (o->IsStruct()) {
-        if (o->IsPointer()) {
+      }
+      else if(o->IsStruct())
+      {
+        if(o->IsPointer())
+        {
           childPath += "->";
-        } else {
+        }
+        else
+        {
           childPath += ".";
         }
         childPath += std::string(child->Name());
-        if (o->IsUnion()) {
-          if (i != o->CanonicalUnionBranch()) {
+        if(o->IsUnion())
+        {
+          if(i != o->CanonicalUnionBranch())
+          {
             childComment = true;
           }
         }
@@ -91,7 +103,8 @@ void CodeWriter::AssignUnion(std::string path, ExtObject *o, bool comment, uint3
     return;
   }
 
-  if (o->IsPointer() && !o->IsNULL()) {
+  if(o->IsPointer() && !o->IsNULL())
+  {
     // This would be a non-null, non-array pointer to non-struct;
     // This should never happen.
     RDCASSERT(0);
@@ -116,9 +129,9 @@ void CodeWriter::AssignUnion(std::string path, ExtObject *o, bool comment, uint3
 
 void CodeWriter::LocalVariable(ExtObject *o, std::string suffix, uint32_t pass)
 {
-  //Unions have multiple elements in them, which is why they need to be
+  // Unions have multiple elements in them, which is why they need to be
   // handled first, ahead of structs and arrays.
-  if (o->IsUnion())
+  if(o->IsUnion())
   {
     std::string name(o->Name());
     name += suffix;
@@ -131,10 +144,12 @@ void CodeWriter::LocalVariable(ExtObject *o, std::string suffix, uint32_t pass)
     uint64_t size = o->Size();
     // Go through all the children and look for complex structures or variable-
     // size arrays. For each of those, declare and initialize them separately.
-    for (uint64_t i = 0; i < size; i++) {
+    for(uint64_t i = 0; i < size; i++)
+    {
       // Handle cases when the member is a complex data type, such as a complex
       // structure or a variable sized array.
-      if (!o->At(i)->IsInlineable()) {
+      if(!o->At(i)->IsInlineable())
+      {
         std::string add_suffix;
         ExtObject *node = tracker->CopiesAdd(o, i, add_suffix);
         LocalVariable(node, suffix + add_suffix, pass);
@@ -142,32 +157,47 @@ void CodeWriter::LocalVariable(ExtObject *o, std::string suffix, uint32_t pass)
     }
     // Now, declare and initialize the data type. Simple members get inlined.
     // Complex structures or variable arrays get referenced by name.
-    if (o->IsNULL()) {
+    if(o->IsNULL())
+    {
       files[pass]->PrintLn("%s* %s%s = NULL;", o->Type(), o->Name(), suffix.c_str());
-    } else if (o->IsStruct() && !o->IsPointer()) {
+    }
+    else if(o->IsStruct() && !o->IsPointer())
+    {
       files[pass]->PrintLn("%s %s%s = {", o->Type(), o->Name(), suffix.c_str());
-    } else if (o->IsStruct() && o->IsPointer()) {
+    }
+    else if(o->IsStruct() && o->IsPointer())
+    {
       files[pass]->PrintLn("%s %s%s[1] = {", o->Type(), o->Name(), suffix.c_str());
-    } else if (o->IsArray()) {
+    }
+    else if(o->IsArray())
+    {
       files[pass]->PrintLn("%s %s%s[%llu] = {", o->Type(), o->Name(), suffix.c_str(), size);
     }
 
-    for (uint64_t i = 0; i < size; i++) {
+    for(uint64_t i = 0; i < size; i++)
+    {
       std::string add_suffix;
       ExtObject *node = tracker->CopiesAdd(o, i, add_suffix);
-      if (!node->IsInlineable()) {
+      if(!node->IsInlineable())
+      {
         files[pass]->PrintLn("/* %s = */ %s%s,", node->Name(), node->Name(),
-          (suffix + add_suffix).c_str());
-      } else if (!node->IsSimpleType() && node->IsInlineable()) {
+                             (suffix + add_suffix).c_str());
+      }
+      else if(!node->IsSimpleType() && node->IsInlineable())
+      {
         InlineVariable(node, pass);
-      } else if (node->IsResource()) {
+      }
+      else if(node->IsResource())
+      {
         files[pass]->PrintLn("/* %s = */ %s,", node->Name(), tracker->GetResourceVar(node->U64()));
-      } else {
+      }
+      else
+      {
         files[pass]->PrintLn("/* %s = */ %s,", node->Name(), node->ValueStr().c_str());
       }
     }
 
-    if (!o->IsNULL())
+    if(!o->IsNULL())
       files[pass]->PrintLn("};");
   }
 }
@@ -189,10 +219,12 @@ void CodeWriter::GenericVkCreate(ExtObject *o, uint32_t pass, bool global_ci)
     std::string ci_name = AddVar(ci->Type(), vk_res->U64());
     files[pass]->PrintLn("%s = %s;", ci_name.c_str(), ci->Name());
   }
-
+  std::string resource_name_str;
+  if(*shimPrefix)
+    resource_name_str.append(", \"").append(res_name).append("\"");
   files[pass]
-      ->PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ci->Name(),
-                res_name)
+      ->PrintLn("VkResult result = %s(%s, &%s, NULL, &%s%s);", o->Name(), device_name, ci->Name(),
+                res_name, resource_name_str.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("}");
 }
@@ -217,9 +249,12 @@ void CodeWriter::GenericCreatePipelines(ExtObject *o, uint32_t pass, bool global
 
   files[pass]->PrintLn("{");
   LocalVariable(ci, "", pass);
+  std::string resource_name_str;
+  if(*shimPrefix)
+    resource_name_str.append(", \"").append(pipe_name).append("\"");
   files[pass]
-      ->PrintLn("VkResult result = %s(%s, %s, 1, &%s, NULL, &%s);", o->Name(), device_name,
-                cache_name, ci->Name(), pipe_name)
+      ->PrintLn("VkResult result = %s(%s, %s, 1, &%s, NULL, &%s%s);", o->Name(), device_name,
+                cache_name, ci->Name(), pipe_name, resource_name_str.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("}");
 }

@@ -47,7 +47,7 @@ VkBool32 VKAPI_PTR DebugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjec
   return VK_FALSE;
 }
 
-void RegisterDebugCallback(AuxVkTraceResources* aux, VkInstance instance, uint32_t flags)
+void RegisterDebugCallback(AuxVkTraceResources *aux, VkInstance instance, uint32_t flags)
 {
   PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallback = VK_NULL_HANDLE;
   CreateDebugReportCallback = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
@@ -101,7 +101,7 @@ void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
                        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
 }
 
-void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dstImage,
+void ImageLayoutTransition(const AuxVkTraceResources &aux, VkImage dstImage,
                            VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
                            VkImageLayout oldLayout)
 {
@@ -109,8 +109,8 @@ void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dstImage,
                         VK_QUEUE_FAMILY_IGNORED, oldLayout, VK_QUEUE_FAMILY_IGNORED);
 }
 
-void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dstImage, VkImageCreateInfo dstCI,
-                           VkImageLayout newLayout, VkImageLayout oldLayout)
+void ImageLayoutTransition(const AuxVkTraceResources &aux, VkImage dstImage,
+                           VkImageCreateInfo dstCI, VkImageLayout newLayout, VkImageLayout oldLayout)
 {
   VkImageSubresourceRange subresourceRange = {
       FullAspectFromFormat(dstCI.format), 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS};
@@ -118,7 +118,7 @@ void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dstImage, VkI
   ImageLayoutTransition(aux, dstImage, subresourceRange, newLayout, oldLayout);
 }
 
-void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dstImg, uint32_t arrayLayer,
+void ImageLayoutTransition(const AuxVkTraceResources &aux, VkImage dstImg, uint32_t arrayLayer,
                            uint32_t mipLevel, VkImageAspectFlagBits aspect, VkImageLayout newLayout,
                            VkImageLayout oldLayout)
 {
@@ -127,7 +127,8 @@ void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dstImg, uint3
   ImageLayoutTransition(aux, dstImg, subresourceRange, newLayout, oldLayout);
 }
 
-void CopyResetImage(const AuxVkTraceResources& aux, VkImage dst, VkBuffer src, VkImageCreateInfo dst_ci)
+void CopyResetImage(const AuxVkTraceResources &aux, VkImage dst, VkBuffer src,
+                    VkImageCreateInfo dst_ci)
 {
   ImageLayoutTransition(aux, dst, dst_ci, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
@@ -192,7 +193,7 @@ void CopyResetImage(const AuxVkTraceResources& aux, VkImage dst, VkBuffer src, V
 #endif
   }
 }
-void CopyResetBuffer(const AuxVkTraceResources& aux, VkBuffer dst, VkBuffer src, VkDeviceSize size)
+void CopyResetBuffer(const AuxVkTraceResources &aux, VkBuffer dst, VkBuffer src, VkDeviceSize size)
 {
   if(size == 0)
     return;
@@ -200,7 +201,8 @@ void CopyResetBuffer(const AuxVkTraceResources& aux, VkBuffer dst, VkBuffer src,
   vkCmdCopyBuffer(aux.command_buffer, src, dst, 1, &region);
 }
 
-void CopyImageToBuffer(const AuxVkTraceResources& aux, VkImage src, VkBuffer dst, VkImageCreateInfo src_ci)
+void CopyImageToBuffer(const AuxVkTraceResources &aux, VkImage src, VkBuffer dst,
+                       VkImageCreateInfo src_ci)
 {
   if(src_ci.samples == VK_SAMPLE_COUNT_1_BIT)
   {
@@ -258,7 +260,7 @@ void CopyImageToBuffer(const AuxVkTraceResources& aux, VkImage src, VkBuffer dst
   }
 }
 
-void DiffDeviceMemory(const AuxVkTraceResources& aux, VkDeviceMemory expected,
+void DiffDeviceMemory(const AuxVkTraceResources &aux, VkDeviceMemory expected,
                       VkDeviceSize expected_offset, VkDeviceMemory actual,
                       VkDeviceSize actual_offset, VkDeviceSize size, const char *name)
 {
@@ -444,12 +446,18 @@ void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance,
   VkSemaphoreCreateInfo semaphore_ci = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, NULL, 0};
   result = vkCreateSemaphore(device, &semaphore_ci, NULL, &aux->semaphore);
 
-  if (IsExtSupported(aux->physDevice, "VK_EXT_debug_marker")) {
-    vkDebugMarkerSetObjectTag = (PFN_vkDebugMarkerSetObjectTagEXT) vkGetInstanceProcAddr(instance, "vkDebugMarkerSetObjectTagEXT");
-    vkDebugMarkerSetObjectName = (PFN_vkDebugMarkerSetObjectNameEXT) vkGetInstanceProcAddr(instance, "vkDebugMarkerSetObjectNameEXT");
-    vkCmdDebugMarkerBegin = (PFN_vkCmdDebugMarkerBeginEXT) vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerBeginEXT");
-    vkCmdDebugMarkerEnd = (PFN_vkCmdDebugMarkerEndEXT) vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerEndEXT");
-    vkCmdDebugMarkerInsert = (PFN_vkCmdDebugMarkerInsertEXT) vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerInsertEXT");
+  if(IsExtSupported(aux->physDevice, "VK_EXT_debug_marker"))
+  {
+    vkDebugMarkerSetObjectTag = (PFN_vkDebugMarkerSetObjectTagEXT)vkGetInstanceProcAddr(
+        instance, "vkDebugMarkerSetObjectTagEXT");
+    vkDebugMarkerSetObjectName = (PFN_vkDebugMarkerSetObjectNameEXT)vkGetInstanceProcAddr(
+        instance, "vkDebugMarkerSetObjectNameEXT");
+    vkCmdDebugMarkerBegin =
+        (PFN_vkCmdDebugMarkerBeginEXT)vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerBeginEXT");
+    vkCmdDebugMarkerEnd =
+        (PFN_vkCmdDebugMarkerEndEXT)vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerEndEXT");
+    vkCmdDebugMarkerInsert =
+        (PFN_vkCmdDebugMarkerInsertEXT)vkGetInstanceProcAddr(instance, "vkCmdDebugMarkerInsertEXT");
   }
 
   uint32_t queueFamilyPropertyCount;
@@ -457,7 +465,7 @@ void InitializeAuxResources(AuxVkTraceResources *aux, VkInstance instance,
   assert(queueFamilyPropertyCount != 0);
   aux->queueFamilyProperties.resize(queueFamilyPropertyCount);
   vkGetPhysicalDeviceQueueFamilyProperties(aux->physDevice, &queueFamilyPropertyCount,
-    aux->queueFamilyProperties.data());
+                                           aux->queueFamilyProperties.data());
 }
 
 int32_t MemoryTypeIndex(VkMemoryPropertyFlags mask, uint32_t bits,
@@ -646,8 +654,9 @@ Region RegionsIntersect(const Region &r1, const Region &r2)
   return r;
 }
 
-void MapUpdate(const AuxVkTraceResources& aux, uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,
-               VkMemoryAllocateInfo &ai, MemoryRemapVec &remap, VkDevice dev)
+void MapUpdate(const AuxVkTraceResources &aux, uint8_t *dst, uint8_t *src,
+               const VkMappedMemoryRange &range, VkMemoryAllocateInfo &ai, MemoryRemapVec &remap,
+               VkDevice dev)
 {
   if(dst != NULL)
   {
@@ -733,19 +742,19 @@ std::string StageProgressString(const char *stage, uint32_t i, uint32_t N)
                      " of " + std::to_string(N));
 }
 
-std::string GetEnvString(const char* envVarName)
+std::string GetEnvString(const char *envVarName)
 {
   std::string val;
 #ifdef _WIN32
-  char* buf = NULL;
-  if (_dupenv_s(&buf, NULL, envVarName) == 0 && buf)
+  char *buf = NULL;
+  if(_dupenv_s(&buf, NULL, envVarName) == 0 && buf)
   {
     val = buf;
     free(buf);
   }
 #else
   char *p = getenv(envVarName);
-  if (p)
+  if(p)
   {
     val = p;
   }
@@ -753,17 +762,17 @@ std::string GetEnvString(const char* envVarName)
   return val;
 }
 
-int GetEnvInt(const char* envVarName, int defVal)
+int GetEnvInt(const char *envVarName, int defVal)
 {
   std::string val = GetEnvString(envVarName);
   return val.empty() ? defVal : atoi(val.c_str());
 }
 
-FILE *OpenFile(char const* fileName, char const* mode)
+FILE *OpenFile(char const *fileName, char const *mode)
 {
   FILE *fp = NULL;
 #ifdef _WIN32
-  if (fopen_s(&fp, fileName, mode) != 0)
+  if(fopen_s(&fp, fileName, mode) != 0)
     fp = NULL;
 #else
   fp = fopen(fileName, mode);

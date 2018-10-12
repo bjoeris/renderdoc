@@ -560,6 +560,10 @@
     <ClCompile Include="replay\replay_driver.cpp" />
     <ClCompile Include="replay\replay_output.cpp" />
     <ClCompile Include="replay\replay_controller.cpp" />
+    <ClCompile Include="serialise\codecs\amd_shader_info_shim\shim_vulkan_base.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="serialise\codecs\amd_shader_info_shim\shim_vulkan.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
@@ -570,6 +574,10 @@
     </ClCompile>
     <ClCompile Include="serialise\codecs\chrome_json_codec.cpp" />
     <ClCompile Include="serialise\codecs\gold_reference_shim\format_conversion.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\gold_reference_shim\shim_vulkan_base.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
@@ -586,6 +594,10 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="serialise\codecs\helper\helper.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\rdoc_auto_capture_shim\shim_vulkan_base.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>

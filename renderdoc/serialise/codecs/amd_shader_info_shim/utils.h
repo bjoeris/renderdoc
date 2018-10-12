@@ -24,8 +24,7 @@
 #pragma once
 
 #include "helper/helper.h"
-
-extern AuxVkTraceResources aux;
+#include "shim_vulkan.h"
 
 std::string getStageStr(VkShaderStageFlagBits stage);
 void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage, const char *disassembly, size_t size);

@@ -24,6 +24,7 @@
 #pragma once
 
 #include <assert.h>
+#include <inttypes.h>
 #include <math.h>
 #include <memory.h>
 #include <stdio.h>
@@ -42,18 +43,36 @@
 
 #define var_to_string(s) #s
 
-#define VK_CHECK_RESULT(f)                                  \
-{                                                           \
-  VkResult res = f;                                         \
-  if (res != VK_SUCCESS)                                    \
-  {                                                         \
-    std::stringstream ss;                                   \
-    ss << "Fatal : VkResult is \"" << VkResultToString(res) \
-       << "\" in " << __FILE__ << " at line " << __LINE__;  \
-    std::cout << ss.str() <<std::endl;                      \
-    assert(res == VK_SUCCESS);                              \
-  }                                                         \
-}                                                           \
+#define VK_CHECK_RESULT(f)                                                            \
+  \
+{                                                                                \
+    VkResult res = f;                                                                 \
+    if(res != VK_SUCCESS)                                                             \
+    {                                                                                 \
+      std::stringstream ss;                                                           \
+      ss << "Fatal : VkResult is \"" << VkResultToString(res) << "\" in " << __FILE__ \
+         << " at line " << __LINE__;                                                  \
+      std::cout << ss.str() << std::endl;                                             \
+      assert(res == VK_SUCCESS);                                                      \
+    }                                                                                 \
+  \
+}
+
+struct VkHandle
+{
+  uint64_t handle;
+  std::string type;
+  VkHandle(uint64_t h, const char *t) : handle(h), type(t) {}
+  bool operator<(const VkHandle &rhs) const
+  {
+    if(handle < rhs.handle)
+      return true;
+    else if(handle > rhs.handle)
+      return false;
+    else
+      return (type < rhs.type);
+  }
+};
 
 struct AuxVkTraceResources
 {
@@ -70,21 +89,25 @@ struct AuxVkTraceResources
   VkFence fence;
   VkSemaphore semaphore;
 
-  uint64_t getTimestampValidBits(VkQueue queue) {
+  uint64_t getTimestampValidBits(VkQueue queue)
+  {
     uint64_t bits = 0;
-    if (!physDeviceProperties.limits.timestampComputeAndGraphics)
+    if(!physDeviceProperties.limits.timestampComputeAndGraphics)
       return 0;
-    for (uint32_t i = 0; i < queueFamilyProperties.size() && bits == 0; i++) {
-      if ((queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0 &&
-        (queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) == 0)
+    for(uint32_t i = 0; i < queueFamilyProperties.size() && bits == 0; i++)
+    {
+      if((queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0 &&
+         (queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) == 0)
         continue;
-      for (uint32_t j = 0; j < queueFamilyProperties[i].queueCount && bits == 0; j++) {
+      for(uint32_t j = 0; j < queueFamilyProperties[i].queueCount && bits == 0; j++)
+      {
         VkQueue q = NULL;
         vkGetDeviceQueue(device, i, j, &q);
-        if (q == queue) {
-          bits = (queueFamilyProperties[i].timestampValidBits == 64) ?
-            UINT64_MAX :
-            (1ULL << queueFamilyProperties[i].timestampValidBits) - 1;
+        if(q == queue)
+        {
+          bits = (queueFamilyProperties[i].timestampValidBits == 64)
+                     ? UINT64_MAX
+                     : (1ULL << queueFamilyProperties[i].timestampValidBits) - 1;
         }
       }
     }
@@ -142,21 +165,23 @@ void ImageLayoutTransition(VkCommandBuffer cmdBuffer, VkImage dstImage,
                            VkImageSubresourceRange subresourceRange, VkImageLayout newLayout,
                            uint32_t dstQueueFamily, VkImageLayout oldLayout, uint32_t srcQueueFamily);
 
-void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dst, VkImageCreateInfo dst_ci,
+void ImageLayoutTransition(const AuxVkTraceResources &aux, VkImage dst, VkImageCreateInfo dst_ci,
                            VkImageLayout final_layout,
                            VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED);
-void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dst,
+void ImageLayoutTransition(const AuxVkTraceResources &aux, VkImage dst,
                            VkImageSubresourceRange subresourceRange, VkImageLayout final_layout,
                            VkImageLayout old_layout = VK_IMAGE_LAYOUT_UNDEFINED);
-void ImageLayoutTransition(const AuxVkTraceResources& aux, VkImage dstImg, uint32_t arrayLayer,
+void ImageLayoutTransition(const AuxVkTraceResources &aux, VkImage dstImg, uint32_t arrayLayer,
                            uint32_t mipLevel, VkImageAspectFlagBits aspect, VkImageLayout newLayout,
                            VkImageLayout oldLayout);
 
-void CopyResetImage(const AuxVkTraceResources& aux, VkImage dst, VkBuffer src, VkImageCreateInfo dst_ci);
-void CopyResetBuffer(const AuxVkTraceResources& aux, VkBuffer dst, VkBuffer src, VkDeviceSize size);
+void CopyResetImage(const AuxVkTraceResources &aux, VkImage dst, VkBuffer src,
+                    VkImageCreateInfo dst_ci);
+void CopyResetBuffer(const AuxVkTraceResources &aux, VkBuffer dst, VkBuffer src, VkDeviceSize size);
 
-void CopyImageToBuffer(const AuxVkTraceResources& aux, VkImage src, VkBuffer dst, VkImageCreateInfo src_ci);
-void DiffDeviceMemory(const AuxVkTraceResources& aux, VkDeviceMemory expected,
+void CopyImageToBuffer(const AuxVkTraceResources &aux, VkImage src, VkBuffer dst,
+                       VkImageCreateInfo src_ci);
+void DiffDeviceMemory(const AuxVkTraceResources &aux, VkDeviceMemory expected,
                       VkDeviceSize expected_offset, VkDeviceMemory actual,
                       VkDeviceSize actual_offset, VkDeviceSize size, const char *name);
 void InitializeDiffBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *memory, size_t size,
@@ -165,10 +190,11 @@ void InitializeDiffBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *mem
 void MakePhysicalDeviceFeaturesMatch(const VkPhysicalDeviceFeatures &available,
                                      VkPhysicalDeviceFeatures *captured_request);
 
-void RegisterDebugCallback(AuxVkTraceResources* aux, VkInstance instance, uint32_t flags);
+void RegisterDebugCallback(AuxVkTraceResources *aux, VkInstance instance, uint32_t flags);
 
-void MapUpdate(const AuxVkTraceResources& aux, uint8_t *dst, uint8_t *src, const VkMappedMemoryRange &range,
-               VkMemoryAllocateInfo &ai, MemoryRemapVec &remap, VkDevice dev);
+void MapUpdate(const AuxVkTraceResources &aux, uint8_t *dst, uint8_t *src,
+               const VkMappedMemoryRange &range, VkMemoryAllocateInfo &ai, MemoryRemapVec &remap,
+               VkDevice dev);
 
 inline uint64_t AlignedSize(uint64_t size, uint64_t alignment)
 {
@@ -180,9 +206,12 @@ inline uint64_t AlignedDown(uint64_t size, uint64_t alignment)
   return (uint64_t(size / alignment)) * alignment;
 }
 
-inline std::string VkResultToString(VkResult r) {
-  switch (r) {
-#define RETURN_VK_RESULT_STRING(r) case VK_ ##r: return #r
+inline std::string VkResultToString(VkResult r)
+{
+  switch(r)
+  {
+#define RETURN_VK_RESULT_STRING(r) \
+  case VK_##r: return #r
     RETURN_VK_RESULT_STRING(SUCCESS);
     RETURN_VK_RESULT_STRING(NOT_READY);
     RETURN_VK_RESULT_STRING(TIMEOUT);
@@ -208,8 +237,7 @@ inline std::string VkResultToString(VkResult r) {
     RETURN_VK_RESULT_STRING(ERROR_VALIDATION_FAILED_EXT);
     RETURN_VK_RESULT_STRING(ERROR_INVALID_SHADER_NV);
 #undef RETURN_VK_RESULT_STRING
-    default:
-    return "UNKNOWN_ERROR";
+    default: return "UNKNOWN_ERROR";
   }
 }
 bool IsExtEnabled(const char *const *extList, uint32_t count, const char *ext);
@@ -217,6 +245,6 @@ bool IsExtSupported(VkPhysicalDevice physicalDevice, const char *ext);
 
 std::string StageProgressString(const char *stage, uint32_t i, uint32_t N);
 
-std::string GetEnvString(const char* envVarName);
-int GetEnvInt(const char* envVarName, int defVal = 0);
-FILE *OpenFile(char const* fileName, char const* mode);
+std::string GetEnvString(const char *envVarName);
+int GetEnvInt(const char *envVarName, int defVal = 0);
+FILE *OpenFile(char const *fileName, char const *mode);

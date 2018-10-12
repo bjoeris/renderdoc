@@ -2,9 +2,9 @@ SET (THIS_PROJECT_NAME timestamp_profiling_shim)
 
 PROJECT(${THIS_PROJECT_NAME})
 
-ADD_LIBRARY(${THIS_PROJECT_NAME} SHARED shim_vulkan.h 
-                                        shim_vulkan.cpp 
-                                        shim_vulkan_base.cpp 
+ADD_LIBRARY(${THIS_PROJECT_NAME} SHARED shim_vulkan.h
+                                        shim_vulkan.cpp
+                                        shim_vulkan_base.cpp
                                         utils.h
                                         utils.cpp)
 

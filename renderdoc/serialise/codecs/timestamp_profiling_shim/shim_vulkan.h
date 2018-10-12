@@ -1,3 +1,26 @@
+/******************************************************************************
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2018 Google LLC
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ ******************************************************************************/
 #pragma once
 #if defined(_WIN32)
 #define SHIM_VK_API_IMPORT __declspec(dllimport)
@@ -18,14 +41,17 @@
 #include "vulkan/vulkan.h"
 
 SHIM_VK_API bool ShimShouldQuitNow();
+SHIM_VK_API void AddResourceName(uint64_t handle, const char *type, const char *name);
+SHIM_VK_API const char *GetResourceName(VkHandle handle);
 
 SHIM_VK_API VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                            const VkAllocationCallbacks *pAllocator,
-                                           VkInstance *pInstance);
+                                           VkInstance *pInstance, const char *handleName);
 
 SHIM_VK_API VkResult shim_vkCreateDevice(VkPhysicalDevice physicalDevice,
                                          const VkDeviceCreateInfo *pCreateInfo,
-                                         const VkAllocationCallbacks *pAllocator, VkDevice *pDevice);
+                                         const VkAllocationCallbacks *pAllocator, VkDevice *pDevice,
+                                         const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator);
 
@@ -87,7 +113,7 @@ SHIM_VK_API VkResult shim_vkDeviceWaitIdle(VkDevice device);
 
 SHIM_VK_API VkResult shim_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
                                            const VkAllocationCallbacks *pAllocator,
-                                           VkDeviceMemory *pMemory);
+                                           VkDeviceMemory *pMemory, const char *handleName);
 
 SHIM_VK_API void shim_vkFreeMemory(VkDevice device, VkDeviceMemory memory,
                                    const VkAllocationCallbacks *pAllocator);
@@ -131,7 +157,8 @@ SHIM_VK_API VkResult shim_vkQueueBindSparse(VkQueue queue, uint32_t bindInfoCoun
                                             const VkBindSparseInfo *pBindInfo, VkFence fence);
 
 SHIM_VK_API VkResult shim_vkCreateFence(VkDevice device, const VkFenceCreateInfo *pCreateInfo,
-                                        const VkAllocationCallbacks *pAllocator, VkFence *pFence);
+                                        const VkAllocationCallbacks *pAllocator, VkFence *pFence,
+                                        const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyFence(VkDevice device, VkFence fence,
                                      const VkAllocationCallbacks *pAllocator);
@@ -145,13 +172,14 @@ SHIM_VK_API VkResult shim_vkWaitForFences(VkDevice device, uint32_t fenceCount,
 
 SHIM_VK_API VkResult shim_vkCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo *pCreateInfo,
                                             const VkAllocationCallbacks *pAllocator,
-                                            VkSemaphore *pSemaphore);
+                                            VkSemaphore *pSemaphore, const char *handleName);
 
 SHIM_VK_API void shim_vkDestroySemaphore(VkDevice device, VkSemaphore semaphore,
                                          const VkAllocationCallbacks *pAllocator);
 
 SHIM_VK_API VkResult shim_vkCreateEvent(VkDevice device, const VkEventCreateInfo *pCreateInfo,
-                                        const VkAllocationCallbacks *pAllocator, VkEvent *pEvent);
+                                        const VkAllocationCallbacks *pAllocator, VkEvent *pEvent,
+                                        const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyEvent(VkDevice device, VkEvent event,
                                      const VkAllocationCallbacks *pAllocator);
@@ -164,7 +192,7 @@ SHIM_VK_API VkResult shim_vkResetEvent(VkDevice device, VkEvent event);
 
 SHIM_VK_API VkResult shim_vkCreateQueryPool(VkDevice device, const VkQueryPoolCreateInfo *pCreateInfo,
                                             const VkAllocationCallbacks *pAllocator,
-                                            VkQueryPool *pQueryPool);
+                                            VkQueryPool *pQueryPool, const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyQueryPool(VkDevice device, VkQueryPool queryPool,
                                          const VkAllocationCallbacks *pAllocator);
@@ -175,7 +203,8 @@ SHIM_VK_API VkResult shim_vkGetQueryPoolResults(VkDevice device, VkQueryPool que
                                                 VkQueryResultFlags flags);
 
 SHIM_VK_API VkResult shim_vkCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo,
-                                         const VkAllocationCallbacks *pAllocator, VkBuffer *pBuffer);
+                                         const VkAllocationCallbacks *pAllocator, VkBuffer *pBuffer,
+                                         const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyBuffer(VkDevice device, VkBuffer buffer,
                                       const VkAllocationCallbacks *pAllocator);
@@ -183,13 +212,14 @@ SHIM_VK_API void shim_vkDestroyBuffer(VkDevice device, VkBuffer buffer,
 SHIM_VK_API VkResult shim_vkCreateBufferView(VkDevice device,
                                              const VkBufferViewCreateInfo *pCreateInfo,
                                              const VkAllocationCallbacks *pAllocator,
-                                             VkBufferView *pView);
+                                             VkBufferView *pView, const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyBufferView(VkDevice device, VkBufferView bufferView,
                                           const VkAllocationCallbacks *pAllocator);
 
 SHIM_VK_API VkResult shim_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
-                                        const VkAllocationCallbacks *pAllocator, VkImage *pImage);
+                                        const VkAllocationCallbacks *pAllocator, VkImage *pImage,
+                                        const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyImage(VkDevice device, VkImage image,
                                      const VkAllocationCallbacks *pAllocator);
@@ -200,7 +230,7 @@ SHIM_VK_API void shim_vkGetImageSubresourceLayout(VkDevice device, VkImage image
 
 SHIM_VK_API VkResult shim_vkCreateImageView(VkDevice device, const VkImageViewCreateInfo *pCreateInfo,
                                             const VkAllocationCallbacks *pAllocator,
-                                            VkImageView *pView);
+                                            VkImageView *pView, const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyImageView(VkDevice device, VkImageView imageView,
                                          const VkAllocationCallbacks *pAllocator);
@@ -208,7 +238,7 @@ SHIM_VK_API void shim_vkDestroyImageView(VkDevice device, VkImageView imageView,
 SHIM_VK_API VkResult shim_vkCreateShaderModule(VkDevice device,
                                                const VkShaderModuleCreateInfo *pCreateInfo,
                                                const VkAllocationCallbacks *pAllocator,
-                                               VkShaderModule *pShaderModule);
+                                               VkShaderModule *pShaderModule, const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyShaderModule(VkDevice device, VkShaderModule shaderModule,
                                             const VkAllocationCallbacks *pAllocator);
@@ -216,7 +246,8 @@ SHIM_VK_API void shim_vkDestroyShaderModule(VkDevice device, VkShaderModule shad
 SHIM_VK_API VkResult shim_vkCreatePipelineCache(VkDevice device,
                                                 const VkPipelineCacheCreateInfo *pCreateInfo,
                                                 const VkAllocationCallbacks *pAllocator,
-                                                VkPipelineCache *pPipelineCache);
+                                                VkPipelineCache *pPipelineCache,
+                                                const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyPipelineCache(VkDevice device, VkPipelineCache pipelineCache,
                                              const VkAllocationCallbacks *pAllocator);
@@ -232,13 +263,13 @@ SHIM_VK_API VkResult shim_vkCreateGraphicsPipelines(VkDevice device, VkPipelineC
                                                     uint32_t createInfoCount,
                                                     const VkGraphicsPipelineCreateInfo *pCreateInfos,
                                                     const VkAllocationCallbacks *pAllocator,
-                                                    VkPipeline *pPipelines);
+                                                    VkPipeline *pPipelines, const char *handleName);
 
 SHIM_VK_API VkResult shim_vkCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache,
                                                    uint32_t createInfoCount,
                                                    const VkComputePipelineCreateInfo *pCreateInfos,
                                                    const VkAllocationCallbacks *pAllocator,
-                                                   VkPipeline *pPipelines);
+                                                   VkPipeline *pPipelines, const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyPipeline(VkDevice device, VkPipeline pipeline,
                                         const VkAllocationCallbacks *pAllocator);
@@ -246,21 +277,23 @@ SHIM_VK_API void shim_vkDestroyPipeline(VkDevice device, VkPipeline pipeline,
 SHIM_VK_API VkResult shim_vkCreatePipelineLayout(VkDevice device,
                                                  const VkPipelineLayoutCreateInfo *pCreateInfo,
                                                  const VkAllocationCallbacks *pAllocator,
-                                                 VkPipelineLayout *pPipelineLayout);
+                                                 VkPipelineLayout *pPipelineLayout,
+                                                 const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyPipelineLayout(VkDevice device, VkPipelineLayout pipelineLayout,
                                               const VkAllocationCallbacks *pAllocator);
 
 SHIM_VK_API VkResult shim_vkCreateSampler(VkDevice device, const VkSamplerCreateInfo *pCreateInfo,
                                           const VkAllocationCallbacks *pAllocator,
-                                          VkSampler *pSampler);
+                                          VkSampler *pSampler, const char *handleName);
 
 SHIM_VK_API void shim_vkDestroySampler(VkDevice device, VkSampler sampler,
                                        const VkAllocationCallbacks *pAllocator);
 
 SHIM_VK_API VkResult shim_vkCreateDescriptorSetLayout(
     VkDevice device, const VkDescriptorSetLayoutCreateInfo *pCreateInfo,
-    const VkAllocationCallbacks *pAllocator, VkDescriptorSetLayout *pSetLayout);
+    const VkAllocationCallbacks *pAllocator, VkDescriptorSetLayout *pSetLayout,
+    const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyDescriptorSetLayout(VkDevice device,
                                                    VkDescriptorSetLayout descriptorSetLayout,
@@ -269,7 +302,8 @@ SHIM_VK_API void shim_vkDestroyDescriptorSetLayout(VkDevice device,
 SHIM_VK_API VkResult shim_vkCreateDescriptorPool(VkDevice device,
                                                  const VkDescriptorPoolCreateInfo *pCreateInfo,
                                                  const VkAllocationCallbacks *pAllocator,
-                                                 VkDescriptorPool *pDescriptorPool);
+                                                 VkDescriptorPool *pDescriptorPool,
+                                                 const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool,
                                               const VkAllocationCallbacks *pAllocator);
@@ -279,7 +313,8 @@ SHIM_VK_API VkResult shim_vkResetDescriptorPool(VkDevice device, VkDescriptorPoo
 
 SHIM_VK_API VkResult shim_vkAllocateDescriptorSets(VkDevice device,
                                                    const VkDescriptorSetAllocateInfo *pAllocateInfo,
-                                                   VkDescriptorSet *pDescriptorSets);
+                                                   VkDescriptorSet *pDescriptorSets,
+                                                   const char *handleName);
 
 SHIM_VK_API VkResult shim_vkFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool,
                                                uint32_t descriptorSetCount,
@@ -293,7 +328,7 @@ SHIM_VK_API void shim_vkUpdateDescriptorSets(VkDevice device, uint32_t descripto
 SHIM_VK_API VkResult shim_vkCreateFramebuffer(VkDevice device,
                                               const VkFramebufferCreateInfo *pCreateInfo,
                                               const VkAllocationCallbacks *pAllocator,
-                                              VkFramebuffer *pFramebuffer);
+                                              VkFramebuffer *pFramebuffer, const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyFramebuffer(VkDevice device, VkFramebuffer framebuffer,
                                            const VkAllocationCallbacks *pAllocator);
@@ -301,7 +336,7 @@ SHIM_VK_API void shim_vkDestroyFramebuffer(VkDevice device, VkFramebuffer frameb
 SHIM_VK_API VkResult shim_vkCreateRenderPass(VkDevice device,
                                              const VkRenderPassCreateInfo *pCreateInfo,
                                              const VkAllocationCallbacks *pAllocator,
-                                             VkRenderPass *pRenderPass);
+                                             VkRenderPass *pRenderPass, const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyRenderPass(VkDevice device, VkRenderPass renderPass,
                                           const VkAllocationCallbacks *pAllocator);
@@ -312,7 +347,7 @@ SHIM_VK_API void shim_vkGetRenderAreaGranularity(VkDevice device, VkRenderPass r
 SHIM_VK_API VkResult shim_vkCreateCommandPool(VkDevice device,
                                               const VkCommandPoolCreateInfo *pCreateInfo,
                                               const VkAllocationCallbacks *pAllocator,
-                                              VkCommandPool *pCommandPool);
+                                              VkCommandPool *pCommandPool, const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyCommandPool(VkDevice device, VkCommandPool commandPool,
                                            const VkAllocationCallbacks *pAllocator);
@@ -322,7 +357,8 @@ SHIM_VK_API VkResult shim_vkResetCommandPool(VkDevice device, VkCommandPool comm
 
 SHIM_VK_API VkResult shim_vkAllocateCommandBuffers(VkDevice device,
                                                    const VkCommandBufferAllocateInfo *pAllocateInfo,
-                                                   VkCommandBuffer *pCommandBuffers);
+                                                   VkCommandBuffer *pCommandBuffers,
+                                                   const char *handleName);
 
 SHIM_VK_API void shim_vkFreeCommandBuffers(VkDevice device, VkCommandPool commandPool,
                                            uint32_t commandBufferCount,
@@ -522,7 +558,7 @@ SHIM_VK_API VkResult shim_vkCreateDisplayModeKHR(VkPhysicalDevice physicalDevice
                                                  VkDisplayKHR display,
                                                  const VkDisplayModeCreateInfoKHR *pCreateInfo,
                                                  const VkAllocationCallbacks *pAllocator,
-                                                 VkDisplayModeKHR *pMode);
+                                                 VkDisplayModeKHR *pMode, const char *handleName);
 
 SHIM_VK_API VkResult shim_vkGetDisplayPlaneCapabilitiesKHR(
     VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex,
@@ -530,12 +566,13 @@ SHIM_VK_API VkResult shim_vkGetDisplayPlaneCapabilitiesKHR(
 
 SHIM_VK_API VkResult shim_vkCreateDisplayPlaneSurfaceKHR(
     VkInstance instance, const VkDisplaySurfaceCreateInfoKHR *pCreateInfo,
-    const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface);
+    const VkAllocationCallbacks *pAllocator, VkSurfaceKHR *pSurface, const char *handleName);
 
 SHIM_VK_API VkResult shim_vkCreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCount,
                                                       const VkSwapchainCreateInfoKHR *pCreateInfos,
                                                       const VkAllocationCallbacks *pAllocator,
-                                                      VkSwapchainKHR *pSwapchains);
+                                                      VkSwapchainKHR *pSwapchains,
+                                                      const char *handleName);
 
 SHIM_VK_API void shim_vkDestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface,
                                           const VkAllocationCallbacks *pAllocator);
@@ -579,7 +616,8 @@ SHIM_VK_API VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKH
 
 SHIM_VK_API VkResult shim_vkCreateDebugReportCallbackEXT(
     VkInstance instance, const VkDebugReportCallbackCreateInfoEXT *pCreateInfo,
-    const VkAllocationCallbacks *pAllocator, VkDebugReportCallbackEXT *pCallback);
+    const VkAllocationCallbacks *pAllocator, VkDebugReportCallbackEXT *pCallback,
+    const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyDebugReportCallbackEXT(VkInstance instance,
                                                       VkDebugReportCallbackEXT callback,
@@ -628,7 +666,8 @@ SHIM_VK_API void shim_vkCmdReserveSpaceForCommandsNVX(
 
 SHIM_VK_API VkResult shim_vkCreateIndirectCommandsLayoutNVX(
     VkDevice device, const VkIndirectCommandsLayoutCreateInfoNVX *pCreateInfo,
-    const VkAllocationCallbacks *pAllocator, VkIndirectCommandsLayoutNVX *pIndirectCommandsLayout);
+    const VkAllocationCallbacks *pAllocator, VkIndirectCommandsLayoutNVX *pIndirectCommandsLayout,
+    const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyIndirectCommandsLayoutNVX(
     VkDevice device, VkIndirectCommandsLayoutNVX indirectCommandsLayout,
@@ -637,7 +676,8 @@ SHIM_VK_API void shim_vkDestroyIndirectCommandsLayoutNVX(
 SHIM_VK_API VkResult shim_vkCreateObjectTableNVX(VkDevice device,
                                                  const VkObjectTableCreateInfoNVX *pCreateInfo,
                                                  const VkAllocationCallbacks *pAllocator,
-                                                 VkObjectTableNVX *pObjectTable);
+                                                 VkObjectTableNVX *pObjectTable,
+                                                 const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyObjectTableNVX(VkDevice device, VkObjectTableNVX objectTable,
                                               const VkAllocationCallbacks *pAllocator);
@@ -846,11 +886,13 @@ SHIM_VK_API VkResult shim_vkGetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevi
 
 SHIM_VK_API VkResult shim_vkCreateDescriptorUpdateTemplate(
     VkDevice device, const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
-    const VkAllocationCallbacks *pAllocator, VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate);
+    const VkAllocationCallbacks *pAllocator, VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate,
+    const char *handleName);
 
 SHIM_VK_API VkResult shim_vkCreateDescriptorUpdateTemplateKHR(
     VkDevice device, const VkDescriptorUpdateTemplateCreateInfo *pCreateInfo,
-    const VkAllocationCallbacks *pAllocator, VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate);
+    const VkAllocationCallbacks *pAllocator, VkDescriptorUpdateTemplate *pDescriptorUpdateTemplate,
+    const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyDescriptorUpdateTemplate(
     VkDevice device, VkDescriptorUpdateTemplate descriptorUpdateTemplate,
@@ -877,14 +919,6 @@ SHIM_VK_API void shim_vkSetHdrMetadataEXT(VkDevice device, uint32_t swapchainCou
                                           const VkHdrMetadataEXT *pMetadata);
 
 SHIM_VK_API VkResult shim_vkGetSwapchainStatusKHR(VkDevice device, VkSwapchainKHR swapchain);
-
-SHIM_VK_API VkResult
-shim_vkGetRefreshCycleDurationGOOGLE(VkDevice device, VkSwapchainKHR swapchain,
-                                     VkRefreshCycleDurationGOOGLE *pDisplayTimingProperties);
-
-SHIM_VK_API VkResult shim_vkGetPastPresentationTimingGOOGLE(
-    VkDevice device, VkSwapchainKHR swapchain, uint32_t *pPresentationTimingCount,
-    VkPastPresentationTimingGOOGLE *pPresentationTimings);
 
 SHIM_VK_API void shim_vkCmdSetViewportWScalingNV(VkCommandBuffer commandBuffer,
                                                  uint32_t firstViewport, uint32_t viewportCount,
@@ -938,11 +972,13 @@ SHIM_VK_API void shim_vkGetImageSparseMemoryRequirements2KHR(
 
 SHIM_VK_API VkResult shim_vkCreateSamplerYcbcrConversion(
     VkDevice device, const VkSamplerYcbcrConversionCreateInfo *pCreateInfo,
-    const VkAllocationCallbacks *pAllocator, VkSamplerYcbcrConversion *pYcbcrConversion);
+    const VkAllocationCallbacks *pAllocator, VkSamplerYcbcrConversion *pYcbcrConversion,
+    const char *handleName);
 
 SHIM_VK_API VkResult shim_vkCreateSamplerYcbcrConversionKHR(
     VkDevice device, const VkSamplerYcbcrConversionCreateInfo *pCreateInfo,
-    const VkAllocationCallbacks *pAllocator, VkSamplerYcbcrConversion *pYcbcrConversion);
+    const VkAllocationCallbacks *pAllocator, VkSamplerYcbcrConversion *pYcbcrConversion,
+    const char *handleName);
 
 SHIM_VK_API void shim_vkDestroySamplerYcbcrConversion(VkDevice device,
                                                       VkSamplerYcbcrConversion ycbcrConversion,
@@ -958,7 +994,8 @@ SHIM_VK_API void shim_vkGetDeviceQueue2(VkDevice device, const VkDeviceQueueInfo
 SHIM_VK_API VkResult shim_vkCreateValidationCacheEXT(VkDevice device,
                                                      const VkValidationCacheCreateInfoEXT *pCreateInfo,
                                                      const VkAllocationCallbacks *pAllocator,
-                                                     VkValidationCacheEXT *pValidationCache);
+                                                     VkValidationCacheEXT *pValidationCache,
+                                                     const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyValidationCacheEXT(VkDevice device,
                                                   VkValidationCacheEXT validationCache,
@@ -1009,7 +1046,8 @@ SHIM_VK_API void shim_vkCmdInsertDebugUtilsLabelEXT(VkCommandBuffer commandBuffe
 
 SHIM_VK_API VkResult shim_vkCreateDebugUtilsMessengerEXT(
     VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
-    const VkAllocationCallbacks *pAllocator, VkDebugUtilsMessengerEXT *pMessenger);
+    const VkAllocationCallbacks *pAllocator, VkDebugUtilsMessengerEXT *pMessenger,
+    const char *handleName);
 
 SHIM_VK_API void shim_vkDestroyDebugUtilsMessengerEXT(VkInstance instance,
                                                       VkDebugUtilsMessengerEXT messenger,

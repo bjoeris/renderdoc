@@ -1,7 +1,7 @@
 SET (THIS_PROJECT_NAME rdoc_auto_capture_shim)
 PROJECT(${THIS_PROJECT_NAME})
 
-ADD_LIBRARY(${THIS_PROJECT_NAME} SHARED "shim_vulkan.h" "shim_vulkan.cpp")
+ADD_LIBRARY(${THIS_PROJECT_NAME} SHARED "shim_vulkan.h" "shim_vulkan.cpp" "shim_vulkan_base.cpp")
 
 TARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME} PRIVATE
                            UNICODE _UNICODE)

@@ -2,7 +2,7 @@ SET (THIS_PROJECT_NAME gold_reference_shim)
 PROJECT(${THIS_PROJECT_NAME})
 
 # Full gold_reference shim
-ADD_LIBRARY(${THIS_PROJECT_NAME} SHARED "shim_vulkan.h" "shim_vulkan.cpp" "utils.h" "utils.cpp" "format_conversion.cpp")
+ADD_LIBRARY(${THIS_PROJECT_NAME} SHARED "shim_vulkan.h" "shim_vulkan.cpp" "shim_vulkan_base.cpp" "utils.h" "utils.cpp" "format_conversion.cpp")
 
 TARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME} PRIVATE
                            UNICODE
@@ -26,7 +26,7 @@ SET_TARGET_PROPERTIES(${THIS_PROJECT_NAME} PROPERTIES
 
 # Screenshot only shim
 SET (SCREENSHOT_SHIM_NAME screenshot)
-ADD_LIBRARY(${SCREENSHOT_SHIM_NAME} SHARED "shim_vulkan.h" "shim_vulkan.cpp" "utils.h" "utils.cpp" "format_conversion.cpp")
+ADD_LIBRARY(${SCREENSHOT_SHIM_NAME} SHARED "shim_vulkan.h" "shim_vulkan.cpp" "shim_vulkan_base.cpp" "utils.h" "utils.cpp" "format_conversion.cpp")
 
 TARGET_COMPILE_DEFINITIONS(${SCREENSHOT_SHIM_NAME} PRIVATE
                            UNICODE

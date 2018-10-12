@@ -27,8 +27,8 @@
 #include "helper/helper.h"
 
 #include "shim_vulkan.h"
-#include "utils.h"
 
+AuxVkTraceResources aux;
 std::map<VkHandle, std::string> ResourceNames;
 
 void AddResourceName(uint64_t handle, const char *type, const char *name)
@@ -73,17 +73,6 @@ VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
   return r;
 }
 
-VkResult shim_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
-                             const VkAllocationCallbacks *pAllocator, VkDevice *pDevice,
-                             const char *handleName)
-{
-  VkResult r = vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
-  assert(r == VK_SUCCESS);
-  AddResourceName((uint64_t)*pDevice, "VkDevice", handleName);
-  InitializeAuxResources(&aux, aux.instance, physicalDevice, *pDevice);
-  return r;
-}
-
 void shim_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator)
 {
   static PFN_vkDestroyInstance fn = vkDestroyInstance;
@@ -99,12 +88,28 @@ VkResult shim_vkEnumeratePhysicalDevices(VkInstance instance, uint32_t *pPhysica
   return r;
 }
 
+void shim_vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice,
+                                        VkPhysicalDeviceProperties *pProperties)
+{
+  static PFN_vkGetPhysicalDeviceProperties fn = vkGetPhysicalDeviceProperties;
+  fn(physicalDevice, pProperties);
+  return;
+}
+
 void shim_vkGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice,
                                                    uint32_t *pQueueFamilyPropertyCount,
                                                    VkQueueFamilyProperties *pQueueFamilyProperties)
 {
   static PFN_vkGetPhysicalDeviceQueueFamilyProperties fn = vkGetPhysicalDeviceQueueFamilyProperties;
   fn(physicalDevice, pQueueFamilyPropertyCount, pQueueFamilyProperties);
+  return;
+}
+
+void shim_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
+                                              VkPhysicalDeviceMemoryProperties *pMemoryProperties)
+{
+  static PFN_vkGetPhysicalDeviceMemoryProperties fn = vkGetPhysicalDeviceMemoryProperties;
+  fn(physicalDevice, pMemoryProperties);
   return;
 }
 
@@ -189,6 +194,14 @@ void shim_vkGetDeviceQueue(VkDevice device, uint32_t queueFamilyIndex, uint32_t 
   static PFN_vkGetDeviceQueue fn = vkGetDeviceQueue;
   fn(device, queueFamilyIndex, queueIndex, pQueue);
   return;
+}
+
+VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pSubmits,
+                            VkFence fence)
+{
+  static PFN_vkQueueSubmit fn = vkQueueSubmit;
+  VkResult r = fn(queue, submitCount, pSubmits, fence);
+  return r;
 }
 
 VkResult shim_vkQueueWaitIdle(VkQueue queue)
@@ -585,32 +598,6 @@ VkResult shim_vkMergePipelineCaches(VkDevice device, VkPipelineCache dstCache,
   return r;
 }
 
-VkResult shim_vkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelineCache,
-                                        uint32_t createInfoCount,
-                                        const VkGraphicsPipelineCreateInfo *pCreateInfos,
-                                        const VkAllocationCallbacks *pAllocator,
-                                        VkPipeline *pPipelines, const char *handleName)
-{
-  static PFN_vkCreateGraphicsPipelines fn = vkCreateGraphicsPipelines;
-  VkResult r = fn(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
-  if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pPipelines, "VkPipeline", handleName);
-  return r;
-}
-
-VkResult shim_vkCreateComputePipelines(VkDevice device, VkPipelineCache pipelineCache,
-                                       uint32_t createInfoCount,
-                                       const VkComputePipelineCreateInfo *pCreateInfos,
-                                       const VkAllocationCallbacks *pAllocator,
-                                       VkPipeline *pPipelines, const char *handleName)
-{
-  static PFN_vkCreateComputePipelines fn = vkCreateComputePipelines;
-  VkResult r = fn(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
-  if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pPipelines, "VkPipeline", handleName);
-  return r;
-}
-
 void shim_vkDestroyPipeline(VkDevice device, VkPipeline pipeline,
                             const VkAllocationCallbacks *pAllocator)
 {
@@ -825,11 +812,279 @@ void shim_vkFreeCommandBuffers(VkDevice device, VkCommandPool commandPool,
   return;
 }
 
+VkResult shim_vkBeginCommandBuffer(VkCommandBuffer commandBuffer,
+                                   const VkCommandBufferBeginInfo *pBeginInfo)
+{
+  static PFN_vkBeginCommandBuffer fn = vkBeginCommandBuffer;
+  VkResult r = fn(commandBuffer, pBeginInfo);
+  return r;
+}
+
+VkResult shim_vkEndCommandBuffer(VkCommandBuffer commandBuffer)
+{
+  static PFN_vkEndCommandBuffer fn = vkEndCommandBuffer;
+  VkResult r = fn(commandBuffer);
+  return r;
+}
+
 VkResult shim_vkResetCommandBuffer(VkCommandBuffer commandBuffer, VkCommandBufferResetFlags flags)
 {
   static PFN_vkResetCommandBuffer fn = vkResetCommandBuffer;
   VkResult r = fn(commandBuffer, flags);
   return r;
+}
+
+void shim_vkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint pipelineBindPoint,
+                            VkPipeline pipeline)
+{
+  static PFN_vkCmdBindPipeline fn = vkCmdBindPipeline;
+  fn(commandBuffer, pipelineBindPoint, pipeline);
+  return;
+}
+
+void shim_vkCmdSetViewport(VkCommandBuffer commandBuffer, uint32_t firstViewport,
+                           uint32_t viewportCount, const VkViewport *pViewports)
+{
+  static PFN_vkCmdSetViewport fn = vkCmdSetViewport;
+  fn(commandBuffer, firstViewport, viewportCount, pViewports);
+  return;
+}
+
+void shim_vkCmdSetScissor(VkCommandBuffer commandBuffer, uint32_t firstScissor,
+                          uint32_t scissorCount, const VkRect2D *pScissors)
+{
+  static PFN_vkCmdSetScissor fn = vkCmdSetScissor;
+  fn(commandBuffer, firstScissor, scissorCount, pScissors);
+  return;
+}
+
+void shim_vkCmdSetLineWidth(VkCommandBuffer commandBuffer, float lineWidth)
+{
+  static PFN_vkCmdSetLineWidth fn = vkCmdSetLineWidth;
+  fn(commandBuffer, lineWidth);
+  return;
+}
+
+void shim_vkCmdSetDepthBias(VkCommandBuffer commandBuffer, float depthBiasConstantFactor,
+                            float depthBiasClamp, float depthBiasSlopeFactor)
+{
+  static PFN_vkCmdSetDepthBias fn = vkCmdSetDepthBias;
+  fn(commandBuffer, depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor);
+  return;
+}
+
+void shim_vkCmdSetBlendConstants(VkCommandBuffer commandBuffer, const float blendConstants[4])
+{
+  static PFN_vkCmdSetBlendConstants fn = vkCmdSetBlendConstants;
+  fn(commandBuffer, blendConstants);
+  return;
+}
+
+void shim_vkCmdSetDepthBounds(VkCommandBuffer commandBuffer, float minDepthBounds,
+                              float maxDepthBounds)
+{
+  static PFN_vkCmdSetDepthBounds fn = vkCmdSetDepthBounds;
+  fn(commandBuffer, minDepthBounds, maxDepthBounds);
+  return;
+}
+
+void shim_vkCmdSetStencilCompareMask(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask,
+                                     uint32_t compareMask)
+{
+  static PFN_vkCmdSetStencilCompareMask fn = vkCmdSetStencilCompareMask;
+  fn(commandBuffer, faceMask, compareMask);
+  return;
+}
+
+void shim_vkCmdSetStencilWriteMask(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask,
+                                   uint32_t writeMask)
+{
+  static PFN_vkCmdSetStencilWriteMask fn = vkCmdSetStencilWriteMask;
+  fn(commandBuffer, faceMask, writeMask);
+  return;
+}
+
+void shim_vkCmdSetStencilReference(VkCommandBuffer commandBuffer, VkStencilFaceFlags faceMask,
+                                   uint32_t reference)
+{
+  static PFN_vkCmdSetStencilReference fn = vkCmdSetStencilReference;
+  fn(commandBuffer, faceMask, reference);
+  return;
+}
+
+void shim_vkCmdBindDescriptorSets(VkCommandBuffer commandBuffer,
+                                  VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout,
+                                  uint32_t firstSet, uint32_t descriptorSetCount,
+                                  const VkDescriptorSet *pDescriptorSets,
+                                  uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets)
+{
+  static PFN_vkCmdBindDescriptorSets fn = vkCmdBindDescriptorSets;
+  fn(commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount, pDescriptorSets,
+     dynamicOffsetCount, pDynamicOffsets);
+  return;
+}
+
+void shim_vkCmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                               VkIndexType indexType)
+{
+  static PFN_vkCmdBindIndexBuffer fn = vkCmdBindIndexBuffer;
+  fn(commandBuffer, buffer, offset, indexType);
+  return;
+}
+
+void shim_vkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, uint32_t firstBinding,
+                                 uint32_t bindingCount, const VkBuffer *pBuffers,
+                                 const VkDeviceSize *pOffsets)
+{
+  static PFN_vkCmdBindVertexBuffers fn = vkCmdBindVertexBuffers;
+  fn(commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets);
+  return;
+}
+
+void shim_vkCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_t instanceCount,
+                    uint32_t firstVertex, uint32_t firstInstance)
+{
+  static PFN_vkCmdDraw fn = vkCmdDraw;
+  fn(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
+  return;
+}
+
+void shim_vkCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, uint32_t instanceCount,
+                           uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
+{
+  static PFN_vkCmdDrawIndexed fn = vkCmdDrawIndexed;
+  fn(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+  return;
+}
+
+void shim_vkCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset,
+                            uint32_t drawCount, uint32_t stride)
+{
+  static PFN_vkCmdDrawIndirect fn = vkCmdDrawIndirect;
+  fn(commandBuffer, buffer, offset, drawCount, stride);
+  return;
+}
+
+void shim_vkCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer,
+                                   VkDeviceSize offset, uint32_t drawCount, uint32_t stride)
+{
+  static PFN_vkCmdDrawIndexedIndirect fn = vkCmdDrawIndexedIndirect;
+  fn(commandBuffer, buffer, offset, drawCount, stride);
+  return;
+}
+
+void shim_vkCmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY,
+                        uint32_t groupCountZ)
+{
+  static PFN_vkCmdDispatch fn = vkCmdDispatch;
+  fn(commandBuffer, groupCountX, groupCountY, groupCountZ);
+  return;
+}
+
+void shim_vkCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset)
+{
+  static PFN_vkCmdDispatchIndirect fn = vkCmdDispatchIndirect;
+  fn(commandBuffer, buffer, offset);
+  return;
+}
+
+void shim_vkCmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer,
+                          uint32_t regionCount, const VkBufferCopy *pRegions)
+{
+  static PFN_vkCmdCopyBuffer fn = vkCmdCopyBuffer;
+  fn(commandBuffer, srcBuffer, dstBuffer, regionCount, pRegions);
+  return;
+}
+
+void shim_vkCmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage,
+                         VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout,
+                         uint32_t regionCount, const VkImageCopy *pRegions)
+{
+  static PFN_vkCmdCopyImage fn = vkCmdCopyImage;
+  fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
+  return;
+}
+
+void shim_vkCmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage,
+                         VkImageLayout srcImageLayout, VkImage dstImage, VkImageLayout dstImageLayout,
+                         uint32_t regionCount, const VkImageBlit *pRegions, VkFilter filter)
+{
+  static PFN_vkCmdBlitImage fn = vkCmdBlitImage;
+  fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions,
+     filter);
+  return;
+}
+
+void shim_vkCmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuffer,
+                                 VkImage dstImage, VkImageLayout dstImageLayout,
+                                 uint32_t regionCount, const VkBufferImageCopy *pRegions)
+{
+  static PFN_vkCmdCopyBufferToImage fn = vkCmdCopyBufferToImage;
+  fn(commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions);
+  return;
+}
+
+void shim_vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage,
+                                 VkImageLayout srcImageLayout, VkBuffer dstBuffer,
+                                 uint32_t regionCount, const VkBufferImageCopy *pRegions)
+{
+  static PFN_vkCmdCopyImageToBuffer fn = vkCmdCopyImageToBuffer;
+  fn(commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions);
+  return;
+}
+
+void shim_vkCmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
+                            VkDeviceSize dstOffset, VkDeviceSize dataSize, const void *pData)
+{
+  static PFN_vkCmdUpdateBuffer fn = vkCmdUpdateBuffer;
+  fn(commandBuffer, dstBuffer, dstOffset, dataSize, pData);
+  return;
+}
+
+void shim_vkCmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize dstOffset,
+                          VkDeviceSize size, uint32_t data)
+{
+  static PFN_vkCmdFillBuffer fn = vkCmdFillBuffer;
+  fn(commandBuffer, dstBuffer, dstOffset, size, data);
+  return;
+}
+
+void shim_vkCmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image,
+                               VkImageLayout imageLayout, const VkClearColorValue *pColor,
+                               uint32_t rangeCount, const VkImageSubresourceRange *pRanges)
+{
+  static PFN_vkCmdClearColorImage fn = vkCmdClearColorImage;
+  fn(commandBuffer, image, imageLayout, pColor, rangeCount, pRanges);
+  return;
+}
+
+void shim_vkCmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage image,
+                                      VkImageLayout imageLayout,
+                                      const VkClearDepthStencilValue *pDepthStencil,
+                                      uint32_t rangeCount, const VkImageSubresourceRange *pRanges)
+{
+  static PFN_vkCmdClearDepthStencilImage fn = vkCmdClearDepthStencilImage;
+  fn(commandBuffer, image, imageLayout, pDepthStencil, rangeCount, pRanges);
+  return;
+}
+
+void shim_vkCmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount,
+                                const VkClearAttachment *pAttachments, uint32_t rectCount,
+                                const VkClearRect *pRects)
+{
+  static PFN_vkCmdClearAttachments fn = vkCmdClearAttachments;
+  fn(commandBuffer, attachmentCount, pAttachments, rectCount, pRects);
+  return;
+}
+
+void shim_vkCmdResolveImage(VkCommandBuffer commandBuffer, VkImage srcImage,
+                            VkImageLayout srcImageLayout, VkImage dstImage,
+                            VkImageLayout dstImageLayout, uint32_t regionCount,
+                            const VkImageResolve *pRegions)
+{
+  static PFN_vkCmdResolveImage fn = vkCmdResolveImage;
+  fn(commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions);
+  return;
 }
 
 void shim_vkCmdSetEvent(VkCommandBuffer commandBuffer, VkEvent event, VkPipelineStageFlags stageMask)
@@ -843,6 +1098,35 @@ void shim_vkCmdResetEvent(VkCommandBuffer commandBuffer, VkEvent event, VkPipeli
 {
   static PFN_vkCmdResetEvent fn = vkCmdResetEvent;
   fn(commandBuffer, event, stageMask);
+  return;
+}
+
+void shim_vkCmdWaitEvents(VkCommandBuffer commandBuffer, uint32_t eventCount,
+                          const VkEvent *pEvents, VkPipelineStageFlags srcStageMask,
+                          VkPipelineStageFlags dstStageMask, uint32_t memoryBarrierCount,
+                          const VkMemoryBarrier *pMemoryBarriers, uint32_t bufferMemoryBarrierCount,
+                          const VkBufferMemoryBarrier *pBufferMemoryBarriers,
+                          uint32_t imageMemoryBarrierCount,
+                          const VkImageMemoryBarrier *pImageMemoryBarriers)
+{
+  static PFN_vkCmdWaitEvents fn = vkCmdWaitEvents;
+  fn(commandBuffer, eventCount, pEvents, srcStageMask, dstStageMask, memoryBarrierCount,
+     pMemoryBarriers, bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount,
+     pImageMemoryBarriers);
+  return;
+}
+
+void shim_vkCmdPipelineBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask,
+                               VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags,
+                               uint32_t memoryBarrierCount, const VkMemoryBarrier *pMemoryBarriers,
+                               uint32_t bufferMemoryBarrierCount,
+                               const VkBufferMemoryBarrier *pBufferMemoryBarriers,
+                               uint32_t imageMemoryBarrierCount,
+                               const VkImageMemoryBarrier *pImageMemoryBarriers)
+{
+  static PFN_vkCmdPipelineBarrier fn = vkCmdPipelineBarrier;
+  fn(commandBuffer, srcStageMask, dstStageMask, dependencyFlags, memoryBarrierCount, pMemoryBarriers,
+     bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers);
   return;
 }
 
@@ -884,6 +1168,46 @@ void shim_vkCmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool q
 {
   static PFN_vkCmdCopyQueryPoolResults fn = vkCmdCopyQueryPoolResults;
   fn(commandBuffer, queryPool, firstQuery, queryCount, dstBuffer, dstOffset, stride, flags);
+  return;
+}
+
+void shim_vkCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout layout,
+                             VkShaderStageFlags stageFlags, uint32_t offset, uint32_t size,
+                             const void *pValues)
+{
+  static PFN_vkCmdPushConstants fn = vkCmdPushConstants;
+  fn(commandBuffer, layout, stageFlags, offset, size, pValues);
+  return;
+}
+
+void shim_vkCmdBeginRenderPass(VkCommandBuffer commandBuffer,
+                               const VkRenderPassBeginInfo *pRenderPassBegin,
+                               VkSubpassContents contents)
+{
+  static PFN_vkCmdBeginRenderPass fn = vkCmdBeginRenderPass;
+  fn(commandBuffer, pRenderPassBegin, contents);
+  return;
+}
+
+void shim_vkCmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents)
+{
+  static PFN_vkCmdNextSubpass fn = vkCmdNextSubpass;
+  fn(commandBuffer, contents);
+  return;
+}
+
+void shim_vkCmdEndRenderPass(VkCommandBuffer commandBuffer)
+{
+  static PFN_vkCmdEndRenderPass fn = vkCmdEndRenderPass;
+  fn(commandBuffer);
+  return;
+}
+
+void shim_vkCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount,
+                               const VkCommandBuffer *pCommandBuffers)
+{
+  static PFN_vkCmdExecuteCommands fn = vkCmdExecuteCommands;
+  fn(commandBuffer, commandBufferCount, pCommandBuffers);
   return;
 }
 
@@ -1169,6 +1493,29 @@ VkResult shim_vkGetPhysicalDeviceExternalImageFormatPropertiesNV(
   return r;
 }
 
+void shim_vkCmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer,
+                                    VkDeviceSize offset, VkBuffer countBuffer,
+                                    VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
+                                    uint32_t stride)
+{
+  static PFN_vkCmdDrawIndirectCountAMD fn =
+      (PFN_vkCmdDrawIndirectCountAMD)vkGetDeviceProcAddr(aux.device, "vkCmdDrawIndirectCountAMD");
+  fn(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
+  return;
+}
+
+void shim_vkCmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buffer,
+                                           VkDeviceSize offset, VkBuffer countBuffer,
+                                           VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
+                                           uint32_t stride)
+{
+  static PFN_vkCmdDrawIndexedIndirectCountAMD fn =
+      (PFN_vkCmdDrawIndexedIndirectCountAMD)vkGetDeviceProcAddr(aux.device,
+                                                                "vkCmdDrawIndexedIndirectCountAMD");
+  fn(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
+  return;
+}
+
 void shim_vkCmdProcessCommandsNVX(VkCommandBuffer commandBuffer,
                                   const VkCmdProcessCommandsInfoNVX *pProcessCommandsInfo)
 {
@@ -1410,6 +1757,17 @@ void shim_vkGetPhysicalDeviceSparseImageFormatProperties2KHR(
       (PFN_vkGetPhysicalDeviceSparseImageFormatProperties2KHR)vkGetInstanceProcAddr(
           aux.instance, "vkGetPhysicalDeviceSparseImageFormatProperties2KHR");
   fn(physicalDevice, pFormatInfo, pPropertyCount, pProperties);
+  return;
+}
+
+void shim_vkCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer,
+                                    VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout,
+                                    uint32_t set, uint32_t descriptorWriteCount,
+                                    const VkWriteDescriptorSet *pDescriptorWrites)
+{
+  static PFN_vkCmdPushDescriptorSetKHR fn =
+      (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(aux.device, "vkCmdPushDescriptorSetKHR");
+  fn(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites);
   return;
 }
 
@@ -1685,6 +2043,22 @@ VkResult shim_vkBindImageMemory2KHR(VkDevice device, uint32_t bindInfoCount,
   return r;
 }
 
+void shim_vkCmdSetDeviceMask(VkCommandBuffer commandBuffer, uint32_t deviceMask)
+{
+  static PFN_vkCmdSetDeviceMask fn =
+      (PFN_vkCmdSetDeviceMask)vkGetDeviceProcAddr(aux.device, "vkCmdSetDeviceMask");
+  fn(commandBuffer, deviceMask);
+  return;
+}
+
+void shim_vkCmdSetDeviceMaskKHR(VkCommandBuffer commandBuffer, uint32_t deviceMask)
+{
+  static PFN_vkCmdSetDeviceMaskKHR fn =
+      (PFN_vkCmdSetDeviceMaskKHR)vkGetDeviceProcAddr(aux.device, "vkCmdSetDeviceMaskKHR");
+  fn(commandBuffer, deviceMask);
+  return;
+}
+
 VkResult shim_vkGetDeviceGroupPresentCapabilitiesKHR(
     VkDevice device, VkDeviceGroupPresentCapabilitiesKHR *pDeviceGroupPresentCapabilities)
 {
@@ -1712,6 +2086,26 @@ VkResult shim_vkAcquireNextImage2KHR(VkDevice device, const VkAcquireNextImageIn
       (PFN_vkAcquireNextImage2KHR)vkGetDeviceProcAddr(device, "vkAcquireNextImage2KHR");
   VkResult r = fn(device, pAcquireInfo, pImageIndex);
   return r;
+}
+
+void shim_vkCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX, uint32_t baseGroupY,
+                            uint32_t baseGroupZ, uint32_t groupCountX, uint32_t groupCountY,
+                            uint32_t groupCountZ)
+{
+  static PFN_vkCmdDispatchBase fn =
+      (PFN_vkCmdDispatchBase)vkGetDeviceProcAddr(aux.device, "vkCmdDispatchBase");
+  fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);
+  return;
+}
+
+void shim_vkCmdDispatchBaseKHR(VkCommandBuffer commandBuffer, uint32_t baseGroupX,
+                               uint32_t baseGroupY, uint32_t baseGroupZ, uint32_t groupCountX,
+                               uint32_t groupCountY, uint32_t groupCountZ)
+{
+  static PFN_vkCmdDispatchBaseKHR fn =
+      (PFN_vkCmdDispatchBaseKHR)vkGetDeviceProcAddr(aux.device, "vkCmdDispatchBaseKHR");
+  fn(commandBuffer, baseGroupX, baseGroupY, baseGroupZ, groupCountX, groupCountY, groupCountZ);
+  return;
 }
 
 VkResult shim_vkGetPhysicalDevicePresentRectanglesKHR(VkPhysicalDevice physicalDevice,
@@ -1795,6 +2189,18 @@ void shim_vkUpdateDescriptorSetWithTemplateKHR(VkDevice device, VkDescriptorSet 
       (PFN_vkUpdateDescriptorSetWithTemplateKHR)vkGetDeviceProcAddr(
           device, "vkUpdateDescriptorSetWithTemplateKHR");
   fn(device, descriptorSet, descriptorUpdateTemplate, pData);
+  return;
+}
+
+void shim_vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer,
+                                                VkDescriptorUpdateTemplate descriptorUpdateTemplate,
+                                                VkPipelineLayout layout, uint32_t set,
+                                                const void *pData)
+{
+  static PFN_vkCmdPushDescriptorSetWithTemplateKHR fn =
+      (PFN_vkCmdPushDescriptorSetWithTemplateKHR)vkGetDeviceProcAddr(
+          aux.device, "vkCmdPushDescriptorSetWithTemplateKHR");
+  fn(commandBuffer, descriptorUpdateTemplate, layout, set, pData);
   return;
 }
 
@@ -2197,4 +2603,14 @@ VkResult shim_vkGetMemoryHostPointerPropertiesEXT(
           device, "vkGetMemoryHostPointerPropertiesEXT");
   VkResult r = fn(device, handleType, pHostPointer, pMemoryHostPointerProperties);
   return r;
+}
+
+void shim_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer,
+                                    VkPipelineStageFlagBits pipelineStage, VkBuffer dstBuffer,
+                                    VkDeviceSize dstOffset, uint32_t marker)
+{
+  static PFN_vkCmdWriteBufferMarkerAMD fn =
+      (PFN_vkCmdWriteBufferMarkerAMD)vkGetDeviceProcAddr(aux.device, "vkCmdWriteBufferMarkerAMD");
+  fn(commandBuffer, pipelineStage, dstBuffer, dstOffset, marker);
+  return;
 }

@@ -3,8 +3,8 @@
 #endif
 #include <cinttypes>
 #include <map>
-#include <unordered_map>
 #include <set>
+#include <unordered_map>
 
 #include <assert.h>
 
@@ -99,18 +99,10 @@ std::unordered_map<std::string, bool> timestampedCalls = {
   {"shim_vkCmdWriteBufferMarkerAMD", false},
 };
 
-VkResult shim_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
-                             const VkAllocationCallbacks *pAllocator, VkDevice *pDevice)
-{
-  VkResult r = vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
-  InitializeAuxResources(&aux, aux.instance, physicalDevice, *pDevice);
-  return r;
-}
-
 void shim_vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice physicalDevice,
                                               VkPhysicalDeviceMemoryProperties *pMemoryProperties)
 {
-  PFN_vkGetPhysicalDeviceMemoryProperties fn = vkGetPhysicalDeviceMemoryProperties;
+  static PFN_vkGetPhysicalDeviceMemoryProperties fn = vkGetPhysicalDeviceMemoryProperties;
   fn(physicalDevice, pMemoryProperties);
   aux.physDeviceMemoryProperties = *pMemoryProperties;
   return;
@@ -140,21 +132,25 @@ VkResult shim_vkBeginCommandBuffer(VkCommandBuffer commandBuffer,
     // Is this always true? Can't use VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
     // for figuring this out.
     assert(aux.cbCommandInfo.count(commandBuffer) == 0);
-    aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, "", 1));
+    aux.addCommandInfo(
+        commandBuffer,
+        CommandInfo(__FUNCTION__,
+                    GetResourceName(VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")), 1));
     return r;
   }
   else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
   {
-    if (!aux.isSecondary(commandBuffer)) {
+    if(!aux.isSecondary(commandBuffer))
+    {
       aux.resetQueries(commandBuffer);
       uint32_t offset = aux.queryOffset(commandBuffer);
       uint32_t count = aux.queryCount(commandBuffer);
       vkCmdResetQueryPool(commandBuffer, aux.queryPool(commandBuffer), offset, count);
-      
     }
     // Before submitting the secondary command buffers, the primary
     // command buffer needs to reset their all query pools.
-    for (uint32_t cb = 0; cb < aux.cbExecCmdBufs[commandBuffer].size(); cb++) {
+    for(uint32_t cb = 0; cb < aux.cbExecCmdBufs[commandBuffer].size(); cb++)
+    {
       VkCommandBuffer execCB = aux.cbExecCmdBufs[commandBuffer][cb].cb;
       aux.resetQueries(execCB);
       uint32_t offset = aux.queryOffset(execCB);
@@ -173,7 +169,10 @@ VkResult shim_vkEndCommandBuffer(VkCommandBuffer commandBuffer)
   static PFN_vkEndCommandBuffer fn = vkEndCommandBuffer;
   if(presentIndex == 0)
   {
-    aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, "", 1));
+    aux.addCommandInfo(
+        commandBuffer,
+        CommandInfo(__FUNCTION__,
+                    GetResourceName(VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")), 1));
     VkResult r = fn(commandBuffer);
     return r;
   }
@@ -226,19 +225,20 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
   static PFN_vkQueuePresentKHR fn =
       (PFN_vkQueuePresentKHR)vkGetDeviceProcAddr(aux.device, "vkQueuePresentKHR");
   VkResult r = fn(queue, pPresentInfo);
-  
+
   // In the first frame, create querypools for all CommandBuffers.
-  if(presentIndex == 0) {
+  if(presentIndex == 0)
+  {
     aux.createQueryPools();
   }
 
-  if(presentIndex == END_TS_FRAME) {
-    for(auto it : aux.cbAccumTimestamps) {
-      float ts = float((it.second[0][0] + it.second[0][1]) /
-        (1000000.0 * (END_TS_FRAME - START_TS_FRAME)));
-      std::string cbTime = "Command Buffer Time = " +
-                           std::to_string(ts) +
-                           " (ms)\n";
+  if(presentIndex == END_TS_FRAME)
+  {
+    for(auto it : aux.cbAccumTimestamps)
+    {
+      float ts =
+          float((it.second[0][0] + it.second[0][1]) / (1000000.0 * (END_TS_FRAME - START_TS_FRAME)));
+      std::string cbTime = "Command Buffer Time = " + std::to_string(ts) + " (ms)\n";
 #if defined(_WIN32)
       OutputDebugStringA(cbTime.c_str());
 #else
@@ -266,16 +266,18 @@ void shim_vkCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBu
   {
     fn(commandBuffer, commandBufferCount, pCommandBuffers);
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, "", 0, false));
-    for (uint32_t cb = 0; cb < commandBufferCount; cb++) {
-      aux.markExecCmdBufRelation(commandBuffer, pCommandBuffers[cb], commandBufferCount-cb);
+    for(uint32_t cb = 0; cb < commandBufferCount; cb++)
+    {
+      aux.markExecCmdBufRelation(commandBuffer, pCommandBuffers[cb], commandBufferCount - cb);
     }
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     assert(!aux.isSecondary(commandBuffer));
     uint32_t offset = aux.queryOffset(commandBuffer);
-    
+
     // Here is what the spec says:
     // VK_SUBPASS_CONTENTS_INLINE specifies that the contents of the subpass
     // will be recorded inline in the primary command buffer, and secondary
@@ -300,10 +302,14 @@ void shim_vkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint p
   if(presentIndex == 0 && timestampedCalls[__FUNCTION__])
   {
     fn(commandBuffer, pipelineBindPoint, pipeline);
-    aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
+    std::string infoStr =
+        "bind " + std::string(GetResourceName(VkHandle((uint64_t)pipeline, "VkPipeline"))) +
+        " to " + std::string(GetResourceName(VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")));
+    aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -328,7 +334,8 @@ void shim_vkCmdSetViewport(VkCommandBuffer commandBuffer, uint32_t firstViewport
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -353,7 +360,8 @@ void shim_vkCmdSetScissor(VkCommandBuffer commandBuffer, uint32_t firstScissor,
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -377,7 +385,8 @@ void shim_vkCmdSetLineWidth(VkCommandBuffer commandBuffer, float lineWidth)
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -402,7 +411,8 @@ void shim_vkCmdSetDepthBias(VkCommandBuffer commandBuffer, float depthBiasConsta
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -426,7 +436,8 @@ void shim_vkCmdSetBlendConstants(VkCommandBuffer commandBuffer, const float blen
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -451,7 +462,8 @@ void shim_vkCmdSetDepthBounds(VkCommandBuffer commandBuffer, float minDepthBound
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -476,7 +488,8 @@ void shim_vkCmdSetStencilCompareMask(VkCommandBuffer commandBuffer, VkStencilFac
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -501,7 +514,8 @@ void shim_vkCmdSetStencilWriteMask(VkCommandBuffer commandBuffer, VkStencilFaceF
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -526,7 +540,8 @@ void shim_vkCmdSetStencilReference(VkCommandBuffer commandBuffer, VkStencilFaceF
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -555,7 +570,8 @@ void shim_vkCmdBindDescriptorSets(VkCommandBuffer commandBuffer,
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -582,7 +598,8 @@ void shim_vkCmdBindIndexBuffer(VkCommandBuffer commandBuffer, VkBuffer buffer, V
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -608,7 +625,8 @@ void shim_vkCmdBindVertexBuffers(VkCommandBuffer commandBuffer, uint32_t firstBi
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -632,15 +650,16 @@ void shim_vkCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_
     fn(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
     char infoStr[256];
     snprintf(infoStr, sizeof(infoStr),
-            "Vertex Count: %d "
-            "Instance Count: %d "
-            "First Vertex: %d "
-            "First Instance: %d ",
-            vertexCount, instanceCount, firstVertex, firstInstance);
+             "Vertex Count: %d "
+             "Instance Count: %d "
+             "First Vertex: %d "
+             "First Instance: %d ",
+             vertexCount, instanceCount, firstVertex, firstInstance);
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -664,16 +683,17 @@ void shim_vkCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, u
     fn(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     char infoStr[256];
     snprintf(infoStr, sizeof(infoStr),
-            "Index Count: %d "
-            "Instance Count: %d "
-            "First Index: %d "
-            "Vertex Offset: %d "
-            "First Instance: %d ",
-            indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+             "Index Count: %d "
+             "Instance Count: %d "
+             "First Index: %d "
+             "Vertex Offset: %d "
+             "First Instance: %d ",
+             indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -697,13 +717,14 @@ void shim_vkCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDe
     fn(commandBuffer, buffer, offset, drawCount, stride);
     char infoStr[256];
     snprintf(infoStr, sizeof(infoStr),
-            "Draw Count: %d "
-            "Stride Count: %d ",
-            drawCount, stride);
+             "Draw Count: %d "
+             "Stride Count: %d ",
+             drawCount, stride);
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -726,16 +747,16 @@ void shim_vkCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffe
   {
     fn(commandBuffer, buffer, offset, drawCount, stride);
     char infoStr[256];
-    snprintf(infoStr, sizeof(infoStr),
-            "Offset: %" PRIu64
-            " "
-            "Draw Count: %u "
-            "Stride Count: %u ",
-            offset, drawCount, stride);
+    snprintf(infoStr, sizeof(infoStr), "Offset: %" PRIu64
+                                       " "
+                                       "Draw Count: %u "
+                                       "Stride Count: %u ",
+             offset, drawCount, stride);
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -759,14 +780,15 @@ void shim_vkCmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uin
     fn(commandBuffer, groupCountX, groupCountY, groupCountZ);
     char infoStr[256];
     snprintf(infoStr, sizeof(infoStr),
-            "Groups X: %d "
-            "Groups Y: %d "
-            "Groups Z: %d ",
-            groupCountX, groupCountY, groupCountZ);
+             "Groups X: %d "
+             "Groups Y: %d "
+             "Groups Z: %d ",
+             groupCountX, groupCountY, groupCountZ);
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -792,7 +814,8 @@ void shim_vkCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, 
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -817,7 +840,8 @@ void shim_vkCmdCopyBuffer(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkB
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -843,7 +867,8 @@ void shim_vkCmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcImage,
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -870,7 +895,8 @@ void shim_vkCmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcImage,
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -898,7 +924,8 @@ void shim_vkCmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer srcBuff
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -924,7 +951,8 @@ void shim_vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer, VkImage srcImage
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -949,7 +977,8 @@ void shim_vkCmdUpdateBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -974,7 +1003,8 @@ void shim_vkCmdFillBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkD
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1000,7 +1030,8 @@ void shim_vkCmdClearColorImage(VkCommandBuffer commandBuffer, VkImage image,
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1027,7 +1058,8 @@ void shim_vkCmdClearDepthStencilImage(VkCommandBuffer commandBuffer, VkImage ima
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1053,7 +1085,8 @@ void shim_vkCmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachme
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1080,7 +1113,8 @@ void shim_vkCmdResolveImage(VkCommandBuffer commandBuffer, VkImage srcImage,
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1112,7 +1146,8 @@ void shim_vkCmdWaitEvents(VkCommandBuffer commandBuffer, uint32_t eventCount,
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1148,7 +1183,8 @@ void shim_vkCmdPipelineBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFla
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1178,7 +1214,8 @@ void shim_vkCmdPushConstants(VkCommandBuffer commandBuffer, VkPipelineLayout lay
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1202,23 +1239,25 @@ void shim_vkCmdBeginRenderPass(VkCommandBuffer commandBuffer,
   if(presentIndex == 0 && timestampedCalls[__FUNCTION__])
   {
     fn(commandBuffer, pRenderPassBegin, contents);
-    std::string infoStr = isInline ?
-      "Subpass with INLINE contents" :
-      "Subpass with SECONDARY command buffers";
+    std::string infoStr =
+        GetResourceName(VkHandle((uint64_t)pRenderPassBegin->renderPass, "VkRenderPass"));
+    infoStr +=
+        isInline ? ": Subpass with INLINE contents" : ": Subpass with SECONDARY command buffers";
     uint32_t ts = isInline ? 2 : 1;
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr, ts, isInline));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     assert(!aux.isSecondary(commandBuffer));
 
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
     fn(commandBuffer, pRenderPassBegin, contents);
-    if (isInline)
+    if(isInline)
       vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-                        aux.queryInc(commandBuffer));
+                          aux.queryInc(commandBuffer));
 
     aux.isInline(commandBuffer, isInline);
   }
@@ -1237,25 +1276,25 @@ void shim_vkCmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents cont
   if(presentIndex == 0 && timestampedCalls[__FUNCTION__])
   {
     fn(commandBuffer, contents);
-    std::string infoStr = isInline ?
-      "Subpass with INLINE contents" :
-      "Subpass with SECONDARY command buffers";
+    std::string infoStr =
+        isInline ? "Subpass with INLINE contents" : "Subpass with SECONDARY command buffers";
 
-    uint32_t ts = 0; // value for !wasInline && !isInline;
-    if (wasInline && isInline)
+    uint32_t ts = 0;    // value for !wasInline && !isInline;
+    if(wasInline && isInline)
       ts = 2;
-    if ((!wasInline && isInline) || (wasInline && !isInline))
+    if((!wasInline && isInline) || (wasInline && !isInline))
       ts = 1;
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr, ts, isInline));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
-    if (wasInline)
+    if(wasInline)
       vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                           aux.queryInc(commandBuffer));
     fn(commandBuffer, contents);
-    if (isInline)
+    if(isInline)
       vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                           aux.queryInc(commandBuffer));
 
@@ -1275,30 +1314,30 @@ void shim_vkCmdEndRenderPass(VkCommandBuffer commandBuffer)
   if(presentIndex == 0 && timestampedCalls[__FUNCTION__])
   {
     fn(commandBuffer);
-    std::string infoStr = wasInline ?
-      "Subpass with INLINE contents" :
-      "Subpass with SECONDARY command buffers";
+    std::string infoStr =
+        wasInline ? "Subpass with INLINE contents" : "Subpass with SECONDARY command buffers";
 
-    uint32_t ts = 1; // value for !wasInline;
-    if (wasInline)
+    uint32_t ts = 1;    // value for !wasInline;
+    if(wasInline)
       ts = 2;
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr, ts, true));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     assert(!aux.isSecondary(commandBuffer));
-    if (wasInline)
+    if(wasInline)
       vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
-                        aux.queryInc(commandBuffer));
+                          aux.queryInc(commandBuffer));
     fn(commandBuffer);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
-    
+
     aux.isInline(commandBuffer, true);
   }
   else
-  {   
+  {
     fn(commandBuffer);
   }
   return;
@@ -1317,7 +1356,8 @@ void shim_vkCmdDrawIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuffer buff
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1346,7 +1386,8 @@ void shim_vkCmdDrawIndexedIndirectCountAMD(VkCommandBuffer commandBuffer, VkBuff
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1374,7 +1415,8 @@ void shim_vkCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer,
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1399,7 +1441,8 @@ void shim_vkCmdSetDeviceMask(VkCommandBuffer commandBuffer, uint32_t deviceMask)
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1424,7 +1467,8 @@ void shim_vkCmdSetDeviceMaskKHR(VkCommandBuffer commandBuffer, uint32_t deviceMa
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1451,7 +1495,8 @@ void shim_vkCmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX, 
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1478,7 +1523,8 @@ void shim_vkCmdDispatchBaseKHR(VkCommandBuffer commandBuffer, uint32_t baseGroup
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, FIRST_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1507,7 +1553,8 @@ void shim_vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer,
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));
@@ -1534,7 +1581,8 @@ void shim_vkCmdWriteBufferMarkerAMD(VkCommandBuffer commandBuffer,
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__));
     return;
   }
-  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME && timestampedCalls[__FUNCTION__])
+  else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME &&
+          timestampedCalls[__FUNCTION__])
   {
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.queryPool(commandBuffer),
                         aux.queryInc(commandBuffer));

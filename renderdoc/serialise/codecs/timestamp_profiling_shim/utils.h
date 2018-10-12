@@ -13,7 +13,8 @@ struct ExecuteCommandBuffer
   VkCommandBuffer cb;
   uint32_t remaining = 0;
 
-  ExecuteCommandBuffer(VkCommandBuffer acb, uint32_t r = 0) {
+  ExecuteCommandBuffer(VkCommandBuffer acb, uint32_t r = 0)
+  {
     cb = acb;
     remaining = r;
   }
@@ -35,17 +36,24 @@ struct CommandInfo
   uint32_t timestamps = 2;
   bool isInlinedSubpass = true;
 
-  CommandInfo(std::string n) {
+  CommandInfo(std::string n) { name = n; }
+  CommandInfo(std::string n, std::string i)
+  {
     name = n;
+    info = i;
   }
-  CommandInfo(std::string n, std::string i) {
-    name = n; info = i;
+  CommandInfo(std::string n, std::string i, uint32_t ts)
+  {
+    name = n;
+    info = i;
+    timestamps = ts;
   }
-  CommandInfo(std::string n, std::string i, uint32_t ts) {
-    name = n; info = i; timestamps = ts; 
-  }
-  CommandInfo(std::string n, std::string i, uint32_t ts, bool inl) { 
-    name = n; info = i; timestamps = ts; isInlinedSubpass = inl;
+  CommandInfo(std::string n, std::string i, uint32_t ts, bool inl)
+  {
+    name = n;
+    info = i;
+    timestamps = ts;
+    isInlinedSubpass = inl;
   }
 };
 
@@ -53,7 +61,8 @@ typedef std::array<uint32_t, 3> TripleU32;
 typedef std::vector<std::array<double, 2>> TupleVec;
 typedef std::vector<CommandInfo> CommandInfoVec;
 
-struct CommandInfoDesc {
+struct CommandInfoDesc
+{
   CommandInfoVec vec;
   bool isInlinedSubpass = false;
   uint32_t executeCommands = 0;
@@ -72,7 +81,7 @@ struct ShimVkTraceResources : public AuxVkTraceResources
 
   uint32_t cmdCount(VkCommandBuffer cb);
   uint32_t queryCount(VkCommandBuffer cb);
-  
+
   uint32_t queryOffset(VkCommandBuffer cb);
   uint32_t resetQueries(VkCommandBuffer cb);
   uint32_t queryInc(VkCommandBuffer cb);
@@ -84,17 +93,12 @@ struct ShimVkTraceResources : public AuxVkTraceResources
   void queueSubmit(VkQueue queue, uint32_t cbCount, VkCommandBuffer *cbList);
   void markExecCmdBufRelation(VkCommandBuffer cb, VkCommandBuffer exec, uint32_t offset);
   bool isPresent(VkCommandBuffer cb);
-  double accumTimestamps(VkCommandBuffer cb, const std::vector<uint64_t> &data, uint64_t frameID, VkQueue queue);
+  double accumTimestamps(VkCommandBuffer cb, const std::vector<uint64_t> &data, uint64_t frameID,
+                         VkQueue queue);
   void accumulateAllTimestamps(VkCommandBuffer cb, uint64_t frameID);
 
-  void secondaryCB(VkCommandBuffer cb) {
-    cbSecondary[cb] = true;
-  }
-
-  bool isSecondary(VkCommandBuffer cb) {
-    return cbSecondary.count(cb) > 0;
-  }
-
+  void secondaryCB(VkCommandBuffer cb) { cbSecondary[cb] = true; }
+  bool isSecondary(VkCommandBuffer cb) { return cbSecondary.count(cb) > 0; }
   VkQueryPool queryPool(VkCommandBuffer cb);
   VkQueue queryQueue(VkCommandBuffer cb);
   VkResult createQueryPools();

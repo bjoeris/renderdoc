@@ -83,7 +83,7 @@ void CodeWriter::Open()
   for(const TemplateFileDesc *desc = TemplateFiles; desc->filename; desc++)
     WriteTemplateFile(desc->filename, desc->contents, desc->size);
 
-  if (*shimPrefix)
+  if(*shimPrefix)
     WriteTemplateFile("shim.enable", "", 0);
 }
 
@@ -281,7 +281,7 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
       // Calculate the correct memory size.
       files[pass]
           ->PrintLn("%s = AlignedSize(memory_size, %s.alignment);", mem_bind_offset,
-                   abr.requirement->Name())
+                    abr.requirement->Name())
           .PrintLn("memory_size = %s + %s.size;", mem_bind_offset, abr.requirement->Name());
 
       files[pass]
@@ -297,12 +297,12 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
       // No memory reordering. Use the captured offsets.
       // Calculate the correct memory size.
       files[pass]
-        ->PrintLn("%s = %s;", mem_bind_offset, abr.offset->ValueStr().c_str())
-        .PrintLn("memory_size = std::max<uint64_t>(memory_size, %s + %s.size);", mem_bind_offset, abr.requirement->Name());
+          ->PrintLn("%s = %s;", mem_bind_offset, abr.offset->ValueStr().c_str())
+          .PrintLn("memory_size = std::max<uint64_t>(memory_size, %s + %s.size);", mem_bind_offset,
+                   abr.requirement->Name());
     }
     // Calculate the correct memory bits.
-    files[pass]
-      ->PrintLn("memory_bits = memory_bits & %s.memoryTypeBits;", abr.requirement->Name());
+    files[pass]->PrintLn("memory_bits = memory_bits & %s.memoryTypeBits;", abr.requirement->Name());
   }
   switch(reset)
   {
@@ -391,9 +391,13 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
             "memory_bits);",
             ai->Name(), ai->At(3)->Name(), ai->At(3)->ValueStr().c_str(), tracker->PhysDevID(),
             tracker->PhysDevID())
-        .PrintLn("%s = %s;", ai_name, ai->Name())
-        .PrintLn("VkResult result = %s%s(%s, &%s, NULL, &%s);", shimPrefix, o->Name(), device_name,
-                 ai->Name(), memory_name)
+        .PrintLn("%s = %s;", ai_name, ai->Name());
+    std::string resource_name_str;
+    if(*shimPrefix)
+      resource_name_str.append(", \"").append(device_name).append("\"");
+    files[pass]
+        ->PrintLn("VkResult result = %s%s(%s, &%s, NULL, &%s%s);", shimPrefix, o->Name(),
+                  device_name, ai->Name(), memory_name, resource_name_str.c_str())
         .PrintLn("assert(result == VK_SUCCESS);")
         .PrintLn("}");
   }
@@ -700,16 +704,20 @@ void CodeWriter::CreateInstance(ExtObject *o, uint32_t pass, bool global_ci)
         .PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->Size() - 1)
         .PrintLn("#endif");
   }
+  std::string resource_name_str;
+  if(*shimPrefix)
+    resource_name_str.append(", \"").append(instance_name).append("\"");
   files[pass]
       ->PrintLn("/* ppEnabledLayerNames */ %s,", layers->Size() > 0 ? layers->Name() : "NULL")
       .PrintLn("/* enabledExtensionCount */ %" PRIu64 ",", extensions->Size())
       .PrintLn("/* ppEnabledExtensionNames */ %s", extensions->Name())
       .PrintLn("};")
-      .PrintLn("VkResult r = %svkCreateInstance(&InstanceCreateInfo, NULL, &%s);", shimPrefix,
-               instance_name)
+      .PrintLn("VkResult r = %svkCreateInstance(&InstanceCreateInfo, NULL, &%s%s);", shimPrefix,
+               instance_name, resource_name_str.c_str())
       .PrintLn("assert(r == VK_SUCCESS);")
       .PrintLn(
-          "RegisterDebugCallback(&aux, %s, VkDebugReportFlagBitsEXT(VK_DEBUG_REPORT_ERROR_BIT_EXT | "
+          "RegisterDebugCallback(&aux, %s, VkDebugReportFlagBitsEXT(VK_DEBUG_REPORT_ERROR_BIT_EXT "
+          "| "
           "VK_DEBUG_REPORT_DEBUG_BIT_EXT));",
           instance_name);
 
@@ -740,9 +748,16 @@ void CodeWriter::CreatePresentImageView(ExtObject *o, uint32_t pass, bool global
       files[pass]->PrintLn("if (%s > %u) {", tracker->SwapchainCountStr(), i);
       image->U64() = (*it)->U64();
       LocalVariable(ci, "", pass);
+      std::string resource_name_str;
+      if(*shimPrefix)
+        resource_name_str.append(", \"")
+            .append(present_views)
+            .append("[")
+            .append(std::to_string(i))
+            .append("]\"");
       files[pass]
-          ->PrintLn("VkResult result = %s(%s, &%s, NULL, &%s[%u]);", o->Name(), device_name,
-                    ci->Name(), present_views, i++)
+          ->PrintLn("VkResult result = %s(%s, &%s, NULL, &%s[%u]%s);", o->Name(), device_name,
+                    ci->Name(), present_views, i++, resource_name_str.c_str())
           .PrintLn("assert(result == VK_SUCCESS);");
       files[pass]->PrintLn("}");
     }
@@ -770,10 +785,17 @@ void CodeWriter::CreatePresentFramebuffer(ExtObject *o, uint32_t pass, bool glob
     var_it->second.name = varName + "[" + std::to_string(i) + "]";
     files[pass]->PrintLn("if (%s > %u) {", tracker->SwapchainCountStr(), i);
     LocalVariable(ci, "", pass);
-
+    std::string resource_name_str;
+    if(*shimPrefix)
+      resource_name_str.append(", \"")
+          .append(present_fbs)
+          .append("[")
+          .append(std::to_string(i))
+          .append("]\"");
     files[pass]
-        ->PrintLn("VkResult result = %s(%s, &%s, NULL, &%s[%u]);", o->Name(),
-                  tracker->GetResourceVar(device->U64()), ci->Name(), present_fbs, i)
+        ->PrintLn("VkResult result = %s(%s, &%s, NULL, &%s[%u]%s);", o->Name(),
+                  tracker->GetResourceVar(device->U64()), ci->Name(), present_fbs, i,
+                  resource_name_str.c_str())
         .PrintLn("assert(result == VK_SUCCESS);");
     files[pass]->PrintLn("}");
   }
@@ -795,14 +817,16 @@ void CodeWriter::CreateDescriptorPool(ExtObject *o, uint32_t pass, bool global_c
 
   files[pass]->PrintLn("{");
   LocalVariable(ci, "", pass);
-
+  std::string resource_name_str;
+  if(*shimPrefix)
+    resource_name_str.append(", \"").append(res_name).append("\"");
   files[pass]
       ->PrintLn("for (uint32_t i = 0; i < %s.poolSizeCount; i++) {", ci->Name())
       .PrintLn("%s.push_back(%s.pPoolSizes[i]);", pool_vec.c_str(), ci->Name())
       .PrintLn("}")
       .PrintLn("%s.pPoolSizes = %s.data();", ci->Name(), pool_vec.c_str())
-      .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ci->Name(),
-               res_name)
+      .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s%s);", o->Name(), device_name, ci->Name(),
+               res_name, resource_name_str.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("%s = %s;", ci_name.c_str(), ci->Name())
       .PrintLn("%s.push_back(%s);", res.c_str(), res_name)
@@ -1055,12 +1079,14 @@ void CodeWriter::CreateDevice(ExtObject *o, uint32_t pass, bool global_ci)
           VK_EXT_DEBUG_MARKER_EXTENSION_NAME)
       .PrintLn("isDebugMarkerEXTEnabled = true;")
       .PrintLn("}");
-
+  std::string resource_name_str;
+  if(*shimPrefix)
+    resource_name_str.append(", \"").append(device_name).append("\"");
   files[pass]
       ->PrintLn("MakePhysicalDeviceFeaturesMatch(VkPhysicalDeviceFeatures_%" PRIu64 ", %s);",
                 tracker->PhysDevID(), ci->At(9)->Name())
-      .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ci->Name(),
-               vk_res_name)
+      .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s%s);", o->Name(), device_name, ci->Name(),
+               vk_res_name, resource_name_str.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("}");
 
@@ -1145,8 +1171,14 @@ void CodeWriter::GetSwapchainImagesKHR(ExtObject *o, uint32_t pass)
 
   // For every image that RenderDoc creates, associate it to a PresentImages[Index];
   const char *image_name = tracker->GetResourceVar(image->Type(), image->U64());
-  files[pass]->PrintLn("if (%s > %u) %s = %s[%u];", tracker->SwapchainCountStr(), swapchain_idx,
-                       image_name, tracker->PresentImagesStr(), swapchain_idx);
+  files[pass]
+      ->PrintLn("if (%s > %u)", tracker->SwapchainCountStr(), swapchain_idx)
+      .PrintLn("{")
+      .PrintLn("%s = %s[%u];", image_name, tracker->PresentImagesStr(), swapchain_idx);
+  if(*shimPrefix)
+    files[pass]->PrintLn("AddResourceName((uint64_t)%s, \"%s\", \"%s\");", image_name,
+                         image->Type(), image_name);
+  files[pass]->PrintLn("}");
 
   count++;
 }
@@ -1162,11 +1194,13 @@ void CodeWriter::AllocateCommandBuffers(ExtObject *o, uint32_t pass)
 
   files[pass]->PrintLn("{");
   LocalVariable(ai, "", pass);
+  std::string resource_name_str;
+  if(*shimPrefix)
+    resource_name_str.append(", \"").append(cmd_buffer_name).append("\"");
   files[pass]
-      ->PrintLn("std::vector<VkCommandBuffer> cmds(%" PRIu64 ");", ai->At(4)->U64())
-      .PrintLn("VkResult result = %s(%s, &%s, cmds.data());", o->Name(), device_name, ai->Name())
+      ->PrintLn("VkResult result = %s(%s, &%s, &%s%s);", o->Name(), device_name, ai->Name(),
+                cmd_buffer_name, resource_name_str.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
-      .PrintLn("%s = cmds[0];", cmd_buffer_name)
       .PrintLn("}");
 }
 
@@ -1182,7 +1216,9 @@ void CodeWriter::AllocateMemory(ExtObject *o, uint32_t pass)
 
   files[pass]->PrintLn("{");
   LocalVariable(ai, "", pass);
-
+  std::string resource_name_str;
+  if(*shimPrefix)
+    resource_name_str.append(", \"").append(memory_name).append("\"");
   files[pass]
       ->PrintLn("%s.%s = CompatibleMemoryTypeIndex(%" PRIu64
                 ", "
@@ -1194,8 +1230,8 @@ void CodeWriter::AllocateMemory(ExtObject *o, uint32_t pass)
                 ai->Name(), ai->At(3)->Name(), ai->At(3)->U64(), tracker->PhysDevID(),
                 tracker->PhysDevID())
       .PrintLn("%s = %s;", ai_name, ai->Name())
-      .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s);", o->Name(), device_name, ai->Name(),
-               memory_name)
+      .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s%s);", o->Name(), device_name, ai->Name(),
+               memory_name, resource_name_str.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("}");
 }
@@ -1217,18 +1253,28 @@ void CodeWriter::AllocateDescriptorSets(ExtObject *o, uint32_t pass)
   std::string pools_ci = MakeVarName("VkDescriptorPoolCreateInfo", descPool);
   files[pass]->PrintLn("{");
   LocalVariable(ai, "", pass);
+  std::string ds_name_str;
+  std::string dp_name_str;
+  if(*shimPrefix)
+  {
+    ds_name_str.append(", \"").append(ds_name).append("\"");
+    dp_name_str.append(", \"").append(tracker->GetResourceVar(descPool)).append("\"");
+  }
   files[pass]
-      ->PrintLn("VkResult result = %s(%s, &%s, &%s);", o->Name(), device_name, ai->Name(), ds_name)
+      ->PrintLn("VkResult result = %s(%s, &%s, &%s%s);", o->Name(), device_name, ai->Name(),
+                ds_name, ds_name_str.c_str())
       .PrintLn("if (result == VK_ERROR_OUT_OF_POOL_MEMORY) {")
       // resize pool vector, allocate another pool, reset pool variable, execute allocation again
       .PrintLn(
-          "result = vkCreateDescriptorPool(%s, &%s, NULL, &%s); // rdoc: try creating a new pool",
-          device_name, pools_ci.c_str(), tracker->GetResourceVar(descPool))
+          "result = %svkCreateDescriptorPool(%s, &%s, NULL, &%s%s); // rdoc: try creating a new "
+          "pool",
+          shimPrefix, device_name, pools_ci.c_str(), tracker->GetResourceVar(descPool),
+          dp_name_str.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("%s.descriptorPool = %s;", ai->Name(), tracker->GetResourceVar(descPool))
       .PrintLn("%s.push_back(%s);", pools.c_str(), tracker->GetResourceVar(descPool))
-      .PrintLn("result = %s(%s, &%s, &%s); // rdoc: try allocating again", o->Name(), device_name,
-               ai->Name(), ds_name)
+      .PrintLn("result = %s(%s, &%s, &%s%s); // rdoc: try allocating again", o->Name(), device_name,
+               ai->Name(), ds_name, ds_name_str.c_str())
       .PrintLn("}")
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("}");
