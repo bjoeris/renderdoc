@@ -54,6 +54,10 @@
 // single presentable variable for the frame render: VkType_id[acquired_frame]
 #define PRESENT_VARIABLE_OFFSET (PRESENT_IMAGE_OFFSET + PRESENT_IMAGE_MAX_COUNT)
 
+#ifndef STATIC_CODE_GEN_OPT_TREAT_LOAD_OP_DONT_CARE_AS_CLEAR
+#define STATIC_CODE_GEN_OPT_TREAT_LOAD_OP_DONT_CARE_AS_CLEAR true
+#endif
+
 namespace vk_cpp_codec
 {
 class CodeWriter;
@@ -111,7 +115,15 @@ enum CodeGenOptBits
   CODE_GEN_OPT_BUFFER_DIFF = 0x40,
 
   // Enable diffing of images at end of frame
-  CODE_GEN_OPT_IMAGE_DIFF = 0X80,
+  CODE_GEN_OPT_IMAGE_DIFF = 0x80,
+
+  // For the purpose of analyzing image usage for code gen optimization, this flag treats all usages
+  // of VK_ATTACHMENT_LOAD_OP_DONT_CARE as VK_ATTACHMENT_LOAD_OP_LOAD.
+  // Some applications use VK_ATTACHMENT_LOAD_OP_DONT_CARE, but incorrectly rely on the previous
+  // content of the attachment being preserved. In this case, this option MAY help code gen more
+  // accurately reproduce the images from the original application (but the behaviour is ultimately
+  // undefined, and up to the driver).
+  CODE_GEN_OPT_TREAT_LOAD_OP_DONT_CARE_AS_CLEAR = 0x100,
 };
 
 typedef uint32_t CodeGenOpts;
@@ -119,7 +131,11 @@ typedef uint32_t CodeGenOpts;
 const CodeGenOpts CODE_GEN_OPT_DEFAULT =
     CODE_GEN_OPT_REORDER_MEMORY_BINDINGS_BIT | CODE_GEN_OPT_BUFFER_INIT_BIT |
     CODE_GEN_OPT_BUFFER_RESET_BIT | CODE_GEN_OPT_IMAGE_INIT_BIT | CODE_GEN_OPT_IMAGE_RESET_BIT |
-    CODE_GEN_OPT_IMAGE_MEMORY_BIT;
+    CODE_GEN_OPT_IMAGE_MEMORY_BIT
+#if STATIC_CODE_GEN_OPT_TREAT_LOAD_OP_DONT_CARE_AS_CLEAR
+    | CODE_GEN_OPT_TREAT_LOAD_OP_DONT_CARE_AS_CLEAR
+#endif
+    ;
 
 class TraceTracker
 {

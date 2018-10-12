@@ -307,6 +307,10 @@ CodeGenOpts GetEnvOpts()
   {
     optimizations |= CODE_GEN_OPT_IMAGE_DIFF;
   }
+  if(OptimizationDisabled("RDOC_CODE_GEN_OPT_TREAT_LOAD_OP_DONT_CARE_AS_CLEAR"))
+  {
+    optimizations &= ~CODE_GEN_OPT_TREAT_LOAD_OP_DONT_CARE_AS_CLEAR;
+  }
   return optimizations;
 }
 

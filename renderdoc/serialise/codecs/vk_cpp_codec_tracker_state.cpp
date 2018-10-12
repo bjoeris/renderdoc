@@ -659,7 +659,9 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
       // load behaviour for depth/color component is defined by loadOp
       VkAttachmentLoadOp loadOp = (VkAttachmentLoadOp)att_desc->At("loadOp")->U64();
       AccessAction action;
-      if(loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR || loadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+      if(loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR ||
+         (loadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE &&
+          ((optimizations & CODE_GEN_OPT_TREAT_LOAD_OP_DONT_CARE_AS_CLEAR) != 0)))
       {
         if(bindingState.isFullRenderArea)
         {
@@ -684,7 +686,8 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
       VkAttachmentLoadOp stencilLoadOp = (VkAttachmentLoadOp)att_desc->At("stencilLoadOp")->U64();
       AccessAction stencilAction;
       if(stencilLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR ||
-         stencilLoadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+         (stencilLoadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE &&
+          ((optimizations & CODE_GEN_OPT_TREAT_LOAD_OP_DONT_CARE_AS_CLEAR) != 0)))
       {
         if(bindingState.isFullRenderArea)
         {
