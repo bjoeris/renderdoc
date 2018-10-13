@@ -25335,7 +25335,7 @@ const char fileData_44[] =
   "bAccumTimestamps[cb].back()[accum] += elapsedTimeNsec;\r\n\r\n  CommandInfoVec &cbVec = cbCommandInfo[cb].vec;\r\n  uint3"
   "2_t j = cbVec[0].timestamps;\r\n  for(uint32_t i = 1; i < (cbVec.size() - 1); i++)\r\n  {\r\n    uint32_t tsCount = cbVec"
   "[i].timestamps;\r\n    if (tsCount == 2) {\r\n      signedTS = (data[j + 1] & context.mask) - (data[j] & context.mask);\r"
-  "\n      if (signedTS < 0) {\r\n        fprintf(stderr, \"timestamp for command %d is negative %d\", i, signedTS);\r\n    "
+  "\n      if (signedTS < 0) {\r\n        fprintf(stderr, \"timestamp for command %u is negative %d\", i, signedTS);\r\n    "
   "    signedTS = abs(signedTS);\r\n      }\r\n      double elapsedTimeNsec = double(signedTS * context.period);\r\n      cb"
   "AccumTimestamps[cb][i][accum] += elapsedTimeNsec;\r\n    } else if (tsCount == 1) {\r\n      // one timestamp is not enou"
   "gh to produce delta timings\r\n      cbAccumTimestamps[cb][i][accum] = 0.0f;\r\n    } else if (tsCount == 0) {\r\n      /"
@@ -25411,19 +25411,19 @@ const char fileData_44[] =
   "          uint32_t &offset = cbCommandInfo[cb].executeCommands;\r\n          uint32_t remaining = cbExecCmdBufs[cb][offse"
   "t].remaining;\r\n          for(uint32_t r = 0; r < remaining; r++)\r\n          {\r\n            VkCommandBuffer execCB ="
   " cbExecCmdBufs[cb][offset + r].cb;\r\n            const char * execCB_name = GetResourceName(ResourceNames, VkHandle((uin"
-  "t64_t) cb, \"VkCommandBuffer\"));\r\n            float execCB_time = commandTime(execCB, 0); // time for command buffer t"
-  "otal execution.\r\n            uint32_t exec_commands = timestampReportCommandCount(execCB);\r\n            for (uint32_t"
-  " execj = 1; execj < exec_commands; execj++) {\r\n              writeCSV(csv, execCB, execCB_name, cb_i, execCB_time, exec"
-  "j);\r\n            }\r\n          }\r\n          offset += remaining;\r\n        }\r\n        else\r\n        {\r\n      "
-  "    writeCSV(csv, cb, cb_name, cb_i, cb_time, j);\r\n        }\r\n      }\r\n    }\r\n  }\r\n  fclose(csv);\r\n}\r\n\r\nv"
-  "oid ShimVkTraceResources::addCommandInfo(VkCommandBuffer cb, const CommandInfo & info) {\r\n  aux.cbCommandInfo[cb].vec.p"
-  "ush_back(info); \r\n  if (info.name.find(\"vkCmdDraw\") != std::string::npos|| \r\n      info.name.find(\"vkCmdDispatch\""
-  ") != std::string::npos) {\r\n    aux.cbCommandInfo[cb].vec.back().hasStats = true;\r\n    aux.cbCommandInfo[cb].pipelineQ"
-  "ueryCount++;\r\n  }\r\n  \r\n  isInline(cb, info.isInlinedSubpass);\r\n}\r\n\r\nbool ShimVkTraceResources::isInline(VkCom"
-  "mandBuffer cb) {\r\n  return cbCommandInfo[cb].isInlinedSubpass;\r\n}\r\n\r\nvoid ShimVkTraceResources::isInline(VkComman"
-  "dBuffer cb, bool current) {\r\n  cbCommandInfo[cb].isInlinedSubpass = current;\r\n}\r\n\r\nvoid ShimVkTraceResources::sec"
-  "ondaryCB(VkCommandBuffer cb)\r\n{\r\n  cbSecondary[cb] = true;\r\n}\r\n\r\nbool ShimVkTraceResources::isSecondary(VkComma"
-  "ndBuffer cb)\r\n{\r\n  return cbSecondary.count(cb) > 0;\r\n}";
+  "t64_t) execCB, \"VkCommandBuffer\"));\r\n            float execCB_time = commandTime(execCB, 0); // time for command buff"
+  "er total execution.\r\n            uint32_t exec_commands = timestampReportCommandCount(execCB);\r\n            for (uint"
+  "32_t execj = 1; execj < exec_commands; execj++) {\r\n              writeCSV(csv, execCB, execCB_name, cb_i, execCB_time, "
+  "execj);\r\n            }\r\n          }\r\n          offset += remaining;\r\n        }\r\n        else\r\n        {\r\n  "
+  "        writeCSV(csv, cb, cb_name, cb_i, cb_time, j);\r\n        }\r\n      }\r\n    }\r\n  }\r\n  fclose(csv);\r\n}\r\n\r"
+  "\nvoid ShimVkTraceResources::addCommandInfo(VkCommandBuffer cb, const CommandInfo & info) {\r\n  aux.cbCommandInfo[cb].ve"
+  "c.push_back(info); \r\n  if (info.name.find(\"vkCmdDraw\") != std::string::npos|| \r\n      info.name.find(\"vkCmdDispatc"
+  "h\") != std::string::npos) {\r\n    aux.cbCommandInfo[cb].vec.back().hasStats = true;\r\n    aux.cbCommandInfo[cb].pipeli"
+  "neQueryCount++;\r\n  }\r\n  \r\n  isInline(cb, info.isInlinedSubpass);\r\n}\r\n\r\nbool ShimVkTraceResources::isInline(Vk"
+  "CommandBuffer cb) {\r\n  return cbCommandInfo[cb].isInlinedSubpass;\r\n}\r\n\r\nvoid ShimVkTraceResources::isInline(VkCom"
+  "mandBuffer cb, bool current) {\r\n  cbCommandInfo[cb].isInlinedSubpass = current;\r\n}\r\n\r\nvoid ShimVkTraceResources::"
+  "secondaryCB(VkCommandBuffer cb)\r\n{\r\n  cbSecondary[cb] = true;\r\n}\r\n\r\nbool ShimVkTraceResources::isSecondary(VkCo"
+  "mmandBuffer cb)\r\n{\r\n  return cbSecondary.count(cb) > 0;\r\n}";
 const char fileData_45[] =
   "/******************************************************************************\r\n* The MIT License (MIT)\r\n*\r\n* Copy"
   "right (c) 2018 Google LLC\r\n*\r\n* Permission is hereby granted, free of charge, to any person obtaining a copy\r\n* of "
@@ -25522,7 +25522,7 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(timestamp_profiling_shim/shim_vulkan.cpp)", 70901, fileData_41},
   {R"(timestamp_profiling_shim/shim_vulkan.h)", 64718, fileData_42},
   {R"(timestamp_profiling_shim/shim_vulkan_base.cpp)", 95869, fileData_43},
-  {R"(timestamp_profiling_shim/utils.cpp)", 16257, fileData_44},
+  {R"(timestamp_profiling_shim/utils.cpp)", 16261, fileData_44},
   {R"(timestamp_profiling_shim/utils.h)", 5709, fileData_45},
   {nullptr, 0, nullptr},
 };
