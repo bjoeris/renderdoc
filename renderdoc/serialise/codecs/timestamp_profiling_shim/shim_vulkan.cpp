@@ -363,9 +363,7 @@ void shim_vkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint p
   if(presentIndex == 0 && timestampedCalls[__FUNCTION__])
   {
     fn(commandBuffer, pipelineBindPoint, pipeline);
-    std::string infoStr =
-        "bind " + std::string(GetResourceName(ResourceNames, VkHandle((uint64_t)pipeline, "VkPipeline"))) +
-        " to " + std::string(GetResourceName(ResourceNames, VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")));
+    std::string infoStr = std::string(GetResourceName(ResourceNames, VkHandle((uint64_t)pipeline, "VkPipeline")));
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
     return;
   }
