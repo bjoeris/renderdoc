@@ -357,7 +357,7 @@ void ShimVkTraceResources::writeAllCSV(const char *name)
             float execCB_time = commandTime(execCB, 0); // time for command buffer total execution.
             uint32_t exec_commands = timestampReportCommandCount(execCB);
             for (uint32_t execj = 1; execj < exec_commands; execj++) {
-              writeCSV(csv, execCB, execCB_name, execCB_time, cb_i, execj);
+              writeCSV(csv, execCB, execCB_name, cb_i, execCB_time, execj);
             }
           }
           offset += remaining;

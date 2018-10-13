@@ -25413,7 +25413,7 @@ const char fileData_44[] =
   " cbExecCmdBufs[cb][offset + r].cb;\r\n            const char * execCB_name = GetResourceName(ResourceNames, VkHandle((uin"
   "t64_t) cb, \"VkCommandBuffer\"));\r\n            float execCB_time = commandTime(execCB, 0); // time for command buffer t"
   "otal execution.\r\n            uint32_t exec_commands = timestampReportCommandCount(execCB);\r\n            for (uint32_t"
-  " execj = 1; execj < exec_commands; execj++) {\r\n              writeCSV(csv, execCB, execCB_name, execCB_time, cb_i, exec"
+  " execj = 1; execj < exec_commands; execj++) {\r\n              writeCSV(csv, execCB, execCB_name, cb_i, execCB_time, exec"
   "j);\r\n            }\r\n          }\r\n          offset += remaining;\r\n        }\r\n        else\r\n        {\r\n      "
   "    writeCSV(csv, cb, cb_name, cb_i, cb_time, j);\r\n        }\r\n      }\r\n    }\r\n  }\r\n  fclose(csv);\r\n}\r\n\r\nv"
   "oid ShimVkTraceResources::addCommandInfo(VkCommandBuffer cb, const CommandInfo & info) {\r\n  aux.cbCommandInfo[cb].vec.p"
