@@ -184,7 +184,7 @@ VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
 
   VkResult r = vkCreateInstance(pCreateInfo, pAllocator, pInstance);
   assert(r == VK_SUCCESS);
-  AddResourceName((uint64_t)*pInstance, "VkInstance", handleName);
+  AddResourceName(ResourceNames, (uint64_t)*pInstance, "VkInstance", handleName);
   aux.instance = *pInstance;
   return r;
 }
@@ -195,7 +195,7 @@ VkResult shim_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCrea
 {
   VkResult r = vkCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice);
   assert(r == VK_SUCCESS);
-  AddResourceName((uint64_t)*pDevice, "VkDevice", handleName);
+  AddResourceName(ResourceNames, (uint64_t)*pDevice, "VkDevice", handleName);
   InitializeAuxResources(&aux, aux.instance, physicalDevice, *pDevice);
   return r;
 }

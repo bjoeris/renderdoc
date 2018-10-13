@@ -45,7 +45,7 @@ std::string getStageStr(VkShaderStageFlagBits stage)
 void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage, const char *disassembly, size_t size)
 {
   std::stringstream ss;
-  ss << GetResourceName(VkHandle((uint64_t)p, "VkPipeline")) << "_VK_SHADER_STAGE_"
+  ss << GetResourceName(ResourceNames, VkHandle((uint64_t)p, "VkPipeline")) << "_VK_SHADER_STAGE_"
      << getStageStr(stage) << "_disassembly.txt";
   std::string filename;
   ss >> filename;
@@ -60,7 +60,7 @@ void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage, const char *disa
 void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage, VkShaderStatisticsInfoAMD &statistics)
 {
   std::stringstream ss;
-  ss << GetResourceName(VkHandle((uint64_t)p, "VkPipeline")) << "_VK_SHADER_STAGE_"
+  ss << GetResourceName(ResourceNames, VkHandle((uint64_t)p, "VkPipeline")) << "_VK_SHADER_STAGE_"
      << getStageStr(stage) << "_statistics.txt";
   std::string filename;
   ss >> filename;

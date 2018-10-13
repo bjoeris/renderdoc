@@ -74,6 +74,11 @@ struct VkHandle
   }
 };
 
+typedef std::map<VkHandle, std::string> ResourceNamesMap;
+
+void AddResourceName(ResourceNamesMap& map, uint64_t handle, const char *type, const char *name);
+const char *GetResourceName(ResourceNamesMap& map, VkHandle handle);
+
 struct AuxVkTraceResources
 {
   VkInstance instance;

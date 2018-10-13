@@ -78,7 +78,7 @@ VkResult shim_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCrea
     };
     r = vkCreateDevice(physicalDevice, &newCI, pAllocator, pDevice);
     assert(r == VK_SUCCESS);
-    AddResourceName((uint64_t)*pDevice, "VkDevice", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pDevice, "VkDevice", handleName);
     InitializeAuxResources(&aux, aux.instance, physicalDevice, *pDevice);
   }
   else
@@ -97,7 +97,7 @@ VkResult shim_vkCreateComputePipelines(VkDevice device, VkPipelineCache pipeline
   static PFN_vkCreateComputePipelines fn = vkCreateComputePipelines;
   VkResult r = fn(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pPipelines, "VkPipeline", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pPipelines, "VkPipeline", handleName);
   if(r != VK_SUCCESS || !extAvailable)
     return r;
 
@@ -145,7 +145,7 @@ VkResult shim_vkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelin
   static PFN_vkCreateGraphicsPipelines fn = vkCreateGraphicsPipelines;
   VkResult r = fn(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pPipelines, "VkPipeline", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pPipelines, "VkPipeline", handleName);
   if(r != VK_SUCCESS || !extAvailable)
     return r;
 

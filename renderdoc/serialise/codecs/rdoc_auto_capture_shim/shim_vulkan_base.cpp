@@ -29,38 +29,7 @@
 #include "shim_vulkan.h"
 
 AuxVkTraceResources aux;
-std::map<VkHandle, std::string> ResourceNames;
-
-void AddResourceName(uint64_t handle, const char *type, const char *name)
-{
-  VkHandle h = VkHandle(handle, type);
-  if(ResourceNames.find(h) != ResourceNames.end())
-  {
-    // Vulkan objects of a non-dispatchable type may have the same handle value,
-    // Concatenate the names in this case.
-    std::string newName = ResourceNames[h] + "_" + std::string(name);
-    ResourceNames[h] = newName;
-  }
-  else
-  {
-    ResourceNames[h] = std::string(name);
-  }
-}
-
-const char *GetResourceName(VkHandle handle)
-{
-  if(ResourceNames.find(handle) == ResourceNames.end())
-  {
-#if defined(DEBUG) || defined(_DEBUG)
-    assert(0);
-#else
-    fprintf(stdout, "Cannot get resource name with type %s and value %" PRIu64, handle.type.c_str(),
-            handle.handle);
-    exit(1);
-#endif
-  }
-  return ResourceNames[handle].c_str();
-}
+ResourceNamesMap ResourceNames;
 
 void shim_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator)
 {
@@ -214,7 +183,7 @@ VkResult shim_vkAllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAll
   static PFN_vkAllocateMemory fn = vkAllocateMemory;
   VkResult r = fn(device, pAllocateInfo, pAllocator, pMemory);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pMemory, "VkDeviceMemory", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pMemory, "VkDeviceMemory", handleName);
   return r;
 }
 
@@ -331,7 +300,7 @@ VkResult shim_vkCreateFence(VkDevice device, const VkFenceCreateInfo *pCreateInf
   static PFN_vkCreateFence fn = vkCreateFence;
   VkResult r = fn(device, pCreateInfo, pAllocator, pFence);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pFence, "VkFence", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pFence, "VkFence", handleName);
   return r;
 }
 
@@ -371,7 +340,7 @@ VkResult shim_vkCreateSemaphore(VkDevice device, const VkSemaphoreCreateInfo *pC
   static PFN_vkCreateSemaphore fn = vkCreateSemaphore;
   VkResult r = fn(device, pCreateInfo, pAllocator, pSemaphore);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pSemaphore, "VkSemaphore", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pSemaphore, "VkSemaphore", handleName);
   return r;
 }
 
@@ -390,7 +359,7 @@ VkResult shim_vkCreateEvent(VkDevice device, const VkEventCreateInfo *pCreateInf
   static PFN_vkCreateEvent fn = vkCreateEvent;
   VkResult r = fn(device, pCreateInfo, pAllocator, pEvent);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pEvent, "VkEvent", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pEvent, "VkEvent", handleName);
   return r;
 }
 
@@ -429,7 +398,7 @@ VkResult shim_vkCreateQueryPool(VkDevice device, const VkQueryPoolCreateInfo *pC
   static PFN_vkCreateQueryPool fn = vkCreateQueryPool;
   VkResult r = fn(device, pCreateInfo, pAllocator, pQueryPool);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pQueryPool, "VkQueryPool", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pQueryPool, "VkQueryPool", handleName);
   return r;
 }
 
@@ -457,7 +426,7 @@ VkResult shim_vkCreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateI
   static PFN_vkCreateBuffer fn = vkCreateBuffer;
   VkResult r = fn(device, pCreateInfo, pAllocator, pBuffer);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pBuffer, "VkBuffer", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pBuffer, "VkBuffer", handleName);
   return r;
 }
 
@@ -475,7 +444,7 @@ VkResult shim_vkCreateBufferView(VkDevice device, const VkBufferViewCreateInfo *
   static PFN_vkCreateBufferView fn = vkCreateBufferView;
   VkResult r = fn(device, pCreateInfo, pAllocator, pView);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pView, "VkBufferView", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pView, "VkBufferView", handleName);
   return r;
 }
 
@@ -494,7 +463,7 @@ VkResult shim_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInf
   static PFN_vkCreateImage fn = vkCreateImage;
   VkResult r = fn(device, pCreateInfo, pAllocator, pImage);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pImage, "VkImage", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pImage, "VkImage", handleName);
   return r;
 }
 
@@ -521,7 +490,7 @@ VkResult shim_vkCreateImageView(VkDevice device, const VkImageViewCreateInfo *pC
   static PFN_vkCreateImageView fn = vkCreateImageView;
   VkResult r = fn(device, pCreateInfo, pAllocator, pView);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pView, "VkImageView", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pView, "VkImageView", handleName);
   return r;
 }
 
@@ -540,7 +509,7 @@ VkResult shim_vkCreateShaderModule(VkDevice device, const VkShaderModuleCreateIn
   static PFN_vkCreateShaderModule fn = vkCreateShaderModule;
   VkResult r = fn(device, pCreateInfo, pAllocator, pShaderModule);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pShaderModule, "VkShaderModule", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pShaderModule, "VkShaderModule", handleName);
   return r;
 }
 
@@ -559,7 +528,7 @@ VkResult shim_vkCreatePipelineCache(VkDevice device, const VkPipelineCacheCreate
   static PFN_vkCreatePipelineCache fn = vkCreatePipelineCache;
   VkResult r = fn(device, pCreateInfo, pAllocator, pPipelineCache);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pPipelineCache, "VkPipelineCache", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pPipelineCache, "VkPipelineCache", handleName);
   return r;
 }
 
@@ -596,7 +565,7 @@ VkResult shim_vkCreateGraphicsPipelines(VkDevice device, VkPipelineCache pipelin
   static PFN_vkCreateGraphicsPipelines fn = vkCreateGraphicsPipelines;
   VkResult r = fn(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pPipelines, "VkPipeline", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pPipelines, "VkPipeline", handleName);
   return r;
 }
 
@@ -609,7 +578,7 @@ VkResult shim_vkCreateComputePipelines(VkDevice device, VkPipelineCache pipeline
   static PFN_vkCreateComputePipelines fn = vkCreateComputePipelines;
   VkResult r = fn(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pPipelines, "VkPipeline", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pPipelines, "VkPipeline", handleName);
   return r;
 }
 
@@ -628,7 +597,7 @@ VkResult shim_vkCreatePipelineLayout(VkDevice device, const VkPipelineLayoutCrea
   static PFN_vkCreatePipelineLayout fn = vkCreatePipelineLayout;
   VkResult r = fn(device, pCreateInfo, pAllocator, pPipelineLayout);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pPipelineLayout, "VkPipelineLayout", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pPipelineLayout, "VkPipelineLayout", handleName);
   return r;
 }
 
@@ -647,7 +616,7 @@ VkResult shim_vkCreateSampler(VkDevice device, const VkSamplerCreateInfo *pCreat
   static PFN_vkCreateSampler fn = vkCreateSampler;
   VkResult r = fn(device, pCreateInfo, pAllocator, pSampler);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pSampler, "VkSampler", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pSampler, "VkSampler", handleName);
   return r;
 }
 
@@ -666,7 +635,7 @@ VkResult shim_vkCreateDescriptorSetLayout(VkDevice device,
   static PFN_vkCreateDescriptorSetLayout fn = vkCreateDescriptorSetLayout;
   VkResult r = fn(device, pCreateInfo, pAllocator, pSetLayout);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pSetLayout, "VkDescriptorSetLayout", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pSetLayout, "VkDescriptorSetLayout", handleName);
   return r;
 }
 
@@ -685,7 +654,7 @@ VkResult shim_vkCreateDescriptorPool(VkDevice device, const VkDescriptorPoolCrea
   static PFN_vkCreateDescriptorPool fn = vkCreateDescriptorPool;
   VkResult r = fn(device, pCreateInfo, pAllocator, pDescriptorPool);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pDescriptorPool, "VkDescriptorPool", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pDescriptorPool, "VkDescriptorPool", handleName);
   return r;
 }
 
@@ -712,7 +681,7 @@ VkResult shim_vkAllocateDescriptorSets(VkDevice device,
   static PFN_vkAllocateDescriptorSets fn = vkAllocateDescriptorSets;
   VkResult r = fn(device, pAllocateInfo, pDescriptorSets);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pDescriptorSets, "VkDescriptorSet", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pDescriptorSets, "VkDescriptorSet", handleName);
   return r;
 }
 
@@ -742,7 +711,7 @@ VkResult shim_vkCreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo
   static PFN_vkCreateFramebuffer fn = vkCreateFramebuffer;
   VkResult r = fn(device, pCreateInfo, pAllocator, pFramebuffer);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pFramebuffer, "VkFramebuffer", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pFramebuffer, "VkFramebuffer", handleName);
   return r;
 }
 
@@ -761,7 +730,7 @@ VkResult shim_vkCreateRenderPass(VkDevice device, const VkRenderPassCreateInfo *
   static PFN_vkCreateRenderPass fn = vkCreateRenderPass;
   VkResult r = fn(device, pCreateInfo, pAllocator, pRenderPass);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pRenderPass, "VkRenderPass", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pRenderPass, "VkRenderPass", handleName);
   return r;
 }
 
@@ -788,7 +757,7 @@ VkResult shim_vkCreateCommandPool(VkDevice device, const VkCommandPoolCreateInfo
   static PFN_vkCreateCommandPool fn = vkCreateCommandPool;
   VkResult r = fn(device, pCreateInfo, pAllocator, pCommandPool);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pCommandPool, "VkCommandPool", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pCommandPool, "VkCommandPool", handleName);
   return r;
 }
 
@@ -815,7 +784,7 @@ VkResult shim_vkAllocateCommandBuffers(VkDevice device,
   static PFN_vkAllocateCommandBuffers fn = vkAllocateCommandBuffers;
   VkResult r = fn(device, pAllocateInfo, pCommandBuffers);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pCommandBuffers, "VkCommandBuffer", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pCommandBuffers, "VkCommandBuffer", handleName);
   return r;
 }
 
@@ -1279,7 +1248,7 @@ VkResult shim_vkCreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayK
       (PFN_vkCreateDisplayModeKHR)vkGetInstanceProcAddr(aux.instance, "vkCreateDisplayModeKHR");
   VkResult r = fn(physicalDevice, display, pCreateInfo, pAllocator, pMode);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pMode, "VkDisplayModeKHR", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pMode, "VkDisplayModeKHR", handleName);
   return r;
 }
 
@@ -1304,7 +1273,7 @@ VkResult shim_vkCreateDisplayPlaneSurfaceKHR(VkInstance instance,
                                                                 "vkCreateDisplayPlaneSurfaceKHR");
   VkResult r = fn(instance, pCreateInfo, pAllocator, pSurface);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pSurface, "VkSurfaceKHR", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pSurface, "VkSurfaceKHR", handleName);
   return r;
 }
 
@@ -1317,7 +1286,7 @@ VkResult shim_vkCreateSharedSwapchainsKHR(VkDevice device, uint32_t swapchainCou
       (PFN_vkCreateSharedSwapchainsKHR)vkGetDeviceProcAddr(device, "vkCreateSharedSwapchainsKHR");
   VkResult r = fn(device, swapchainCount, pCreateInfos, pAllocator, pSwapchains);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pSwapchains, "VkSwapchainKHR", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pSwapchains, "VkSwapchainKHR", handleName);
   return r;
 }
 
@@ -1396,11 +1365,17 @@ void shim_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapchain,
 }
 
 VkResult shim_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
-                                      uint32_t *pSwapchainImageCount, VkImage *pSwapchainImages)
-{
+  uint32_t *pSwapchainImageCount, VkImage *pSwapchainImages,
+  const char *handleName) {
   static PFN_vkGetSwapchainImagesKHR fn =
-      (PFN_vkGetSwapchainImagesKHR)vkGetDeviceProcAddr(device, "vkGetSwapchainImagesKHR");
+    (PFN_vkGetSwapchainImagesKHR) vkGetDeviceProcAddr(device, "vkGetSwapchainImagesKHR");
   VkResult r = fn(device, swapchain, pSwapchainImageCount, pSwapchainImages);
+  if (r == VK_SUCCESS && pSwapchainImages != NULL && handleName != NULL) {
+    for (uint32_t i = 0; i < pSwapchainImageCount[0]; i++) {
+      std::string fullName = std::string(handleName).append("[").append(std::to_string(i)).append("]");
+      AddResourceName(ResourceNames, (uint64_t) pSwapchainImages[i], "VkImage", fullName.c_str());
+    }
+  }
   return r;
 }
 
@@ -1424,7 +1399,7 @@ VkResult shim_vkCreateDebugReportCallbackEXT(VkInstance instance,
                                                                 "vkCreateDebugReportCallbackEXT");
   VkResult r = fn(instance, pCreateInfo, pAllocator, pCallback);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pCallback, "VkDebugReportCallbackEXT", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pCallback, "VkDebugReportCallbackEXT", handleName);
   return r;
 }
 
@@ -1560,7 +1535,7 @@ VkResult shim_vkCreateIndirectCommandsLayoutNVX(
           device, "vkCreateIndirectCommandsLayoutNVX");
   VkResult r = fn(device, pCreateInfo, pAllocator, pIndirectCommandsLayout);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pIndirectCommandsLayout, "VkIndirectCommandsLayoutNVX", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pIndirectCommandsLayout, "VkIndirectCommandsLayoutNVX", handleName);
   return r;
 }
 
@@ -1583,7 +1558,7 @@ VkResult shim_vkCreateObjectTableNVX(VkDevice device, const VkObjectTableCreateI
       (PFN_vkCreateObjectTableNVX)vkGetDeviceProcAddr(device, "vkCreateObjectTableNVX");
   VkResult r = fn(device, pCreateInfo, pAllocator, pObjectTable);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pObjectTable, "VkObjectTableNVX", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pObjectTable, "VkObjectTableNVX", handleName);
   return r;
 }
 
@@ -2145,7 +2120,7 @@ VkResult shim_vkCreateDescriptorUpdateTemplate(VkDevice device,
                                                                 "vkCreateDescriptorUpdateTemplate");
   VkResult r = fn(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pDescriptorUpdateTemplate, "VkDescriptorUpdateTemplate", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pDescriptorUpdateTemplate, "VkDescriptorUpdateTemplate", handleName);
   return r;
 }
 
@@ -2159,7 +2134,7 @@ VkResult shim_vkCreateDescriptorUpdateTemplateKHR(
           device, "vkCreateDescriptorUpdateTemplateKHR");
   VkResult r = fn(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pDescriptorUpdateTemplate, "VkDescriptorUpdateTemplate", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pDescriptorUpdateTemplate, "VkDescriptorUpdateTemplate", handleName);
   return r;
 }
 
@@ -2377,7 +2352,7 @@ VkResult shim_vkCreateSamplerYcbcrConversion(VkDevice device,
                                                               "vkCreateSamplerYcbcrConversion");
   VkResult r = fn(device, pCreateInfo, pAllocator, pYcbcrConversion);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion", handleName);
   return r;
 }
 
@@ -2392,7 +2367,7 @@ VkResult shim_vkCreateSamplerYcbcrConversionKHR(VkDevice device,
           device, "vkCreateSamplerYcbcrConversionKHR");
   VkResult r = fn(device, pCreateInfo, pAllocator, pYcbcrConversion);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion", handleName);
   return r;
 }
 
@@ -2434,7 +2409,7 @@ VkResult shim_vkCreateValidationCacheEXT(VkDevice device,
       (PFN_vkCreateValidationCacheEXT)vkGetDeviceProcAddr(device, "vkCreateValidationCacheEXT");
   VkResult r = fn(device, pCreateInfo, pAllocator, pValidationCache);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pValidationCache, "VkValidationCacheEXT", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pValidationCache, "VkValidationCacheEXT", handleName);
   return r;
 }
 
@@ -2583,7 +2558,7 @@ VkResult shim_vkCreateDebugUtilsMessengerEXT(VkInstance instance,
                                                                 "vkCreateDebugUtilsMessengerEXT");
   VkResult r = fn(instance, pCreateInfo, pAllocator, pMessenger);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pMessenger, "VkDebugUtilsMessengerEXT", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pMessenger, "VkDebugUtilsMessengerEXT", handleName);
   return r;
 }
 

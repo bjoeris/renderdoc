@@ -1157,14 +1157,18 @@ void CodeWriter::GetSwapchainImagesKHR(ExtObject *o, uint32_t pass)
   // Do this only once: populate the PresentImages vector with swapchain images.
   if(count == 0)
   {
+    std::string resource_name_str;
+    if (*shimPrefix)
+      resource_name_str.append(", \"").append(tracker->PresentImagesStr()).append("\"");
+
     files[pass]
         ->PrintLn("{")
-        .PrintLn("VkResult result = %s(%s, %s, &%s, NULL);", o->Name(), device_name, swapchain_name,
-                 tracker->SwapchainCountStr())
+        .PrintLn("VkResult result = %s(%s, %s, &%s, NULL%s);", o->Name(), device_name, swapchain_name,
+                 tracker->SwapchainCountStr(), resource_name_str.c_str())
         .PrintLn("assert(result == VK_SUCCESS);")
         .PrintLn("%s.resize(%s);", tracker->PresentImagesStr(), tracker->SwapchainCountStr())
-        .PrintLn("result = %s(%s, %s, &%s, %s.data());", o->Name(), device_name, swapchain_name,
-                 tracker->SwapchainCountStr(), tracker->PresentImagesStr())
+        .PrintLn("result = %s(%s, %s, &%s, %s.data()%s);", o->Name(), device_name, swapchain_name,
+                 tracker->SwapchainCountStr(), tracker->PresentImagesStr(), resource_name_str.c_str())
         .PrintLn("assert(result == VK_SUCCESS);");
     files[pass]->PrintLn("}");
   }
@@ -1172,13 +1176,9 @@ void CodeWriter::GetSwapchainImagesKHR(ExtObject *o, uint32_t pass)
   // For every image that RenderDoc creates, associate it to a PresentImages[Index];
   const char *image_name = tracker->GetResourceVar(image->Type(), image->U64());
   files[pass]
-      ->PrintLn("if (%s > %u)", tracker->SwapchainCountStr(), swapchain_idx)
-      .PrintLn("{")
-      .PrintLn("%s = %s[%u];", image_name, tracker->PresentImagesStr(), swapchain_idx);
-  if(*shimPrefix)
-    files[pass]->PrintLn("AddResourceName((uint64_t)%s, \"%s\", \"%s\");", image_name,
-                         image->Type(), image_name);
-  files[pass]->PrintLn("}");
+      ->PrintLn("if (%s > %u) {", tracker->SwapchainCountStr(), swapchain_idx)
+      .PrintLn("%s = %s[%u];", image_name, tracker->PresentImagesStr(), swapchain_idx)
+      .PrintLn("}");
 
   count++;
 }

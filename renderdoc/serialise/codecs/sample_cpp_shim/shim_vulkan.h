@@ -41,10 +41,9 @@
 #include "vulkan/vulkan.h"
 
 extern AuxVkTraceResources aux;
+extern ResourceNamesMap ResourceNames;
 
 SHIM_VK_API bool ShimShouldQuitNow();
-SHIM_VK_API void AddResourceName(uint64_t handle, const char *type, const char *name);
-SHIM_VK_API const char *GetResourceName(VkHandle handle);
 
 SHIM_VK_API VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                            const VkAllocationCallbacks *pAllocator,
@@ -608,7 +607,9 @@ SHIM_VK_API void shim_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swap
 
 SHIM_VK_API VkResult shim_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
                                                   uint32_t *pSwapchainImageCount,
-                                                  VkImage *pSwapchainImages);
+                                                  VkImage *pSwapchainImages,
+                                                  const char *handleName);
+
 
 SHIM_VK_API VkResult shim_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
                                                 uint64_t timeout, VkSemaphore semaphore,

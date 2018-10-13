@@ -172,7 +172,7 @@ VkResult shim_vkBeginCommandBuffer(VkCommandBuffer commandBuffer,
     aux.addCommandInfo(
         commandBuffer,
         CommandInfo(__FUNCTION__,
-                    GetResourceName(VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")), 1));
+                    GetResourceName(ResourceNames, VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")), 1));
     return r;
   }
   else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
@@ -227,7 +227,7 @@ VkResult shim_vkEndCommandBuffer(VkCommandBuffer commandBuffer)
     aux.addCommandInfo(
         commandBuffer,
         CommandInfo(__FUNCTION__,
-                    GetResourceName(VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")), 1));
+                    GetResourceName(ResourceNames, VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")), 1));
     VkResult r = fn(commandBuffer);
     return r;
   }
@@ -360,8 +360,8 @@ void shim_vkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint p
   {
     fn(commandBuffer, pipelineBindPoint, pipeline);
     std::string infoStr =
-        "bind " + std::string(GetResourceName(VkHandle((uint64_t)pipeline, "VkPipeline"))) +
-        " to " + std::string(GetResourceName(VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")));
+        "bind " + std::string(GetResourceName(ResourceNames, VkHandle((uint64_t)pipeline, "VkPipeline"))) +
+        " to " + std::string(GetResourceName(ResourceNames, VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")));
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
     return;
   }
@@ -1333,7 +1333,7 @@ void shim_vkCmdBeginRenderPass(VkCommandBuffer commandBuffer,
   {
     fn(commandBuffer, pRenderPassBegin, contents);
     std::string infoStr =
-        GetResourceName(VkHandle((uint64_t)pRenderPassBegin->renderPass, "VkRenderPass"));
+        GetResourceName(ResourceNames, VkHandle((uint64_t)pRenderPassBegin->renderPass, "VkRenderPass"));
     infoStr +=
         isInline ? ": Subpass with INLINE contents" : ": Subpass with SECONDARY command buffers";
     uint32_t ts = isInline ? 2 : 1;

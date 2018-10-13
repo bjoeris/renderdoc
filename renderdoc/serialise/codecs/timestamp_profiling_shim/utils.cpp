@@ -330,7 +330,7 @@ void ShimVkTraceResources::writeAllCSV(const char *name)
     for(uint32_t cb_i = 0; cb_i < order.size(); cb_i++)
     {
       VkCommandBuffer cb = order[cb_i].cb;
-      const char * cb_name = "";// GetResourceName(VkHandle((uint64_t) cb, "VkCommandBuffer"));
+      const char * cb_name = "";// GetResourceName(ResourceNames, VkHandle((uint64_t) cb, "VkCommandBuffer"));
       float cb_time = commandTime(cb, 0); // time for command buffer total execution.
       uint32_t commands = timestampReportCommandCount(cb);
       for(uint32_t j = 1; j < commands; j++) // skips vkBeginCommandBuffer
@@ -343,7 +343,7 @@ void ShimVkTraceResources::writeAllCSV(const char *name)
           for(uint32_t r = 0; r < remaining; r++)
           {
             VkCommandBuffer execCB = cbExecCmdBufs[cb][offset + r].cb;
-            const char * execCB_name = "";// GetResourceName(VkHandle((uint64_t) cb, "VkCommandBuffer"));
+            const char * execCB_name = "";// GetResourceName(ResourceNames, VkHandle((uint64_t) cb, "VkCommandBuffer"));
             float execCB_time = commandTime(execCB, 0); // time for command buffer total execution.
             uint32_t exec_commands = timestampReportCommandCount(execCB);
             for (uint32_t execj = 1; execj < exec_commands; execj++) {

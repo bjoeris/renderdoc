@@ -61,7 +61,7 @@ VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
 {
   VkResult r = vkCreateInstance(pCreateInfo, pAllocator, pInstance);
   assert(r == VK_SUCCESS);
-  AddResourceName((uint64_t)*pInstance, "VkInstance", handleName);
+  AddResourceName(ResourceNames, (uint64_t)*pInstance, "VkInstance", handleName);
   aux.instance = *pInstance;
   captureFrame = GetEnvInt(RDOC_ENV_VAR, kDefaultCaptureFrame);
   // if captureFrame is '0', first frame needs to save images.
@@ -88,7 +88,7 @@ VkResult shim_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInf
   static PFN_vkCreateImage fn = vkCreateImage;
   VkResult r = fn(device, pCreateInfo, pAllocator, pImage);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pImage, "VkImage", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pImage, "VkImage", handleName);
   imagesMap[*pImage] = *pCreateInfo;
   return r;
 }
@@ -100,7 +100,7 @@ VkResult shim_vkCreateImageView(VkDevice device, const VkImageViewCreateInfo *pC
   static PFN_vkCreateImageView fn = vkCreateImageView;
   VkResult r = fn(device, pCreateInfo, pAllocator, pView);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pView, "VkImageView", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pView, "VkImageView", handleName);
   ImageAndView iav(pCreateInfo->image, imagesMap[pCreateInfo->image], *pView, *pCreateInfo);
   imageAndViewMap[*pView] = iav;
   return r;
@@ -113,7 +113,7 @@ VkResult shim_vkCreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo
   static PFN_vkCreateFramebuffer fn = vkCreateFramebuffer;
   VkResult r = fn(device, pCreateInfo, pAllocator, pFramebuffer);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pFramebuffer, "VkFramebuffer", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pFramebuffer, "VkFramebuffer", handleName);
   std::vector<VkImageView> attachments(pCreateInfo->pAttachments,
                                        pCreateInfo->pAttachments + pCreateInfo->attachmentCount);
   framebufferAttachements[*pFramebuffer] = attachments;
@@ -137,7 +137,7 @@ VkResult shim_vkCreateRenderPass(VkDevice device, const VkRenderPassCreateInfo *
 
   VkResult r = fn(device, pCreateInfo, pAllocator, pRenderPass);
   if(r == VK_SUCCESS)
-    AddResourceName((uint64_t)*pRenderPass, "VkRenderPass", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pRenderPass, "VkRenderPass", handleName);
   RenderPassInfo rpInfo = {*pRenderPass};
   rpInfo.finalLayouts.resize(CreateInfo->attachmentCount);
   for(uint32_t i = 0; i < CreateInfo->attachmentCount; i++)
@@ -220,7 +220,7 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
           filename = "/var/game/";
 #endif
           filename += std::to_string(renderPassCount) + "_attachment_" + std::to_string(info.index) +
-                      "_" + GetResourceName(VkHandle((uint64_t)info.srcImage, "VkImage")) + "_" +
+                      "_" + GetResourceName(ResourceNames, VkHandle((uint64_t)info.srcImage, "VkImage")) + "_" +
                       FormatToString(info.format) + "_" + std::to_string(info.width) + "x" +
                       std::to_string(info.height) + ".ppm";
           bufferToPpm(info.buffer, info.bufferDeviceMem, filename, info.width, info.height,
@@ -264,7 +264,8 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
 }
 
 VkResult shim_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
-                                      uint32_t *pSwapchainImageCount, VkImage *pSwapchainImages)
+                                      uint32_t *pSwapchainImageCount, VkImage *pSwapchainImages,
+                                      const char *handleName)
 {
   static PFN_vkGetSwapchainImagesKHR fn =
       (PFN_vkGetSwapchainImagesKHR)vkGetDeviceProcAddr(device, "vkGetSwapchainImagesKHR");
@@ -293,6 +294,15 @@ VkResult shim_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
     }
     swapchainImageMap[swapchain] = swapchainImages;
   }
+
+  if (r == VK_SUCCESS && pSwapchainImages != NULL && handleName != NULL)
+  {
+    for (uint32_t i = 0; i < pSwapchainImageCount[0]; i++) {
+      std::string fullName = std::string(handleName).append("[").append(std::to_string(i)).append("]");
+      AddResourceName(ResourceNames, (uint64_t) pSwapchainImages[i], "VkImage", fullName.c_str());
+    }
+  }
+
   return r;
 }
 

@@ -779,3 +779,28 @@ FILE *OpenFile(char const *fileName, char const *mode)
 #endif
   return fp;
 }
+
+void AddResourceName(ResourceNamesMap& map, uint64_t handle, const char *type, const char *name) {
+  VkHandle h = VkHandle(handle, type);
+  if (map.find(h) != map.end()) {
+    // Vulkan objects of a non-dispatchable type may have the same handle value,
+    // Concatenate the names in this case.
+    std::string newName = map[h] + "_" + std::string(name);
+    map[h] = newName;
+  } else {
+    map[h] = std::string(name);
+  }
+}
+
+const char *GetResourceName(ResourceNamesMap& map, VkHandle handle) {
+  if (map.find(handle) == map.end()) {
+#if defined(DEBUG) || defined(_DEBUG)
+    assert(0);
+#else
+    fprintf(stdout, "Cannot get resource name with type %s and value %" PRIu64, handle.type.c_str(),
+      handle.handle);
+    exit(1);
+#endif
+  }
+  return map[handle].c_str();
+}
