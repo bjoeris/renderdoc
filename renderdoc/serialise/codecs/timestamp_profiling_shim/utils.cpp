@@ -135,7 +135,10 @@ double ShimVkTraceResources::accumTimestamps(VkCommandBuffer cb, const std::vect
   }
 
   int64_t signedTS = (data.back() & context.mask) - (data.front() & context.mask);
-  signedTS = signedTS < 0 ? -signedTS : signedTS;
+  if (signedTS < 0) {
+    fprintf(stderr, "timestamp for command buffer is negative %d", signedTS);
+    signedTS = abs(signedTS);
+  }
   double elapsedTimeNsec = double(signedTS * context.period);
   uint32_t accum = frameID % 2;
   cbAccumTimestamps[cb].front()[accum] +=
@@ -149,7 +152,10 @@ double ShimVkTraceResources::accumTimestamps(VkCommandBuffer cb, const std::vect
     uint32_t tsCount = cbVec[i].timestamps;
     if (tsCount == 2) {
       signedTS = (data[j + 1] & context.mask) - (data[j] & context.mask);
-      signedTS = signedTS < 0 ? -signedTS : signedTS;
+      if (signedTS < 0) {
+        fprintf(stderr, "timestamp for command %u is negative %d", i, signedTS);
+        signedTS = abs(signedTS);
+      }
       double elapsedTimeNsec = double(signedTS * context.period);
       cbAccumTimestamps[cb][i][accum] += elapsedTimeNsec;
     } else if (tsCount == 1) {
@@ -208,9 +214,13 @@ void ShimVkTraceResources::fetchPipelineStats(uint64_t frameID) {
     for (VkCommandBuffer cbi : todo) {
       uint32_t offset = 0;
       uint32_t count = pipelinestatsQueryCount(cbi);
+      VkQueryPool pool = pipelinestatsQueryPool(cbi);
+      if (pool == VK_NULL_HANDLE)
+        continue;
+
       std::vector<uint64_t> ps_data(pipelinestatsQueryUnitsCount(cbi));
       VkResult pollResult = vkGetQueryPoolResults(
-        device, pipelinestatsQueryPool(cbi), offset, count,
+        device, pool, offset, count,
         sizeof(uint64_t) * ps_data.size(), ps_data.data(),
         sizeof(uint64_t) * cbPipelineStatsContext[cbi].stats,
         VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);

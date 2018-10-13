@@ -202,7 +202,9 @@ VkResult shim_vkBeginCommandBuffer(VkCommandBuffer commandBuffer,
       aux.resetPipelinestatsQueries(commandBuffer);
       uint32_t offset = aux.pipelinestatsQueryOffset(commandBuffer);
       uint32_t count = aux.pipelinestatsQueryCount(commandBuffer);
-      vkCmdResetQueryPool(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), offset, count);
+      VkQueryPool pool = aux.pipelinestatsQueryPool(commandBuffer);
+      if (pool != VK_NULL_HANDLE)
+        vkCmdResetQueryPool(commandBuffer, pool, offset, count);
     }
 
     // Before submitting the secondary command buffers, the primary
@@ -212,7 +214,9 @@ VkResult shim_vkBeginCommandBuffer(VkCommandBuffer commandBuffer,
       aux.resetPipelinestatsQueries(execCB);
       uint32_t offset = aux.pipelinestatsQueryOffset(execCB);
       uint32_t count = aux.pipelinestatsQueryCount(execCB);
-      vkCmdResetQueryPool(commandBuffer, aux.pipelinestatsQueryPool(execCB), offset, count);
+      VkQueryPool pool = aux.pipelinestatsQueryPool(execCB);
+      if (pool != VK_NULL_HANDLE)
+        vkCmdResetQueryPool(commandBuffer, pool, offset, count);
     }
 
   }
