@@ -24,6 +24,7 @@
 #include "utils.h"
 #include "helper/helper.h"
 #include "shim_vulkan.h"
+#include <inttypes.h>
 
 uint32_t ShimVkTraceResources::timestampCollectCommandCount(VkCommandBuffer cb)
 {
@@ -136,8 +137,8 @@ double ShimVkTraceResources::accumTimestamps(VkCommandBuffer cb, const std::vect
 
   int64_t signedTS = (data.back() & context.mask) - (data.front() & context.mask);
   if (signedTS < 0) {
-    fprintf(stderr, "timestamp for command buffer is negative %d", signedTS);
-    signedTS = abs(signedTS);
+    fprintf(stderr, "timestamp for command buffer is negative %" PRId64 "\n", signedTS);
+    signedTS = std::abs(signedTS);
   }
   double elapsedTimeNsec = double(signedTS * context.period);
   uint32_t accum = frameID % 2;
@@ -153,8 +154,8 @@ double ShimVkTraceResources::accumTimestamps(VkCommandBuffer cb, const std::vect
     if (tsCount == 2) {
       signedTS = (data[j + 1] & context.mask) - (data[j] & context.mask);
       if (signedTS < 0) {
-        fprintf(stderr, "timestamp for command %u is negative %d", i, signedTS);
-        signedTS = abs(signedTS);
+        fprintf(stderr, "timestamp for command %u is negative %" PRId64 "\n", i, signedTS);
+        signedTS = std::abs(signedTS);
       }
       double elapsedTimeNsec = double(signedTS * context.period);
       cbAccumTimestamps[cb][i][accum] += elapsedTimeNsec;
