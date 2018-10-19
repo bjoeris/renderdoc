@@ -1158,13 +1158,13 @@ void CodeWriter::GetSwapchainImagesKHR(ExtObject *o, uint32_t pass)
   if(count == 0)
   {
     std::string resource_name_str;
-    if (*shimPrefix)
+    if(*shimPrefix)
       resource_name_str.append(", \"").append(tracker->PresentImagesStr()).append("\"");
 
     files[pass]
         ->PrintLn("{")
-        .PrintLn("VkResult result = %s(%s, %s, &%s, NULL%s);", o->Name(), device_name, swapchain_name,
-                 tracker->SwapchainCountStr(), resource_name_str.c_str())
+        .PrintLn("VkResult result = %s(%s, %s, &%s, NULL%s);", o->Name(), device_name,
+                 swapchain_name, tracker->SwapchainCountStr(), resource_name_str.c_str())
         .PrintLn("assert(result == VK_SUCCESS);")
         .PrintLn("%s.resize(%s);", tracker->PresentImagesStr(), tracker->SwapchainCountStr())
         .PrintLn("result = %s(%s, %s, &%s, %s.data()%s);", o->Name(), device_name, swapchain_name,
@@ -1334,7 +1334,7 @@ void CodeWriter::ClearBufferData()
 {
   for(VariableIDMapIter i = tracker->DataBlobBegin(); i != tracker->DataBlobEnd(); i++)
   {
-    files[ID_RELEASE]->PrintLn("%s.clear()", i->second.name.c_str());
+    files[ID_RELEASE]->PrintLn("%s.clear();", i->second.name.c_str());
   }
 }
 
@@ -2544,5 +2544,14 @@ void CodeWriter::DebugMarkerSetObjectNameEXT(ExtObject *o, uint32_t pass)
                "ObjectNI")
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("}");
+}
+
+void CodeWriter::ReleaseResources()
+{
+  ClearBufferData();
+  if(*shimPrefix)
+  {
+    files[ID_RELEASE]->PrintLn("ShimRelease();");
+  }
 }
 }    // namespace vk_cpp_codec

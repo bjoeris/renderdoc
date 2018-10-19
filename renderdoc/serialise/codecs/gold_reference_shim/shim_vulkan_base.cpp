@@ -31,6 +31,14 @@
 AuxVkTraceResources aux;
 ResourceNamesMap ResourceNames;
 
+void ShimRelease()
+{
+  PFN_vkDestroyDebugReportCallbackEXT fn = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
+      aux.instance, "vkDestroyDebugReportCallbackEXT");
+  if(fn && aux.callback != VK_NULL_HANDLE)
+    fn(aux.instance, aux.callback, NULL);
+}
+
 VkResult shim_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
                              const VkAllocationCallbacks *pAllocator, VkDevice *pDevice,
                              const char *handleName)
@@ -1445,7 +1453,8 @@ VkResult shim_vkCreateIndirectCommandsLayoutNVX(
           device, "vkCreateIndirectCommandsLayoutNVX");
   VkResult r = fn(device, pCreateInfo, pAllocator, pIndirectCommandsLayout);
   if(r == VK_SUCCESS)
-    AddResourceName(ResourceNames, (uint64_t)*pIndirectCommandsLayout, "VkIndirectCommandsLayoutNVX", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pIndirectCommandsLayout,
+                    "VkIndirectCommandsLayoutNVX", handleName);
   return r;
 }
 
@@ -2030,7 +2039,8 @@ VkResult shim_vkCreateDescriptorUpdateTemplate(VkDevice device,
                                                                 "vkCreateDescriptorUpdateTemplate");
   VkResult r = fn(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
   if(r == VK_SUCCESS)
-    AddResourceName(ResourceNames, (uint64_t)*pDescriptorUpdateTemplate, "VkDescriptorUpdateTemplate", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pDescriptorUpdateTemplate,
+                    "VkDescriptorUpdateTemplate", handleName);
   return r;
 }
 
@@ -2044,7 +2054,8 @@ VkResult shim_vkCreateDescriptorUpdateTemplateKHR(
           device, "vkCreateDescriptorUpdateTemplateKHR");
   VkResult r = fn(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
   if(r == VK_SUCCESS)
-    AddResourceName(ResourceNames, (uint64_t)*pDescriptorUpdateTemplate, "VkDescriptorUpdateTemplate", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pDescriptorUpdateTemplate,
+                    "VkDescriptorUpdateTemplate", handleName);
   return r;
 }
 
@@ -2262,7 +2273,8 @@ VkResult shim_vkCreateSamplerYcbcrConversion(VkDevice device,
                                                               "vkCreateSamplerYcbcrConversion");
   VkResult r = fn(device, pCreateInfo, pAllocator, pYcbcrConversion);
   if(r == VK_SUCCESS)
-    AddResourceName(ResourceNames, (uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion",
+                    handleName);
   return r;
 }
 
@@ -2277,7 +2289,8 @@ VkResult shim_vkCreateSamplerYcbcrConversionKHR(VkDevice device,
           device, "vkCreateSamplerYcbcrConversionKHR");
   VkResult r = fn(device, pCreateInfo, pAllocator, pYcbcrConversion);
   if(r == VK_SUCCESS)
-    AddResourceName(ResourceNames, (uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion",
+                    handleName);
   return r;
 }
 
