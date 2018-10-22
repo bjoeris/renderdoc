@@ -76,8 +76,8 @@ struct VkHandle
 
 typedef std::map<VkHandle, std::string> ResourceNamesMap;
 
-void AddResourceName(ResourceNamesMap& map, uint64_t handle, const char *type, const char *name);
-const char *GetResourceName(ResourceNamesMap& map, VkHandle handle);
+void AddResourceName(ResourceNamesMap &map, uint64_t handle, const char *type, const char *name);
+const char *GetResourceName(ResourceNamesMap &map, VkHandle handle);
 
 struct AuxVkTraceResources
 {
@@ -119,15 +119,20 @@ struct AuxVkTraceResources
     return bits;
   }
 
-  int32_t queueBits(VkQueue queue, bool & isGraphics, bool & isCompute, bool & isTransfer) {
-    for (uint32_t i = 0; i < queueFamilyProperties.size(); i++) {
-      for (uint32_t j = 0; j < queueFamilyProperties[i].queueCount; j++) {
+  int32_t queueBits(VkQueue queue, bool &isGraphics, bool &isCompute, bool &isTransfer)
+  {
+    for(uint32_t i = 0; i < queueFamilyProperties.size(); i++)
+    {
+      for(uint32_t j = 0; j < queueFamilyProperties[i].queueCount; j++)
+      {
         VkQueue q = NULL;
         vkGetDeviceQueue(device, i, j, &q);
-        if (q == queue) {
+        if(q == queue)
+        {
           isGraphics = queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT;
           isCompute = (queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) && !isGraphics;
-          isTransfer = (queueFamilyProperties[i].queueFlags & VK_QUEUE_TRANSFER_BIT) && !isGraphics && !isCompute;
+          isTransfer = (queueFamilyProperties[i].queueFlags & VK_QUEUE_TRANSFER_BIT) &&
+                       !isGraphics && !isCompute;
           return i;
         }
       }
@@ -137,17 +142,21 @@ struct AuxVkTraceResources
     return -1;
   }
 
-  bool isGraphicsQueue(VkQueue queue) {
+  bool isGraphicsQueue(VkQueue queue)
+  {
     bool isGraphics, isCompute, isTransfer;
-    if (queueBits(queue, isGraphics, isCompute, isTransfer) >= 0)
+    if(queueBits(queue, isGraphics, isCompute, isTransfer) >= 0)
       return isGraphics;
-    else return false;
+    else
+      return false;
   }
-  bool isComputeQueue(VkQueue queue) {
+  bool isComputeQueue(VkQueue queue)
+  {
     bool isGraphics, isCompute, isTransfer;
-    if (queueBits(queue, isGraphics, isCompute, isTransfer) >= 0)
+    if(queueBits(queue, isGraphics, isCompute, isTransfer) >= 0)
       return isCompute;
-    else return false;
+    else
+      return false;
   }
 };
 
@@ -226,7 +235,9 @@ void InitializeDiffBuffer(VkDevice device, VkBuffer *buffer, VkDeviceMemory *mem
 void MakePhysicalDeviceFeaturesMatch(const VkPhysicalDeviceFeatures &available,
                                      VkPhysicalDeviceFeatures *captured_request);
 
-void RegisterDebugCallback(AuxVkTraceResources *aux, VkInstance instance, uint32_t flags);
+void RegisterDebugCallback(AuxVkTraceResources *aux, VkInstance instance,
+                           VkDebugReportFlagsEXT flags, VkDebugReportCallbackEXT *pCallback,
+                           PFN_vkDebugReportCallbackEXT pfnCallback = VK_NULL_HANDLE);
 
 void MapUpdate(const AuxVkTraceResources &aux, uint8_t *dst, uint8_t *src,
                const VkMappedMemoryRange &range, VkMemoryAllocateInfo &ai, MemoryRemapVec &remap,

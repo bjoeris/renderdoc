@@ -47,17 +47,20 @@ VkBool32 VKAPI_PTR DebugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjec
   return VK_FALSE;
 }
 
-void RegisterDebugCallback(AuxVkTraceResources *aux, VkInstance instance, uint32_t flags)
+void RegisterDebugCallback(AuxVkTraceResources *aux, VkInstance instance,
+                           VkDebugReportFlagsEXT flags, VkDebugReportCallbackEXT *pCallback,
+                           PFN_vkDebugReportCallbackEXT pfnCallBack)
 {
   PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallback = VK_NULL_HANDLE;
   CreateDebugReportCallback = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(
       instance, "vkCreateDebugReportCallbackEXT");
 
-  VkDebugReportCallbackCreateInfoEXT ci = {VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
-                                           0, VkDebugReportFlagsEXT(flags), DebugCallback, NULL};
+  VkDebugReportCallbackCreateInfoEXT ci = {
+      VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT, 0, flags,
+      (pfnCallBack == VK_NULL_HANDLE) ? DebugCallback : pfnCallBack, NULL};
   if(CreateDebugReportCallback != NULL)
   {
-    VkResult result = CreateDebugReportCallback(instance, &ci, NULL, &aux->callback);
+    VkResult result = CreateDebugReportCallback(instance, &ci, NULL, pCallback);
     assert(result == VK_SUCCESS);
   }
 }
@@ -780,25 +783,31 @@ FILE *OpenFile(char const *fileName, char const *mode)
   return fp;
 }
 
-void AddResourceName(ResourceNamesMap& map, uint64_t handle, const char *type, const char *name) {
+void AddResourceName(ResourceNamesMap &map, uint64_t handle, const char *type, const char *name)
+{
   VkHandle h = VkHandle(handle, type);
-  if (map.find(h) != map.end()) {
+  if(map.find(h) != map.end())
+  {
     // Vulkan objects of a non-dispatchable type may have the same handle value,
     // Concatenate the names in this case.
     std::string newName = map[h] + "_" + std::string(name);
     map[h] = newName;
-  } else {
+  }
+  else
+  {
     map[h] = std::string(name);
   }
 }
 
-const char *GetResourceName(ResourceNamesMap& map, VkHandle handle) {
-  if (map.find(handle) == map.end()) {
+const char *GetResourceName(ResourceNamesMap &map, VkHandle handle)
+{
+  if(map.find(handle) == map.end())
+  {
 #if defined(DEBUG) || defined(_DEBUG)
     assert(0);
 #else
     fprintf(stdout, "Cannot get resource name with type %s and value %" PRIu64, handle.type.c_str(),
-      handle.handle);
+            handle.handle);
     exit(1);
 #endif
   }
