@@ -164,10 +164,14 @@ struct GPUBuffer
   // uniform buffer alignment requirement
   VkDeviceSize align = 0;
 
+  // alignment requirement for mapped memory ranges
+  VkDeviceSize mapalign = 0;
+
   // for handling ring allocations
   VkDeviceSize totalsize = 0;
   VkDeviceSize curoffset = 0;
   VkDeviceSize mapoffset = 0;
+  VkDeviceSize mapsize = 0;
 
   uint32_t ringCount = 0;
 
