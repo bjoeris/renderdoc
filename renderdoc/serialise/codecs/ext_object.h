@@ -33,6 +33,7 @@
 #include <list>
 #include <string>
 #include <utility>
+#include <unordered_map>
 #include <vector>
 
 #include "common/common.h"
@@ -44,7 +45,7 @@
 
 namespace vk_cpp_codec
 {
-extern const char *VkImageLayoutStrings[15];
+extern std::unordered_map<uint64_t, std::string> VkImageLayoutStrings;
 
 inline uint32_t as_uint32(uint64_t val)
 {

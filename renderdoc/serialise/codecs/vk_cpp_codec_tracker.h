@@ -79,7 +79,7 @@ typedef std::map<uint64_t, Variable> VariableIDMap;
 typedef VariableIDMap::iterator VariableIDMapIter;
 typedef std::pair<uint64_t, Variable> VariableIDMapPair;
 
-extern const char *VkImageLayoutStrings[15];
+extern std::unordered_map<uint64_t, std::string> VkImageLayoutStrings;
 
 // Bit flags for the various code gen optimizations.
 enum CodeGenOptBits

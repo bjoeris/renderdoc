@@ -1685,7 +1685,7 @@ void CodeWriter::InitialLayouts(ExtObject *o, uint32_t pass)
         // If it changes though, we can transition from whatever was the endLayout to startLayout in
         // POSTRESET stage.
         if(changes.layoutChanged)
-          ImageLayoutTransition(image_id, imageRegionState, VkImageLayoutStrings[changes.endLayout],
+          ImageLayoutTransition(image_id, imageRegionState, VkImageLayoutStrings[changes.endLayout].c_str(),
                                 ID_POSTRESET);
       }
       else
@@ -1701,7 +1701,7 @@ void CodeWriter::InitialLayouts(ExtObject *o, uint32_t pass)
         // If it changes though, we can transition from whatever was the endLayout to startLayout in
         // POSTRESET stage.
         if(changes.layoutChanged)
-          ImageLayoutTransition(image_id, imageRegionState, VkImageLayoutStrings[changes.endLayout],
+          ImageLayoutTransition(image_id, imageRegionState, VkImageLayoutStrings[changes.endLayout].c_str(),
                                 ID_POSTRESET);
       }
     }
@@ -1764,10 +1764,12 @@ void CodeWriter::ImagePreDiff(ExtObject *o, uint32_t pass)
   for(ImageSubresourceRangeIter subres_it = range.begin(); subres_it != range.end(); subres_it++)
   {
     std::string aspect_str = ToStr(subres_it->aspect);
+    ImageSubresourceState iss = imageState.At(*subres_it);
+    VkImageLayout subres_layout = iss.Layout();
     files[pass]->PrintLn("%sImageLayoutTransition(aux, %s, %" PRIu64 ", %" PRIu64 ", %s, %s, %s);",
                          comment, imageVar, subres_it->level, subres_it->layer, aspect_str.c_str(),
                          "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL",
-                         VkImageLayoutStrings[imageState.At(*subres_it).Layout()]);
+                         VkImageLayoutStrings[subres_layout].c_str());
   }
 
   files[pass]->PrintLn("%sCopyImageToBuffer(aux, %s, VkBuffer_diff_%" PRIu64
@@ -1777,9 +1779,11 @@ void CodeWriter::ImagePreDiff(ExtObject *o, uint32_t pass)
   for(ImageSubresourceRangeIter subres_it = range.begin(); subres_it != range.end(); subres_it++)
   {
     std::string aspect_str = ToStr(subres_it->aspect);
+    ImageSubresourceState iss = imageState.At(*subres_it);
+    VkImageLayout subres_layout = iss.Layout();
     files[pass]->PrintLn("%sImageLayoutTransition(aux, %s, %" PRIu64 ", %" PRIu64 ", %s, %s, %s);",
                          comment, imageVar, subres_it->level, subres_it->layer, aspect_str.c_str(),
-                         VkImageLayoutStrings[imageState.At(*subres_it).Layout()],
+                         VkImageLayoutStrings[subres_layout].c_str(),
                          "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL");
   }
 }
