@@ -52,13 +52,15 @@ struct TimestampContext
   uint32_t accum;
 };
 
-struct PipelineStatsContext {
+struct PipelineStatsContext
+{
   bool isGraphics = false;
   uint32_t stats = 1;
   VkQueryPool pool = NULL;
 };
 
-struct AllPipelineStats {
+struct AllPipelineStats
+{
   uint64_t inputAssemblyVertices;
   uint64_t inputAssemblyPrimitive;
   uint64_t vertexInvocations;
@@ -72,7 +74,8 @@ struct AllPipelineStats {
   uint64_t computeInvocations;
 };
 
-struct AllComputePipelineStats {
+struct AllComputePipelineStats
+{
   uint64_t computeInvocations;
 };
 
@@ -165,8 +168,8 @@ struct ShimVkTraceResources : public AuxVkTraceResources
 
   VkResult createQueryPools();
 
-  void writeCSV(FILE * f, VkCommandBuffer cb, const char * cb_name,
-    uint32_t cb_index, float cb_time, uint32_t cmd_index);
+  void writeCSV(FILE *f, VkCommandBuffer cb, const char *cb_name, uint32_t cb_index, float cb_time,
+                uint32_t cmd_index);
   void writeAllCSV(const char *name);
 };
 

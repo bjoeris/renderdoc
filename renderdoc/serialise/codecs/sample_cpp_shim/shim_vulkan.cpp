@@ -36,6 +36,14 @@ bool ShimShouldQuitNow()
   return false;
 }
 
+void ShimRelease()
+{
+  PFN_vkDestroyDebugReportCallbackEXT fn = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
+      aux.instance, "vkDestroyDebugReportCallbackEXT");
+  if(fn && aux.callback != VK_NULL_HANDLE)
+    fn(aux.instance, aux.callback, NULL);
+}
+
 VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkInstance *pInstance,
                                const char *handleName)
@@ -1398,10 +1406,13 @@ VkResult shim_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
   static PFN_vkGetSwapchainImagesKHR fn =
       (PFN_vkGetSwapchainImagesKHR)vkGetDeviceProcAddr(device, "vkGetSwapchainImagesKHR");
   VkResult r = fn(device, swapchain, pSwapchainImageCount, pSwapchainImages);
-  if (r == VK_SUCCESS && pSwapchainImages != NULL && handleName != NULL) {
-    for (uint32_t i = 0; i < pSwapchainImageCount[0]; i++) {
-      std::string fullName = std::string(handleName).append("[").append(std::to_string(i)).append("]");
-      AddResourceName(ResourceNames, (uint64_t) pSwapchainImages[i], "VkImage", fullName.c_str());
+  if(r == VK_SUCCESS && pSwapchainImages != NULL && handleName != NULL)
+  {
+    for(uint32_t i = 0; i < pSwapchainImageCount[0]; i++)
+    {
+      std::string fullName =
+          std::string(handleName).append("[").append(std::to_string(i)).append("]");
+      AddResourceName(ResourceNames, (uint64_t)pSwapchainImages[i], "VkImage", fullName.c_str());
     }
   }
   return r;
@@ -1571,7 +1582,8 @@ VkResult shim_vkCreateIndirectCommandsLayoutNVX(
           device, "vkCreateIndirectCommandsLayoutNVX");
   VkResult r = fn(device, pCreateInfo, pAllocator, pIndirectCommandsLayout);
   if(r == VK_SUCCESS)
-    AddResourceName(ResourceNames, (uint64_t)*pIndirectCommandsLayout, "VkIndirectCommandsLayoutNVX", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pIndirectCommandsLayout,
+                    "VkIndirectCommandsLayoutNVX", handleName);
   return r;
 }
 
@@ -2156,7 +2168,8 @@ VkResult shim_vkCreateDescriptorUpdateTemplate(VkDevice device,
                                                                 "vkCreateDescriptorUpdateTemplate");
   VkResult r = fn(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
   if(r == VK_SUCCESS)
-    AddResourceName(ResourceNames, (uint64_t)*pDescriptorUpdateTemplate, "VkDescriptorUpdateTemplate", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pDescriptorUpdateTemplate,
+                    "VkDescriptorUpdateTemplate", handleName);
   return r;
 }
 
@@ -2170,7 +2183,8 @@ VkResult shim_vkCreateDescriptorUpdateTemplateKHR(
           device, "vkCreateDescriptorUpdateTemplateKHR");
   VkResult r = fn(device, pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
   if(r == VK_SUCCESS)
-    AddResourceName(ResourceNames, (uint64_t)*pDescriptorUpdateTemplate, "VkDescriptorUpdateTemplate", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pDescriptorUpdateTemplate,
+                    "VkDescriptorUpdateTemplate", handleName);
   return r;
 }
 
@@ -2388,7 +2402,8 @@ VkResult shim_vkCreateSamplerYcbcrConversion(VkDevice device,
                                                               "vkCreateSamplerYcbcrConversion");
   VkResult r = fn(device, pCreateInfo, pAllocator, pYcbcrConversion);
   if(r == VK_SUCCESS)
-    AddResourceName(ResourceNames, (uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion",
+                    handleName);
   return r;
 }
 
@@ -2403,7 +2418,8 @@ VkResult shim_vkCreateSamplerYcbcrConversionKHR(VkDevice device,
           device, "vkCreateSamplerYcbcrConversionKHR");
   VkResult r = fn(device, pCreateInfo, pAllocator, pYcbcrConversion);
   if(r == VK_SUCCESS)
-    AddResourceName(ResourceNames, (uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion", handleName);
+    AddResourceName(ResourceNames, (uint64_t)*pYcbcrConversion, "VkSamplerYcbcrConversion",
+                    handleName);
   return r;
 }
 

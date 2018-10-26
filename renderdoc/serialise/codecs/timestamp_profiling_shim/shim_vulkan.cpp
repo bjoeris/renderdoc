@@ -55,77 +55,93 @@ bool ShimShouldQuitNow()
   return quitNow;
 }
 
+void ShimRelease()
+{
+  for(std::pair<VkCommandBuffer, TimestampContext> iter : aux.cbTimestampContext)
+  {
+    vkDestroyQueryPool(aux.device, iter.second.pool, NULL);
+  }
+  for(std::pair<VkCommandBuffer, PipelineStatsContext> iter : aux.cbPipelineStatsContext)
+  {
+    vkDestroyQueryPool(aux.device, iter.second.pool, NULL);
+  }
+  PFN_vkDestroyDebugReportCallbackEXT fn = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
+      aux.instance, "vkDestroyDebugReportCallbackEXT");
+  if(fn && aux.callback != VK_NULL_HANDLE)
+    fn(aux.instance, aux.callback, NULL);
+}
+
 std::unordered_map<std::string, bool> timestampedCalls = {
-  {"shim_vkCmdBindPipeline", true},
-  {"shim_vkCmdSetViewport", false},
-  {"shim_vkCmdSetScissor", false},
-  {"shim_vkCmdSetLineWidth", false},
-  {"shim_vkCmdSetDepthBias", false},
-  {"shim_vkCmdSetBlendConstants", false},
-  {"shim_vkCmdSetDepthBounds", false},
-  {"shim_vkCmdSetStencilCompareMask", false},
-  {"shim_vkCmdSetStencilWriteMask", false},
-  {"shim_vkCmdSetStencilReference", false},
-  {"shim_vkCmdBindDescriptorSets", false},
-  {"shim_vkCmdBindIndexBuffer", false},
-  {"shim_vkCmdBindVertexBuffers", false},
-  {"shim_vkCmdDraw", true},
-  {"shim_vkCmdDrawIndexed", true},
-  {"shim_vkCmdDrawIndirect", true},
-  {"shim_vkCmdDrawIndexedIndirect", true},
-  {"shim_vkCmdDispatch", true},
-  {"shim_vkCmdDispatchIndirect", true},
-  {"shim_vkCmdCopyBuffer", true},
-  {"shim_vkCmdCopyImage", true},
-  {"shim_vkCmdBlitImage", true},
-  {"shim_vkCmdCopyBufferToImage", true},
-  {"shim_vkCmdCopyImageToBuffer", true},
-  {"shim_vkCmdUpdateBuffer", true},
-  {"shim_vkCmdFillBuffer", true},
-  {"shim_vkCmdClearColorImage", true},
-  {"shim_vkCmdClearDepthStencilImage", true},
-  {"shim_vkCmdClearAttachments", true},
-  {"shim_vkCmdResolveImage", true},
-  {"shim_vkCmdSetEvent", false},
-  {"shim_vkCmdResetEvent", false},
-  {"shim_vkCmdWaitEvents", false},
-  {"shim_vkCmdPipelineBarrier", true},
-  {"shim_vkCmdBeginQuery", false},
-  {"shim_vkCmdEndQuery", false},
-  {"shim_vkCmdResetQueryPool", false},
-  {"shim_vkCmdWriteTimestamp", false},
-  {"shim_vkCmdCopyQueryPoolResults", false},
-  {"shim_vkCmdPushConstants", true},
-  {"shim_vkCmdBeginRenderPass", true},
-  {"shim_vkCmdNextSubpass", true},
-  {"shim_vkCmdEndRenderPass", true},
-  {"shim_vkCmdExecuteCommands", true},
-  {"shim_vkCmdDebugMarkerBeginEXT", false},
-  {"shim_vkCmdDebugMarkerEndEXT", false},
-  {"shim_vkCmdDebugMarkerInsertEXT", false},
-  {"shim_vkCmdDrawIndirectCountAMD", false},
-  {"shim_vkCmdDrawIndexedIndirectCountAMD", false},
-  {"shim_vkCmdProcessCommandsNVX", false},
-  {"shim_vkCmdReserveSpaceForCommandsNVX", false},
-  {"shim_vkCmdPushDescriptorSetKHR", false},
-  {"shim_vkCmdSetDeviceMask", false},
-  {"shim_vkCmdSetDeviceMaskKHR", false},
-  {"shim_vkCmdDispatchBase", false},
-  {"shim_vkCmdDispatchBaseKHR", false},
-  {"shim_vkCmdPushDescriptorSetWithTemplateKHR", false},
-  {"shim_vkCmdSetViewportWScalingNV", false},
-  {"shim_vkCmdSetDiscardRectangleEXT", false},
-  {"shim_vkCmdSetSampleLocationsEXT", false},
-  {"shim_vkCmdBeginDebugUtilsLabelEXT", false},
-  {"shim_vkCmdEndDebugUtilsLabelEXT", false},
-  {"shim_vkCmdInsertDebugUtilsLabelEXT", false},
-  {"shim_vkCmdWriteBufferMarkerAMD", false},
+    {"shim_vkCmdBindPipeline", true},
+    {"shim_vkCmdSetViewport", false},
+    {"shim_vkCmdSetScissor", false},
+    {"shim_vkCmdSetLineWidth", false},
+    {"shim_vkCmdSetDepthBias", false},
+    {"shim_vkCmdSetBlendConstants", false},
+    {"shim_vkCmdSetDepthBounds", false},
+    {"shim_vkCmdSetStencilCompareMask", false},
+    {"shim_vkCmdSetStencilWriteMask", false},
+    {"shim_vkCmdSetStencilReference", false},
+    {"shim_vkCmdBindDescriptorSets", false},
+    {"shim_vkCmdBindIndexBuffer", false},
+    {"shim_vkCmdBindVertexBuffers", false},
+    {"shim_vkCmdDraw", true},
+    {"shim_vkCmdDrawIndexed", true},
+    {"shim_vkCmdDrawIndirect", true},
+    {"shim_vkCmdDrawIndexedIndirect", true},
+    {"shim_vkCmdDispatch", true},
+    {"shim_vkCmdDispatchIndirect", true},
+    {"shim_vkCmdCopyBuffer", true},
+    {"shim_vkCmdCopyImage", true},
+    {"shim_vkCmdBlitImage", true},
+    {"shim_vkCmdCopyBufferToImage", true},
+    {"shim_vkCmdCopyImageToBuffer", true},
+    {"shim_vkCmdUpdateBuffer", true},
+    {"shim_vkCmdFillBuffer", true},
+    {"shim_vkCmdClearColorImage", true},
+    {"shim_vkCmdClearDepthStencilImage", true},
+    {"shim_vkCmdClearAttachments", true},
+    {"shim_vkCmdResolveImage", true},
+    {"shim_vkCmdSetEvent", false},
+    {"shim_vkCmdResetEvent", false},
+    {"shim_vkCmdWaitEvents", false},
+    {"shim_vkCmdPipelineBarrier", true},
+    {"shim_vkCmdBeginQuery", false},
+    {"shim_vkCmdEndQuery", false},
+    {"shim_vkCmdResetQueryPool", false},
+    {"shim_vkCmdWriteTimestamp", false},
+    {"shim_vkCmdCopyQueryPoolResults", false},
+    {"shim_vkCmdPushConstants", true},
+    {"shim_vkCmdBeginRenderPass", true},
+    {"shim_vkCmdNextSubpass", true},
+    {"shim_vkCmdEndRenderPass", true},
+    {"shim_vkCmdExecuteCommands", true},
+    {"shim_vkCmdDebugMarkerBeginEXT", false},
+    {"shim_vkCmdDebugMarkerEndEXT", false},
+    {"shim_vkCmdDebugMarkerInsertEXT", false},
+    {"shim_vkCmdDrawIndirectCountAMD", false},
+    {"shim_vkCmdDrawIndexedIndirectCountAMD", false},
+    {"shim_vkCmdProcessCommandsNVX", false},
+    {"shim_vkCmdReserveSpaceForCommandsNVX", false},
+    {"shim_vkCmdPushDescriptorSetKHR", false},
+    {"shim_vkCmdSetDeviceMask", false},
+    {"shim_vkCmdSetDeviceMaskKHR", false},
+    {"shim_vkCmdDispatchBase", false},
+    {"shim_vkCmdDispatchBaseKHR", false},
+    {"shim_vkCmdPushDescriptorSetWithTemplateKHR", false},
+    {"shim_vkCmdSetViewportWScalingNV", false},
+    {"shim_vkCmdSetDiscardRectangleEXT", false},
+    {"shim_vkCmdSetSampleLocationsEXT", false},
+    {"shim_vkCmdBeginDebugUtilsLabelEXT", false},
+    {"shim_vkCmdEndDebugUtilsLabelEXT", false},
+    {"shim_vkCmdInsertDebugUtilsLabelEXT", false},
+    {"shim_vkCmdWriteBufferMarkerAMD", false},
 };
 
 VkResult shim_vkCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
                              const VkAllocationCallbacks *pAllocator, VkDevice *pDevice)
 {
-  VkDeviceCreateInfo * pCI = const_cast<VkDeviceCreateInfo *>(pCreateInfo);
+  VkDeviceCreateInfo *pCI = const_cast<VkDeviceCreateInfo *>(pCreateInfo);
   VkPhysicalDeviceFeatures *pEF = const_cast<VkPhysicalDeviceFeatures *>(pCI->pEnabledFeatures);
   // Make sure these features are enabled.
   pEF->pipelineStatisticsQuery = 1;
@@ -171,8 +187,9 @@ VkResult shim_vkBeginCommandBuffer(VkCommandBuffer commandBuffer,
     assert(aux.cbCommandInfo.count(commandBuffer) == 0);
     aux.addCommandInfo(
         commandBuffer,
-        CommandInfo(__FUNCTION__,
-                    GetResourceName(ResourceNames, VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")), 1));
+        CommandInfo(
+            __FUNCTION__,
+            GetResourceName(ResourceNames, VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")), 1));
     return r;
   }
   else if(presentIndex > START_TS_FRAME && presentIndex < END_TS_FRAME)
@@ -197,28 +214,31 @@ VkResult shim_vkBeginCommandBuffer(VkCommandBuffer commandBuffer,
 
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.timestampQueryPool(commandBuffer),
                         aux.timestampQueryInc(commandBuffer));
-  } else if (presentIndex == END_TS_FRAME) { // last frame: do pipelinestats now
-    if (!aux.isSecondary(commandBuffer)) {
+  }
+  else if(presentIndex == END_TS_FRAME)
+  {    // last frame: do pipelinestats now
+    if(!aux.isSecondary(commandBuffer))
+    {
       aux.resetPipelinestatsQueries(commandBuffer);
       uint32_t offset = aux.pipelinestatsQueryOffset(commandBuffer);
       uint32_t count = aux.pipelinestatsQueryCount(commandBuffer);
       VkQueryPool pool = aux.pipelinestatsQueryPool(commandBuffer);
-      if (pool != VK_NULL_HANDLE)
+      if(pool != VK_NULL_HANDLE)
         vkCmdResetQueryPool(commandBuffer, pool, offset, count);
     }
 
     // Before submitting the secondary command buffers, the primary
     // command buffer needs to reset their all query pools.
-    for (uint32_t cb = 0; cb < aux.cbExecCmdBufs[commandBuffer].size(); cb++) {
+    for(uint32_t cb = 0; cb < aux.cbExecCmdBufs[commandBuffer].size(); cb++)
+    {
       VkCommandBuffer execCB = aux.cbExecCmdBufs[commandBuffer][cb].cb;
       aux.resetPipelinestatsQueries(execCB);
       uint32_t offset = aux.pipelinestatsQueryOffset(execCB);
       uint32_t count = aux.pipelinestatsQueryCount(execCB);
       VkQueryPool pool = aux.pipelinestatsQueryPool(execCB);
-      if (pool != VK_NULL_HANDLE)
+      if(pool != VK_NULL_HANDLE)
         vkCmdResetQueryPool(commandBuffer, pool, offset, count);
     }
-
   }
   return r;
 }
@@ -230,8 +250,9 @@ VkResult shim_vkEndCommandBuffer(VkCommandBuffer commandBuffer)
   {
     aux.addCommandInfo(
         commandBuffer,
-        CommandInfo(__FUNCTION__,
-                    GetResourceName(ResourceNames, VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")), 1));
+        CommandInfo(
+            __FUNCTION__,
+            GetResourceName(ResourceNames, VkHandle((uint64_t)commandBuffer, "VkCommandBuffer")), 1));
     VkResult r = fn(commandBuffer);
     return r;
   }
@@ -291,16 +312,15 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
     aux.createQueryPools();
   }
 
-  if(presentIndex == END_TS_FRAME) {
-
+  if(presentIndex == END_TS_FRAME)
+  {
     aux.fetchPipelineStats(END_TS_FRAME);
 
-    for(auto it : aux.cbAccumTimestamps) {
-      float ts = float((it.second[0][0] + it.second[0][1]) /
-        (1000000.0 * (END_TS_FRAME - START_TS_FRAME)));
-      std::string cbTime = "Command Buffer Time = " +
-                           std::to_string(ts) +
-                           " (ms)\n";
+    for(auto it : aux.cbAccumTimestamps)
+    {
+      float ts =
+          float((it.second[0][0] + it.second[0][1]) / (1000000.0 * (END_TS_FRAME - START_TS_FRAME)));
+      std::string cbTime = "Command Buffer Time = " + std::to_string(ts) + " (ms)\n";
 #if defined(_WIN32)
       OutputDebugStringA(cbTime.c_str());
 #else
@@ -363,7 +383,8 @@ void shim_vkCmdBindPipeline(VkCommandBuffer commandBuffer, VkPipelineBindPoint p
   if(presentIndex == 0 && timestampedCalls[__FUNCTION__])
   {
     fn(commandBuffer, pipelineBindPoint, pipeline);
-    std::string infoStr = std::string(GetResourceName(ResourceNames, VkHandle((uint64_t)pipeline, "VkPipeline")));
+    std::string infoStr =
+        std::string(GetResourceName(ResourceNames, VkHandle((uint64_t)pipeline, "VkPipeline")));
     aux.addCommandInfo(commandBuffer, CommandInfo(__FUNCTION__, infoStr));
     return;
   }
@@ -726,14 +747,16 @@ void shim_vkCmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount, uint32_
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.timestampQueryPool(commandBuffer),
                         aux.timestampQueryInc(commandBuffer));
   }
-  else if (presentIndex == END_TS_FRAME)
+  else if(presentIndex == END_TS_FRAME)
   {
-    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryOffset(commandBuffer), 0);
+    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                    aux.pipelinestatsQueryOffset(commandBuffer), 0);
     fn(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
-    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryInc(commandBuffer));
-  } else {
+    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                  aux.pipelinestatsQueryInc(commandBuffer));
+  }
+  else
+  {
     fn(commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
   }
   return;
@@ -765,12 +788,14 @@ void shim_vkCmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount, u
     fn(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.timestampQueryPool(commandBuffer),
                         aux.timestampQueryInc(commandBuffer));
-  } else if (presentIndex == END_TS_FRAME) {
-    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryOffset(commandBuffer), 0);
+  }
+  else if(presentIndex == END_TS_FRAME)
+  {
+    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                    aux.pipelinestatsQueryOffset(commandBuffer), 0);
     fn(commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
-    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryInc(commandBuffer));
+    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                  aux.pipelinestatsQueryInc(commandBuffer));
   }
   else
   {
@@ -802,12 +827,14 @@ void shim_vkCmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDe
     fn(commandBuffer, buffer, offset, drawCount, stride);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.timestampQueryPool(commandBuffer),
                         aux.timestampQueryInc(commandBuffer));
-  } else if (presentIndex == END_TS_FRAME) {
-    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryOffset(commandBuffer), 0);
+  }
+  else if(presentIndex == END_TS_FRAME)
+  {
+    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                    aux.pipelinestatsQueryOffset(commandBuffer), 0);
     fn(commandBuffer, buffer, offset, drawCount, stride);
-    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryInc(commandBuffer));
+    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                  aux.pipelinestatsQueryInc(commandBuffer));
   }
   else
   {
@@ -840,12 +867,14 @@ void shim_vkCmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer buffe
     fn(commandBuffer, buffer, offset, drawCount, stride);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.timestampQueryPool(commandBuffer),
                         aux.timestampQueryInc(commandBuffer));
-  } else if (presentIndex == END_TS_FRAME) {
-    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryOffset(commandBuffer), 0);
+  }
+  else if(presentIndex == END_TS_FRAME)
+  {
+    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                    aux.pipelinestatsQueryOffset(commandBuffer), 0);
     fn(commandBuffer, buffer, offset, drawCount, stride);
-    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryInc(commandBuffer));
+    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                  aux.pipelinestatsQueryInc(commandBuffer));
   }
   else
   {
@@ -878,12 +907,14 @@ void shim_vkCmdDispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uin
     fn(commandBuffer, groupCountX, groupCountY, groupCountZ);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.timestampQueryPool(commandBuffer),
                         aux.timestampQueryInc(commandBuffer));
-  } else if (presentIndex == END_TS_FRAME) {
-    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryOffset(commandBuffer), 0);
+  }
+  else if(presentIndex == END_TS_FRAME)
+  {
+    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                    aux.pipelinestatsQueryOffset(commandBuffer), 0);
     fn(commandBuffer, groupCountX, groupCountY, groupCountZ);
-    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryInc(commandBuffer));
+    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                  aux.pipelinestatsQueryInc(commandBuffer));
   }
   else
   {
@@ -911,12 +942,14 @@ void shim_vkCmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer buffer, 
     fn(commandBuffer, buffer, offset);
     vkCmdWriteTimestamp(commandBuffer, SECOND_TS_STAGE, aux.timestampQueryPool(commandBuffer),
                         aux.timestampQueryInc(commandBuffer));
-  } else if (presentIndex == END_TS_FRAME) {
-    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryOffset(commandBuffer), 0);
+  }
+  else if(presentIndex == END_TS_FRAME)
+  {
+    vkCmdBeginQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                    aux.pipelinestatsQueryOffset(commandBuffer), 0);
     fn(commandBuffer, buffer, offset);
-    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer), 
-      aux.pipelinestatsQueryInc(commandBuffer));
+    vkCmdEndQuery(commandBuffer, aux.pipelinestatsQueryPool(commandBuffer),
+                  aux.pipelinestatsQueryInc(commandBuffer));
   }
   else
   {
@@ -1334,8 +1367,8 @@ void shim_vkCmdBeginRenderPass(VkCommandBuffer commandBuffer,
   if(presentIndex == 0 && timestampedCalls[__FUNCTION__])
   {
     fn(commandBuffer, pRenderPassBegin, contents);
-    std::string infoStr =
-        GetResourceName(ResourceNames, VkHandle((uint64_t)pRenderPassBegin->renderPass, "VkRenderPass"));
+    std::string infoStr = GetResourceName(
+        ResourceNames, VkHandle((uint64_t)pRenderPassBegin->renderPass, "VkRenderPass"));
     infoStr +=
         isInline ? ": Subpass with INLINE contents" : ": Subpass with SECONDARY command buffers";
     uint32_t ts = isInline ? 2 : 1;

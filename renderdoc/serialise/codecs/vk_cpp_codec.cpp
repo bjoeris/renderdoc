@@ -94,6 +94,7 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
       case(uint32_t)SystemChunk::CaptureEnd:
         code.EndFramePresent(ext, pass);
         code.EndFrameWaitIdle(ext, pass);
+        code.ReleaseResources();
         break;
 
         CODE_VULKAN_CASE(EnumeratePhysicalDevices, ext, pass);

@@ -49,9 +49,9 @@ class TraceTracker;
 
 struct TemplateFileDesc
 {
-  const char* filename;
+  const char *filename;
   size_t size;
-  const char* contents;
+  const char *contents;
 };
 
 class CodeWriter
@@ -310,6 +310,7 @@ public:
   void InitialLayouts(ExtObject *o, uint32_t pass);
 
   void PrintReadBuffers(StructuredBufferList &buffers);
+  void ReleaseResources();
 };
 
 }    // namespace vk_cpp_codec

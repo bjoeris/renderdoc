@@ -219,9 +219,10 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
 #if defined(__yeti__)
           filename = "/var/game/";
 #endif
-          filename += std::to_string(renderPassCount) + "_attachment_" + std::to_string(info.index) +
-                      "_" + GetResourceName(ResourceNames, VkHandle((uint64_t)info.srcImage, "VkImage")) + "_" +
-                      FormatToString(info.format) + "_" + std::to_string(info.width) + "x" +
+          filename += std::to_string(renderPassCount) + "_attachment_" +
+                      std::to_string(info.index) + "_" +
+                      GetResourceName(ResourceNames, VkHandle((uint64_t)info.srcImage, "VkImage")) +
+                      "_" + FormatToString(info.format) + "_" + std::to_string(info.width) + "x" +
                       std::to_string(info.height) + ".ppm";
           bufferToPpm(info.buffer, info.bufferDeviceMem, filename, info.width, info.height,
                       info.format);
@@ -295,11 +296,13 @@ VkResult shim_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
     swapchainImageMap[swapchain] = swapchainImages;
   }
 
-  if (r == VK_SUCCESS && pSwapchainImages != NULL && handleName != NULL)
+  if(r == VK_SUCCESS && pSwapchainImages != NULL && handleName != NULL)
   {
-    for (uint32_t i = 0; i < pSwapchainImageCount[0]; i++) {
-      std::string fullName = std::string(handleName).append("[").append(std::to_string(i)).append("]");
-      AddResourceName(ResourceNames, (uint64_t) pSwapchainImages[i], "VkImage", fullName.c_str());
+    for(uint32_t i = 0; i < pSwapchainImageCount[0]; i++)
+    {
+      std::string fullName =
+          std::string(handleName).append("[").append(std::to_string(i)).append("]");
+      AddResourceName(ResourceNames, (uint64_t)pSwapchainImages[i], "VkImage", fullName.c_str());
     }
   }
 

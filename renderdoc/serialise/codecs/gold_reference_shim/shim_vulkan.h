@@ -44,6 +44,7 @@ extern AuxVkTraceResources aux;
 extern ResourceNamesMap ResourceNames;
 
 SHIM_VK_API bool ShimShouldQuitNow();
+SHIM_VK_API void ShimRelease();
 
 SHIM_VK_API VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                            const VkAllocationCallbacks *pAllocator,
@@ -607,8 +608,7 @@ SHIM_VK_API void shim_vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swap
 
 SHIM_VK_API VkResult shim_vkGetSwapchainImagesKHR(VkDevice device, VkSwapchainKHR swapchain,
                                                   uint32_t *pSwapchainImageCount,
-                                                  VkImage *pSwapchainImages,
-                                                  const char *handleName);
+                                                  VkImage *pSwapchainImages, const char *handleName);
 
 SHIM_VK_API VkResult shim_vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain,
                                                 uint64_t timeout, VkSemaphore semaphore,
