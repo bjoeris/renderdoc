@@ -129,7 +129,10 @@ void GPUBuffer::Create(WrappedVulkan *driver, VkDevice dev, VkDeviceSize size, u
   device = dev;
   createFlags = flags;
 
-  align = (VkDeviceSize)driver->GetDeviceProps().limits.minUniformBufferOffsetAlignment;
+  align = driver->GetDeviceProps().limits.minUniformBufferOffsetAlignment;
+  RDCASSERTMSG("align must be a power of 2", (align & (align - 1)) == 0);
+  mapalign = driver->GetDeviceProps().limits.nonCoherentAtomSize;
+  RDCASSERTMSG("mapalign must be a power of 2", (mapalign & (mapalign - 1)) == 0);
 
   sz = size;
   // offset must be aligned, so ensure we have at least ringSize
@@ -214,23 +217,33 @@ void *GPUBuffer::Map(uint32_t *bindoffset, VkDeviceSize usedsize)
   if(bindoffset)
     *bindoffset = (uint32_t)offset;
 
-  mapoffset = offset;
+  // Mapped memory offset must be aligned
+  mapoffset = AlignDown(offset, mapalign);
+
+  // Mapped memory size must be aligned or mapoffset + mapsize must equal totalsize
+  VkDeviceSize mapend = AlignUp(offset + size, mapalign);
+  if(mapend > totalsize)
+  {
+    mapend = totalsize;
+  }
+  mapsize = mapend - mapoffset;
 
   void *ptr = NULL;
-  VkResult vkr = m_pDriver->vkMapMemory(device, mem, offset, size, 0, (void **)&ptr);
+  VkResult vkr = m_pDriver->vkMapMemory(device, mem, mapoffset, mapsize, 0, (void **)&ptr);
   RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
   if(createFlags & eGPUBufferReadback)
   {
     VkMappedMemoryRange range = {
-        VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, mem, offset, size,
+        VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, mem, mapoffset, mapsize,
     };
 
     vkr = m_pDriver->vkInvalidateMappedMemoryRanges(device, 1, &range);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
   }
 
-  return ptr;
+  // return a pointer to the mapped address of `offset`
+  return ((char *)ptr + offset - mapoffset);
 }
 
 void *GPUBuffer::Map(VkDeviceSize &bindoffset, VkDeviceSize usedsize)
@@ -249,7 +262,7 @@ void GPUBuffer::Unmap()
   if(!(createFlags & eGPUBufferReadback) && !(createFlags & eGPUBufferGPULocal))
   {
     VkMappedMemoryRange range = {
-        VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, mem, mapoffset, VK_WHOLE_SIZE,
+        VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE, NULL, mem, mapoffset, mapsize,
     };
 
     VkResult vkr = m_pDriver->vkFlushMappedMemoryRanges(device, 1, &range);

@@ -152,6 +152,12 @@ inline T AlignUpPtr(T x, A a)
   return (T)AlignUp<uintptr_t>((uintptr_t)x, (uintptr_t)a);
 }
 
+template <typename T>
+inline T AlignDown(T x, T a)
+{
+  return x & (~(a - 1));
+}
+
 #define MAKE_FOURCC(a, b, c, d) \
   (((uint32_t)(d) << 24) | ((uint32_t)(c) << 16) | ((uint32_t)(b) << 8) | (uint32_t)(a))
 
