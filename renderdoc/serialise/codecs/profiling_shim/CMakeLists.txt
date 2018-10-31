@@ -1,4 +1,4 @@
-SET (THIS_PROJECT_NAME timestamp_profiling_shim)
+SET (THIS_PROJECT_NAME profiling_shim)
 
 PROJECT(${THIS_PROJECT_NAME})
 

@@ -328,9 +328,9 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
 #endif
     }
 #if defined(__yeti__)
-    const char csvFileName[] = "/var/game/timestamps.csv";
+    const char csvFileName[] = "/var/game/profiling_output.csv";
 #else
-    const char csvFileName[] = "timestamps.csv";
+    const char csvFileName[] = "profiling_output.csv";
 #endif
     aux.writeAllCSV(csvFileName);
   }
