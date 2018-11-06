@@ -26,6 +26,7 @@
 #include "renderdoccmd.h"
 #include <app/renderdoc_app.h>
 #include <replay/version.h>
+#include <fstream>
 #include <string>
 
 // normally this is in the renderdoc core library, but it's needed for the 'unknown enum' path,
@@ -186,6 +187,32 @@ struct VersionCommand : public Command
 
     std::cout << std::endl;
 
+    return 0;
+  }
+};
+
+struct GitVersionCommand : public Command
+{
+  GitVersionCommand(const GlobalEnvironment &env) : Command(env) {}
+  virtual void AddOptions(cmdline::parser &parser)
+  {
+#if defined(__yeti__)
+    parser.add<string>("out", 'o', "The output filename to save the file to", false,
+                       "/var/game/rdoc_version.txt");
+#else
+    parser.add<string>("out", 'o', "The output filename to save the file to", false,
+                       "rdoc_version.txt");
+#endif
+  }
+  virtual const char *Description() { return "Write git commit hash to file"; }
+  virtual bool IsInternalOnly() { return false; }
+  virtual bool IsCaptureCommand() { return false; }
+  virtual int Execute(cmdline::parser &parser, const CaptureOptions &)
+  {
+    std::string filename = parser.get<string>("out");
+    std::ofstream file(filename);
+    file << GitVersionHash;
+    file.close();
     return 0;
   }
 };
@@ -1187,6 +1214,7 @@ int renderdoccmd(const GlobalEnvironment &env, std::vector<std::string> &argv)
     add_alias("/?", "help");
 
     // add platform agnostic commands
+    add_command("git-version", new GitVersionCommand(env));
     add_command("thumb", new ThumbCommand(env));
     add_command("capture", new CaptureCommand(env));
     add_command("inject", new InjectCommand(env));
