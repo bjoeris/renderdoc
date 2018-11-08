@@ -69,9 +69,9 @@ uint32_t ShimVkTraceResources::timestampReportCommandCount(VkCommandBuffer cb)
   // then exclude vk[Begin|End]CommandBuffer from reporting.
   // If we only have 2 commands, then report time for vkEndCommandBuffer
   // which is equal to vkBeginCommandBuffer.
-  uint32_t commands = cbCommandInfo[cb].vec.size() > 2 ? cbCommandInfo[cb].vec.size() - 1
-                                                       : cbCommandInfo[cb].vec.size();
-  return commands;
+  size_t commands = cbCommandInfo[cb].vec.size() > 2 ? cbCommandInfo[cb].vec.size() - 1
+                                                     : cbCommandInfo[cb].vec.size();
+  return (uint32_t)commands;
 }
 
 uint32_t ShimVkTraceResources::pipelinestatsQueryCount(VkCommandBuffer cb)
