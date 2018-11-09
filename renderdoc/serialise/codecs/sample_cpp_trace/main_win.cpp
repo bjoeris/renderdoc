@@ -55,7 +55,7 @@ double avgFrameMilliseconds = 0;
 LARGE_INTEGER performanceCounterFrequency;
 bool automated = false;
 bool resourceReset = false;
-HINSTANCE appInstance;
+HINSTANCE appInstance = NULL;
 HWND appHwnd;
 
 #define RDOC_WINDOW_CLASS_NAME L"RenderDoc Frame Loop"
@@ -269,13 +269,13 @@ static void Usage()
 }
 
 //-----------------------------------------------------------------------------
-// WinMain
+// main
 //-----------------------------------------------------------------------------
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
+int main()
 {
   bool quit = false;
 
-  appInstance = hInstance;
+  appInstance = GetModuleHandle(NULL);
 
   // Parse the command line arguments
   if(!ParseCommandLine())
@@ -291,6 +291,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     QueryPerformanceFrequency(&performanceCounterFrequency);
 
     int repeatIteration = 0;
+
     while(frameLoops == -1 || repeatIteration < frameLoops)
     {
       ProcessMessages(quit);
