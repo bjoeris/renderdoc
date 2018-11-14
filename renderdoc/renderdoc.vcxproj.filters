@@ -151,14 +151,14 @@
     <Filter Include="Common\Serialise\Codecs\CPP\sample">
       <UniqueIdentifier>{95b0407f-6f5f-4161-8af3-50c55416ae8c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Common\Serialise\Codecs\CPP\profiling_shim">
-      <UniqueIdentifier>{81c400ce-4e33-4164-9fe6-d8edbd8f0cbd}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Common\Serialise\Codecs\CPP\validation_shim">
-      <UniqueIdentifier>{82744af0-215b-4157-aa55-fa7771f2923a}</UniqueIdentifier>
+      <UniqueIdentifier>{92e8b0cf-b637-4c13-be8c-8f48d06dde82}</UniqueIdentifier>
     </Filter>
     <Filter Include="Common\Serialise\Codecs\CPP\rdoc_auto_capture_shim">
       <UniqueIdentifier>{10d4d65b-73c6-4b2e-af3a-b3daef5622c9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Codecs\CPP\profiling_shim">
+      <UniqueIdentifier>{81c400ce-4e33-4164-9fe6-d8edbd8f0cbd}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -537,11 +537,11 @@
     <ClInclude Include="serialise\codecs\rdoc_auto_capture_shim\renderdoc_app.h">
       <Filter>Common\Serialise\Codecs\CPP\rdoc_auto_capture_shim</Filter>
     </ClInclude>
-    <ClInclude Include="serialise\codecs\profiling_shim\shim_vulkan.h">
-      <Filter>Common\Serialise\Codecs\CPP\profiling_shim</Filter>
-    </ClInclude>
     <ClInclude Include="serialise\codecs\validation_shim\shim_vulkan.h">
       <Filter>Common\Serialise\Codecs\CPP\validation_shim</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\profiling_shim\shim_vulkan.h">
+      <Filter>Common\Serialise\Codecs\CPP\profiling_shim</Filter>
     </ClInclude>
     <ClInclude Include="serialise\codecs\profiling_shim\utils.h">
       <Filter>Common\Serialise\Codecs\CPP\profiling_shim</Filter>
@@ -965,13 +965,13 @@
     <ClCompile Include="serialise\codecs\rdoc_auto_capture_shim\shim_vulkan.cpp">
       <Filter>Common\Serialise\Codecs\CPP\rdoc_auto_capture_shim</Filter>
     </ClCompile>
+    <ClCompile Include="serialise\codecs\profiling_shim\shim_vulkan_base.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\profiling_shim</Filter>
+    </ClCompile>
     <ClCompile Include="serialise\codecs\validation_shim\shim_vulkan.cpp">
       <Filter>Common\Serialise\Codecs\CPP\validation_shim</Filter>
     </ClCompile>
     <ClCompile Include="serialise\codecs\profiling_shim\shim_vulkan.cpp">
-      <Filter>Common\Serialise\Codecs\CPP\profiling_shim</Filter>
-    </ClCompile>
-    <ClCompile Include="serialise\codecs\profiling_shim\shim_vulkan_base.cpp">
       <Filter>Common\Serialise\Codecs\CPP\profiling_shim</Filter>
     </ClCompile>
     <ClCompile Include="serialise\codecs\gold_reference_shim\shim_vulkan_base.cpp">
