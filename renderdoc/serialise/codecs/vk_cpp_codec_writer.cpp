@@ -541,9 +541,11 @@ void CodeWriter::EnumeratePhysicalDevices(ExtObject *o, uint32_t pass)
       .PrintLn("r = vkEnumeratePhysicalDevices(%s, &phys_device_count, phys_devices.data());",
                instance_name)
       .PrintLn("assert(r == VK_SUCCESS);")
+      .PrintLn("%s = phys_devices[0]; // by default use device 0", phys_device_name)
       .PrintLn("if (phys_devices.size() > %s) {", o->At(1)->ValueStr().c_str())
-      .PrintLn("%s = phys_devices[%s]; // trace used %" PRIu64, phys_device_name,
-               o->At(1)->ValueStr().c_str(), o->At(1)->U64());
+      .PrintLn("%s = phys_devices[%s]; // trace was captured on device %s", phys_device_name,
+               o->At(1)->ValueStr().c_str(), o->At(1)->ValueStr().c_str())
+      .PrintLn("}");
 
   // Print device properties that were captured in comments.
   ExtObject *phys_dev_props = o->At(4);
@@ -587,16 +589,16 @@ void CodeWriter::EnumeratePhysicalDevices(ExtObject *o, uint32_t pass)
       AddNamedVar("std::vector<VkQueueFamilyProperties>", tracker->GetQueueFamilyPropertiesVar());
 
   files[pass]
-      ->PrintLn("{")
-      .PrintLn("uint32_t count = 0;")
-      .PrintLn("%svkGetPhysicalDeviceQueueFamilyProperties(%s, &count, NULL);", shimPrefix,
-               phys_device_name)
-      .PrintLn("%s.resize(count);", queue_prop_name.c_str())
-      .PrintLn("%svkGetPhysicalDeviceQueueFamilyProperties(%s, &count, %s.data());", shimPrefix,
-               phys_device_name,
-               queue_prop_name.c_str())
-      .PrintLn("}")
-      .PrintLn("}");    // Close bracket for 'if (phys_devices.size() > %llu)'
+    ->PrintLn("{")
+    .PrintLn("uint32_t count = 0;")
+    .PrintLn("%svkGetPhysicalDeviceQueueFamilyProperties(%s, &count, NULL);", shimPrefix,
+      phys_device_name)
+    .PrintLn("%s.resize(count);", queue_prop_name.c_str())
+    .PrintLn("%svkGetPhysicalDeviceQueueFamilyProperties(%s, &count, %s.data());", shimPrefix,
+      phys_device_name,
+      queue_prop_name.c_str())
+    .PrintLn("}");
+
 
   files[pass]->PrintLn("}");    // Close bracket.
 }
@@ -2298,10 +2300,12 @@ void CodeWriter::CmdWaitEvents(ExtObject *o, uint32_t pass)
   LocalVariable(o->At(10), "", pass);
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->U64(), o->At(2)->Name(),
-                o->At(3)->Str(), o->At(4)->Str(), o->At(5)->ValueStr().c_str(), o->At(6)->Name(),
-                o->At(7)->ValueStr().c_str(), o->At(8)->Name(), o->At(9)->ValueStr().c_str(),
-                o->At(10)->Name())
+                tracker->GetResourceVar(o->At(0)->U64()),
+                o->At(1)->ValueStr().c_str(), o->At(2)->Name(),
+                o->At(3)->Str(), o->At(4)->Str(),
+                o->At(5)->ValueStr().c_str(), o->At(6)->Name(),
+                o->At(7)->ValueStr().c_str(), o->At(8)->Name(),
+                o->At(9)->ValueStr().c_str(), o->At(10)->Name())
       .PrintLn("}");
 }
 
