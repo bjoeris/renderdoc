@@ -250,6 +250,10 @@ void TraceTracker::CreateSamplerInternal(ExtObject *o)
   GenericCreateResourceInternal(o);
 }
 
+void TraceTracker::CreateEventInternal(ExtObject *o) {
+  GenericCreateResourceInternal(o);
+}
+
 void TraceTracker::CreateShaderModuleInternal(ExtObject *o)
 {
   ExtObject *ci = o->At("CreateInfo");

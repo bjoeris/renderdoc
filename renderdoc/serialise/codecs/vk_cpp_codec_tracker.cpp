@@ -695,6 +695,7 @@ void TraceTracker::ScanResourceCreation(StructuredChunkList &chunks, StructuredB
         TT_VK_CALL_INTERNAL_SWITCH(CreateGraphicsPipelines, ext);
         TT_VK_CALL_INTERNAL_SWITCH(CreateComputePipelines, ext);
         TT_VK_CALL_INTERNAL_SWITCH(EnumeratePhysicalDevices, ext);
+        TT_VK_CALL_INTERNAL_SWITCH(CreateEvent, ext);
       default: break;
     }
   }
@@ -823,6 +824,18 @@ void TraceTracker::ScanFilter(StructuredChunkList &chunks)
         else
           c++;
         break;
+
+      case (uint32_t) VulkanChunk::vkCmdSetEvent:// fallthrough intended
+      case (uint32_t) VulkanChunk::vkSetEvent: // fallthrough intended
+      case (uint32_t) VulkanChunk::vkCmdResetEvent:// fallthrough intended
+      case (uint32_t)VulkanChunk::vkResetEvent: // fallthrough intended
+      case (uint32_t) VulkanChunk::vkGetEventStatus:
+      if (FilterEventFunc(as_ext(chunks[c])))
+        chunks.removeOne(chunks[c]);
+      else
+        c++;
+      break;
+
       default: c++; break;
     }
   }

@@ -284,6 +284,7 @@ private:
   void CreateComputePipelinesInternal(ExtObject *o);
   void CreateSamplerInternal(ExtObject *ext);
   void CreateShaderModuleInternal(ExtObject *o);
+  void CreateEventInternal(ExtObject *o);
   void CreateSwapchainKHRInternal(ExtObject *o);
   void GetSwapchainImagesKHRInternal(ExtObject *o);
   void CreatePipelineCacheInternal(ExtObject *o);
@@ -349,6 +350,13 @@ private:
   void FilterCmdResolveImage(ExtObject *o);
   void FilterCreateDevice(ExtObject *o);
   bool FilterCmdPipelineBarrier(ExtObject *o);
+  // A single FilterEventFunc is used for filtering of:
+  //   VulkanChunk::vkCmdSetEvent:
+  //   VulkanChunk::vkSetEvent: 
+  //   VulkanChunk::vkCmdResetEvent:
+  //   VulkanChunk::vkResetEvent: 
+  //   VulkanChunk::vkGetEventStatus:
+  bool FilterEventFunc(ExtObject *o);
   // --------------------------------------------------------------------------
   // Trace tracker 'Scans' the trace entirely several times to understand
   // what was happening in it to resources.

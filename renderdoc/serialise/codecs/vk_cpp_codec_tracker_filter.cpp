@@ -287,6 +287,10 @@ bool TraceTracker::FilterCmdPipelineBarrier(ExtObject *o)
   return (memory->Size() != 0 || buffer->Size() != 0 || image->Size() != 0);
 }
 
+bool TraceTracker::FilterEventFunc(ExtObject *o) {
+  return !IsValidNonNullResouce(o->At(1)->U64());
+}
+
 bool TraceTracker::CmdWaitEvents(ExtObject *o)
 {
   ExtObject *event_count = o->At(1);
