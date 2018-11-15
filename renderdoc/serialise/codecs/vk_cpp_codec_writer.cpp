@@ -586,7 +586,7 @@ void CodeWriter::EnumeratePhysicalDevices(ExtObject *o, uint32_t pass)
 
   // Declare the vkGetPhysicalDeviceQueueFamilyProperties variable.
   std::string queue_prop_name =
-      AddNamedVar("std::vector<VkQueueFamilyProperties>", tracker->GetQueueFamilyPropertiesVar());
+      AddNamedVar("std::vector<VkQueueFamilyProperties>", tracker->GetQueueFamilyPropertiesVar(physicalDevice->U64()));
 
   files[pass]
     ->PrintLn("{")

@@ -28,16 +28,26 @@ namespace vk_cpp_codec
 {
 void TraceTracker::EnumeratePhysicalDevicesInternal(ExtObject *o)
 {
-  RDCASSERT(o->Size() == 9 && queueFamilyCount == 0);
-  queueFamilyCount = o->At("queueCount")->U64();
+  RDCASSERT(o->Size() == 9);
+  uint64_t physDeviceID = o->At("PhysicalDevice")->U64();
+  uint64_t physDeviceIdx = o->At("PhysicalDeviceIndex")->U64();
+  // assert this phys device hasn't been queried yet
+  RDCASSERT(indexedPhysicalDeviceID.find(physDeviceID) == indexedPhysicalDeviceID.end());
+  indexedPhysicalDeviceID.emplace(physDeviceID, physDeviceIdx);
+
+  U64UMapIter queueFamilyCountIter = physDeviceQueueFamilies.emplace(physDeviceID, o->At("queueCount")->U64()).first;
+  uint64_t queueFamilyCount = queueFamilyCountIter->second;
+
   ExtObject *queueFamilyProps = o->At("queueProps");
-  queueUsed.resize(queueFamilyCount);
+  queueUsed[physDeviceID].resize(queueFamilyCount);
   RDCASSERT(queueFamilyCount <= queueFamilyProps->Size());
   for(size_t i = 0; i < queueFamilyCount; i++)
   {
     uint64_t queueCount = queueFamilyProps->At(i)->At("queueCount")->U64();
-    queueUsed[i].resize((size_t)queueCount);
+    queueUsed[physDeviceID][i].resize((size_t)queueCount);
   }
+
+  queueFamilyPropertiesStr[physDeviceID] = code->MakeVarName("VkQueueFamilyProperties", physDeviceID);
 }
 
 void TraceTracker::CreateDeviceInternal(ExtObject *o)
@@ -68,17 +78,15 @@ void TraceTracker::CreateDeviceInternal(ExtObject *o)
   extensionCount->U64() = extensions->Size();
 
   TrackVarInMap(resources, "VkSemaphore", "aux.semaphore", ACQUIRE_SEMAPHORE_VAR_ID);
-
-  queueFamilyPropertiesStr = code->MakeVarName("VkQueueFamilyProperties", PhysDevID());
 }
 
 void TraceTracker::GetDeviceQueueInternal(ExtObject *o)
 {
   uint64_t queueFamilyIndex = o->At("queueFamilyIndex")->U64();
   uint64_t queueIndex = o->At("queueIndex")->U64();
-  RDCASSERT(queueFamilyIndex < queueUsed.size());
-  RDCASSERT(queueIndex < queueUsed[queueFamilyIndex].size());
-  queueUsed[queueFamilyIndex][queueIndex] = true;
+  RDCASSERT(queueFamilyIndex < queueUsed[PhysDevID()].size());
+  RDCASSERT(queueIndex < queueUsed[PhysDevID()][queueFamilyIndex].size());
+  queueUsed[PhysDevID()][queueFamilyIndex][queueIndex] = true;
   uint64_t queue = o->At("Queue")->U64();
   bool inserted = deviceQueues.insert(std::make_pair(queue, o)).second;
   RDCASSERT(inserted);

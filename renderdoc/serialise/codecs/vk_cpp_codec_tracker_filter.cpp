@@ -414,16 +414,16 @@ void TraceTracker::FilterCreateDevice(ExtObject *o)
   ExtObject *ci = o->At(1);
   uint64_t queueCreateInfoCount = ci->At("queueCreateInfoCount")->U64();
   ExtObject *queueCreateInfos = ci->At("pQueueCreateInfos");
-  RDCASSERT(queueCreateInfoCount <= queueUsed.size());
+  RDCASSERT(queueCreateInfoCount <= queueUsed[PhysDevID()].size());
   RDCASSERT(queueCreateInfoCount <= queueCreateInfos->Size());
   for(size_t i = 0; i < queueCreateInfoCount; i++)
   {
     ExtObject *queueCreateInfo = queueCreateInfos->At(i);
     uint64_t &queueCount = queueCreateInfo->At("queueCount")->U64();
     uint64_t lastUsedQueue = 0;
-    for(size_t j = 0; j < queueUsed[i].size(); j++)
+    for(size_t j = 0; j < queueUsed[PhysDevID()][i].size(); j++)
     {
-      if(queueUsed[i][j])
+      if(queueUsed[PhysDevID()][i][j])
       {
         lastUsedQueue = j;
       }

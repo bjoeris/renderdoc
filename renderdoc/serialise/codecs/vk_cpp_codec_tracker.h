@@ -32,6 +32,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 #include "common/common.h"
 #include "core/core.h"
@@ -78,6 +79,9 @@ struct Variable
 typedef std::map<uint64_t, Variable> VariableIDMap;
 typedef VariableIDMap::iterator VariableIDMapIter;
 typedef std::pair<uint64_t, Variable> VariableIDMapPair;
+
+typedef std::unordered_map<uint64_t, uint64_t> U64UMap;
+typedef U64UMap::iterator U64UMapIter;
 
 extern std::unordered_map<uint64_t, std::string> VkImageLayoutStrings;
 
@@ -176,7 +180,7 @@ private:
 
   std::string swapchainCountStr;
   std::string presentImagesStr;
-  std::string queueFamilyPropertiesStr;
+  std::unordered_map<uint64_t, std::string> queueFamilyPropertiesStr;
 
   // Descriptor sets are created with a specific descriptor set layout.
   // When descriptor sets are updated, much of the descriptor set layout info
@@ -216,12 +220,14 @@ private:
   uint64_t swapchainWidth = 0;
   uint64_t swapchainHeight = 0;
   ExtObject *swapchainCreateInfo = NULL;
-  uint64_t queueFamilyCount = 0;
+  U64UMap physDeviceQueueFamilies;
+  U64UMap indexedPhysicalDeviceID;
 
-  // queueUsed[family][index] is true if the queue at the specified index in the specified family
-  // is used. Currently, "used" just means that "vkGetDeviceQueue" was called for that
+  // queueUsed[physical device resource ID][family][index] is true if the queue in the
+  // specified physical device resource, in the specified queue family at 'index' is
+  // used. Currently, "used" just means that "vkGetDeviceQueue" was called for that
   // queue/family.
-  std::vector<std::vector<bool>> queueUsed;
+  std::unordered_map<uint64_t, std::vector<std::vector<bool>> > queueUsed;
 
   // This map keeps track of semaphore usage in a trace, checking that for
   // every 'wait' semaphore, there was a 'signal' issued before. It also collects
@@ -416,7 +422,7 @@ public:
   void InstanceID(uint64_t id) { instanceID = id; }
   uint64_t InstanceID() { return instanceID; }
   void PhysDevID(uint64_t id) { physicalDeviceID = id; }
-  uint64_t PhysDevID() { return physicalDeviceID; }
+  uint64_t PhysDevID() const { return physicalDeviceID; }
   void DeviceID(uint64_t id) { deviceID = id; }
   uint64_t DeviceID() { return deviceID; }
   void SwapchainID(uint64_t id) { swapchainID = id; }
@@ -433,17 +439,19 @@ public:
   const char *GetDeviceVar() { return GetResourceVar(deviceID); }
   const char *GetSwapchainVar() { return GetResourceVar(swapchainID); }
   const char *GetPresentQueueVar() { return GetResourceVar(presentQueueID); }
-  const char *GetQueueFamilyPropertiesVar() const { return queueFamilyPropertiesStr.c_str(); }
-  uint64_t QueueFamilyCount() const { return queueFamilyCount; }
+  const char *GetQueueFamilyPropertiesVar() const { return queueFamilyPropertiesStr.find(PhysDevID())->second.c_str(); }
+  const char *GetQueueFamilyPropertiesVar(uint64_t physDevID) const { return queueFamilyPropertiesStr.find(physDevID)->second.c_str(); }
+  uint64_t QueueFamilyCount() const { return physDeviceQueueFamilies.find(PhysDevID())->second; }
   bool IsQueueFamilyUsed(uint64_t queueFamilyIndex) const
   {
-    if(queueFamilyIndex > queueUsed.size())
+    auto queueUsedIter = queueUsed.find(PhysDevID());
+    if(queueFamilyIndex > queueUsedIter->second.size())
     {
       return false;
     }
-    for(size_t i = 0; i < queueUsed[queueFamilyIndex].size(); i++)
+    for(size_t i = 0; i < queueUsedIter->second[queueFamilyIndex].size(); i++)
     {
-      if(queueUsed[queueFamilyIndex][i])
+      if(queueUsedIter->second[queueFamilyIndex][i])
       {
         return true;
       }
