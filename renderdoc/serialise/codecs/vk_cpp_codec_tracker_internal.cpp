@@ -578,10 +578,12 @@ void TraceTracker::CreateCommandPoolInternal(ExtObject *o)
 
 void TraceTracker::AllocateCommandBuffersInternal(ExtObject *o)
 {
-  uint64_t commandBufferCount = o->At("AllocateInfo")->At("commandBufferCount")->U64();
-  if(commandBufferCount != 1)
-    RDCWARN("%s has AllocateInfo.commandBufferCount equal to '%llu', expected '1'", o->Name(),
-            commandBufferCount);
+  uint64_t& commandBufferCount = o->At("AllocateInfo")->At("commandBufferCount")->U64();
+  if (commandBufferCount != 1) {
+    RDCWARN("%s has AllocateInfo.commandBufferCount equal to '%llu', expected '1', setting to '1'", o->Name(),
+      commandBufferCount);
+    commandBufferCount = 1;
+  }
   uint64_t cmdBufferPoolID = o->At("AllocateInfo")->At("commandPool")->U64();
   uint64_t cmdBufferID = o->At("CommandBuffer")->U64();
   ResourceWithViewsMapIter cmdBufferPool = ResourceCreateFind(cmdBufferPoolID);
