@@ -211,6 +211,7 @@ struct GitVersionCommand : public Command
   {
     std::string filename = parser.get<string>("out");
     std::ofstream file(filename);
+    if (!file) return 1;
     file << GitVersionHash;
     file.close();
     return 0;
