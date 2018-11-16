@@ -27,37 +27,30 @@
 #include <unordered_map>
 namespace vk_cpp_codec
 {
-  std::unordered_map<uint64_t, std::string> VkImageLayoutStrings = {
-    {(uint64_t)VK_IMAGE_LAYOUT_UNDEFINED,
-    "VK_IMAGE_LAYOUT_UNDEFINED"},
-    {(uint64_t) VK_IMAGE_LAYOUT_GENERAL,
-    "VK_IMAGE_LAYOUT_GENERAL"},
-    {(uint64_t) VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    "VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL"},
-    {(uint64_t) VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-    "VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL"},
-    {(uint64_t) VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
-    "VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL"},
-    {(uint64_t) VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    "VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL"},
-    {(uint64_t) VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-    "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL"},
-    {(uint64_t) VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL"},
-    {(uint64_t) VK_IMAGE_LAYOUT_PREINITIALIZED,
-    "VK_IMAGE_LAYOUT_PREINITIALIZED"},
-    {(uint64_t) VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL,
-    "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL"},
-    {(uint64_t) VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL,
-    "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL"},
-    {(uint64_t) VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-    "VK_IMAGE_LAYOUT_PRESENT_SRC_KHR"},
-    {(uint64_t) VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR,
-    "VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR"},
-    {(uint64_t) VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL_KHR,
-    "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL_KHR"},
-    {(uint64_t) VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL_KHR,
-    "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL_KHR"},
+std::unordered_map<uint64_t, std::string> VkImageLayoutStrings = {
+    {(uint64_t)VK_IMAGE_LAYOUT_UNDEFINED, "VK_IMAGE_LAYOUT_UNDEFINED"},
+    {(uint64_t)VK_IMAGE_LAYOUT_GENERAL, "VK_IMAGE_LAYOUT_GENERAL"},
+    {(uint64_t)VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+     "VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL"},
+    {(uint64_t)VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+     "VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL"},
+    {(uint64_t)VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+     "VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL"},
+    {(uint64_t)VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+     "VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL"},
+    {(uint64_t)VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, "VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL"},
+    {(uint64_t)VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, "VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL"},
+    {(uint64_t)VK_IMAGE_LAYOUT_PREINITIALIZED, "VK_IMAGE_LAYOUT_PREINITIALIZED"},
+    {(uint64_t)VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL,
+     "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL"},
+    {(uint64_t)VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL,
+     "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL"},
+    {(uint64_t)VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, "VK_IMAGE_LAYOUT_PRESENT_SRC_KHR"},
+    {(uint64_t)VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR, "VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR"},
+    {(uint64_t)VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL_KHR,
+     "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL_KHR"},
+    {(uint64_t)VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL_KHR,
+     "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL_KHR"},
 };
 
 // ----------------------------------------------------------------------------
@@ -78,65 +71,66 @@ namespace vk_cpp_codec
 #define TT_VK_CALL_ANALYZE_SWITCH(call, arg) \
   case(uint32_t)VulkanChunk::vk##call: call##Analyze(arg); break;
 
-std::string TraceTracker::GetVkDebugObjectFromString(const char * type) {
-  if (strstr(type, "VkInstance") != NULL)
+std::string TraceTracker::GetVkDebugObjectFromString(const char *type)
+{
+  if(strstr(type, "VkInstance") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_INSTANCE_EXT";
-  if (strstr(type, "VkPhysicalDevice") != NULL)
+  if(strstr(type, "VkPhysicalDevice") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_PHYSICAL_DEVICE_EXT";
-  if (strstr(type, "VkDevice") != NULL)
+  if(strstr(type, "VkDevice") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_EXT";
-  if (strstr(type, "VkQueue") != NULL)
+  if(strstr(type, "VkQueue") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_QUEUE_EXT";
-  if (strstr(type, "VkSemaphore") != NULL)
+  if(strstr(type, "VkSemaphore") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_SEMAPHORE_EXT";
-  if (strstr(type, "VkCommandBuffer") != NULL)
+  if(strstr(type, "VkCommandBuffer") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_BUFFER_EXT";
-  if (strstr(type, "VkFence") != NULL)
+  if(strstr(type, "VkFence") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_FENCE_EXT";
-  if (strstr(type, "VkDeviceMemory") != NULL)
+  if(strstr(type, "VkDeviceMemory") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_MEMORY_EXT";
   // VkBufferView and VkImageView are checked ahead of VkBuffer and VkImage.
-  if (strstr(type, "VkBufferView") != NULL)
+  if(strstr(type, "VkBufferView") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_VIEW_EXT";
-  if (strstr(type, "VkImageView") != NULL)
+  if(strstr(type, "VkImageView") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_VIEW_EXT";
-  if (strstr(type, "VkBuffer") != NULL)
+  if(strstr(type, "VkBuffer") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT";
-  if (strstr(type, "VkImage") != NULL)
+  if(strstr(type, "VkImage") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT";
-  if (strstr(type, "VkEvent") != NULL)
+  if(strstr(type, "VkEvent") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_EVENT_EXT";
-  if (strstr(type, "VkQueryPool") != NULL)
+  if(strstr(type, "VkQueryPool") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_QUERY_POOL_EXT";
-  if (strstr(type, "VkShaderModule") != NULL)
+  if(strstr(type, "VkShaderModule") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT";
-  if (strstr(type, "VkPipelineCache") != NULL)
+  if(strstr(type, "VkPipelineCache") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_CACHE_EXT";
-  if (strstr(type, "VkPipelineLayout") != NULL)
+  if(strstr(type, "VkPipelineLayout") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_LAYOUT_EXT";
-  if (strstr(type, "VkRenderPass") != NULL)
+  if(strstr(type, "VkRenderPass") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT";
-  if (strstr(type, "VkPipeline") != NULL)
+  if(strstr(type, "VkPipeline") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT";
-  if (strstr(type, "VkDescriptorSetLayout") != NULL)
+  if(strstr(type, "VkDescriptorSetLayout") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT_EXT";
-  if (strstr(type, "VkSampler") != NULL)
+  if(strstr(type, "VkSampler") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT";
-  if (strstr(type, "VkDescriptorPool") != NULL)
+  if(strstr(type, "VkDescriptorPool") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_POOL_EXT";
-  if (strstr(type, "VkDescriptorSet") != NULL)
+  if(strstr(type, "VkDescriptorSet") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_EXT";
-  if (strstr(type, "VkFramebuffer") != NULL)
+  if(strstr(type, "VkFramebuffer") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT";
-  if (strstr(type, "VkCommandPool") != NULL)
+  if(strstr(type, "VkCommandPool") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_POOL_EXT";
-  if (strstr(type, "VkSurface") != NULL)
+  if(strstr(type, "VkSurface") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_SURFACE_KHR_EXT";
-  if (strstr(type, "VkSwapchainKHR") != NULL)
+  if(strstr(type, "VkSwapchainKHR") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_SWAPCHAIN_KHR_EXT";
-  if (strstr(type, "VkDebugCallbackEXT") != NULL)
+  if(strstr(type, "VkDebugCallbackEXT") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT_EXT";
-  if (strstr(type, "VkDescriptorUpdateTemplate") != NULL)
+  if(strstr(type, "VkDescriptorUpdateTemplate") != NULL)
     return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT";
 
   return "VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT";
@@ -158,7 +152,7 @@ const char *TraceTracker::GetVarFromMap(VariableIDMap &m, uint64_t id, const cha
 const char *TraceTracker::GetVarFromMap(VariableIDMap &m, const char *type, const char *name,
                                         uint64_t id)
 {
-std::string dt = GetVkDebugObjectFromString(type);
+  std::string dt = GetVkDebugObjectFromString(type);
   std::string full_name = std::string(name) + std::string("_") + std::to_string(id);
   return GetVarFromMap(m, id, type, full_name.c_str(), dt);
 }
@@ -770,6 +764,7 @@ void TraceTracker::ScanFilter(StructuredChunkList &chunks)
   for(size_t c = 0; c < chunks.size();)
   {
     ExtObject *ext = as_ext(chunks[c]);
+    bool removed = false;
     switch(ext->ChunkID())
     {
       case(uint32_t)SystemChunk::InitialContents:
@@ -777,10 +772,7 @@ void TraceTracker::ScanFilter(StructuredChunkList &chunks)
         if(ext->At(0)->U64() == VkResourceType::eResDescriptorSet && !FilterInitDescSet(ext))
         {
           chunks.removeOne(chunks[c]);
-        }
-        else
-        {
-          c++;
+          removed = true;
         }
       }
       break;
@@ -789,55 +781,54 @@ void TraceTracker::ScanFilter(StructuredChunkList &chunks)
         if(!FilterUpdateDescriptorSets(ext))
         {
           chunks.removeOne(chunks[c]);
-        }
-        else
-        {
-          c++;
+          removed = true;
         }
       }
       break;
       case(uint32_t)VulkanChunk::vkUpdateDescriptorSetWithTemplate:
         if(!FilterUpdateDescriptorSetWithTemplate(as_ext(chunks[c])))
+        {
           chunks.removeOne(chunks[c]);
-        else
-          c++;
+          removed = true;
+        }
         break;
-      case(uint32_t)VulkanChunk::vkCreateImage: FilterCreateImage(as_ext(chunks[c++])); break;
+      case(uint32_t)VulkanChunk::vkCreateImage: FilterCreateImage(as_ext(chunks[c])); break;
       case(uint32_t)VulkanChunk::vkCreateGraphicsPipelines:
-        FilterCreateGraphicsPipelines(as_ext(chunks[c++]));
+        FilterCreateGraphicsPipelines(as_ext(chunks[c]));
         break;
       case(uint32_t)VulkanChunk::vkCreateComputePipelines:
-        FilterCreateComputePipelines(as_ext(chunks[c++]));
+        FilterCreateComputePipelines(as_ext(chunks[c]));
         break;
       case(uint32_t)VulkanChunk::vkCmdCopyImageToBuffer:
-        FilterCmdCopyImageToBuffer(as_ext(chunks[c++]));
+        FilterCmdCopyImageToBuffer(as_ext(chunks[c]));
         break;
-      case(uint32_t)VulkanChunk::vkCmdCopyImage: FilterCmdCopyImage(as_ext(chunks[c++])); break;
-      case(uint32_t)VulkanChunk::vkCmdBlitImage: FilterCmdBlitImage(as_ext(chunks[c++])); break;
-      case(uint32_t)VulkanChunk::vkCmdResolveImage:
-        FilterCmdResolveImage(as_ext(chunks[c++]));
-        break;
-      case(uint32_t)VulkanChunk::vkCreateDevice: FilterCreateDevice(as_ext(chunks[c++])); break;
+      case(uint32_t)VulkanChunk::vkCmdCopyImage: FilterCmdCopyImage(as_ext(chunks[c])); break;
+      case(uint32_t)VulkanChunk::vkCmdBlitImage: FilterCmdBlitImage(as_ext(chunks[c])); break;
+      case(uint32_t)VulkanChunk::vkCmdResolveImage: FilterCmdResolveImage(as_ext(chunks[c])); break;
+      case(uint32_t)VulkanChunk::vkCreateDevice: FilterCreateDevice(as_ext(chunks[c])); break;
       case(uint32_t)VulkanChunk::vkCmdPipelineBarrier:
         if(!FilterCmdPipelineBarrier(as_ext(chunks[c])))
+        {
           chunks.removeOne(chunks[c]);
-        else
-          c++;
+          removed = true;
+        }
         break;
-
-      case (uint32_t) VulkanChunk::vkCmdSetEvent:// fallthrough intended
-      case (uint32_t) VulkanChunk::vkSetEvent: // fallthrough intended
-      case (uint32_t) VulkanChunk::vkCmdResetEvent:// fallthrough intended
-      case (uint32_t)VulkanChunk::vkResetEvent: // fallthrough intended
-      case (uint32_t) VulkanChunk::vkGetEventStatus:
-      if (FilterEventFunc(as_ext(chunks[c])))
-        chunks.removeOne(chunks[c]);
-      else
-        c++;
-      break;
-
-      default: c++; break;
+      case(uint32_t)VulkanChunk::vkCmdSetEvent:      // fallthrough intended
+      case(uint32_t)VulkanChunk::vkSetEvent:         // fallthrough intended
+      case(uint32_t)VulkanChunk::vkCmdResetEvent:    // fallthrough intended
+      case(uint32_t)VulkanChunk::vkResetEvent:       // fallthrough intended
+      case(uint32_t)VulkanChunk::vkGetEventStatus:
+        if(FilterEventFunc(as_ext(chunks[c])))
+        {
+          chunks.removeOne(chunks[c]);
+          removed = true;
+        }
+        break;
+      default: break;
     }
+
+    if(!removed)
+      c++;
   }
 }
 
