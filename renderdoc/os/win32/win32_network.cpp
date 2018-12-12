@@ -377,7 +377,17 @@ Socket *CreateClientSocket(const char *host, uint16_t port, int timeoutMS)
   std::wstring whost = StringFormat::UTF82Wide(string(host));
 
   addrinfoW *addrResult = NULL;
-  GetAddrInfoW(whost.c_str(), portwstr, &hints, &addrResult);
+  int res = GetAddrInfoW(whost.c_str(), portwstr, &hints, &addrResult);
+  if(res != 0)
+  {
+    wchar_t *s = NULL;
+    FormatMessageW(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL, res, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPWSTR)&s, 0, NULL);
+    RDCDEBUG("%s", std::wstring(s));
+    LocalFree(s);
+    return NULL;
+  }
 
   for(addrinfoW *ptr = addrResult; ptr != NULL; ptr = ptr->ai_next)
   {
