@@ -145,7 +145,7 @@ void TraceTracker::CreateResourceViewInternal(ExtObject *o)
   }
 
   {
-    RDCWARN("Resource wasn't found in createdResource or presentResources");
+    RDCWARN("View %llu requires resource %llu that wasn't found in createdResource or presentResources", view->U64(), resource->U64());
   }
 }
 
