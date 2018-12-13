@@ -792,7 +792,7 @@ void TraceTracker::ScanFilter(StructuredChunkList &chunks)
           removed = true;
         }
         break;
-      case(uint32_t)VulkanChunk::vkCreateImage: FilterCreateImage(as_ext(chunks[c])); break;
+
       case(uint32_t)VulkanChunk::vkCreateGraphicsPipelines:
         FilterCreateGraphicsPipelines(as_ext(chunks[c]));
         break;
@@ -831,6 +831,33 @@ void TraceTracker::ScanFilter(StructuredChunkList &chunks)
       c++;
   }
 }
+
+void TraceTracker::ScanChunks(StructuredChunkList &chunks) {
+  for (size_t c = 0; c < chunks.size();) {
+    ExtObject *ext = as_ext(chunks[c]);
+    bool removed = false;
+    switch (ext->ChunkID()) {
+      case(uint32_t) VulkanChunk::vkCreateImage:
+      if (!FilterCreateImage(as_ext(chunks[c]))){
+        chunks.removeOne(chunks[c]);
+        removed = true;
+      } break;
+
+      case (uint32_t) VulkanChunk::vkCreateBufferView: // fallthrough intended
+      case(uint32_t) VulkanChunk::vkCreateImageView:
+      if (!FilterCreateResourceView(as_ext(chunks[c]))) {
+        chunks.removeOne(chunks[c]);
+        removed = true;
+      } break;
+
+      default: break;
+    }
+
+    if (!removed)
+      c++;
+  }
+}
+
 
 void TraceTracker::AnalyzeMemoryResetRequirements()
 {
@@ -899,6 +926,7 @@ void TraceTracker::AnalyzeMemoryResetRequirements()
 // invalid desc set, clean resource references and such?
 void TraceTracker::Scan(StructuredChunkList &chunks, StructuredBufferList &buffers)
 {
+  ScanChunks(chunks);
   ScanResourceCreation(chunks, buffers);
   ScanFilter(chunks);
   ScanInitialContents(chunks);

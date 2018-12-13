@@ -342,6 +342,7 @@ private:
   bool FilterInitDescSet(ExtObject *o);
   bool FilterUpdateDescriptorSetWithTemplate(ExtObject *o);
   bool FilterCreateImage(ExtObject *o);
+  bool FilterCreateResourceView(ExtObject *o);
   bool FilterCreateGraphicsPipelines(ExtObject *o);
   bool FilterCreateComputePipelines(ExtObject *o);
   void FilterCmdCopyImageToBuffer(ExtObject *o);
@@ -364,6 +365,7 @@ private:
   void ScanBinaryData(StructuredBufferList &buffers);
   void ScanResourceCreation(StructuredChunkList &chunks, StructuredBufferList &buffers);
   void ScanFilter(StructuredChunkList &chunks);
+  void ScanChunks(StructuredChunkList &chunks);
   void ScanInitialContents(StructuredChunkList &chunks);
   void ScanQueueSubmits(StructuredChunkList &chunks);
   // TODO(akharlamov, bjoeris): This function seems poorly named. It actually analyzes the entire

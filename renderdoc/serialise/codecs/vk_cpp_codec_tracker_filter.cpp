@@ -522,16 +522,30 @@ bool TraceTracker::FilterCreateComputePipelines(ExtObject *o)
   return true;
 }
 
-bool TraceTracker::FilterCreateImage(ExtObject *o)
-{
-  ExtObject *ci = o->At(1);
-  // RenderDoc adds this entry for extension support in 1.17.
-  if(ci->At(1)->Name() == std::string("pNextType"))
-  {
-    ExtObject *pNextType = ci->At(1);
+bool TraceTracker::FilterCreateResourceView(ExtObject *o) {
+  ExtObject *ci = o->At("CreateInfo");
+  ExtObject *pNextType = ci->At("pNextType");
+  if (pNextType != NULL) {
+    // Since we are removing it, it's worth checking it didn't
+    // have any usefull data.
+    RDCASSERT(pNextType->Size() == 0);
     ci->RemoveOne(pNextType);
   }
-  return true;
+  RDCASSERT(o->At(3)->Name() == std::string("View"));
+  return o->At("View")->U64() != 0;
+}
+
+bool TraceTracker::FilterCreateImage(ExtObject *o) {
+  ExtObject *ci = o->At("CreateInfo");
+  ExtObject *pNextType = ci->At("pNextType");
+  if(pNextType != NULL)
+  {
+    // Since we are removing it, it's worth checking it didn't
+    // have any usefull data.
+    RDCASSERT(pNextType->Size() == 0);
+    ci->RemoveOne(pNextType);
+  }
+  return o->At("Image")->U64() != 0;
 }
 
 bool TraceTracker::FilterImageInfoDescSet(uint64_t type, uint64_t image_id, uint64_t sampler_id,
