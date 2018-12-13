@@ -115,7 +115,10 @@ struct ExtObject : public SDObject
   ExtObject *At(std::string child)
   {
     ExtObject *ext = static_cast<ExtObject *>(FindChild(child.c_str()));
-    RDCASSERT(ext != NULL);
+
+    if (ext == NULL) {
+      RDCLOG("Search for member %s failed", child.c_str());
+    }
     return ext;
   }
   bool Exists(std::string child)
