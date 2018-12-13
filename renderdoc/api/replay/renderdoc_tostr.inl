@@ -82,7 +82,10 @@ std::string DoStringise(const ResourceFormatType &el)
     STRINGISE_ENUM_CLASS(D24S8);
     STRINGISE_ENUM_CLASS(D32S8);
     STRINGISE_ENUM_CLASS(S8);
-    STRINGISE_ENUM_CLASS(YUV);
+    STRINGISE_ENUM_CLASS(YUV8);
+    STRINGISE_ENUM_CLASS(YUV10);
+    STRINGISE_ENUM_CLASS(YUV12);
+    STRINGISE_ENUM_CLASS(YUV16);
   }
   END_ENUM_STRINGISE();
 }
@@ -852,6 +855,7 @@ std::string DoStringise(const SectionType &el)
     STRINGISE_ENUM_CLASS_NAMED(Notes, "renderdoc/ui/notes");
     STRINGISE_ENUM_CLASS_NAMED(ResourceRenames, "renderdoc/ui/resrenames");
     STRINGISE_ENUM_CLASS_NAMED(AMDRGPProfile, "amd/rgp/profile");
+    STRINGISE_ENUM_CLASS_NAMED(ExtendedThumbnail, "renderdoc/internal/exthumb");
   }
   END_ENUM_STRINGISE();
 }

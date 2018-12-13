@@ -30,6 +30,8 @@
 #include "strings/string_utils.h"
 #include "vk_debug.h"
 
+#include "stb/stb_image_write.h"
+
 uint32_t VkInitParams::GetSerialiseSize()
 {
   // misc bytes and fixed integer members
@@ -232,6 +234,23 @@ VkCommandBuffer WrappedVulkan::GetNextCmd()
   m_InternalCmds.pendingcmds.push_back(ret);
 
   return ret;
+}
+
+void WrappedVulkan::RemovePendingCommandBuffer(VkCommandBuffer cmd)
+{
+  for(auto it = m_InternalCmds.pendingcmds.begin(); it != m_InternalCmds.pendingcmds.end(); ++it)
+  {
+    if(*it == cmd)
+    {
+      m_InternalCmds.pendingcmds.erase(it);
+      break;
+    }
+  }
+}
+
+void WrappedVulkan::AddPendingCommandBuffer(VkCommandBuffer cmd)
+{
+  m_InternalCmds.pendingcmds.push_back(cmd);
 }
 
 void WrappedVulkan::SubmitCmds(VkSemaphore *unwrappedWaitSemaphores,
@@ -576,23 +595,45 @@ static const VkExtensionProperties supportedExtensions[] = {
         VK_AMD_GPU_SHADER_HALF_FLOAT_EXTENSION_NAME, VK_AMD_GPU_SHADER_HALF_FLOAT_SPEC_VERSION,
     },
     {
+        VK_AMD_GPU_SHADER_INT16_EXTENSION_NAME, VK_AMD_GPU_SHADER_INT16_SPEC_VERSION,
+    },
+    {
+        VK_AMD_MIXED_ATTACHMENT_SAMPLES_EXTENSION_NAME, VK_AMD_MIXED_ATTACHMENT_SAMPLES_SPEC_VERSION,
+    },
+    {
         VK_AMD_NEGATIVE_VIEWPORT_HEIGHT_EXTENSION_NAME, VK_AMD_NEGATIVE_VIEWPORT_HEIGHT_SPEC_VERSION,
     },
     {
         VK_AMD_SHADER_BALLOT_EXTENSION_NAME, VK_AMD_SHADER_BALLOT_SPEC_VERSION,
     },
     {
+        VK_AMD_SHADER_CORE_PROPERTIES_EXTENSION_NAME, VK_AMD_SHADER_CORE_PROPERTIES_SPEC_VERSION,
+    },
+    {
         VK_AMD_SHADER_EXPLICIT_VERTEX_PARAMETER_EXTENSION_NAME,
         VK_AMD_SHADER_EXPLICIT_VERTEX_PARAMETER_SPEC_VERSION,
     },
     {
+        VK_AMD_SHADER_FRAGMENT_MASK_EXTENSION_NAME, VK_AMD_SHADER_FRAGMENT_MASK_SPEC_VERSION,
+    },
+    {
+        VK_AMD_SHADER_IMAGE_LOAD_STORE_LOD_EXTENSION_NAME,
+        VK_AMD_SHADER_IMAGE_LOAD_STORE_LOD_SPEC_VERSION,
+    },
+    {
         VK_AMD_SHADER_TRINARY_MINMAX_EXTENSION_NAME, VK_AMD_SHADER_TRINARY_MINMAX_SPEC_VERSION,
+    },
+    {
+        VK_AMD_TEXTURE_GATHER_BIAS_LOD_EXTENSION_NAME, VK_AMD_TEXTURE_GATHER_BIAS_LOD_SPEC_VERSION,
     },
 #ifdef VK_EXT_acquire_xlib_display
     {
         VK_EXT_ACQUIRE_XLIB_DISPLAY_EXTENSION_NAME, VK_EXT_ACQUIRE_XLIB_DISPLAY_SPEC_VERSION,
     },
 #endif
+    {
+        VK_EXT_ASTC_DECODE_MODE_EXTENSION_NAME, VK_EXT_ASTC_DECODE_MODE_SPEC_VERSION,
+    },
     {
         VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME,
         VK_EXT_CONSERVATIVE_RASTERIZATION_SPEC_VERSION,
@@ -619,7 +660,13 @@ static const VkExtensionProperties supportedExtensions[] = {
         VK_EXT_DISPLAY_SURFACE_COUNTER_EXTENSION_NAME, VK_EXT_DISPLAY_SURFACE_COUNTER_SPEC_VERSION,
     },
     {
+        VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_SPEC_VERSION,
+    },
+    {
         VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME, VK_EXT_GLOBAL_PRIORITY_SPEC_VERSION,
+    },
+    {
+        VK_EXT_PCI_BUS_INFO_EXTENSION_NAME, VK_EXT_PCI_BUS_INFO_SPEC_VERSION,
     },
     {
         VK_EXT_POST_DEPTH_COVERAGE_EXTENSION_NAME, VK_EXT_POST_DEPTH_COVERAGE_SPEC_VERSION,
@@ -644,10 +691,25 @@ static const VkExtensionProperties supportedExtensions[] = {
         VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_SPEC_VERSION,
     },
     {
+        VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME, VK_EXT_SWAPCHAIN_COLOR_SPACE_SPEC_VERSION,
+    },
+    {
+        VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME, VK_EXT_TRANSFORM_FEEDBACK_SPEC_VERSION,
+    },
+    {
+        VK_EXT_VALIDATION_CACHE_EXTENSION_NAME, VK_EXT_VALIDATION_CACHE_SPEC_VERSION,
+    },
+    {
         VK_EXT_VALIDATION_FLAGS_EXTENSION_NAME, VK_EXT_VALIDATION_FLAGS_SPEC_VERSION,
     },
     {
         VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME, VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_SPEC_VERSION,
+    },
+    {
+        VK_GOOGLE_DECORATE_STRING_EXTENSION_NAME, VK_GOOGLE_DECORATE_STRING_SPEC_VERSION,
+    },
+    {
+        VK_GOOGLE_HLSL_FUNCTIONALITY1_EXTENSION_NAME, VK_GOOGLE_HLSL_FUNCTIONALITY1_SPEC_VERSION,
     },
 #ifdef VK_IMG_format_pvrtc
     {
@@ -667,6 +729,9 @@ static const VkExtensionProperties supportedExtensions[] = {
 #endif
     {
         VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, VK_KHR_BIND_MEMORY_2_SPEC_VERSION,
+    },
+    {
+        VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, VK_KHR_CREATE_RENDERPASS_2_SPEC_VERSION,
     },
     {
         VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, VK_KHR_DEDICATED_ALLOCATION_SPEC_VERSION,
@@ -691,6 +756,12 @@ static const VkExtensionProperties supportedExtensions[] = {
         VK_KHR_DISPLAY_SWAPCHAIN_EXTENSION_NAME, VK_KHR_DISPLAY_SWAPCHAIN_SPEC_VERSION,
     },
 #endif
+    {
+        VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME, VK_KHR_DRAW_INDIRECT_COUNT_SPEC_VERSION,
+    },
+    {
+        VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME, VK_KHR_DRIVER_PROPERTIES_SPEC_VERSION,
+    },
     {
         VK_KHR_EXTERNAL_FENCE_EXTENSION_NAME, VK_KHR_EXTERNAL_FENCE_SPEC_VERSION,
     },
@@ -754,6 +825,9 @@ static const VkExtensionProperties supportedExtensions[] = {
         VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME, VK_KHR_IMAGE_FORMAT_LIST_SPEC_VERSION,
     },
     {
+        VK_KHR_INCREMENTAL_PRESENT_EXTENSION_NAME, VK_KHR_INCREMENTAL_PRESENT_SPEC_VERSION,
+    },
+    {
         VK_KHR_MAINTENANCE1_EXTENSION_NAME, VK_KHR_MAINTENANCE1_SPEC_VERSION,
     },
     {
@@ -779,7 +853,13 @@ static const VkExtensionProperties supportedExtensions[] = {
         VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME, VK_KHR_SAMPLER_YCBCR_CONVERSION_SPEC_VERSION,
     },
     {
+        VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME, VK_KHR_SHADER_ATOMIC_INT64_SPEC_VERSION,
+    },
+    {
         VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME, VK_KHR_SHADER_DRAW_PARAMETERS_SPEC_VERSION,
+    },
+    {
+        VK_KHR_SHARED_PRESENTABLE_IMAGE_EXTENSION_NAME, VK_KHR_SHARED_PRESENTABLE_IMAGE_SPEC_VERSION,
     },
     {
         VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME,
@@ -823,6 +903,9 @@ static const VkExtensionProperties supportedExtensions[] = {
     },
 #endif
     {
+        VK_NV_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME, VK_NV_COMPUTE_SHADER_DERIVATIVES_SPEC_VERSION,
+    },
+    {
         VK_NV_DEDICATED_ALLOCATION_EXTENSION_NAME, VK_NV_DEDICATED_ALLOCATION_SPEC_VERSION,
     },
     {
@@ -837,6 +920,28 @@ static const VkExtensionProperties supportedExtensions[] = {
         VK_NV_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME, VK_NV_EXTERNAL_MEMORY_WIN32_SPEC_VERSION,
     },
 #endif
+    {
+        VK_NV_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME,
+        VK_NV_FRAGMENT_SHADER_BARYCENTRIC_SPEC_VERSION,
+    },
+    {
+        VK_NV_GEOMETRY_SHADER_PASSTHROUGH_EXTENSION_NAME,
+        VK_NV_GEOMETRY_SHADER_PASSTHROUGH_SPEC_VERSION,
+    },
+    {
+        VK_NV_SAMPLE_MASK_OVERRIDE_COVERAGE_EXTENSION_NAME,
+        VK_NV_SAMPLE_MASK_OVERRIDE_COVERAGE_SPEC_VERSION,
+    },
+    {
+        VK_NV_SHADER_IMAGE_FOOTPRINT_EXTENSION_NAME, VK_NV_SHADER_IMAGE_FOOTPRINT_SPEC_VERSION,
+    },
+    {
+        VK_NV_SHADER_SUBGROUP_PARTITIONED_EXTENSION_NAME,
+        VK_NV_SHADER_SUBGROUP_PARTITIONED_SPEC_VERSION,
+    },
+    {
+        VK_NV_VIEWPORT_ARRAY2_EXTENSION_NAME, VK_NV_VIEWPORT_ARRAY2_SPEC_VERSION,
+    },
 #ifdef VK_NV_win32_keyed_mutex
     {
         VK_NV_WIN32_KEYED_MUTEX_EXTENSION_NAME, VK_NV_WIN32_KEYED_MUTEX_SPEC_VERSION,
@@ -1042,10 +1147,46 @@ bool WrappedVulkan::Serialise_BeginCaptureFrame(SerialiserType &ser)
 
   SERIALISE_CHECK_READ_ERRORS();
 
-  if(IsReplayingAndReading() && !imgBarriers.empty())
+  if(IsReplayingAndReading())
   {
     VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
     VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+
+    if(IsLoading(m_State))
+    {
+      // for the first load, ensure all images are in a non-undefined layout. Any images that don't
+      // have an initial layout to transition back into were likely created mid-frame so their state
+      // is expected to be transitioned from undefined in the capture itself.
+      for(auto it = m_ImageLayouts.begin(); it != m_ImageLayouts.end(); ++it)
+      {
+        for(auto stit = it->second.subresourceStates.begin();
+            stit != it->second.subresourceStates.end(); ++stit)
+        {
+          if(stit->newLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+             GetResourceManager()->HasCurrentResource(it->first))
+          {
+            VkImage img = GetResourceManager()->GetCurrentHandle<VkImage>(it->first);
+
+            if(GetResID(img) != GetResourceManager()->GetOriginalID(GetResID(img)))
+            {
+              VkImageMemoryBarrier barrier = {};
+
+              stit->newLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+              barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+              barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+              barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+              barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+              barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+              barrier.image = Unwrap(img);
+              barrier.subresourceRange = stit->subresourceRange;
+
+              imgBarriers.push_back(barrier);
+            }
+          }
+        }
+      }
+    }
 
     if(!imgBarriers.empty())
     {
@@ -1263,13 +1404,9 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
     }
   }
 
-  byte *thpixels = NULL;
-  uint16_t thwidth = 0;
-  uint16_t thheight = 0;
-  int thpixelslen = 0;
-
   // gather backbuffer screenshot
   const uint32_t maxSize = 2048;
+  RenderDoc::FramePixels fp;
 
   if(swap != VK_NULL_HANDLE)
   {
@@ -1343,6 +1480,9 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
         {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
     };
 
+    if(swapInfo.shared)
+      bbBarrier.oldLayout = VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR;
+
     DoPipelineBarrier(cmd, 1, &bbBarrier);
 
     if(swapQueueIndex != m_QueueFamilyIdx)
@@ -1407,8 +1547,11 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
     vkr = vt->MapMemory(Unwrap(device), Unwrap(readbackMem.mem), readbackMem.offs, readbackMem.size,
                         0, (void **)&pData);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
-
     RDCASSERT(pData != NULL);
+
+    fp.len = (uint32_t)readbackMem.size;
+    fp.data = new uint8_t[fp.len];
+    memcpy(fp.data, pData, fp.len);
 
     VkMappedMemoryRange range = {
         VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
@@ -1421,157 +1564,41 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
     vkr = vt->InvalidateMappedMemoryRanges(Unwrap(device), 1, &range);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
-    // point sample info into raw buffer
-    {
-      ResourceFormat fmt = MakeResourceFormat(swapInfo.format);
-
-      byte *data = (byte *)pData;
-
-      float widthf = float(swapInfo.extent.width);
-      float heightf = float(swapInfo.extent.height);
-
-      thwidth = (uint16_t)RDCMIN(maxSize, swapInfo.extent.width);
-      thwidth &= ~0x7;    // align down to multiple of 8
-      thheight = uint16_t(thwidth * imInfo.extent.height / imInfo.extent.width);
-
-      thpixelslen = 3U * thwidth * thheight;
-      thpixels = new byte[thpixelslen];
-
-      uint32_t stride = fmt.compByteWidth * fmt.compCount;
-
-      bool buf1010102 = false;
-      bool buf565 = false, buf5551 = false;
-      bool bufBGRA = (fmt.bgraOrder != false);
-
-      switch(fmt.type)
-      {
-        case ResourceFormatType::R10G10B10A2:
-          stride = 4;
-          buf1010102 = true;
-          break;
-        case ResourceFormatType::R5G6B5:
-          stride = 2;
-          buf565 = true;
-          break;
-        case ResourceFormatType::R5G5B5A1:
-          stride = 2;
-          buf5551 = true;
-          break;
-        default: break;
-      }
-
-      byte *dst = thpixels;
-
-      for(uint32_t y = 0; y < thheight; y++)
-      {
-        for(uint32_t x = 0; x < thwidth; x++)
-        {
-          uint32_t xSource = x * imInfo.extent.width / thwidth;
-          uint32_t ySource = y * imInfo.extent.height / thheight;
-
-          byte *src = &data[stride * xSource + layout.rowPitch * ySource];
-
-          if(buf1010102)
-          {
-            uint32_t *src1010102 = (uint32_t *)src;
-            Vec4f unorm = ConvertFromR10G10B10A2(*src1010102);
-            dst[0] = (byte)(unorm.x * 255.0f);
-            dst[1] = (byte)(unorm.y * 255.0f);
-            dst[2] = (byte)(unorm.z * 255.0f);
-          }
-          else if(buf565)
-          {
-            uint16_t *src565 = (uint16_t *)src;
-            Vec3f unorm = ConvertFromB5G6R5(*src565);
-            dst[0] = (byte)(unorm.z * 255.0f);
-            dst[1] = (byte)(unorm.y * 255.0f);
-            dst[2] = (byte)(unorm.x * 255.0f);
-          }
-          else if(buf5551)
-          {
-            uint16_t *src5551 = (uint16_t *)src;
-            Vec4f unorm = ConvertFromB5G5R5A1(*src5551);
-            dst[0] = (byte)(unorm.z * 255.0f);
-            dst[1] = (byte)(unorm.y * 255.0f);
-            dst[2] = (byte)(unorm.x * 255.0f);
-          }
-          else if(bufBGRA)
-          {
-            dst[0] = src[2];
-            dst[1] = src[1];
-            dst[2] = src[0];
-          }
-          else if(fmt.compByteWidth == 2)    // R16G16B16A16 backbuffer
-          {
-            uint16_t *src16 = (uint16_t *)src;
-
-            float linearR = RDCCLAMP(ConvertFromHalf(src16[0]), 0.0f, 1.0f);
-            float linearG = RDCCLAMP(ConvertFromHalf(src16[1]), 0.0f, 1.0f);
-            float linearB = RDCCLAMP(ConvertFromHalf(src16[2]), 0.0f, 1.0f);
-
-            if(linearR < 0.0031308f)
-              dst[0] = byte(255.0f * (12.92f * linearR));
-            else
-              dst[0] = byte(255.0f * (1.055f * powf(linearR, 1.0f / 2.4f) - 0.055f));
-
-            if(linearG < 0.0031308f)
-              dst[1] = byte(255.0f * (12.92f * linearG));
-            else
-              dst[1] = byte(255.0f * (1.055f * powf(linearG, 1.0f / 2.4f) - 0.055f));
-
-            if(linearB < 0.0031308f)
-              dst[2] = byte(255.0f * (12.92f * linearB));
-            else
-              dst[2] = byte(255.0f * (1.055f * powf(linearB, 1.0f / 2.4f) - 0.055f));
-          }
-          else
-          {
-            dst[0] = src[0];
-            dst[1] = src[1];
-            dst[2] = src[2];
-          }
-
-          dst += 3;
-        }
-      }
-    }
-
     vt->UnmapMemory(Unwrap(device), Unwrap(readbackMem.mem));
 
     // delete all
     vt->DestroyBuffer(Unwrap(device), Unwrap(readbackBuf), NULL);
     GetResourceManager()->ReleaseWrappedResource(readbackBuf);
-  }
 
-  byte *buf = NULL;
-  int buflen = 0;
-  FileType thformat = FileType::JPG;
-
-  if(wnd)
-  {
-    buflen = thwidth * thheight;
-    buf = new byte[buflen];
-
-    jpge::params p;
-    p.m_quality = 80;
-
-    bool success =
-        jpge::compress_image_to_jpeg_file_in_memory(buf, buflen, thwidth, thheight, 3, thpixels, p);
-
-    if(!success)
+    ResourceFormat fmt = MakeResourceFormat(swapInfo.format);
+    fp.width = swapInfo.extent.width;
+    fp.height = swapInfo.extent.height;
+    fp.pitch = rowPitch;
+    fp.stride = fmt.compByteWidth * fmt.compCount;
+    fp.bpc = fmt.compByteWidth;
+    fp.bgra = fmt.bgraOrder();
+    fp.max_width = maxSize;
+    fp.pitch_requirement = 8;
+    switch(fmt.type)
     {
-      RDCERR("Failed to compress to jpg");
-      SAFE_DELETE_ARRAY(buf);
-      thwidth = 0;
-      thheight = 0;
+      case ResourceFormatType::R10G10B10A2:
+        fp.stride = 4;
+        fp.buf1010102 = true;
+        break;
+      case ResourceFormatType::R5G6B5:
+        fp.stride = 2;
+        fp.buf565 = true;
+        break;
+      case ResourceFormatType::R5G5B5A1:
+        fp.stride = 2;
+        fp.buf5551 = true;
+        break;
+      default: break;
     }
   }
 
-  RDCFile *rdc = RenderDoc::Inst().CreateRDC(RDCDriver::Vulkan, m_CapturedFrames.back().frameNumber,
-                                             buf, buflen, thwidth, thheight, thformat);
-
-  SAFE_DELETE_ARRAY(buf);
-  SAFE_DELETE_ARRAY(thpixels);
+  RDCFile *rdc =
+      RenderDoc::Inst().CreateRDC(RDCDriver::Vulkan, m_CapturedFrames.back().frameNumber, fp);
 
   StreamWriter *captureWriter = NULL;
 
@@ -1684,6 +1711,35 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
   FreeAllMemory(MemoryScope::InitialContents);
 
   return true;
+}
+
+void WrappedVulkan::AdvanceFrame()
+{
+  if(IsBackgroundCapturing(m_State))
+  {
+    RenderDoc::Inst().Tick();
+    GetResourceManager()->FlushPendingDirty();
+  }
+  m_FrameCounter++;    // first present becomes frame #1, this function is at the end of the frame
+}
+
+void WrappedVulkan::Present(void *dev, void *wnd)
+{
+  bool activeWindow = wnd == NULL || RenderDoc::Inst().IsActiveWindow(dev, wnd);
+
+  RenderDoc::Inst().AddActiveDriver(RDCDriver::Vulkan, true);
+  if(!activeWindow)
+    return;
+
+  if(IsActiveCapturing(m_State) && !m_AppControlledCapture)
+    RenderDoc::Inst().EndFrameCapture(dev, wnd);
+
+  if(RenderDoc::Inst().ShouldTriggerCapture(m_FrameCounter) && IsBackgroundCapturing(m_State))
+  {
+    RenderDoc::Inst().StartFrameCapture(dev, wnd);
+
+    m_AppControlledCapture = false;
+  }
 }
 
 void WrappedVulkan::AddResource(ResourceId id, ResourceType type, const char *defaultNamePrefix)
@@ -1867,6 +1923,8 @@ ReplayStatus WrappedVulkan::ReadLogInitialisation(RDCFile *rdc, bool storeStruct
     m_InternalCmds.pendingcmds.pop_back();
   }
 
+  FreeAllMemory(MemoryScope::IndirectReadback);
+
   return ReplayStatus::Succeeded;
 }
 
@@ -2027,8 +2085,7 @@ ReplayStatus WrappedVulkan::ContextReplayLog(CaptureState readType, uint32_t sta
   {
     GetFrameRecord().drawcallList = m_ParentDrawcall.Bake();
 
-    DrawcallDescription *previous = NULL;
-    SetupDrawcallPointers(m_Drawcalls, GetFrameRecord().drawcallList, NULL, previous);
+    SetupDrawcallPointers(m_Drawcalls, GetFrameRecord().drawcallList);
 
     struct SortEID
     {
@@ -2588,6 +2645,39 @@ bool WrappedVulkan::ProcessChunk(ReadSerialiser &ser, VulkanChunk chunk)
       return Serialise_vkGetDeviceQueue2(ser, VK_NULL_HANDLE, NULL, NULL);
       break;
 
+    case VulkanChunk::vkCmdDrawIndirectCountKHR:
+      return Serialise_vkCmdDrawIndirectCountKHR(ser, VK_NULL_HANDLE, VK_NULL_HANDLE, 0,
+                                                 VK_NULL_HANDLE, 0, 0, 0);
+      break;
+    case VulkanChunk::vkCmdDrawIndexedIndirectCountKHR:
+      return Serialise_vkCmdDrawIndexedIndirectCountKHR(ser, VK_NULL_HANDLE, VK_NULL_HANDLE, 0,
+                                                        VK_NULL_HANDLE, 0, 0, 0);
+      break;
+
+    case VulkanChunk::vkCreateRenderPass2KHR:
+      return Serialise_vkCreateRenderPass2KHR(ser, VK_NULL_HANDLE, NULL, NULL, NULL);
+    case VulkanChunk::vkCmdBeginRenderPass2KHR:
+      return Serialise_vkCmdBeginRenderPass2KHR(ser, VK_NULL_HANDLE, NULL, NULL);
+    case VulkanChunk::vkCmdNextSubpass2KHR:
+      return Serialise_vkCmdNextSubpass2KHR(ser, VK_NULL_HANDLE, NULL, NULL);
+    case VulkanChunk::vkCmdEndRenderPass2KHR:
+      return Serialise_vkCmdEndRenderPass2KHR(ser, VK_NULL_HANDLE, NULL);
+
+    case VulkanChunk::vkCmdBindTransformFeedbackBuffersEXT:
+      return Serialise_vkCmdBindTransformFeedbackBuffersEXT(ser, VK_NULL_HANDLE, 0, 0, NULL, NULL,
+                                                            NULL);
+    case VulkanChunk::vkCmdBeginTransformFeedbackEXT:
+      return Serialise_vkCmdBeginTransformFeedbackEXT(ser, VK_NULL_HANDLE, 0, 0, NULL, NULL);
+    case VulkanChunk::vkCmdEndTransformFeedbackEXT:
+      return Serialise_vkCmdEndTransformFeedbackEXT(ser, VK_NULL_HANDLE, 0, 0, NULL, NULL);
+    case VulkanChunk::vkCmdBeginQueryIndexedEXT:
+      return Serialise_vkCmdBeginQueryIndexedEXT(ser, VK_NULL_HANDLE, VK_NULL_HANDLE, 0, 0, 0);
+    case VulkanChunk::vkCmdEndQueryIndexedEXT:
+      return Serialise_vkCmdEndQueryIndexedEXT(ser, VK_NULL_HANDLE, VK_NULL_HANDLE, 0, 0);
+    case VulkanChunk::vkCmdDrawIndirectByteCountEXT:
+      return Serialise_vkCmdDrawIndirectByteCountEXT(ser, VK_NULL_HANDLE, 0, 0, VK_NULL_HANDLE, 0,
+                                                     0, 0);
+
     default:
     {
       SystemChunk system = (SystemChunk)chunk;
@@ -2719,6 +2809,15 @@ void WrappedVulkan::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
     VkResult vkr = VK_SUCCESS;
 
     bool rpWasActive = false;
+    // these are the image barriers to take the images from their current state to whatever is
+    // needed for the loadRP. This is because when creating the loadRP we set initial = final =
+    // attachment layout, to ensure it's in a known layout (and not transitioned from UNDEFINED or
+    // something). We do a 'safe' transition from current layout to what's expected in the
+    // attachment, which should always be a nop or overriding an UNDEFINED transition. Then we put
+    // it back again afterwards.
+    std::vector<VkImageMemoryBarrier> loadRPImgBarriers;
+
+    m_RenderState.rpBarriers.clear();
 
     // we'll need our own command buffer if we're replaying just a subsection
     // of events within a single command buffer record - always if it's only
@@ -2727,6 +2826,9 @@ void WrappedVulkan::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
     if(partial)
     {
       VkCommandBuffer cmd = m_OutsideCmdBuffer = GetNextCmd();
+
+      // we'll explicitly submit this when we're ready
+      RemovePendingCommandBuffer(cmd);
 
       VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
                                             VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
@@ -2738,31 +2840,6 @@ void WrappedVulkan::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
 
       if(m_Partial[Primary].renderPassActive)
       {
-        // first apply implicit transitions to the right subpass
-        std::vector<VkImageMemoryBarrier> imgBarriers = GetImplicitRenderPassBarriers();
-
-        // don't transition from undefined, or contents will be discarded, instead transition from
-        // the current state.
-        for(size_t i = 0; i < imgBarriers.size(); i++)
-        {
-          if(imgBarriers[i].oldLayout == VK_IMAGE_LAYOUT_UNDEFINED)
-          {
-            // TODO find overlapping range and transition that instead
-            imgBarriers[i].oldLayout =
-                m_ImageLayouts[GetResourceManager()->GetNonDispWrapper(imgBarriers[i].image)->id]
-                    .subresourceStates[0]
-                    .newLayout;
-          }
-        }
-
-        GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[GetResID(cmd)].imgbarriers,
-                                             m_ImageLayouts, (uint32_t)imgBarriers.size(),
-                                             &imgBarriers[0]);
-
-        ObjDisp(cmd)->CmdPipelineBarrier(Unwrap(cmd), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                                         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, false, 0, NULL, 0, NULL,
-                                         (uint32_t)imgBarriers.size(), &imgBarriers[0]);
-
         const DrawcallDescription *draw = GetDrawcall(endEventID);
 
         bool rpUnneeded = false;
@@ -2809,10 +2886,18 @@ void WrappedVulkan::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
     {
       VkCommandBuffer cmd = m_OutsideCmdBuffer;
 
+      // end any active XFB
+      if(!m_RenderState.xfbcounters.empty())
+        m_RenderState.EndTransformFeedback(cmd);
+
       // check if the render pass is active - it could have become active
-      // even if it wasn't before (if the above event was a CmdBeginRenderPass)
+      // even if it wasn't before (if the above event was a CmdBeginRenderPass).
+      // If we began our own custom single-draw loadrp, and it was ended by a CmdEndRenderPass,
+      // we need to reverse the virtual transitions we did above, as it won't happen otherwise
       if(m_Partial[Primary].renderPassActive)
         m_RenderState.EndRenderPass(cmd);
+      else if(rpWasActive)
+        m_RenderState.DoRenderpassEndTransitions(cmd);
 
       // we might have replayed a CmdBeginRenderPass or CmdEndRenderPass,
       // but we want to keep the partial replay data state intact, so restore
@@ -2820,6 +2905,8 @@ void WrappedVulkan::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
       m_Partial[Primary].renderPassActive = rpWasActive;
 
       ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
+
+      AddPendingCommandBuffer(cmd);
 
       SubmitCmds();
 
@@ -3007,6 +3094,11 @@ VkBool32 WrappedVulkan::DebugCallback(VkDebugReportFlagsEXT flags,
     // The validation layers can't track simultaneous use of the same memory in multiple buffers, so
     // misreports any buffer which was filled by initial states (whole-memory buffer copies).
     if(isMEM && messageCode == 15)
+      return false;
+
+    // Non-linear image is aliased with linear buffer
+    // Not an error, the validation layers complain at our whole-mem bufs
+    if(strstr(pMessage, "InvalidAliasing"))
       return false;
 
     RDCWARN("[%s:%u/%d] %s", pLayerPrefix, (uint32_t)location, messageCode, pMessage);
@@ -3216,6 +3308,16 @@ void WrappedVulkan::AddUsage(VulkanDrawcallTreeNode &drawNode, vector<DebugMessa
   for(size_t i = 0; i < state.vbuffers.size(); i++)
     drawNode.resourceUsage.push_back(
         std::make_pair(state.vbuffers[i], EventUsage(e, ResourceUsage::VertexBuffer)));
+
+  for(uint32_t i = state.xfbfirst;
+      i < state.xfbfirst + state.xfbcount && i < state.xfbbuffers.size(); i++)
+  {
+    if(state.xfbbuffers[i] != ResourceId())
+    {
+      drawNode.resourceUsage.push_back(
+          std::make_pair(state.xfbbuffers[i], EventUsage(e, ResourceUsage::StreamOut)));
+    }
+  }
 
   //////////////////////////////
   // Shaders

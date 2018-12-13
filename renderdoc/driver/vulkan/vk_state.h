@@ -45,8 +45,13 @@ struct VulkanRenderState
   VulkanRenderState &operator=(const VulkanRenderState &o);
   void BeginRenderPassAndApplyState(VkCommandBuffer cmd, PipelineBinding binding);
   void EndRenderPass(VkCommandBuffer cmd);
-  void BindPipeline(VkCommandBuffer cmd, PipelineBinding binding, bool subpass0);
 
+  void DoRenderPassBeginTransitions(VkCommandBuffer cmd);
+  void DoRenderpassEndTransitions(VkCommandBuffer cmd);
+
+  void EndTransformFeedback(VkCommandBuffer cmd);
+
+  void BindPipeline(VkCommandBuffer cmd, PipelineBinding binding, bool subpass0);
   void BindDescriptorSet(const DescSetLayout &descLayout, VkCommandBuffer cmd,
                          VkPipelineLayout layout, VkPipelineBindPoint bindPoint, uint32_t setIndex,
                          uint32_t *dynamicOffsets);
@@ -103,7 +108,25 @@ struct VulkanRenderState
   };
   vector<VertBuffer> vbuffers;
 
+  struct XFBBuffer
+  {
+    ResourceId buf;
+    VkDeviceSize offs;
+    VkDeviceSize size;
+  };
+  vector<XFBBuffer> xfbbuffers;
+
+  struct XFBCounter
+  {
+    ResourceId buf;
+    VkDeviceSize offs;
+  };
+  uint32_t firstxfbcounter = 0;
+  vector<XFBCounter> xfbcounters;
+
   VulkanResourceManager *GetResourceManager();
   VulkanCreationInfo *m_CreationInfo;
   WrappedVulkan *m_pDriver;
+
+  std::vector<VkImageMemoryBarrier> rpBarriers;
 };

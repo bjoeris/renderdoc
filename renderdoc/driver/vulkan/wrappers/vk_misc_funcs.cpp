@@ -24,23 +24,8 @@
 
 #include "../vk_core.h"
 
-template <>
-VkFramebufferCreateInfo WrappedVulkan::UnwrapInfo(const VkFramebufferCreateInfo *info)
-{
-  VkFramebufferCreateInfo ret = *info;
-
-  VkImageView *unwrapped = GetTempArray<VkImageView>(info->attachmentCount);
-  for(uint32_t i = 0; i < info->attachmentCount; i++)
-    unwrapped[i] = Unwrap(info->pAttachments[i]);
-
-  ret.renderPass = Unwrap(ret.renderPass);
-  ret.pAttachments = unwrapped;
-
-  return ret;
-}
-
-void WrappedVulkan::MakeSubpassLoadRP(VkRenderPassCreateInfo &info,
-                                      const VkRenderPassCreateInfo *origInfo, uint32_t s)
+template <typename RPCreateInfo>
+static void MakeSubpassLoadRP(RPCreateInfo &info, const RPCreateInfo *origInfo, uint32_t s)
 {
   info.subpassCount = 1;
   info.pSubpasses = origInfo->pSubpasses + s;
@@ -48,8 +33,14 @@ void WrappedVulkan::MakeSubpassLoadRP(VkRenderPassCreateInfo &info,
   // remove any dependencies
   info.dependencyCount = 0;
 
-  const VkSubpassDescription *sub = info.pSubpasses;
-  VkAttachmentDescription *att = (VkAttachmentDescription *)info.pAttachments;
+  // we use decltype here because this is templated to work for regular and create_renderpass2
+  // structs
+  using SubpassInfo = typename std::remove_reference<decltype(info.pSubpasses[0])>::type;
+  using AttachmentInfo =
+      typename std::remove_cv<typename std::remove_reference<decltype(info.pAttachments[0])>::type>::type;
+
+  SubpassInfo *sub = info.pSubpasses;
+  AttachmentInfo *att = (AttachmentInfo *)info.pAttachments;
 
   // apply this subpass's attachment layouts to the initial and final layouts
   // so that this RP doesn't perform any layout transitions
@@ -77,6 +68,21 @@ void WrappedVulkan::MakeSubpassLoadRP(VkRenderPassCreateInfo &info,
         att[sub->pDepthStencilAttachment->attachment].finalLayout =
             sub->pDepthStencilAttachment->layout;
   }
+}
+
+template <>
+VkFramebufferCreateInfo WrappedVulkan::UnwrapInfo(const VkFramebufferCreateInfo *info)
+{
+  VkFramebufferCreateInfo ret = *info;
+
+  VkImageView *unwrapped = GetTempArray<VkImageView>(info->attachmentCount);
+  for(uint32_t i = 0; i < info->attachmentCount; i++)
+    unwrapped[i] = Unwrap(info->pAttachments[i]);
+
+  ret.renderPass = Unwrap(ret.renderPass);
+  ret.pAttachments = unwrapped;
+
+  return ret;
 }
 
 // note, for threading reasons we ensure to release the wrappers before
@@ -761,6 +767,22 @@ bool WrappedVulkan::Serialise_vkCreateRenderPass(SerialiserType &ser, VkDevice d
         live = GetResourceManager()->WrapResource(Unwrap(device), rp);
         GetResourceManager()->AddLiveResource(RenderPass, rp);
 
+        bool badIndirectArgDep = false;
+
+        for(uint32_t i = 0; i < CreateInfo.dependencyCount; i++)
+          if(CreateInfo.pDependencies[i].dstAccessMask & VK_ACCESS_INDIRECT_COMMAND_READ_BIT)
+            badIndirectArgDep = true;
+
+        if(badIndirectArgDep)
+          AddDebugMessage(MessageCategory::State_Creation, MessageSeverity::High,
+                          MessageSource::RuntimeWarning,
+                          StringFormat::Fmt("Creating renderpass %s contains a subpass dependency "
+                                            "that would allow writing indirect command arguments.\n"
+                                            "Indirect command contents are read at the end of the "
+                                            "render pass, so write-after-read overwrites will "
+                                            "cause incorrect display of indirect arguments.",
+                                            ToStr(RenderPass).c_str()));
+
         // make a version of the render pass that loads from its attachments,
         // so it can be used for replaying a single draw after a render pass
         // without doing a clear or a DONT_CARE load.
@@ -892,6 +914,221 @@ VkResult WrappedVulkan::vkCreateRenderPass(VkDevice device, const VkRenderPassCr
         MakeSubpassLoadRP(info, pCreateInfo, s);
 
         ret = ObjDisp(device)->CreateRenderPass(Unwrap(device), &info, NULL, &rpinfo.loadRPs[s]);
+        RDCASSERTEQUAL(ret, VK_SUCCESS);
+
+        ResourceId loadRPid = GetResourceManager()->WrapResource(Unwrap(device), rpinfo.loadRPs[s]);
+
+        // register as a live-only resource, so it is cleaned up properly
+        GetResourceManager()->AddLiveResource(loadRPid, rpinfo.loadRPs[s]);
+      }
+
+      m_CreationInfo.m_RenderPass[id] = rpinfo;
+    }
+  }
+
+  return ret;
+}
+
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkCreateRenderPass2KHR(SerialiserType &ser, VkDevice device,
+                                                     const VkRenderPassCreateInfo2KHR *pCreateInfo,
+                                                     const VkAllocationCallbacks *pAllocator,
+                                                     VkRenderPass *pRenderPass)
+{
+  SERIALISE_ELEMENT(device);
+  SERIALISE_ELEMENT_LOCAL(CreateInfo, *pCreateInfo);
+  SERIALISE_ELEMENT_OPT(pAllocator);
+  SERIALISE_ELEMENT_LOCAL(RenderPass, GetResID(*pRenderPass)).TypedAs("VkRenderPass");
+
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+  {
+    VkRenderPass rp = VK_NULL_HANDLE;
+
+    VulkanCreationInfo::RenderPass rpinfo;
+    rpinfo.Init(GetResourceManager(), m_CreationInfo, &CreateInfo);
+
+    // we want to store off the data so we can display it after the pass.
+    // override any user-specified DONT_CARE.
+    // Likewise we don't want to throw away data before we're ready, so change
+    // any load ops to LOAD instead of DONT_CARE (which is valid!). We of course
+    // leave any LOAD_OP_CLEAR alone.
+    VkAttachmentDescription2KHR *att = (VkAttachmentDescription2KHR *)CreateInfo.pAttachments;
+    for(uint32_t i = 0; i < CreateInfo.attachmentCount; i++)
+    {
+      att[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+      att[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+      if(att[i].loadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+        att[i].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+      if(att[i].stencilLoadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
+        att[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+
+      // renderpass can't start or end in presentable layout on replay
+      ReplacePresentableImageLayout(att[i].initialLayout);
+      ReplacePresentableImageLayout(att[i].finalLayout);
+    }
+
+    VkResult ret = ObjDisp(device)->CreateRenderPass2KHR(Unwrap(device), &CreateInfo, NULL, &rp);
+
+    if(ret != VK_SUCCESS)
+    {
+      RDCERR("Failed on resource serialise-creation, VkResult: %s", ToStr(ret).c_str());
+      return false;
+    }
+    else
+    {
+      ResourceId live;
+
+      if(GetResourceManager()->HasWrapper(ToTypedHandle(rp)))
+      {
+        live = GetResourceManager()->GetNonDispWrapper(rp)->id;
+
+        // destroy this instance of the duplicate, as we must have matching create/destroy
+        // calls and there won't be a wrapped resource hanging around to destroy this one.
+        ObjDisp(device)->DestroyRenderPass(Unwrap(device), rp, NULL);
+
+        // whenever the new ID is requested, return the old ID, via replacements.
+        GetResourceManager()->ReplaceResource(RenderPass, GetResourceManager()->GetOriginalID(live));
+      }
+      else
+      {
+        live = GetResourceManager()->WrapResource(Unwrap(device), rp);
+        GetResourceManager()->AddLiveResource(RenderPass, rp);
+
+        // make a version of the render pass that loads from its attachments,
+        // so it can be used for replaying a single draw after a render pass
+        // without doing a clear or a DONT_CARE load.
+        for(uint32_t i = 0; i < CreateInfo.attachmentCount; i++)
+        {
+          att[i].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+          att[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        }
+
+        VkRenderPassCreateInfo2KHR loadInfo = CreateInfo;
+
+        rpinfo.loadRPs.resize(CreateInfo.subpassCount);
+
+        // create a render pass for each subpass that maintains attachment layouts
+        for(uint32_t s = 0; s < CreateInfo.subpassCount; s++)
+        {
+          MakeSubpassLoadRP(loadInfo, &CreateInfo, s);
+
+          ret = ObjDisp(device)->CreateRenderPass2KHR(Unwrap(device), &loadInfo, NULL,
+                                                      &rpinfo.loadRPs[s]);
+          RDCASSERTEQUAL(ret, VK_SUCCESS);
+
+          // handle the loadRP being a duplicate
+          if(GetResourceManager()->HasWrapper(ToTypedHandle(rpinfo.loadRPs[s])))
+          {
+            // just fetch the existing wrapped object
+            rpinfo.loadRPs[s] =
+                (VkRenderPass)(uint64_t)GetResourceManager()->GetNonDispWrapper(rpinfo.loadRPs[s]);
+
+            // destroy this instance of the duplicate, as we must have matching create/destroy
+            // calls and there won't be a wrapped resource hanging around to destroy this one.
+            ObjDisp(device)->DestroyRenderPass(Unwrap(device), rpinfo.loadRPs[s], NULL);
+
+            // don't need to ReplaceResource as no IDs are involved
+          }
+          else
+          {
+            ResourceId loadRPid =
+                GetResourceManager()->WrapResource(Unwrap(device), rpinfo.loadRPs[s]);
+
+            // register as a live-only resource, so it is cleaned up properly
+            GetResourceManager()->AddLiveResource(loadRPid, rpinfo.loadRPs[s]);
+          }
+        }
+
+        m_CreationInfo.m_RenderPass[live] = rpinfo;
+      }
+    }
+
+    AddResource(RenderPass, ResourceType::RenderPass, "Render Pass");
+    DerivedResource(device, RenderPass);
+  }
+
+  return true;
+}
+
+VkResult WrappedVulkan::vkCreateRenderPass2KHR(VkDevice device,
+                                               const VkRenderPassCreateInfo2KHR *pCreateInfo,
+                                               const VkAllocationCallbacks *pAllocator,
+                                               VkRenderPass *pRenderPass)
+{
+  VkResult ret;
+  SERIALISE_TIME_CALL(ret = ObjDisp(device)->CreateRenderPass2KHR(Unwrap(device), pCreateInfo,
+                                                                  pAllocator, pRenderPass));
+
+  if(ret == VK_SUCCESS)
+  {
+    ResourceId id = GetResourceManager()->WrapResource(Unwrap(device), *pRenderPass);
+
+    if(IsCaptureMode(m_State))
+    {
+      Chunk *chunk = NULL;
+
+      {
+        CACHE_THREAD_SERIALISER();
+
+        SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCreateRenderPass2KHR);
+        Serialise_vkCreateRenderPass2KHR(ser, device, pCreateInfo, NULL, pRenderPass);
+
+        chunk = scope.Get();
+      }
+
+      VkResourceRecord *record = GetResourceManager()->AddResourceRecord(*pRenderPass);
+      record->AddChunk(chunk);
+
+      // +1 for the terminal value
+      uint32_t arrayCount = pCreateInfo->attachmentCount + 1;
+
+      record->imageAttachments = new AttachmentInfo[arrayCount];
+
+      RDCEraseMem(record->imageAttachments, sizeof(AttachmentInfo) * arrayCount);
+
+      for(uint32_t i = 0; i < pCreateInfo->attachmentCount; i++)
+      {
+        record->imageAttachments[i].record = NULL;
+        record->imageAttachments[i].barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        record->imageAttachments[i].barrier.oldLayout = pCreateInfo->pAttachments[i].initialLayout;
+        record->imageAttachments[i].barrier.newLayout = pCreateInfo->pAttachments[i].finalLayout;
+      }
+    }
+    else
+    {
+      GetResourceManager()->AddLiveResource(id, *pRenderPass);
+
+      VulkanCreationInfo::RenderPass rpinfo;
+      rpinfo.Init(GetResourceManager(), m_CreationInfo, pCreateInfo);
+
+      VkRenderPassCreateInfo2KHR info = *pCreateInfo;
+
+      VkAttachmentDescription2KHR atts[16];
+      RDCASSERT(ARRAY_COUNT(atts) >= (size_t)info.attachmentCount);
+
+      // make a version of the render pass that loads from its attachments,
+      // so it can be used for replaying a single draw after a render pass
+      // without doing a clear or a DONT_CARE load.
+      for(uint32_t i = 0; i < info.attachmentCount; i++)
+      {
+        atts[i] = info.pAttachments[i];
+        atts[i].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        atts[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+      }
+
+      info.pAttachments = atts;
+
+      rpinfo.loadRPs.resize(pCreateInfo->subpassCount);
+
+      // create a render pass for each subpass that maintains attachment layouts
+      for(uint32_t s = 0; s < pCreateInfo->subpassCount; s++)
+      {
+        MakeSubpassLoadRP(info, pCreateInfo, s);
+
+        ret = ObjDisp(device)->CreateRenderPass2KHR(Unwrap(device), &info, NULL, &rpinfo.loadRPs[s]);
         RDCASSERTEQUAL(ret, VK_SUCCESS);
 
         ResourceId loadRPid = GetResourceManager()->WrapResource(Unwrap(device), rpinfo.loadRPs[s]);
@@ -1345,9 +1582,10 @@ static ObjData GetObjData(VkObjectType objType, uint64_t object)
       ret.unwrapped = GetWrapped((VkSurfaceKHR)object)->real.handle;
       break;
 
-    // VkDisplayKHR and VkDisplayModeKHR are not wrapped
+    // VkDisplayKHR, VkDisplayModeKHR, and VkValidationCacheEXT are not wrapped
     case VK_OBJECT_TYPE_DISPLAY_KHR:
     case VK_OBJECT_TYPE_DISPLAY_MODE_KHR:
+    case VK_OBJECT_TYPE_VALIDATION_CACHE_EXT:
       ret.unwrapped = object;
       break;
 
@@ -1368,9 +1606,8 @@ static ObjData GetObjData(VkObjectType objType, uint64_t object)
 
     // these objects are not supported
     case VK_OBJECT_TYPE_OBJECT_TABLE_NVX:
-    case VK_OBJECT_TYPE_VALIDATION_CACHE_EXT:
     case VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NVX:
-    case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NVX:
+    case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV:
     case VK_OBJECT_TYPE_UNKNOWN:
     case VK_OBJECT_TYPE_RANGE_SIZE:
     case VK_OBJECT_TYPE_MAX_ENUM: break;
@@ -1436,6 +1673,8 @@ static ObjData GetObjData(VkDebugReportObjectTypeEXT objType, uint64_t object)
     castType = VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION;
   else if(objType == VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT)
     castType = VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE;
+  else if(objType == VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV_EXT)
+    castType = VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV;
 
   RDCCOMPILE_ASSERT(VK_DEBUG_REPORT_OBJECT_TYPE_END_RANGE_EXT ==
                         VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT_EXT,
@@ -1704,6 +1943,10 @@ INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateFramebuffer, VkDevice device,
 
 INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateRenderPass, VkDevice device,
                                 const VkRenderPassCreateInfo *pCreateInfo,
+                                const VkAllocationCallbacks *pAllocator, VkRenderPass *pRenderPass);
+
+INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateRenderPass2KHR, VkDevice device,
+                                const VkRenderPassCreateInfo2KHR *pCreateInfo,
                                 const VkAllocationCallbacks *pAllocator, VkRenderPass *pRenderPass);
 
 INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateQueryPool, VkDevice device,

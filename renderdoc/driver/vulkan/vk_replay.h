@@ -128,6 +128,12 @@ struct VulkanAMDDrawCallback;
 
 struct VulkanPostVSData
 {
+  struct InstData
+  {
+    uint32_t numVerts = 0;
+    uint32_t bufOffset = 0;
+  };
+
   struct StageData
   {
     VkBuffer buf;
@@ -139,6 +145,9 @@ struct VulkanPostVSData
     uint32_t numVerts;
     uint32_t vertStride;
     uint32_t instStride;
+
+    // complex case - expansion per instance
+    std::vector<InstData> instData;
 
     uint32_t numViews;
 
@@ -187,6 +196,7 @@ public:
   void DestroyResources();
 
   void SetDriver(WrappedVulkan *d) { m_pDriver = d; }
+  DriverInformation GetDriverInfo() { return m_DriverInfo; }
   APIProperties GetAPIProperties();
 
   ResourceDescription &GetResourceDesc(ResourceId id);
@@ -249,8 +259,9 @@ public:
 
   void InitPostVSBuffers(uint32_t eventId);
   void InitPostVSBuffers(const std::vector<uint32_t> &passEvents);
+
   // indicates that EID alias is the same as eventId
-  void AliasPostVSBuffers(uint32_t eventId, uint32_t alias) { m_PostVSAlias[alias] = eventId; }
+  void AliasPostVSBuffers(uint32_t eventId, uint32_t alias) { m_PostVS.Alias[alias] = eventId; }
   void ClearPostVSCache();
 
   MeshFormat GetPostVSBuffers(uint32_t eventId, uint32_t instID, uint32_t viewID,
@@ -328,9 +339,14 @@ public:
   static bool CheckVulkanLayer(VulkanLayerFlags &flags, std::vector<std::string> &myJSONs,
                                std::vector<std::string> &otherJSONs);
   static void InstallVulkanLayer(bool systemLevel);
+  void GetInitialDriverVersion();
+  void SetDriverInformation(const VkPhysicalDeviceProperties &props);
 
   AMDCounters *GetAMDCounters() { return m_pAMDCounters; }
 private:
+  void FetchVSOut(uint32_t eventId);
+  void FetchTessGSOut(uint32_t eventId);
+
   bool RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginInfo rpbegin, int flags);
 
   void CreateTexImageView(VkImageAspectFlags aspectFlags, VkImage liveIm,
@@ -410,6 +426,7 @@ private:
     eTexDisplay_F32Render = 0x2,
     eTexDisplay_BlendAlpha = 0x4,
     eTexDisplay_MipShift = 0x8,
+    eTexDisplay_GreenOnly = 0x10,
   };
 
   // General use/misc items that are used in many places
@@ -433,7 +450,12 @@ private:
     VkPipeline BlendPipeline = VK_NULL_HANDLE;
     VkPipeline F16Pipeline = VK_NULL_HANDLE;
     VkPipeline F32Pipeline = VK_NULL_HANDLE;
+
+    VkPipeline PipelineGreenOnly = VK_NULL_HANDLE;
+    VkPipeline F16PipelineGreenOnly = VK_NULL_HANDLE;
+    VkPipeline F32PipelineGreenOnly = VK_NULL_HANDLE;
     GPUBuffer UBO;
+    GPUBuffer HeatmapUBO;
 
     // ring buffered to allow multiple texture renders between flushes
     VkDescriptorSet DescSet[16] = {VK_NULL_HANDLE};
@@ -469,8 +491,6 @@ private:
     VkImageView ImageView = VK_NULL_HANDLE;
     VkFramebuffer NoDepthFB = VK_NULL_HANDLE;
     VkRenderPass NoDepthRP = VK_NULL_HANDLE;
-
-    GPUBuffer OverdrawRampUBO;
 
     VkDescriptorSetLayout m_QuadDescSetLayout = VK_NULL_HANDLE;
     VkDescriptorSet m_QuadDescSet = VK_NULL_HANDLE;
@@ -573,13 +593,23 @@ private:
     VkPipeline m_MinMaxResultPipe[3] = {VK_NULL_HANDLE};
   } m_Histogram;
 
-  std::map<uint32_t, VulkanPostVSData> m_PostVSData;
-  std::map<uint32_t, uint32_t> m_PostVSAlias;
+  struct PostVS
+  {
+    void Destroy(WrappedVulkan *driver);
+
+    VkQueryPool XFBQueryPool = VK_NULL_HANDLE;
+    uint32_t XFBQueryPoolSize = 0;
+
+    std::map<uint32_t, VulkanPostVSData> Data;
+    std::map<uint32_t, uint32_t> Alias;
+  } m_PostVS;
 
   std::vector<ResourceDescription> m_Resources;
   std::map<ResourceId, size_t> m_ResourceIdx;
 
   VKPipe::State m_VulkanPipelineState;
+
+  DriverInformation m_DriverInfo;
 
   void FillTimersAMD(uint32_t *eventStartID, uint32_t *sampleIndex, vector<uint32_t> *eventIDs);
 

@@ -666,6 +666,9 @@ struct GLDispatchTable
   // OVR_multiview_multisampled_render_to_texture
   PFNGLFRAMEBUFFERTEXTUREMULTISAMPLEMULTIVIEWOVRPROC glFramebufferTextureMultisampleMultiviewOVR;
 
+  // QCOM_texture_foveated
+  PFNGLTEXTUREFOVEATIONPARAMETERSQCOMPROC glTextureFoveationParametersQCOM;
+
   // ARB_parallel_shader_compile
   PFNGLMAXSHADERCOMPILERTHREADSKHRPROC glMaxShaderCompilerThreadsKHR; // aliases glMaxShaderCompilerThreadsARB
 
@@ -967,7 +970,9 @@ void SetDriverForHooks(WrappedOpenGL *driver);
 // intialisation. This can have false positives if the program creates a context late, but it's the
 // best we can do.
 #if ENABLED(RDOC_WIN32)
-void EnableHooks();
+void EnableGLHooks();
+#else
+#define EnableGLHooks() (void)0
 #endif
 
 // this function looks up our list of hook entry points and returns our hook entry point instead of

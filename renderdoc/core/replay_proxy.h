@@ -39,7 +39,10 @@ enum ReplayProxyPacket
   // peacefully with remote server packet numbers
   eReplayProxy_First = 0x1000,
 
-  eReplayProxy_ReplayLog = eReplayProxy_First,
+  eReplayProxy_RemoteExecutionKeepAlive = eReplayProxy_First,
+  eReplayProxy_RemoteExecutionFinished,
+
+  eReplayProxy_ReplayLog,
 
   eReplayProxy_CacheBufferData,
   eReplayProxy_CacheTextureData,
@@ -94,7 +97,11 @@ enum ReplayProxyPacket
   eReplayProxy_DisassembleShader,
   eReplayProxy_GetDisassemblyTargets,
   eReplayProxy_GetTargetShaderEncodings,
+
+  eReplayProxy_GetDriverInfo,
 };
+
+DECLARE_REFLECTION_ENUM(ReplayProxyPacket);
 
 #define IMPLEMENT_FUNCTION_PROXIED(rettype, name, ...)                                  \
   rettype name(__VA_ARGS__);                                                            \
@@ -135,6 +142,8 @@ public:
   {
     RDCEraseEl(m_APIProps);
 
+    InitRemoteExecutionThread();
+
     if(m_Replay)
       InitPreviewWindow();
   }
@@ -143,6 +152,13 @@ public:
 
   void InitPreviewWindow();
   void ShutdownPreviewWindow();
+  void RefreshPreviewWindow();
+
+  void InitRemoteExecutionThread();
+  void ShutdownRemoteExecutionThread();
+  void BeginRemoteExecution();
+  void EndRemoteExecution();
+  void RemoteExecutionThreadEntry();
 
   bool IsRemoteProxy() { return !m_RemoteServer; }
   void Shutdown() { delete this; }
@@ -415,8 +431,6 @@ public:
     return ResourceId();
   }
 
-  void RefreshPreviewWindow();
-
   bool Tick(int type);
 
   const D3D11Pipe::State *GetD3D11PipelineState() { return &m_D3D11PipelineState; }
@@ -435,6 +449,7 @@ public:
   IMPLEMENT_FUNCTION_PROXIED(TextureDescription, GetTexture, ResourceId id);
 
   IMPLEMENT_FUNCTION_PROXIED(APIProperties, GetAPIProperties);
+  IMPLEMENT_FUNCTION_PROXIED(DriverInformation, GetDriverInfo);
 
   IMPLEMENT_FUNCTION_PROXIED(std::vector<DebugMessage>, GetDebugMessages);
 
@@ -548,6 +563,8 @@ private:
   const DrawcallDescription *FindDraw(const rdcarray<DrawcallDescription> &drawcallList,
                                       uint32_t eventId);
 
+  bool CheckError(ReplayProxyPacket receivedPacket, ReplayProxyPacket expectedPacket);
+
   struct TextureCacheEntry
   {
     ResourceId replayid;
@@ -646,6 +663,24 @@ private:
   WindowingData m_PreviewWindowingData = {WindowingSystem::Unknown};
 
   uint32_t m_EventID = 0;
+
+  enum RemoteExecutionState
+  {
+    RemoteExecution_Inactive = 0,
+    RemoteExecution_ThreadIdle = 1,
+    RemoteExecution_ThreadActive = 2,
+  };
+
+  volatile int32_t m_RemoteExecutionKill = 0;
+  volatile int32_t m_RemoteExecutionState = RemoteExecution_Inactive;
+
+  bool IsThreadIdle()
+  {
+    return Atomic::CmpExch32(&m_RemoteExecutionState, RemoteExecution_ThreadIdle,
+                             RemoteExecution_ThreadIdle) == RemoteExecution_ThreadIdle;
+  }
+
+  Threading::ThreadHandle m_RemoteExecutionThread = 0;
 
   bool m_IsErrored = false;
 

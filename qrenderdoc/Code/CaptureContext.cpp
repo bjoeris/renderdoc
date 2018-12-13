@@ -25,6 +25,7 @@
 #include "CaptureContext.h"
 #include <QApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QLabel>
@@ -32,7 +33,10 @@
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QProgressDialog>
+#include <QRegularExpression>
 #include <QTimer>
+#include "Code/Resources.h"
+#include "Code/pyrenderdoc/PythonContext.h"
 #include "Windows/APIInspector.h"
 #include "Windows/BufferViewer.h"
 #include "Windows/CommentView.h"
@@ -54,6 +58,7 @@
 #include "Windows/TimelineBar.h"
 #include "QRDUtils.h"
 #include "RGPInterop.h"
+#include "version.h"
 
 #include "pipestate.inl"
 
@@ -103,13 +108,31 @@ CaptureContext::CaptureContext(QString paramFilename, QString remoteHost, uint32
         m_MainWindow->takeCaptureOwnership();
     }
   }
+
+  {
+    QDir dir(configFilePath("extensions"));
+
+    if(!dir.exists())
+      dir.mkpath(dir.absolutePath());
+  }
+
+  rdcarray<ExtensionMetadata> exts = CaptureContext::GetInstalledExtensions();
+
+  for(const ExtensionMetadata &e : exts)
+  {
+    if(cfg.AlwaysLoad_Extensions.contains(e.package))
+    {
+      qInfo() << "Automatically loading extension" << QString(e.package);
+      LoadExtension(e.package);
+    }
+  }
 }
 
 CaptureContext::~CaptureContext()
 {
   RENDERDOC_UnregisterMemoryRegion(this);
   delete m_Icon;
-  m_Renderer.CloseThread();
+  m_Replay.CloseThread();
   delete m_MainWindow;
 }
 
@@ -137,6 +160,526 @@ rdcstr CaptureContext::TempCaptureFilename(const rdcstr &appname)
       QFormatStr("%1_%2.rdc")
           .arg(appname)
           .arg(QDateTime::currentDateTimeUtc().toString(lit("yyyy.MM.dd_HH.mm.ss"))));
+}
+
+rdcarray<ExtensionMetadata> CaptureContext::GetInstalledExtensions()
+{
+  QString extensionFolder = configFilePath("extensions");
+
+  rdcarray<ExtensionMetadata> ret;
+
+  QDirIterator it(extensionFolder, QDirIterator::Subdirectories);
+
+  extensionFolder = extensionFolder.toLower();
+
+  while(it.hasNext())
+  {
+    QFileInfo fileinfo(it.next());
+
+    if(fileinfo.fileName().toLower() == lit("extension.json"))
+    {
+      QFile f(fileinfo.absoluteFilePath());
+
+      QString package = fileinfo.absolutePath()
+                            .replace(extensionFolder, QString())
+                            .replace(QLatin1Char('/'), QLatin1Char('.'));
+
+      while(package[0] == QLatin1Char('.'))
+        package.remove(0, 1);
+
+      while(package[package.size() - 1] == QLatin1Char('.'))
+        package.remove(package.size() - 1, 1);
+
+      if(f.exists() && f.open(QIODevice::ReadOnly | QIODevice::Text))
+      {
+        QVariantMap json = JSONToVariant(QString::fromUtf8(f.readAll()));
+
+        if(json.empty())
+        {
+          qCritical() << fileinfo.absoluteFilePath() << "is corrupt, cannot parse json";
+          continue;
+        }
+
+        ExtensionMetadata ext;
+
+        ext.package = package;
+        ext.filePath = fileinfo.absolutePath();
+
+        if(json.contains(lit("name")))
+        {
+          ext.name = json[lit("name")].toString();
+        }
+        else
+        {
+          qCritical() << "Extension" << package << "is corrupt, no name entry";
+          continue;
+        }
+
+        ext.extensionAPI = 1;
+        if(json.contains(lit("extension_api")))
+        {
+          ext.extensionAPI = json[lit("extension_api")].toInt();
+        }
+        else
+        {
+          qCritical() << "Extension" << QString(ext.name) << "is corrupt, no api version entry";
+          continue;
+        }
+
+        if(json.contains(lit("version")))
+        {
+          ext.version = json[lit("version")].toString();
+        }
+        else
+        {
+          qCritical() << "Extension" << QString(ext.name) << "is corrupt, no version entry";
+          continue;
+        }
+
+        if(json.contains(lit("description")))
+        {
+          ext.description = json[lit("description")].toString();
+        }
+        else
+        {
+          qCritical() << "Extension" << QString(ext.name) << "is corrupt, no description entry";
+          continue;
+        }
+
+        if(json.contains(lit("author")))
+        {
+          ext.author = json[lit("author")].toString();
+        }
+        else
+        {
+          qCritical() << "Extension" << QString(ext.name) << "is corrupt, no author entry";
+          continue;
+        }
+
+        if(json.contains(lit("url")))
+        {
+          ext.extensionURL = json[lit("url")].toString();
+        }
+        else
+        {
+          qCritical() << "Extension" << QString(ext.name) << "is corrupt, no URL entry";
+          continue;
+        }
+
+        if(json.contains(lit("minimum_renderdoc")))
+        {
+          QString minVer = json[lit("minimum_renderdoc")].toString();
+
+          QRegularExpression re(lit("([0-9]*).([0-9]*)"));
+          QRegularExpressionMatch match = re.match(minVer);
+
+          bool ok = false, badversion = false;
+
+          if(match.hasMatch())
+          {
+            int major = match.captured(1).toInt(&ok);
+
+            if(ok)
+            {
+              int minor = match.captured(2).toInt(&ok);
+
+              // if it needs a higher major version, we can't load it
+              if(major > RENDERDOC_VERSION_MAJOR)
+                badversion = true;
+
+              // if major versions are the same and it needs a higher minor, we can't load it either
+              if(major == RENDERDOC_VERSION_MAJOR && minor > RENDERDOC_VERSION_MINOR)
+                badversion = true;
+            }
+          }
+
+          if(!ok)
+          {
+            qCritical() << "Extension" << QString(ext.name)
+                        << "is corrupt, minimum_renderdoc doesn't match a MAJOR.MINOR version";
+            continue;
+          }
+
+          if(badversion)
+          {
+            qInfo() << "Extension" << QString(ext.name) << "declares minimum_renderdoc" << minVer
+                    << "so skipping";
+            continue;
+          }
+        }
+
+        ret.push_back(ext);
+      }
+    }
+  }
+
+  return ret;
+}
+
+bool CaptureContext::IsExtensionLoaded(rdcstr name)
+{
+  return m_ExtensionObjects.contains(name);
+}
+
+bool CaptureContext::LoadExtension(rdcstr name)
+{
+  bool ret = false;
+
+  PythonContext::ProcessExtensionWork([this, &ret, name]() {
+    for(QObject *o : m_ExtensionObjects[name])
+      delete o;
+
+    m_ExtensionObjects[name].clear();
+
+    ret = PythonContext::LoadExtension(*this, name);
+
+    if(ret)
+    {
+      m_ExtensionObjects[name].swap(m_PendingExtensionObjects);
+    }
+    else
+    {
+      m_ExtensionObjects.remove(name);
+
+      for(QObject *o : m_PendingExtensionObjects)
+        delete o;
+
+      m_PendingExtensionObjects.clear();
+    }
+  });
+
+  for(QAction *a : m_MainWindow->GetMenuActions())
+    CleanMenu(a);
+
+  m_RegisteredMenuItems.removeAll(NULL);
+
+  return ret;
+}
+
+void CaptureContext::RegisterWindowMenu(WindowMenu base, const rdcarray<rdcstr> &submenus,
+                                        ExtensionCallback callback)
+{
+  if(base == WindowMenu::Unknown)
+  {
+    qCritical() << "Can't register menu for WindowMenu::Unknown";
+    return;
+  }
+
+  if(submenus.isEmpty())
+  {
+    qCritical() << "Empty list of submenus";
+    return;
+  }
+
+  if(base == WindowMenu::NewMenu && submenus.count() == 1)
+  {
+    qCritical() << "Need at least two items in submenus for WindowMenu::NewMenu";
+    return;
+  }
+
+  QMenu *menu = m_MainWindow->GetBaseMenu(base, submenus[0]);
+
+  if(!menu)
+  {
+    qCritical() << "Couldn't get base menu";
+    return;
+  }
+
+  std::function<void()> slotcallback = [this, callback]() { callback(this, {}); };
+
+  // if it's a new menu, GetBaseMenu already did the work, so skip the 0th element of submenus
+  if(base == WindowMenu::NewMenu)
+  {
+    rdcarray<rdcstr> items = submenus;
+    items.erase(0);
+    AddSortedMenuItem(menu, false, items, slotcallback);
+  }
+  else
+  {
+    AddSortedMenuItem(menu, false, submenus, slotcallback);
+  }
+}
+
+void CaptureContext::RegisterPanelMenu(PanelMenu base, const rdcarray<rdcstr> &submenus,
+                                       ExtensionCallback callback)
+{
+  if(base == PanelMenu::Unknown)
+  {
+    qCritical() << "Can't register menu for PanelMenu::Unknown";
+    return;
+  }
+
+  RegisteredMenuItem *item = new RegisteredMenuItem();
+  item->panel = base;
+  item->submenus = submenus;
+  item->callback = callback;
+  m_RegisteredMenuItems.push_back(item);
+  m_PendingExtensionObjects.push_back(item);
+}
+
+void CaptureContext::RegisterContextMenu(ContextMenu base, const rdcarray<rdcstr> &submenus,
+                                         ExtensionCallback callback)
+{
+  if(base == ContextMenu::Unknown)
+  {
+    qCritical() << "Can't register menu for ContextMenu::Unknown";
+    return;
+  }
+
+  RegisteredMenuItem *item = new RegisteredMenuItem();
+  item->context = base;
+  item->submenus = submenus;
+  item->callback = callback;
+  m_RegisteredMenuItems.push_back(item);
+  m_PendingExtensionObjects.push_back(item);
+}
+
+void CaptureContext::MenuDisplaying(ContextMenu contextMenu, QMenu *menu,
+                                    const ExtensionCallbackData &data)
+{
+  ContextMenu contextMenuAlt = contextMenu;
+
+  switch(contextMenu)
+  {
+    case ContextMenu::MeshPreview_GSOutVertex:
+    case ContextMenu::MeshPreview_VSInVertex:
+    case ContextMenu::MeshPreview_VSOutVertex:
+      contextMenuAlt = ContextMenu::MeshPreview_Vertex;
+      break;
+    case ContextMenu::TextureViewer_InputThumbnail:
+    case ContextMenu::TextureViewer_OutputThumbnail:
+      contextMenuAlt = ContextMenu::TextureViewer_Thumbnail;
+      break;
+    default: break;
+  }
+
+  for(RegisteredMenuItem *item : m_RegisteredMenuItems)
+  {
+    if(item->context == contextMenu || item->context == contextMenuAlt)
+    {
+      AddSortedMenuItem(menu, true, item->submenus, [this, item, data]() {
+        rdcarray<rdcpair<rdcstr, PyObject *>> args;
+
+        PythonContext::ConvertPyArgs(data, args);
+
+        item->callback(this, args);
+
+        PythonContext::FreePyArgs(args);
+      });
+    }
+  }
+}
+
+void CaptureContext::MenuDisplaying(PanelMenu panelMenu, QMenu *menu, QWidget *extensionButton,
+                                    const ExtensionCallbackData &data)
+{
+  for(RegisteredMenuItem *item : m_RegisteredMenuItems)
+  {
+    if(item->panel == panelMenu)
+    {
+      AddSortedMenuItem(menu, false, item->submenus, [this, item, data]() {
+        rdcarray<rdcpair<rdcstr, PyObject *>> args;
+
+        PythonContext::ConvertPyArgs(data, args);
+
+        item->callback(this, args);
+
+        PythonContext::FreePyArgs(args);
+      });
+    }
+  }
+
+  QAction *emptyAction = new QAction(tr("No extension commands configured"), menu);
+
+  if(menu->isEmpty())
+  {
+    menu->addAction(emptyAction);
+    QObject::connect(emptyAction, &QAction::triggered,
+                     [this]() { m_MainWindow->showExtensionManager(); });
+  }
+}
+
+void CaptureContext::MessageDialog(const rdcstr &text, const rdcstr &title)
+{
+  RDDialog::information(m_MainWindow, title, text);
+}
+
+void CaptureContext::ErrorDialog(const rdcstr &text, const rdcstr &title)
+{
+  RDDialog::critical(m_MainWindow, title, text);
+}
+
+DialogButton CaptureContext::QuestionDialog(const rdcstr &text, const rdcarray<DialogButton> &options,
+                                            const rdcstr &title)
+{
+  QMessageBox::StandardButtons buttons;
+  for(DialogButton b : options)
+    buttons |= (QMessageBox::StandardButton)b;
+  return (DialogButton)RDDialog::question(m_MainWindow, title, text, buttons);
+}
+
+rdcstr CaptureContext::OpenFileName(const rdcstr &caption, const rdcstr &dir, const rdcstr &filter)
+{
+  return RDDialog::getOpenFileName(m_MainWindow, caption, dir, filter);
+}
+
+rdcstr CaptureContext::OpenDirectoryName(const rdcstr &caption, const rdcstr &dir)
+{
+  return RDDialog::getExistingDirectory(m_MainWindow, caption, dir);
+}
+
+rdcstr CaptureContext::SaveFileName(const rdcstr &caption, const rdcstr &dir, const rdcstr &filter)
+{
+  return RDDialog::getSaveFileName(m_MainWindow, caption, dir, filter);
+}
+
+void CaptureContext::AddSortedMenuItem(QMenu *menu, bool rootMenu, const rdcarray<rdcstr> &items,
+                                       std::function<void()> callback)
+{
+  QAction *beforeAction = NULL;
+  bool addIcon = rootMenu;
+
+  // if we're inserting into a pre-existing menu, try to find an __examples__ action which tells us
+  // where
+  // to be inserting
+  {
+    QList<QAction *> children = menu->actions();
+    int idx = 0;
+    for(; idx < children.count(); idx++)
+    {
+      if(children[idx]->text() == lit("__extensions__"))
+        break;
+    }
+
+    // if we found it, set beforeAction
+    if(idx < children.count())
+    {
+      // search back to find the right place alphabetically to place this, if there are existing
+      // menus
+
+      for(; idx > 0;)
+      {
+        // if the previous child is a separator, break, there are no more previous menus
+        if(children[idx - 1]->isSeparator())
+          break;
+
+        // if we should be sorted before the previous child, move backwards
+        if(children[idx - 1]->text() > items[0])
+        {
+          idx--;
+          continue;
+        }
+
+        // if we found the right place, break
+        break;
+      }
+
+      beforeAction = children[idx];
+      addIcon = true;
+    }
+  }
+
+  for(int i = 0; i < items.count() - 1; i++)
+  {
+    QList<QAction *> children = menu->actions();
+
+    bool found = false;
+
+    // see if this submenu already exists, if so just iterate down to it
+    for(QAction *a : children)
+    {
+      if(a->text() == items[i])
+      {
+        menu = a->menu();
+        found = true;
+        break;
+      }
+    }
+
+    if(found)
+    {
+      addIcon = false;
+      beforeAction = NULL;
+      continue;
+    }
+
+    // create the new submenu
+    QMenu *submenu = new QMenu(items[i], m_MainWindow);
+
+    // if we don't have a beforeAction, find where to insert this to keep alphabetical order.
+    if(!beforeAction)
+    {
+      for(QAction *a : children)
+      {
+        if(submenu->menuAction()->text() < a->text())
+        {
+          beforeAction = a;
+          break;
+        }
+      }
+    }
+
+    if(beforeAction)
+      menu->insertMenu(beforeAction, submenu);
+    else
+      menu->addMenu(submenu);
+
+    if(addIcon)
+      submenu->setIcon(Icons::plugin());
+
+    addIcon = false;
+
+    beforeAction = NULL;
+
+    menu = submenu;
+  }
+
+  QAction *action = new QAction(m_MainWindow);
+
+  action->setText(items.back());
+
+  QObject::connect(action, &QAction::triggered, callback);
+
+  if(!beforeAction)
+  {
+    QList<QAction *> children = menu->actions();
+
+    for(QAction *a : children)
+    {
+      if(action->text() < a->text())
+      {
+        beforeAction = a;
+        break;
+      }
+    }
+  }
+
+  if(beforeAction)
+    menu->insertAction(beforeAction, action);
+  else
+    menu->addAction(action);
+
+  if(addIcon)
+    action->setIcon(Icons::plugin());
+
+  m_PendingExtensionObjects.push_back(action);
+}
+
+void CaptureContext::CleanMenu(QAction *action)
+{
+  QMenu *menu = action->menu();
+
+  // if this isn't a menu, nothing to do - return
+  if(!menu)
+    return;
+
+  // first clean all our children
+  for(QAction *a : menu->actions())
+    CleanMenu(a);
+
+  // if we no longer have any children in this menu, delete it.
+  if(menu->actions().isEmpty())
+    delete menu;
 }
 
 void CaptureContext::LoadCapture(const rdcstr &captureFile, const rdcstr &origFilename,
@@ -241,12 +784,12 @@ void CaptureContext::LoadCaptureThreaded(const QString &captureFile, const QStri
   m_PostloadProgress = 0.0f;
 
   // this function call will block until the capture is either loaded, or there's some failure
-  m_Renderer.OpenCapture(captureFile, [this](float p) { m_LoadProgress = p; });
+  m_Replay.OpenCapture(captureFile, [this](float p) { m_LoadProgress = p; });
 
   // if the renderer isn't running, we hit a failure case so display an error message
-  if(!m_Renderer.IsRunning())
+  if(!m_Replay.IsRunning())
   {
-    QString errmsg = ToQStr(m_Renderer.GetCreateStatus());
+    QString errmsg = ToQStr(m_Replay.GetCreateStatus());
 
     QString messageText = tr("%1\nFailed to open capture for replay: %2.\n\n"
                              "Check diagnostic log in Help menu for more details.")
@@ -271,7 +814,7 @@ void CaptureContext::LoadCaptureThreaded(const QString &captureFile, const QStri
   m_FirstDrawcall = m_LastDrawcall = NULL;
 
   // fetch initial data like drawcalls, textures and buffers
-  m_Renderer.BlockInvoke([this](IReplayController *r) {
+  m_Replay.BlockInvoke([this](IReplayController *r) {
     if(Config().EventBrowser_AddFake)
       r->AddFakeMarkers();
 
@@ -465,7 +1008,7 @@ void CaptureContext::RecompressCapture()
   if(IsCaptureLocal())
   {
     // for local files we already have a handle. We'll reuse it, then re-open
-    cap = Replay().GetCaptureFile();
+    cap = m_Replay.GetCaptureFile();
   }
   else
   {
@@ -539,7 +1082,7 @@ void CaptureContext::RecompressCapture()
     m_CaptureTemporary = false;
 
     // open the saved capture file. This will let us remove the old file too
-    Replay().ReopenCaptureFile(m_CaptureFile);
+    m_Replay.ReopenCaptureFile(m_CaptureFile);
 
     m_CaptureMods = CaptureModifications::All;
 
@@ -568,7 +1111,7 @@ bool CaptureContext::SaveCaptureTo(const rdcstr &captureFile)
       }
       else
       {
-        ICaptureFile *capFile = Replay().GetCaptureFile();
+        ICaptureFile *capFile = m_Replay.GetCaptureFile();
 
         if(capFile)
         {
@@ -618,7 +1161,7 @@ bool CaptureContext::SaveCaptureTo(const rdcstr &captureFile)
   m_CaptureLocal = true;
   m_CaptureTemporary = false;
 
-  Replay().ReopenCaptureFile(captureFile);
+  m_Replay.ReopenCaptureFile(captureFile);
   SaveChanges();
 
   return true;
@@ -638,7 +1181,7 @@ void CaptureContext::CloseCapture()
 
   m_CaptureFile = QString();
 
-  m_Renderer.CloseThread();
+  m_Replay.CloseThread();
 
   memset(&m_APIProps, 0, sizeof(m_APIProps));
   memset(&m_FrameInfo, 0, sizeof(m_FrameInfo));
@@ -752,7 +1295,7 @@ void CaptureContext::ExportCapture(const CaptureFileFormat &fmt, const rdcstr &e
   // if we don't need buffers, we can export directly from our existing capture file
   if(!fmt.requiresBuffers)
   {
-    file = Replay().GetCaptureFile();
+    file = m_Replay.GetCaptureFile();
     sdfile = m_StructuredFile;
   }
 
@@ -821,7 +1364,7 @@ void CaptureContext::SetEventID(const rdcarray<ICaptureViewer *> &exclude, uint3
   uint32_t prevEventID = m_EventID;
   m_EventID = eventId;
 
-  m_Renderer.BlockInvoke([this, eventId, force](IReplayController *r) {
+  m_Replay.BlockInvoke([this, eventId, force](IReplayController *r) {
     r->SetFrameEvent(eventId, force);
     m_CurD3D11PipelineState = r->GetD3D11PipelineState();
     m_CurD3D12PipelineState = r->GetD3D12PipelineState();

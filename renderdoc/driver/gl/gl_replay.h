@@ -92,6 +92,7 @@ public:
   void Shutdown();
 
   void SetDriver(WrappedOpenGL *d) { m_pDriver = d; }
+  DriverInformation GetDriverInfo() { return m_DriverInfo; }
   APIProperties GetAPIProperties();
 
   ResourceDescription &GetResourceDesc(ResourceId id);
@@ -359,6 +360,7 @@ private:
     GLuint quadoverdrawFragShader;
     GLuint quadoverdrawResolveProg;
 
+    ResourceId overlayTexId;
     GLuint overlayTex;
     GLuint overlayFBO;
     GLuint overlayProg;
@@ -370,8 +372,6 @@ private:
   } DebugData;
 
   bool m_Degraded;
-
-  GPUVendor m_Vendor = GPUVendor::Unknown;
 
   HighlightCache m_HighlightCache;
 
@@ -424,6 +424,8 @@ private:
   std::map<ResourceId, size_t> m_ResourceIdx;
 
   GLPipe::State m_CurPipelineState;
+
+  DriverInformation m_DriverInfo;
 
   // AMD counter instance
   AMDCounters *m_pAMDCounters = NULL;

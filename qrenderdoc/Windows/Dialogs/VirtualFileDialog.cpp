@@ -72,9 +72,9 @@ public:
                                 node->parentIndex = i;
                                 node->file = files[i];
                                 roots.push_back(node);
-
-                                home = indexForPath(homeDir);
                               }
+
+                              home = indexForPath(homeDir);
                             });
       }
       else
@@ -807,7 +807,18 @@ void VirtualFileDialog::on_filename_keyPress(QKeyEvent *e)
   }
 
   if(matches == 0 && !text.trimmed().isEmpty())
+  {
+    idx = m_Model->indexForPath(text.trimmed());
+
+    if(idx.isValid())
+    {
+      changeCurrentDir(idx);
+      ui->filename->setText(QString());
+      return;
+    }
+
     fileNotFound(text);
+  }
 
   m_FileProxy->setFilterRegExp(re);
   m_FileProxy->refresh();

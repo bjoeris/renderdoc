@@ -711,6 +711,12 @@
     <ClCompile Include="Code\Interface\ShaderProcessingTool.cpp">
       <Filter>Code\Interface</Filter>
     </ClCompile>
+    <ClCompile Include="$(IntDir)generated\moc_ExtensionManager.cpp">
+      <Filter>Generated Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Windows\Dialogs\ExtensionManager.cpp">
+      <Filter>Windows\Dialogs</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="3rdparty\flowlayout\FlowLayout.h">
@@ -902,9 +908,6 @@
     <ClInclude Include="Code\ScintillaSyntax.h">
       <Filter>Code</Filter>
     </ClInclude>
-    <ClInclude Include="Resources\resource.h">
-      <Filter>Resources</Filter>
-    </ClInclude>
     <ClInclude Include="Code\Resources.h">
       <Filter>Code</Filter>
     </ClInclude>
@@ -1060,6 +1063,12 @@
     </ClInclude>
     <ClInclude Include="Code\RGPInterop.h">
       <Filter>Code</Filter>
+    </ClInclude>
+    <ClInclude Include="$(IntDir)generated\ui_ExtensionManager.h">
+      <Filter>Generated Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Code\Interface\Extensions.h">
+      <Filter>Code\Interface</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -1436,6 +1445,12 @@
     <CustomBuild Include="Widgets\CollapseGroupBox.h">
       <Filter>Widgets</Filter>
     </CustomBuild>
+    <CustomBuild Include="Windows\Dialogs\ExtensionManager.ui">
+      <Filter>Windows\Dialogs</Filter>
+    </CustomBuild>
+    <CustomBuild Include="Windows\Dialogs\ExtensionManager.h">
+      <Filter>Windows\Dialogs</Filter>
+    </CustomBuild>
   </ItemGroup>
   <ItemGroup>
     <Image Include="Resources\action.png">
@@ -1773,11 +1788,6 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <Xml Include="Resources\glsl.xml">
-      <Filter>Resources\Files</Filter>
-    </Xml>
-    <Xml Include="Resources\hlsl.xml">
-      <Filter>Resources\Files</Filter>
-    </Xml>
+    <Natvis Include="python36.natvis" />
   </ItemGroup>
 </Project>

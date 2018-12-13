@@ -217,6 +217,7 @@ SOURCES += Code/qrenderdoc.cpp \
     Windows/Dialogs/SuggestRemoteDialog.cpp \
     Windows/Dialogs/VirtualFileDialog.cpp \
     Windows/Dialogs/RemoteManager.cpp \
+    Windows/Dialogs/ExtensionManager.cpp \
     Windows/PixelHistoryView.cpp \
     Widgets/PipelineFlowChart.cpp \
     Windows/Dialogs/EnvironmentEditor.cpp \
@@ -242,6 +243,7 @@ HEADERS += Code/CaptureContext.h \
     Code/Interface/QRDInterface.h \
     Code/Interface/Analytics.h \
     Code/Interface/PersistantConfig.h \
+    Code/Interface/Extensions.h \
     Code/Interface/RemoteHost.h \
     Styles/StyleData.h \
     Styles/RDStyle/RDStyle.h \
@@ -291,6 +293,7 @@ HEADERS += Code/CaptureContext.h \
     Windows/Dialogs/SuggestRemoteDialog.h \
     Windows/Dialogs/VirtualFileDialog.h \
     Windows/Dialogs/RemoteManager.h \
+    Windows/Dialogs/ExtensionManager.h \
     Windows/PixelHistoryView.h \
     Widgets/PipelineFlowChart.h \
     Windows/Dialogs/EnvironmentEditor.h \
@@ -331,6 +334,7 @@ FORMS    += Windows/Dialogs/AboutDialog.ui \
     Windows/Dialogs/SuggestRemoteDialog.ui \
     Windows/Dialogs/VirtualFileDialog.ui \
     Windows/Dialogs/RemoteManager.ui \
+    Windows/Dialogs/ExtensionManager.ui \
     Windows/PixelHistoryView.ui \
     Windows/Dialogs/EnvironmentEditor.ui \
     Widgets/FindReplace.ui \

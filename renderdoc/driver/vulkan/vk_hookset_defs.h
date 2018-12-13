@@ -25,6 +25,7 @@
 #pragma once
 
 #include "official/vk_layer.h"
+#include "official/vk_layer_dispatch_table.h"
 
 // extensions made core in 1.1
 #define VK11 VK_MAKE_VERSION(1, 1, 0)
@@ -347,7 +348,12 @@
   CheckExt(EXT_sampler_filter_minmax, VKXX);      \
   CheckExt(KHR_sampler_ycbcr_conversion, VK11);   \
   CheckExt(KHR_device_group, VK11);               \
-  CheckExt(MVK_moltenvk, VKXX);
+  CheckExt(MVK_moltenvk, VKXX);                   \
+  CheckExt(KHR_draw_indirect_count, VKXX);        \
+  CheckExt(EXT_validation_cache, VKXX);           \
+  CheckExt(KHR_shared_presentable_image, VKXX);   \
+  CheckExt(KHR_create_renderpass2, VKXX);         \
+  CheckExt(EXT_transform_feedback, VKXX);
 
 #define HookInitVulkanInstanceExts()                                                                 \
   HookInitExtension(KHR_surface, DestroySurfaceKHR);                                                 \
@@ -457,6 +463,23 @@
   HookInitExtension(KHR_device_group &&KHR_surface, GetDeviceGroupSurfacePresentModesKHR);         \
   HookInitExtension(KHR_device_group &&KHR_swapchain, AcquireNextImage2KHR);                       \
   HookInitExtension(protected_memory, GetDeviceQueue2);                                            \
+  HookInitExtension(KHR_draw_indirect_count, CmdDrawIndirectCountKHR);                             \
+  HookInitExtension(KHR_draw_indirect_count, CmdDrawIndexedIndirectCountKHR);                      \
+  HookInitExtension(EXT_validation_cache, CreateValidationCacheEXT);                               \
+  HookInitExtension(EXT_validation_cache, DestroyValidationCacheEXT);                              \
+  HookInitExtension(EXT_validation_cache, MergeValidationCachesEXT);                               \
+  HookInitExtension(EXT_validation_cache, GetValidationCacheDataEXT);                              \
+  HookInitExtension(KHR_shared_presentable_image, GetSwapchainStatusKHR);                          \
+  HookInitExtension(KHR_create_renderpass2, CreateRenderPass2KHR);                                 \
+  HookInitExtension(KHR_create_renderpass2, CmdBeginRenderPass2KHR);                               \
+  HookInitExtension(KHR_create_renderpass2, CmdNextSubpass2KHR);                                   \
+  HookInitExtension(KHR_create_renderpass2, CmdEndRenderPass2KHR);                                 \
+  HookInitExtension(EXT_transform_feedback, CmdBindTransformFeedbackBuffersEXT);                   \
+  HookInitExtension(EXT_transform_feedback, CmdBeginTransformFeedbackEXT);                         \
+  HookInitExtension(EXT_transform_feedback, CmdEndTransformFeedbackEXT);                           \
+  HookInitExtension(EXT_transform_feedback, CmdBeginQueryIndexedEXT);                              \
+  HookInitExtension(EXT_transform_feedback, CmdEndQueryIndexedEXT);                                \
+  HookInitExtension(EXT_transform_feedback, CmdDrawIndirectByteCountEXT);                          \
   HookInitDevice_PlatformSpecific()
 
 #define DefineHooks()                                                                                \
@@ -967,6 +990,49 @@
   HookDefine3(VkResult, vkGetDisplayPlaneCapabilities2KHR, VkPhysicalDevice, physicalDevice,         \
               const VkDisplayPlaneInfo2KHR *, pDisplayPlaneInfo, VkDisplayPlaneCapabilities2KHR *,   \
               pCapabilities);                                                                        \
+  HookDefine7(void, vkCmdDrawIndirectCountKHR, VkCommandBuffer, commandBuffer, VkBuffer, buffer,     \
+              VkDeviceSize, offset, VkBuffer, countBuffer, VkDeviceSize, countBufferOffset,          \
+              uint32_t, maxDrawCount, uint32_t, stride);                                             \
+  HookDefine7(void, vkCmdDrawIndexedIndirectCountKHR, VkCommandBuffer, commandBuffer, VkBuffer,      \
+              buffer, VkDeviceSize, offset, VkBuffer, countBuffer, VkDeviceSize,                     \
+              countBufferOffset, uint32_t, maxDrawCount, uint32_t, stride);                          \
+  HookDefine4(VkResult, vkCreateValidationCacheEXT, VkDevice, device,                                \
+              const VkValidationCacheCreateInfoEXT *, pCreateInfo, const VkAllocationCallbacks *,    \
+              pAllocator, VkValidationCacheEXT *, pValidationCache);                                 \
+  HookDefine3(void, vkDestroyValidationCacheEXT, VkDevice, device, VkValidationCacheEXT,             \
+              validationCache, const VkAllocationCallbacks *, pAllocator);                           \
+  HookDefine4(VkResult, vkMergeValidationCachesEXT, VkDevice, device, VkValidationCacheEXT,          \
+              dstCache, uint32_t, srcCacheCount, const VkValidationCacheEXT *, pSrcCaches);          \
+  HookDefine4(VkResult, vkGetValidationCacheDataEXT, VkDevice, device, VkValidationCacheEXT,         \
+              validationCache, size_t *, pDataSize, void *, pData);                                  \
+  HookDefine2(VkResult, vkGetSwapchainStatusKHR, VkDevice, device, VkSwapchainKHR, swapchain);       \
+  HookDefine4(VkResult, vkCreateRenderPass2KHR, VkDevice, device,                                    \
+              const VkRenderPassCreateInfo2KHR *, pCreateInfo, const VkAllocationCallbacks *,        \
+              pAllocator, VkRenderPass *, pRenderPass);                                              \
+  HookDefine3(void, vkCmdBeginRenderPass2KHR, VkCommandBuffer, commandBuffer,                        \
+              const VkRenderPassBeginInfo *, pRenderPassBegin, const VkSubpassBeginInfoKHR *,        \
+              pSubpassBeginInfo);                                                                    \
+  HookDefine3(void, vkCmdNextSubpass2KHR, VkCommandBuffer, commandBuffer,                            \
+              const VkSubpassBeginInfoKHR *, pSubpassBeginInfo, const VkSubpassEndInfoKHR *,         \
+              pSubpassEndInfo);                                                                      \
+  HookDefine2(void, vkCmdEndRenderPass2KHR, VkCommandBuffer, commandBuffer,                          \
+              const VkSubpassEndInfoKHR *, pSubpassEndInfo);                                         \
+  HookDefine6(void, vkCmdBindTransformFeedbackBuffersEXT, VkCommandBuffer, commandBuffer,            \
+              uint32_t, firstBinding, uint32_t, bindingCount, const VkBuffer *, pBuffers,            \
+              const VkDeviceSize *, pOffsets, const VkDeviceSize *, pSizes);                         \
+  HookDefine5(void, vkCmdBeginTransformFeedbackEXT, VkCommandBuffer, commandBuffer, uint32_t,        \
+              firstBuffer, uint32_t, bufferCount, const VkBuffer *, pCounterBuffers,                 \
+              const VkDeviceSize *, pCounterBufferOffsets);                                          \
+  HookDefine5(void, vkCmdEndTransformFeedbackEXT, VkCommandBuffer, commandBuffer, uint32_t,          \
+              firstBuffer, uint32_t, bufferCount, const VkBuffer *, pCounterBuffers,                 \
+              const VkDeviceSize *, pCounterBufferOffsets);                                          \
+  HookDefine5(void, vkCmdBeginQueryIndexedEXT, VkCommandBuffer, commandBuffer, VkQueryPool,          \
+              queryPool, uint32_t, query, VkQueryControlFlags, flags, uint32_t, index);              \
+  HookDefine4(void, vkCmdEndQueryIndexedEXT, VkCommandBuffer, commandBuffer, VkQueryPool,            \
+              queryPool, uint32_t, query, uint32_t, index);                                          \
+  HookDefine7(void, vkCmdDrawIndirectByteCountEXT, VkCommandBuffer, commandBuffer, uint32_t,         \
+              instanceCount, uint32_t, firstInstance, VkBuffer, counterBuffer, VkDeviceSize,         \
+              counterBufferOffset, uint32_t, counterOffset, uint32_t, vertexStride);                 \
   HookDefine_PlatformSpecific()
 
 struct VkLayerInstanceDispatchTableExtended : VkLayerInstanceDispatchTable

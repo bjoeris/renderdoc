@@ -449,7 +449,8 @@ void WrappedOpenGL::Common_glNamedBufferStorageEXT(ResourceId id, GLsizeiptr siz
     // because the user code isn't writing into them anyway and we're inserting invisible sync
     // points - so there's no need for it to be coherently mapped (and there's no requirement
     // that a buffer declared as coherent must ALWAYS be mapped as coherent).
-    if(flags & GL_MAP_PERSISTENT_BIT)
+    uint32_t persistentWriteFlags = GL_MAP_PERSISTENT_BIT | GL_MAP_WRITE_BIT;
+    if((flags & persistentWriteFlags) == persistentWriteFlags)
     {
       record->Map.persistentPtr = (byte *)GL.glMapNamedBufferRangeEXT(
           record->Resource.name, 0, size,
@@ -478,8 +479,12 @@ void WrappedOpenGL::glNamedBufferStorageEXT(GLuint buffer, GLsizeiptr size, cons
   if(IsCaptureMode(m_State) && data == NULL)
   {
     dummy = new byte[size];
-    memset(dummy, 0xdd, size);
+    memset(dummy, RenderDoc::Inst().GetCaptureOptions().verifyBufferAccess ? 0xdd : 0x0, size);
     data = dummy;
+
+    GLResourceRecord *record = GetResourceManager()->GetResourceRecord(BufferRes(GetCtx(), buffer));
+    if(record)
+      record->Map.orphaned = true;
   }
 
   SERIALISE_TIME_CALL(GL.glNamedBufferStorageEXT(buffer, size, data, flags));
@@ -504,8 +509,12 @@ void WrappedOpenGL::glBufferStorage(GLenum target, GLsizeiptr size, const void *
   if(IsCaptureMode(m_State) && data == NULL)
   {
     dummy = new byte[size];
-    memset(dummy, 0xdd, size);
+    memset(dummy, RenderDoc::Inst().GetCaptureOptions().verifyBufferAccess ? 0xdd : 0x0, size);
     data = dummy;
+
+    GLResourceRecord *record = GetCtxData().m_BufferRecord[BufferIdx(target)];
+    if(record)
+      record->Map.orphaned = true;
   }
 
   SERIALISE_TIME_CALL(GL.glBufferStorage(target, size, data, flags));
@@ -564,8 +573,12 @@ void WrappedOpenGL::glNamedBufferDataEXT(GLuint buffer, GLsizeiptr size, const v
   if(IsCaptureMode(m_State) && data == NULL)
   {
     dummy = new byte[size];
-    memset(dummy, 0xdd, size);
+    memset(dummy, RenderDoc::Inst().GetCaptureOptions().verifyBufferAccess ? 0xdd : 0x0, size);
     data = dummy;
+
+    GLResourceRecord *record = GetResourceManager()->GetResourceRecord(BufferRes(GetCtx(), buffer));
+    if(record)
+      record->Map.orphaned = true;
   }
 
   SERIALISE_TIME_CALL(GL.glNamedBufferDataEXT(buffer, size, data, usage));
@@ -589,8 +602,6 @@ void WrappedOpenGL::glNamedBufferDataEXT(GLuint buffer, GLsizeiptr size, const v
     {
       if(data)
         memcpy(record->GetDataPtr(), data, (size_t)size);
-      else
-        memset(record->GetDataPtr(), 0xbe, (size_t)size);
 
       SAFE_DELETE_ARRAY(dummy);
 
@@ -698,16 +709,20 @@ void WrappedOpenGL::glBufferData(GLenum target, GLsizeiptr size, const void *dat
 {
   byte *dummy = NULL;
 
+  size_t idx = BufferIdx(target);
+
   if(IsCaptureMode(m_State) && data == NULL)
   {
     dummy = new byte[size];
-    memset(dummy, 0xdd, size);
+    memset(dummy, RenderDoc::Inst().GetCaptureOptions().verifyBufferAccess ? 0xdd : 0x0, size);
     data = dummy;
+
+    GLResourceRecord *record = GetCtxData().m_BufferRecord[idx];
+    if(record)
+      record->Map.orphaned = true;
   }
 
   SERIALISE_TIME_CALL(GL.glBufferData(target, size, data, usage));
-
-  size_t idx = BufferIdx(target);
 
   if(IsCaptureMode(m_State))
   {
@@ -725,10 +740,9 @@ void WrappedOpenGL::glBufferData(GLenum target, GLsizeiptr size, const void *dat
     if(IsBackgroundCapturing(m_State) && record->HasDataPtr() &&
        size == (GLsizeiptr)record->Length && usage == record->usage)
     {
-      if(data)
-        memcpy(record->GetDataPtr(), data, (size_t)size);
-      else
-        memset(record->GetDataPtr(), 0xbe, (size_t)size);
+      // if data was NULL, it was set to dummy above.
+      RDCASSERT(data);
+      memcpy(record->GetDataPtr(), data, (size_t)size);
 
       SAFE_DELETE_ARRAY(dummy);
 
@@ -1881,6 +1895,15 @@ void *WrappedOpenGL::glMapNamedBufferRangeEXT(GLuint buffer, GLintptr offset, GL
   {
     GLResourceRecord *record = GetResourceManager()->GetResourceRecord(BufferRes(GetCtx(), buffer));
 
+    // if the buffer was recently orphaned, unset the flag. If the map is unsynchronised then sync
+    // ourselves to allow our dummy upload of uninitialised 0xdddddddd to complete.
+    if(record->Map.orphaned)
+    {
+      if(access & GL_MAP_UNSYNCHRONIZED_BIT)
+        GL.glFinish();
+      record->Map.orphaned = false;
+    }
+
     bool directMap = false;
 
     // first check if we've already given up on these buffers
@@ -1900,14 +1923,20 @@ void *WrappedOpenGL::glMapNamedBufferRangeEXT(GLuint buffer, GLintptr offset, GL
        IsBackgroundCapturing(m_State))
       directMap = true;
 
-    // persistent maps must ALWAYS be intercepted
-    if((access & GL_MAP_PERSISTENT_BIT) || record->Map.persistentPtr)
+    // read-only persistent maps can also be made directly
+    uint32_t persistentReadFlags = GL_MAP_PERSISTENT_BIT | GL_MAP_READ_BIT;
+    if((access & persistentReadFlags) == persistentReadFlags)
+      directMap = true;
+
+    // persistent maps must ALWAYS be intercepted if they are writeable. if it's a read-only
+    // persistent map we never allocated a persistent pointer so we can skip this
+    if(record->Map.persistentPtr)
       directMap = false;
 
-    bool verifyWrite = (RenderDoc::Inst().GetCaptureOptions().verifyMapWrites != 0);
+    bool verifyWrite = RenderDoc::Inst().GetCaptureOptions().verifyBufferAccess;
 
     // must also intercept to verify writes
-    if(verifyWrite)
+    if(verifyWrite && (access & GL_MAP_WRITE_BIT))
       directMap = false;
 
     if(directMap)
@@ -1922,8 +1951,9 @@ void *WrappedOpenGL::glMapNamedBufferRangeEXT(GLuint buffer, GLintptr offset, GL
     record->Map.invalidate = invalidateMap;
     record->Map.verifyWrite = verifyWrite;
 
-    // store a list of all persistent maps, and subset of all coherent maps
-    if(access & GL_MAP_PERSISTENT_BIT)
+    // store a list of all persistent writing maps, and subset of all coherent maps
+    uint32_t persistentWriteFlags = GL_MAP_PERSISTENT_BIT | GL_MAP_WRITE_BIT;
+    if((access & persistentWriteFlags) == persistentWriteFlags)
     {
       Atomic::Inc64(&record->Map.persistentMaps);
       m_PersistentMaps.insert(record);
@@ -1973,8 +2003,8 @@ void *WrappedOpenGL::glMapNamedBufferRangeEXT(GLuint buffer, GLintptr offset, GL
         // comparison & modified buffer in case the application calls glMemoryBarrier(..) at any
         // time.
 
-        // if we're invalidating, mark the whole range as 0xcc
-        if(invalidateMap)
+        // if we're invalidating and verifying, mark the whole range as 0xcc
+        if(invalidateMap && RenderDoc::Inst().GetCaptureOptions().verifyBufferAccess)
         {
           memset(record->GetShadowPtr(0) + offset, 0xcc, length);
           memset(record->GetShadowPtr(1) + offset, 0xcc, length);
@@ -2019,7 +2049,7 @@ void *WrappedOpenGL::glMapNamedBufferRangeEXT(GLuint buffer, GLintptr offset, GL
         }
 
         // if we're invalidating, mark the whole range as 0xcc
-        if(invalidateMap)
+        if(invalidateMap && RenderDoc::Inst().GetCaptureOptions().verifyBufferAccess)
         {
           memset(shadow + offset, 0xcc, length);
           memset(record->GetShadowPtr(1) + offset, 0xcc, length);
@@ -2046,10 +2076,10 @@ void *WrappedOpenGL::glMapNamedBufferRangeEXT(GLuint buffer, GLintptr offset, GL
           }
 
           // if we're not invalidating, we need the existing contents
-          if(!invalidateMap)
-            memcpy(shadow, record->GetDataPtr(), buflength);
-          else
+          if(invalidateMap && RenderDoc::Inst().GetCaptureOptions().verifyBufferAccess)
             memset(shadow + offset, 0xcc, length);
+          else
+            memcpy(shadow, record->GetDataPtr(), buflength);
 
           ptr = shadow;
         }
@@ -3146,7 +3176,8 @@ void WrappedOpenGL::glVertexAttribPointer(GLuint index, GLint size, GLenum type,
         SCOPED_SERIALISE_CHUNK(gl_CurChunk);
         Serialise_glVertexArrayVertexAttribOffsetEXT(
             ser, varecord ? varecord->Resource.name : 0, bufrecord ? bufrecord->Resource.name : 0,
-            index, size, type, normalized, stride, (GLintptr)pointer);
+            index, size, type, normalized, stride,
+            bufrecord ? (GLintptr)pointer : GLintptr(0xDEADBEEF));
 
         r->AddChunk(scope.Get());
       }
@@ -3272,9 +3303,9 @@ void WrappedOpenGL::glVertexAttribIPointer(GLuint index, GLint size, GLenum type
       {
         USE_SCRATCH_SERIALISER();
         SCOPED_SERIALISE_CHUNK(gl_CurChunk);
-        Serialise_glVertexArrayVertexAttribIOffsetEXT(ser, varecord ? varecord->Resource.name : 0,
-                                                      bufrecord ? bufrecord->Resource.name : 0,
-                                                      index, size, type, stride, (GLintptr)pointer);
+        Serialise_glVertexArrayVertexAttribIOffsetEXT(
+            ser, varecord ? varecord->Resource.name : 0, bufrecord ? bufrecord->Resource.name : 0,
+            index, size, type, stride, bufrecord ? (GLintptr)pointer : GLintptr(0xDEADBEEF));
 
         r->AddChunk(scope.Get());
       }
@@ -3400,9 +3431,9 @@ void WrappedOpenGL::glVertexAttribLPointer(GLuint index, GLint size, GLenum type
       {
         USE_SCRATCH_SERIALISER();
         SCOPED_SERIALISE_CHUNK(gl_CurChunk);
-        Serialise_glVertexArrayVertexAttribLOffsetEXT(ser, varecord ? varecord->Resource.name : 0,
-                                                      bufrecord ? bufrecord->Resource.name : 0,
-                                                      index, size, type, stride, (GLintptr)pointer);
+        Serialise_glVertexArrayVertexAttribLOffsetEXT(
+            ser, varecord ? varecord->Resource.name : 0, bufrecord ? bufrecord->Resource.name : 0,
+            index, size, type, stride, bufrecord ? (GLintptr)pointer : GLintptr(0xDEADBEEF));
 
         r->AddChunk(scope.Get());
       }

@@ -255,6 +255,7 @@ struct ConciseGraphicsPipeline
   bool blendEnable;
   VkBlendFactor srcBlend;
   VkBlendFactor dstBlend;
+  uint32_t writeMask;
 };
 
 static void create(WrappedVulkan *driver, const char *objName, const int line, VkPipeline *pipe,
@@ -315,7 +316,7 @@ static void create(WrappedVulkan *driver, const char *objName, const int line, V
       // alpha blending
       info.srcBlend, info.dstBlend, VK_BLEND_OP_ADD,
       // write mask
-      0xf,
+      info.writeMask,
   };
 
   const VkPipelineColorBlendStateCreateInfo colorBlend = {
@@ -512,6 +513,7 @@ VulkanDebugManager::VulkanDebugManager(WrappedVulkan *driver)
         false,    // blendEnable
         VK_BLEND_FACTOR_ONE,
         VK_BLEND_FACTOR_ZERO,
+        0xf,    // writeMask
     };
 
     CREATE_OBJECT(m_DepthMS2ArrayPipe[f], depthPipeInfo);
@@ -776,6 +778,7 @@ void VulkanDebugManager::CreateCustomShaderPipeline(ResourceId shader, VkPipelin
       false,    // blendEnable
       VK_BLEND_FACTOR_ONE,
       VK_BLEND_FACTOR_ZERO,
+      0xf,    // writeMask
   };
 
   CREATE_OBJECT(m_Custom.TexPipeline, customPipe);
@@ -1463,6 +1466,7 @@ void VulkanReplay::DestroyResources()
   m_VertexPick.Destroy(m_pDriver);
   m_PixelPick.Destroy(m_pDriver);
   m_Histogram.Destroy(m_pDriver);
+  m_PostVS.Destroy(m_pDriver);
 
   SAFE_DELETE(m_pAMDCounters);
 }
@@ -1516,6 +1520,7 @@ void VulkanReplay::TextureRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
   CREATE_OBJECT(DescSetLayout,
                 {
                     {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, VK_SHADER_STAGE_ALL, NULL},
+                    {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, VK_SHADER_STAGE_ALL, NULL},
                     {6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
                     {7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
                     {8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
@@ -1543,6 +1548,9 @@ void VulkanReplay::TextureRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
   UBO.Create(driver, driver->GetDev(), 128, 10, 0);
   RDCCOMPILE_ASSERT(sizeof(TexDisplayUBOData) <= 128, "tex display size");
 
+  HeatmapUBO.Create(driver, driver->GetDev(), 512, 10, 0);
+  RDCCOMPILE_ASSERT(sizeof(HeatmapData) <= 512, "tex display size");
+
   {
     VkRenderPass SRGBA8RP = VK_NULL_HANDLE;
     VkRenderPass RGBA16RP = VK_NULL_HANDLE;
@@ -1567,6 +1575,7 @@ void VulkanReplay::TextureRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
         false,    // blendEnable
         VK_BLEND_FACTOR_ONE,
         VK_BLEND_FACTOR_ZERO,
+        0xf,    // writeMask
     };
 
     CREATE_OBJECT(Pipeline, texDisplayInfo);
@@ -1581,8 +1590,19 @@ void VulkanReplay::TextureRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
     texDisplayInfo.blendEnable = true;
     texDisplayInfo.srcBlend = VK_BLEND_FACTOR_SRC_ALPHA;
     texDisplayInfo.dstBlend = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-
     CREATE_OBJECT(BlendPipeline, texDisplayInfo);
+
+    // make versions that only write to green, for doing two-pass stencil writes
+    texDisplayInfo.writeMask = 0x2;
+
+    texDisplayInfo.renderPass = SRGBA8RP;
+    CREATE_OBJECT(PipelineGreenOnly, texDisplayInfo);
+
+    texDisplayInfo.renderPass = RGBA32RP;
+    CREATE_OBJECT(F32PipelineGreenOnly, texDisplayInfo);
+
+    texDisplayInfo.renderPass = RGBA16RP;
+    CREATE_OBJECT(F16PipelineGreenOnly, texDisplayInfo);
 
     driver->vkDestroyRenderPass(driver->GetDev(), SRGBA8RP, NULL);
     driver->vkDestroyRenderPass(driver->GetDev(), RGBA16RP, NULL);
@@ -1773,7 +1793,12 @@ void VulkanReplay::TextureRendering::Destroy(WrappedVulkan *driver)
   driver->vkDestroyPipeline(driver->GetDev(), BlendPipeline, NULL);
   driver->vkDestroyPipeline(driver->GetDev(), F16Pipeline, NULL);
   driver->vkDestroyPipeline(driver->GetDev(), F32Pipeline, NULL);
+
+  driver->vkDestroyPipeline(driver->GetDev(), PipelineGreenOnly, NULL);
+  driver->vkDestroyPipeline(driver->GetDev(), F16PipelineGreenOnly, NULL);
+  driver->vkDestroyPipeline(driver->GetDev(), F32PipelineGreenOnly, NULL);
   UBO.Destroy();
+  HeatmapUBO.Destroy();
 
   driver->vkDestroySampler(driver->GetDev(), LinearSampler, NULL);
 
@@ -1798,13 +1823,11 @@ void VulkanReplay::OverlayRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
   CREATE_OBJECT(m_QuadDescSetLayout,
                 {
                     {0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_ALL, NULL},
-                    {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, NULL},
                 });
 
   CREATE_OBJECT(m_TriSizeDescSetLayout,
                 {
                     {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, VK_SHADER_STAGE_ALL, NULL},
-                    {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_ALL, NULL},
                     {2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1, VK_SHADER_STAGE_ALL, NULL},
                 });
 
@@ -1833,6 +1856,7 @@ void VulkanReplay::OverlayRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
       true,    // blendEnable
       VK_BLEND_FACTOR_SRC_ALPHA,
       VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+      0xf,    // writeMask
   };
 
   uint32_t samplesHandled = 0;
@@ -1882,28 +1906,16 @@ void VulkanReplay::OverlayRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
   RDCASSERTEQUAL((uint32_t)driver->GetDeviceProps().limits.framebufferColorSampleCounts,
                  samplesHandled);
 
-  OverdrawRampUBO.Create(driver, driver->GetDev(), 2048, 1, 0);    // no ring needed, fixed data
-  RDCCOMPILE_ASSERT(sizeof(overdrawRamp) <= 2048, "overdraw ramp uniforms size");
-
-  void *ramp = OverdrawRampUBO.Map();
-  memcpy(ramp, overdrawRamp, sizeof(overdrawRamp));
-  OverdrawRampUBO.Unmap();
-
   m_TriSizeUBO.Create(driver, driver->GetDev(), sizeof(Vec4f), 4096, 0);
 
   VkDescriptorBufferInfo outlineUBO = {};
   VkDescriptorBufferInfo overdrawramp = {};
 
   m_OutlineUBO.FillDescriptor(outlineUBO);
-  OverdrawRampUBO.FillDescriptor(overdrawramp);
 
   VkWriteDescriptorSet writes[] = {
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, Unwrap(m_OutlineDescSet), 0, 0, 1,
        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, NULL, &outlineUBO, NULL},
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, Unwrap(m_QuadDescSet), 1, 0, 1,
-       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &overdrawramp, NULL},
-      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, Unwrap(m_TriSizeDescSet), 1, 0, 1,
-       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &overdrawramp, NULL},
   };
 
   VkDevice dev = driver->GetDev();
@@ -1921,8 +1933,6 @@ void VulkanReplay::OverlayRendering::Destroy(WrappedVulkan *driver)
   driver->vkDestroyImageView(driver->GetDev(), ImageView, NULL);
   driver->vkDestroyFramebuffer(driver->GetDev(), NoDepthFB, NULL);
   driver->vkDestroyRenderPass(driver->GetDev(), NoDepthRP, NULL);
-
-  OverdrawRampUBO.Destroy();
 
   driver->vkDestroyDescriptorSetLayout(driver->GetDev(), m_QuadDescSetLayout, NULL);
   driver->vkDestroyPipelineLayout(driver->GetDev(), m_QuadResolvePipeLayout, NULL);
@@ -1975,6 +1985,7 @@ void VulkanReplay::CheckerboardRendering::Init(WrappedVulkan *driver, VkDescript
       false,    // blendEnable
       VK_BLEND_FACTOR_ONE,
       VK_BLEND_FACTOR_ZERO,
+      0xf,    // writeMask
   };
 
   CREATE_OBJECT(Pipeline, checkerInfo);
@@ -2411,4 +2422,10 @@ void VulkanReplay::HistogramMinMax::Destroy(WrappedVulkan *driver)
   m_HistogramBuf.Destroy();
   m_HistogramReadback.Destroy();
   m_HistogramUBO.Destroy();
+}
+
+void VulkanReplay::PostVS::Destroy(WrappedVulkan *driver)
+{
+  if(XFBQueryPool != VK_NULL_HANDLE)
+    driver->vkDestroyQueryPool(driver->GetDev(), XFBQueryPool, NULL);
 }

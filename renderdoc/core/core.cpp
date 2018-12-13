@@ -29,9 +29,11 @@
 #include "api/replay/version.h"
 #include "common/common.h"
 #include "hooks/hooks.h"
+#include "maths/formatpacking.h"
 #include "replay/replay_driver.h"
 #include "serialise/rdcfile.h"
 #include "serialise/serialiser.h"
+#include "stb/stb_image_write.h"
 #include "strings/string_utils.h"
 #include "crash_handler.h"
 
@@ -86,9 +88,21 @@ std::string DoStringise(const ReplayLogType &el)
 {
   BEGIN_ENUM_STRINGISE(ReplayLogType);
   {
-    STRINGISE_ENUM_CLASS_NAMED(eReplay_Full, "Full replay including draw");
-    STRINGISE_ENUM_CLASS_NAMED(eReplay_WithoutDraw, "Replay without draw");
-    STRINGISE_ENUM_CLASS_NAMED(eReplay_OnlyDraw, "Replay only draw");
+    STRINGISE_ENUM_NAMED(eReplay_Full, "Full replay including draw");
+    STRINGISE_ENUM_NAMED(eReplay_WithoutDraw, "Replay without draw");
+    STRINGISE_ENUM_NAMED(eReplay_OnlyDraw, "Replay only draw");
+  }
+  END_ENUM_STRINGISE();
+}
+
+template <>
+std::string DoStringise(const VendorExtensions &el)
+{
+  BEGIN_ENUM_STRINGISE(VendorExtensions);
+  {
+    STRINGISE_ENUM_CLASS(NvAPI);
+    STRINGISE_ENUM_CLASS_NAMED(OpenGL_Ext, "Unsupported GL extensions");
+    STRINGISE_ENUM_CLASS_NAMED(Vulkan_Ext, "Unsupported Vulkan extensions");
   }
   END_ENUM_STRINGISE();
 }
@@ -542,27 +556,7 @@ void RenderDoc::Tick()
 
   if(!prev_focus && cur_focus)
   {
-    m_Cap = 0;
-
-    // can only shift focus if we have multiple windows
-    if(m_WindowFrameCapturers.size() > 1)
-    {
-      for(auto it = m_WindowFrameCapturers.begin(); it != m_WindowFrameCapturers.end(); ++it)
-      {
-        if(it->first == m_ActiveWindow)
-        {
-          auto nextit = it;
-          ++nextit;
-
-          if(nextit != m_WindowFrameCapturers.end())
-            m_ActiveWindow = nextit->first;
-          else
-            m_ActiveWindow = m_WindowFrameCapturers.begin()->first;
-
-          break;
-        }
-      }
-    }
+    CycleActiveWindow();
   }
   if(!prev_cap && cur_cap)
   {
@@ -571,6 +565,31 @@ void RenderDoc::Tick()
 
   prev_focus = cur_focus;
   prev_cap = cur_cap;
+}
+
+void RenderDoc::CycleActiveWindow()
+{
+  m_Cap = 0;
+
+  // can only shift focus if we have multiple windows
+  if(m_WindowFrameCapturers.size() > 1)
+  {
+    for(auto it = m_WindowFrameCapturers.begin(); it != m_WindowFrameCapturers.end(); ++it)
+    {
+      if(it->first == m_ActiveWindow)
+      {
+        auto nextit = it;
+        ++nextit;
+
+        if(nextit != m_WindowFrameCapturers.end())
+          m_ActiveWindow = nextit->first;
+        else
+          m_ActiveWindow = m_WindowFrameCapturers.begin()->first;
+
+        break;
+      }
+    }
+  }
 }
 
 string RenderDoc::GetOverlayText(RDCDriver driver, uint32_t frameNumber, int flags)
@@ -699,8 +718,142 @@ bool RenderDoc::ShouldTriggerCapture(uint32_t frameNumber)
   return ret;
 }
 
-RDCFile *RenderDoc::CreateRDC(RDCDriver driver, uint32_t frameNum, void *thpixels, size_t thlen,
-                              uint16_t thwidth, uint16_t thheight, FileType thformat)
+void RenderDoc::ResamplePixels(const FramePixels &in, RDCThumb &out)
+{
+  // code below assumes pitch_requirement is a power of 2 number
+  RDCASSERT((in.pitch_requirement & (in.pitch_requirement - 1)) == 0);
+
+  out.width = (uint16_t)RDCMIN(in.max_width, in.width);
+  out.width &= ~(in.pitch_requirement - 1);    // align down to multiple of in.
+  out.height = uint16_t(out.width * in.height / in.width);
+  out.len = 3 * out.width * out.height;
+  out.pixels = new byte[out.len];
+  out.format = FileType::Raw;
+
+  byte *dst = (byte *)out.pixels;
+  byte *source = (byte *)in.data;
+
+  for(uint32_t y = 0; y < out.height; y++)
+  {
+    for(uint32_t x = 0; x < out.width; x++)
+    {
+      uint32_t xSource = x * in.width / out.width;
+      uint32_t ySource = y * in.height / out.height;
+      byte *src = &source[in.stride * xSource + in.pitch * ySource];
+
+      if(in.buf1010102)
+      {
+        uint32_t *src1010102 = (uint32_t *)src;
+        Vec4f unorm = ConvertFromR10G10B10A2(*src1010102);
+        dst[0] = (byte)(unorm.x * 255.0f);
+        dst[1] = (byte)(unorm.y * 255.0f);
+        dst[2] = (byte)(unorm.z * 255.0f);
+      }
+      else if(in.buf565)
+      {
+        uint16_t *src565 = (uint16_t *)src;
+        Vec3f unorm = ConvertFromB5G6R5(*src565);
+        dst[0] = (byte)(unorm.z * 255.0f);
+        dst[1] = (byte)(unorm.y * 255.0f);
+        dst[2] = (byte)(unorm.x * 255.0f);
+      }
+      else if(in.buf5551)
+      {
+        uint16_t *src5551 = (uint16_t *)src;
+        Vec4f unorm = ConvertFromB5G5R5A1(*src5551);
+        dst[0] = (byte)(unorm.z * 255.0f);
+        dst[1] = (byte)(unorm.y * 255.0f);
+        dst[2] = (byte)(unorm.x * 255.0f);
+      }
+      else if(in.bgra)
+      {
+        dst[0] = src[2];
+        dst[1] = src[1];
+        dst[2] = src[0];
+      }
+      else if(in.bpc == 2)    // R16G16B16A16 backbuffer
+      {
+        uint16_t *src16 = (uint16_t *)src;
+
+        float linearR = RDCCLAMP(ConvertFromHalf(src16[0]), 0.0f, 1.0f);
+        float linearG = RDCCLAMP(ConvertFromHalf(src16[1]), 0.0f, 1.0f);
+        float linearB = RDCCLAMP(ConvertFromHalf(src16[2]), 0.0f, 1.0f);
+
+        if(linearR < 0.0031308f)
+          dst[0] = byte(255.0f * (12.92f * linearR));
+        else
+          dst[0] = byte(255.0f * (1.055f * powf(linearR, 1.0f / 2.4f) - 0.055f));
+
+        if(linearG < 0.0031308f)
+          dst[1] = byte(255.0f * (12.92f * linearG));
+        else
+          dst[1] = byte(255.0f * (1.055f * powf(linearG, 1.0f / 2.4f) - 0.055f));
+
+        if(linearB < 0.0031308f)
+          dst[2] = byte(255.0f * (12.92f * linearB));
+        else
+          dst[2] = byte(255.0f * (1.055f * powf(linearB, 1.0f / 2.4f) - 0.055f));
+      }
+      else
+      {
+        dst[0] = src[0];
+        dst[1] = src[1];
+        dst[2] = src[2];
+      }
+      dst += 3;
+    }
+  }
+
+  if(!in.is_y_flipped)
+  {
+    for(uint16_t y = 0; y <= out.height / 2; y++)
+    {
+      uint16_t flipY = (out.height - 1 - y);
+      for(uint16_t x = 0; x < out.width; x++)
+      {
+        byte *src = (byte *)out.pixels;
+        byte save[3];
+        save[0] = src[(y * out.width + x) * 3 + 0];
+        save[1] = src[(y * out.width + x) * 3 + 1];
+        save[2] = src[(y * out.width + x) * 3 + 2];
+
+        src[(y * out.width + x) * 3 + 0] = src[(flipY * out.width + x) * 3 + 0];
+        src[(y * out.width + x) * 3 + 1] = src[(flipY * out.width + x) * 3 + 1];
+        src[(y * out.width + x) * 3 + 2] = src[(flipY * out.width + x) * 3 + 2];
+
+        src[(flipY * out.width + x) * 3 + 0] = save[0];
+        src[(flipY * out.width + x) * 3 + 1] = save[1];
+        src[(flipY * out.width + x) * 3 + 2] = save[2];
+      }
+    }
+  }
+}
+void RenderDoc::EncodePixelsPNG(const RDCThumb &in, RDCThumb &out)
+{
+  struct WriteCallbackData
+  {
+    std::vector<byte> buffer;
+
+    static void writeData(void *context, void *data, int size)
+    {
+      WriteCallbackData *pThis = (WriteCallbackData *)context;
+      const byte *start = (const byte *)data;
+      pThis->buffer.insert(pThis->buffer.end(), start, start + size);
+    }
+  };
+
+  WriteCallbackData callbackData;
+  stbi_write_png_to_func(&WriteCallbackData::writeData, &callbackData, in.width, in.height, 3,
+                         in.pixels, 0);
+  out.width = in.width;
+  out.height = in.height;
+  out.pixels = new byte[callbackData.buffer.size()];
+  memcpy((void *)out.pixels, callbackData.buffer.data(), callbackData.buffer.size());
+  out.len = (uint32_t)callbackData.buffer.size();
+  out.format = FileType::PNG;
+}
+
+RDCFile *RenderDoc::CreateRDC(RDCDriver driver, uint32_t frameNum, const FramePixels &fp)
 {
   RDCFile *ret = new RDCFile;
 
@@ -720,20 +873,17 @@ RDCFile *RenderDoc::CreateRDC(RDCDriver driver, uint32_t frameNum, void *thpixel
     }
   }
 
-  RDCThumb th;
-  RDCThumb *thumb = NULL;
-
-  if(thpixels)
+  RDCThumb outRaw, outPng;
+  if(fp.data)
   {
-    th.len = (uint32_t)thlen;
-    th.pixels = (const byte *)thpixels;
-    th.width = thwidth;
-    th.height = thheight;
-    th.format = thformat;
-    thumb = &th;
+    // point sample info into raw buffer
+    ResamplePixels(fp, outRaw);
+    EncodePixelsPNG(outRaw, outPng);
   }
 
-  ret->SetData(driver, ToStr(driver).c_str(), OSUtility::GetMachineIdent(), thumb);
+  RDCASSERT(outPng.pixels != NULL);
+
+  ret->SetData(driver, ToStr(driver).c_str(), OSUtility::GetMachineIdent(), &outPng);
 
   FileIO::CreateParentDirectory(m_CurrentLogFile);
 
@@ -744,6 +894,9 @@ RDCFile *RenderDoc::CreateRDC(RDCDriver driver, uint32_t frameNum, void *thpixel
     RDCERR("Error creating RDC at '%s'", m_CurrentLogFile.c_str());
     SAFE_DELETE(ret);
   }
+
+  SAFE_DELETE_ARRAY(outRaw.pixels);
+  SAFE_DELETE_ARRAY(outPng.pixels);
 
   return ret;
 }
@@ -1040,6 +1193,53 @@ map<RDCDriver, string> RenderDoc::GetRemoteDrivers()
   return ret;
 }
 
+DriverInformation RenderDoc::GetDriverInformation(GraphicsAPI api)
+{
+  DriverInformation ret = {};
+
+  RDCDriver driverType = RDCDriver::Unknown;
+  switch(api)
+  {
+    case GraphicsAPI::D3D11: driverType = RDCDriver::D3D11; break;
+    case GraphicsAPI::D3D12: driverType = RDCDriver::D3D12; break;
+    case GraphicsAPI::OpenGL: driverType = RDCDriver::OpenGL; break;
+    case GraphicsAPI::Vulkan: driverType = RDCDriver::Vulkan; break;
+  }
+
+  if(driverType == RDCDriver::Unknown || !HasReplayDriver(driverType))
+    return ret;
+
+  IReplayDriver *driver = NULL;
+  ReplayStatus status = CreateProxyReplayDriver(driverType, &driver);
+
+  if(status == ReplayStatus::Succeeded)
+  {
+    ret = driver->GetDriverInfo();
+  }
+  else
+  {
+    RDCERR("Couldn't create proxy replay driver for %s: %s", ToStr(driverType).c_str(),
+           ToStr(status).c_str());
+  }
+
+  if(driver)
+    driver->Shutdown();
+
+  return ret;
+}
+
+void RenderDoc::EnableVendorExtensions(VendorExtensions ext)
+{
+  m_VendorExts[(int)ext] = true;
+
+  RDCWARN("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+  RDCWARN("!!! Vendor Extension enabled: %s", ToStr(ext).c_str());
+  RDCWARN("!!! ");
+  RDCWARN("!!! This can cause crashes, incorrect replay, or other problems and");
+  RDCWARN("!!! is explicitly unsupported. Do not enable without understanding.");
+  RDCWARN("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+}
+
 void RenderDoc::SetCaptureOptions(const CaptureOptions &opts)
 {
   m_Options = opts;
@@ -1088,6 +1288,27 @@ void RenderDoc::FinishCaptureWriting(RDCFile *rdc, uint32_t frameNumber)
       delete w;
     }
 
+    const RDCThumb &thumb = rdc->GetThumbnail();
+    if(thumb.format != FileType::JPG && thumb.width > 0 && thumb.height > 0)
+    {
+      SectionProperties props = {};
+      props.type = SectionType::ExtendedThumbnail;
+      props.version = 1;
+      StreamWriter *w = rdc->WriteSection(props);
+
+      ExtThumbnailHeader header;
+      header.width = thumb.width;
+      header.height = thumb.height;
+      header.len = thumb.len;
+      header.format = (uint32_t)thumb.format;
+      w->Write(header);
+      w->Write(thumb.pixels, thumb.len);
+
+      w->Finish();
+
+      delete w;
+    }
+
     RDCLOG("Written to disk: %s", m_CurrentLogFile.c_str());
 
     CaptureData cap(m_CurrentLogFile, Timing::GetUnixTimestamp(), rdc->GetDriver(), frameNumber);
@@ -1117,7 +1338,7 @@ void RenderDoc::RemoveDeviceFrameCapturer(void *dev)
 {
   if(dev == NULL)
   {
-    RDCERR("Invalid device pointer: %#p / %#p", dev);
+    RDCERR("Invalid device pointer: %#p", dev);
     return;
   }
 

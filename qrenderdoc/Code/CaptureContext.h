@@ -52,7 +52,7 @@ class TimelineBar;
 class PythonShell;
 class ResourceInspector;
 
-class CaptureContext : public ICaptureContext
+class CaptureContext : public ICaptureContext, IExtensionManager
 {
   Q_DECLARE_TR_FUNCTIONS(CaptureContext);
 
@@ -64,6 +64,39 @@ public:
   bool isRunning();
 
   rdcstr TempCaptureFilename(const rdcstr &appname) override;
+
+  //////////////////////////////////////////////////////////////////////////////
+  // IExtensionManager
+
+  rdcarray<ExtensionMetadata> GetInstalledExtensions() override;
+  bool IsExtensionLoaded(rdcstr name) override;
+  bool LoadExtension(rdcstr name) override;
+
+  void RegisterWindowMenu(WindowMenu base, const rdcarray<rdcstr> &submenus,
+                          ExtensionCallback callback) override;
+  void RegisterPanelMenu(PanelMenu base, const rdcarray<rdcstr> &submenus,
+                         ExtensionCallback callback) override;
+  void RegisterContextMenu(ContextMenu base, const rdcarray<rdcstr> &submenus,
+                           ExtensionCallback callback) override;
+
+  void MenuDisplaying(ContextMenu contextMenu, QMenu *menu,
+                      const ExtensionCallbackData &data) override;
+  void MenuDisplaying(PanelMenu panelMenu, QMenu *menu, QWidget *extensionButton,
+                      const ExtensionCallbackData &data) override;
+
+  void MessageDialog(const rdcstr &text, const rdcstr &title = "Python Extension Message") override;
+  void ErrorDialog(const rdcstr &text, const rdcstr &title = "Python Extension Error") override;
+  DialogButton QuestionDialog(const rdcstr &text, const rdcarray<DialogButton> &options,
+                              const rdcstr &title = "Python Extension Prompt") override;
+
+  rdcstr OpenFileName(const rdcstr &caption = "Open a file", const rdcstr &dir = rdcstr(),
+                      const rdcstr &filter = rdcstr()) override;
+
+  rdcstr OpenDirectoryName(const rdcstr &caption = "Open a directory",
+                           const rdcstr &dir = rdcstr()) override;
+
+  rdcstr SaveFileName(const rdcstr &caption = "Save a file", const rdcstr &dir = rdcstr(),
+                      const rdcstr &filter = rdcstr()) override;
 
   //////////////////////////////////////////////////////////////////////////////
   // Control functions
@@ -98,7 +131,8 @@ public:
   //////////////////////////////////////////////////////////////////////////////
   // Accessors
 
-  ReplayManager &Replay() override { return m_Renderer; }
+  IReplayManager &Replay() override { return m_Replay; }
+  IExtensionManager &Extensions() override { return *this; }
   bool IsCaptureLoaded() override { return m_CaptureLoaded; }
   bool IsCaptureLocal() override { return m_CaptureLocal; }
   bool IsCaptureTemporary() override { return m_CaptureTemporary; }
@@ -227,7 +261,7 @@ public:
   const PipeState &CurPipelineState() override { return *m_CurPipelineState; }
   PersistantConfig &Config() override { return m_Config; }
 private:
-  ReplayManager m_Renderer;
+  ReplayManager m_Replay;
 
   const D3D11Pipe::State *m_CurD3D11PipelineState;
   const D3D12Pipe::State *m_CurD3D12PipelineState;
@@ -268,6 +302,10 @@ private:
 
   void LoadCaptureThreaded(const QString &captureFile, const QString &origFilename, bool temporary,
                            bool local);
+
+  void AddSortedMenuItem(QMenu *menu, bool rootMenu, const rdcarray<rdcstr> &items,
+                         std::function<void()> callback);
+  void CleanMenu(QAction *action);
 
   uint32_t m_SelectedEventID = 0;
   uint32_t m_EventID = 0;
@@ -329,6 +367,11 @@ private:
 #endif
 
   QIcon *m_Icon = NULL;
+
+  QList<QObject *> m_PendingExtensionObjects;
+  QMap<rdcstr, QList<QObject *>> m_ExtensionObjects;
+
+  QList<QPointer<RegisteredMenuItem>> m_RegisteredMenuItems;
 
   // Windows
   MainWindow *m_MainWindow = NULL;

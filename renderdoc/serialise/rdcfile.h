@@ -47,6 +47,14 @@ struct RDCThumb
   FileType format = FileType::JPG;
 };
 
+struct ExtThumbnailHeader
+{
+  uint16_t width;
+  uint16_t height;
+  uint32_t len;
+  uint32_t format;
+};
+
 class RDCFile
 {
 public:

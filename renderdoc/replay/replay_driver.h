@@ -170,6 +170,8 @@ public:
   virtual void FileChanged() = 0;
 
   virtual bool NeedRemapForFetch(const ResourceFormat &format) = 0;
+
+  virtual DriverInformation GetDriverInfo() = 0;
 };
 
 class IReplayDriver : public IRemoteDriver
@@ -226,10 +228,8 @@ public:
 };
 
 // utility functions useful in any driver implementation
-DrawcallDescription *SetupDrawcallPointers(std::vector<DrawcallDescription *> &drawcallTable,
-                                           rdcarray<DrawcallDescription> &draws,
-                                           DrawcallDescription *parent,
-                                           DrawcallDescription *&previous);
+void SetupDrawcallPointers(std::vector<DrawcallDescription *> &drawcallTable,
+                           rdcarray<DrawcallDescription> &draws);
 
 // for hardware/APIs that can't do line rasterization, manually expand any triangle input topology
 // to a linestrip with strip restart indices.
@@ -265,3 +265,5 @@ struct HighlightCache
   FloatVector InterpretVertex(const byte *data, uint32_t vert, const MeshDisplay &cfg,
                               const byte *end, bool useidx, bool &valid);
 };
+
+extern const Vec4f colorRamp[22];

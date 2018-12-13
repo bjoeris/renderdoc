@@ -133,15 +133,14 @@ struct ResourceFormat
     compCount = compByteWidth = 0;
     compType = CompType::Typeless;
 
-    bgraOrder = false;
-    srgbCorrected = false;
+    flags = 0;
   }
   ResourceFormat(const ResourceFormat &) = default;
 
   bool operator==(const ResourceFormat &r) const
   {
     return type == r.type && compCount == r.compCount && compByteWidth == r.compByteWidth &&
-           compType == r.compType && bgraOrder == r.bgraOrder && srgbCorrected == r.srgbCorrected;
+           compType == r.compType && flags == r.flags;
   }
   bool operator<(const ResourceFormat &r) const
   {
@@ -153,10 +152,8 @@ struct ResourceFormat
       return compByteWidth < r.compByteWidth;
     if(compType != r.compType)
       return compType < r.compType;
-    if(bgraOrder != r.bgraOrder)
-      return bgraOrder < r.bgraOrder;
-    if(srgbCorrected != r.srgbCorrected)
-      return srgbCorrected < r.srgbCorrected;
+    if(flags != r.flags)
+      return flags < r.flags;
     return false;
   }
 
@@ -172,12 +169,113 @@ struct ResourceFormat
   }
 
   DOCUMENT(R"(:return: ``True`` if the ``ResourceFormat`` is a 'special' non-regular type.
-:type: ``bool``
+:rtype: ``bool``
 )");
   bool Special() const { return type != ResourceFormatType::Regular; }
   DOCUMENT(R"(The :class:`ResourceFormatType` of this format. If the value is not
 :attr:`ResourceFormatType.Regular` then it's a non-uniform layout like block-compressed.
 )");
+
+  DOCUMENT(R"(:return: ``True`` if the components are to be read in ``BGRA`` order.
+:rtype: ``bool``
+)");
+  bool bgraOrder() const { return (flags & ResourceFormat_BGRA) != 0; }
+  DOCUMENT(R"(:return: ``True`` if the components are SRGB corrected on read and write.
+:rtype: ``bool``
+)");
+  bool srgbCorrected() const { return (flags & ResourceFormat_SRGB) != 0; }
+  DOCUMENT(R"(Get the subsampling rate for a YUV format. Only valid when :data:`type` is
+a YUV format like :attr:`ResourceFormatType.YUV8`.
+
+For other formats, 0 is returned.
+
+:return: The subsampling rate, e.g. 444 for 4:4:4 or 420 for 4:2:0
+:rtype: ``int``
+)");
+  uint32_t yuvSubsampling() const
+  {
+    if(flags & ResourceFormat_444)
+      return 444;
+    else if(flags & ResourceFormat_422)
+      return 422;
+    else if(flags & ResourceFormat_420)
+      return 420;
+    return 0;
+  }
+
+  DOCUMENT(R"(Get the number of planes for a YUV format. Only valid when :data:`type` is
+a YUV format like :attr:`ResourceFormatType.YUV8`.
+
+For other formats, 1 is returned.
+
+:return: The number of planes
+:rtype: ``int``
+)");
+  uint32_t yuvPlaneCount() const
+  {
+    if(flags & ResourceFormat_3Planes)
+      return 3;
+    else if(flags & ResourceFormat_2Planes)
+      return 2;
+    return 1;
+  }
+
+  DOCUMENT(R"(Set BGRA order flag. See :meth:`bgraOrder`.
+
+:param bool flag: The new flag value.
+)");
+  void setBgraOrder(bool flag)
+  {
+    if(flag)
+      flags |= ResourceFormat_BGRA;
+    else
+      flags &= ~ResourceFormat_BGRA;
+  }
+
+  DOCUMENT(R"(Set SRGB correction flag. See :meth:`srgbCorrected`.
+
+:param bool flag: The new flag value.
+)");
+  void setSrgbCorrected(bool flag)
+  {
+    if(flag)
+      flags |= ResourceFormat_SRGB;
+    else
+      flags &= ~ResourceFormat_SRGB;
+  }
+
+  DOCUMENT(R"(Set YUV subsampling rate. See :meth:`yuvSubsampling`.
+
+The value should be e.g. 444 for 4:4:4 or 422 for 4:2:2. Invalid values will result in 0 being set.
+
+:param int subsample: The new subsampling rate.
+)");
+  void setYUVSubsampling(uint32_t subsampling)
+  {
+    flags &= ~ResourceFormat_SubSample_Mask;
+    if(subsampling == 444)
+      flags |= ResourceFormat_444;
+    else if(subsampling == 422)
+      flags |= ResourceFormat_422;
+    else if(subsampling == 420)
+      flags |= ResourceFormat_420;
+  }
+
+  DOCUMENT(R"(Set number of YUV planes. See :meth:`yuvPlaneCount`.
+
+Invalid values will result in 1 being set.
+
+:param int planes: The new number of YUV planes.
+)");
+  void setYUVPlaneCount(uint32_t planes)
+  {
+    flags &= ~ResourceFormat_Planes_Mask;
+    if(planes == 2)
+      flags |= ResourceFormat_2Planes;
+    else if(planes == 3)
+      flags |= ResourceFormat_3Planes;
+  }
+
   ResourceFormatType type;
 
   DOCUMENT("The :class:`type <CompType>` of each component.");
@@ -187,10 +285,26 @@ struct ResourceFormat
   DOCUMENT("The width in bytes of each component.");
   uint8_t compByteWidth;
 
-  DOCUMENT("``True`` if the components are to be read in ``BGRA`` order.");
-  bool bgraOrder;
-  DOCUMENT("``True`` if the components are SRGB corrected on read and write.");
-  bool srgbCorrected;
+private:
+  enum
+  {
+    ResourceFormat_BGRA = 0x001,
+    ResourceFormat_SRGB = 0x002,
+
+    ResourceFormat_444 = 0x004,
+    ResourceFormat_422 = 0x008,
+    ResourceFormat_420 = 0x010,
+    ResourceFormat_SubSample_Mask = 0x01C,
+
+    ResourceFormat_2Planes = 0x020,
+    ResourceFormat_3Planes = 0x040,
+    ResourceFormat_Planes_Mask = 0x060,
+  };
+  uint16_t flags;
+
+  // make DoSerialise a friend so it can serialise flags
+  template <typename SerialiserType>
+  friend void DoSerialise(SerialiserType &ser, ResourceFormat &el);
 };
 
 DECLARE_REFLECTION_STRUCT(ResourceFormat);
@@ -277,7 +391,10 @@ typically it is one parent to many derived.
 )");
   rdcarray<ResourceId> parentResources;
 
-  DOCUMENT("Utility function for setting up a custom name to overwrite the auto-generated one.");
+  DOCUMENT(R"(Utility function for setting up a custom name to overwrite the auto-generated one.
+
+:param str givenName: The custom name to use.
+)");
   inline void SetCustomName(const rdcstr &givenName)
   {
     autogeneratedName = false;
@@ -1202,6 +1319,18 @@ worked around by re-sorting bindings.
 };
 
 DECLARE_REFLECTION_STRUCT(APIProperties);
+
+DOCUMENT("Gives information about the driver for this API.");
+struct DriverInformation
+{
+  DOCUMENT("The :class:`GPUVendor` that provides this driver");
+  GPUVendor vendor;
+
+  DOCUMENT("The version string for the driver");
+  char version[128];
+};
+
+DECLARE_REFLECTION_STRUCT(DriverInformation);
 
 DOCUMENT("A 128-bit Uuid.");
 struct Uuid

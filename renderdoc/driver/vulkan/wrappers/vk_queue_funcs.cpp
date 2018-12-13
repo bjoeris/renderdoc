@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 #include "../vk_core.h"
+#include "../vk_debug.h"
 
 template <typename SerialiserType>
 bool WrappedVulkan::Serialise_vkGetDeviceQueue(SerialiserType &ser, VkDevice device,
@@ -268,7 +269,7 @@ bool WrappedVulkan::Serialise_vkQueueSubmit(SerialiserType &ser, VkQueue queue, 
 
           // insert the baked command buffer in-line into this list of notes, assigning new event
           // and drawIDs
-          InsertDrawsAndRefreshIDs(cmdBufInfo.draw->children);
+          InsertDrawsAndRefreshIDs(cmdBufInfo);
 
           for(size_t e = 0; e < cmdBufInfo.draw->executedCmds.size(); e++)
           {
@@ -429,8 +430,95 @@ bool WrappedVulkan::Serialise_vkQueueSubmit(SerialiserType &ser, VkQueue queue, 
   return true;
 }
 
-void WrappedVulkan::InsertDrawsAndRefreshIDs(vector<VulkanDrawcallTreeNode> &cmdBufNodes)
+bool WrappedVulkan::PatchIndirectDraw(VkIndirectPatchType type, DrawcallDescription &draw,
+                                      byte *&argptr, byte *argend)
 {
+  bool valid = false;
+
+  if(type == VkIndirectPatchType::DrawIndirect || type == VkIndirectPatchType::DrawIndirectCount)
+  {
+    if(argptr && argptr + sizeof(VkDrawIndirectCommand) <= argend)
+    {
+      VkDrawIndirectCommand *arg = (VkDrawIndirectCommand *)argptr;
+
+      draw.numIndices = arg->vertexCount;
+      draw.numInstances = arg->instanceCount;
+      draw.vertexOffset = arg->firstVertex;
+      draw.instanceOffset = arg->firstInstance;
+
+      valid = true;
+    }
+  }
+  else if(type == VkIndirectPatchType::DrawIndirectByteCount)
+  {
+    if(argptr && argptr + 4 <= argend)
+    {
+      uint32_t *arg = (uint32_t *)argptr;
+
+      draw.numIndices = *arg;
+
+      valid = true;
+    }
+  }
+  else if(type == VkIndirectPatchType::DrawIndexedIndirect ||
+          type == VkIndirectPatchType::DrawIndexedIndirectCount)
+  {
+    if(argptr && argptr + sizeof(VkDrawIndexedIndirectCommand) <= argend)
+    {
+      VkDrawIndexedIndirectCommand *arg = (VkDrawIndexedIndirectCommand *)argptr;
+
+      draw.numIndices = arg->indexCount;
+      draw.numInstances = arg->instanceCount;
+      draw.vertexOffset = arg->vertexOffset;
+      draw.indexOffset = arg->firstIndex;
+      draw.instanceOffset = arg->firstInstance;
+
+      valid = true;
+    }
+  }
+  else
+  {
+    RDCERR("Unexpected indirect draw type");
+  }
+
+  if(valid && !draw.events.empty())
+  {
+    SDChunk *chunk = m_StructuredFile->chunks[draw.events.back().chunkIndex];
+
+    if(chunk->metadata.chunkID != (uint32_t)VulkanChunk::vkCmdIndirectSubCommand)
+      chunk = m_StructuredFile->chunks[draw.events.back().chunkIndex - 1];
+
+    SDObject *command = chunk->FindChild("command");
+
+    // single draw indirect draws don't have a command child since it can't be added without
+    // breaking serialising the chunk.
+    if(command)
+    {
+      // patch up structured data contents
+      if(SDObject *sub = command->FindChild("vertexCount"))
+        sub->data.basic.u = draw.numIndices;
+      if(SDObject *sub = command->FindChild("indexCount"))
+        sub->data.basic.u = draw.numIndices;
+      if(SDObject *sub = command->FindChild("instanceCount"))
+        sub->data.basic.u = draw.numInstances;
+      if(SDObject *sub = command->FindChild("firstVertex"))
+        sub->data.basic.u = draw.vertexOffset;
+      if(SDObject *sub = command->FindChild("vertexOffset"))
+        sub->data.basic.u = draw.vertexOffset;
+      if(SDObject *sub = command->FindChild("firstIndex"))
+        sub->data.basic.u = draw.indexOffset;
+      if(SDObject *sub = command->FindChild("firstInstance"))
+        sub->data.basic.u = draw.instanceOffset;
+    }
+  }
+
+  return valid;
+}
+
+void WrappedVulkan::InsertDrawsAndRefreshIDs(BakedCmdBufferInfo &cmdBufInfo)
+{
+  vector<VulkanDrawcallTreeNode> &cmdBufNodes = cmdBufInfo.draw->children;
+
   // assign new drawcall IDs
   for(size_t i = 0; i < cmdBufNodes.size(); i++)
   {
@@ -448,6 +536,141 @@ void WrappedVulkan::InsertDrawsAndRefreshIDs(vector<VulkanDrawcallTreeNode> &cmd
     VulkanDrawcallTreeNode n = cmdBufNodes[i];
     n.draw.eventId += m_RootEventID;
     n.draw.drawcallId += m_RootDrawcallID;
+
+    if(n.indirectPatch.type == VkIndirectPatchType::DispatchIndirect)
+    {
+      VkDispatchIndirectCommand unknown = {0};
+      bytebuf argbuf;
+      GetDebugManager()->GetBufferData(GetResID(n.indirectPatch.buf), 0, 0, argbuf);
+      VkDispatchIndirectCommand *args = (VkDispatchIndirectCommand *)&argbuf[0];
+
+      if(argbuf.size() < sizeof(VkDispatchIndirectCommand))
+      {
+        RDCERR("Couldn't fetch arguments buffer for vkCmdDispatchIndirect");
+        args = &unknown;
+      }
+
+      n.draw.name =
+          StringFormat::Fmt("vkCmdDispatchIndirect(<%u, %u, %u>)", args->x, args->y, args->z);
+      n.draw.dispatchDimension[0] = args->x;
+      n.draw.dispatchDimension[1] = args->y;
+      n.draw.dispatchDimension[2] = args->z;
+    }
+    else if(n.indirectPatch.type == VkIndirectPatchType::DrawIndirectByteCount ||
+            n.indirectPatch.type == VkIndirectPatchType::DrawIndirect ||
+            n.indirectPatch.type == VkIndirectPatchType::DrawIndexedIndirect ||
+            n.indirectPatch.type == VkIndirectPatchType::DrawIndirectCount ||
+            n.indirectPatch.type == VkIndirectPatchType::DrawIndexedIndirectCount)
+    {
+      bool hasCount = (n.indirectPatch.type == VkIndirectPatchType::DrawIndirectCount ||
+                       n.indirectPatch.type == VkIndirectPatchType::DrawIndexedIndirectCount);
+      bytebuf argbuf;
+      GetDebugManager()->GetBufferData(GetResID(n.indirectPatch.buf), 0, 0, argbuf);
+
+      byte *ptr = argbuf.begin(), *end = argbuf.end();
+
+      uint32_t indirectCount = n.indirectPatch.count;
+      if(hasCount)
+      {
+        if(argbuf.size() >= 16)
+        {
+          uint32_t *count = (uint32_t *)end;
+          count -= 4;
+          indirectCount = *count;
+        }
+        else
+        {
+          RDCERR("Couldn't get indirect draw count");
+        }
+      }
+
+      if(indirectCount > n.indirectPatch.count)
+      {
+        RDCERR("Indirect count higher than maxCount, clamping");
+      }
+      else if(indirectCount < n.indirectPatch.count)
+      {
+        // need to remove any draws we reserved that didn't actually happen, and shift any
+        // subsequent event and draw Ids
+        uint32_t shiftCount = n.indirectPatch.count - indirectCount;
+
+        // i is the pushmarker, so i + 1 is the first of the sub draws.
+        // i + 1 + n.indirectPatch.count is the last of the draws, we don't want to erase the next
+        // one (the popmarker)
+        cmdBufNodes.erase(cmdBufNodes.begin() + i + 1 + indirectCount,
+                          cmdBufNodes.begin() + i + 1 + n.indirectPatch.count);
+        for(size_t j = i + 1 + indirectCount; j < cmdBufNodes.size(); j++)
+        {
+          cmdBufNodes[j].draw.eventId -= shiftCount;
+          cmdBufNodes[j].draw.drawcallId -= shiftCount;
+
+          for(APIEvent &ev : cmdBufNodes[j].draw.events)
+            ev.eventId -= shiftCount;
+        }
+
+        cmdBufInfo.eventCount -= shiftCount;
+        cmdBufInfo.drawCount -= shiftCount;
+
+        for(size_t j = 0; j < cmdBufInfo.debugMessages.size(); j++)
+        {
+          if(cmdBufInfo.debugMessages[j].eventId >= cmdBufNodes[i].draw.eventId + indirectCount + 2)
+            cmdBufInfo.debugMessages[j].eventId -= shiftCount;
+        }
+      }
+
+      // indirect count versions always have a multidraw marker regions, but static count of 1 would
+      // be in-lined as a single draw, so we patch in-place
+      if(!hasCount && indirectCount == 1)
+      {
+        bool valid = PatchIndirectDraw(n.indirectPatch.type, n.draw, ptr, end);
+
+        if(n.indirectPatch.type == VkIndirectPatchType::DrawIndirectByteCount)
+        {
+          if(n.draw.numIndices > n.indirectPatch.vertexoffset)
+            n.draw.numIndices -= n.indirectPatch.vertexoffset;
+          else
+            n.draw.numIndices = 0;
+
+          n.draw.numIndices /= n.indirectPatch.stride;
+        }
+
+        if(valid)
+          n.draw.name =
+              StringFormat::Fmt("%s(%u) => <%u, %u>", n.draw.name.c_str(), n.indirectPatch.count,
+                                n.draw.numIndices, n.draw.numInstances);
+        else
+          n.draw.name =
+              StringFormat::Fmt("%s(%u) => <?, ?>", n.draw.name.c_str(), n.indirectPatch.count);
+      }
+      else
+      {
+        // we should have N draws immediately following this one, check that that's the case
+        RDCASSERT(i + indirectCount < cmdBufNodes.size(), i, indirectCount, n.indirectPatch.count,
+                  cmdBufNodes.size());
+
+        // if there was a count, patch that onto the root drawcall name
+        if(hasCount)
+        {
+          n.draw.name = StringFormat::Fmt("%s(<%u>)", n.draw.name.c_str(), indirectCount);
+        }
+
+        for(size_t j = 0; j < (size_t)indirectCount && i + j + 1 < cmdBufNodes.size(); j++)
+        {
+          VulkanDrawcallTreeNode &n2 = cmdBufNodes[i + j + 1];
+
+          bool valid = PatchIndirectDraw(n.indirectPatch.type, n2.draw, ptr, end);
+
+          if(valid)
+            n2.draw.name = StringFormat::Fmt("%s[%zu](<%u, %u>)", n2.draw.name.c_str(), j,
+                                             n2.draw.numIndices, n2.draw.numInstances);
+          else
+            n2.draw.name = StringFormat::Fmt("%s[%zu](<?, ?>)", n2.draw.name.c_str(), j);
+
+          if(ptr)
+            ptr += n.indirectPatch.stride;
+        }
+      }
+    }
 
     for(APIEvent &ev : n.draw.events)
     {
@@ -556,6 +779,8 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
                                                         unwrappedSubmits, Unwrap(fence)));
 
   bool capframe = false;
+  bool present = false;
+
   set<ResourceId> refdIDs;
 
   VkResourceRecord *queueRecord = GetRecord(queue);
@@ -567,6 +792,7 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
       ResourceId cmd = GetResID(pSubmits[s].pCommandBuffers[i]);
 
       VkResourceRecord *record = GetRecord(pSubmits[s].pCommandBuffers[i]);
+      present |= record->bakedCommands->cmdInfo->present;
 
       {
         SCOPED_LOCK(m_ImageLayoutsLock);
@@ -628,7 +854,7 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
             {
               VkResourceRecord *sparserecord = GetResourceManager()->GetResourceRecord(refit->first);
 
-              GetResourceManager()->MarkSparseMapReferenced(sparserecord->sparseInfo);
+              GetResourceManager()->MarkSparseMapReferenced(sparserecord->resInfo);
             }
           }
         }
@@ -780,6 +1006,12 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
         GetResourceManager()->MarkResourceFrameReferenced(
             GetResID(pSubmits[s].pSignalSemaphores[sem]), eFrameRef_Read);
     }
+  }
+
+  if(present)
+  {
+    AdvanceFrame();
+    Present(LayerDisp(m_Instance), NULL);
   }
 
   return ret;
@@ -1038,19 +1270,19 @@ VkResult WrappedVulkan::vkQueueBindSparse(VkQueue queue, uint32_t bindInfoCount,
       for(uint32_t buf = 0; buf < pBindInfo[i].bufferBindCount; buf++)
       {
         const VkSparseBufferMemoryBindInfo &bind = pBindInfo[i].pBufferBinds[buf];
-        GetRecord(bind.buffer)->sparseInfo->Update(bind.bindCount, bind.pBinds);
+        GetRecord(bind.buffer)->resInfo->Update(bind.bindCount, bind.pBinds);
       }
 
       for(uint32_t op = 0; op < pBindInfo[i].imageOpaqueBindCount; op++)
       {
         const VkSparseImageOpaqueMemoryBindInfo &bind = pBindInfo[i].pImageOpaqueBinds[op];
-        GetRecord(bind.image)->sparseInfo->Update(bind.bindCount, bind.pBinds);
+        GetRecord(bind.image)->resInfo->Update(bind.bindCount, bind.pBinds);
       }
 
       for(uint32_t op = 0; op < pBindInfo[i].imageBindCount; op++)
       {
         const VkSparseImageMemoryBindInfo &bind = pBindInfo[i].pImageBinds[op];
-        GetRecord(bind.image)->sparseInfo->Update(bind.bindCount, bind.pBinds);
+        GetRecord(bind.image)->resInfo->Update(bind.bindCount, bind.pBinds);
       }
     }
   }

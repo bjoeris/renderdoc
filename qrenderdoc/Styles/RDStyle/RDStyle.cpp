@@ -195,6 +195,11 @@ void RDStyle::polishPalette(QPalette &pal) const
   else
     pal.setColor(QPalette::AlternateBase, base.lighter(110));
 
+  if(m_Scheme == Dark)
+  {
+    pal.setColor(QPalette::BrightText, text);
+  }
+
   pal.setColor(QPalette::ToolTipBase, tooltip);
   pal.setColor(QPalette::ToolTipText, text);
 
@@ -543,6 +548,8 @@ QRect RDStyle::subElementRect(SubElement element, const QStyleOption *opt, const
   {
     QRect ret = opt->rect;
 
+    if(element == QStyle::SE_ItemViewItemCheckIndicator)
+      ret.setLeft(ret.left() + 4);
     ret.setWidth(Constants::CheckWidth);
 
     int extra = ret.height() - Constants::CheckHeight;
@@ -713,6 +720,9 @@ QSize RDStyle::sizeFromContents(ContentsType type, const QStyleOption *opt, cons
     // add room for an icon
     if(menuitem->maxIconWidth)
       ret.setWidth(ret.width() + Constants::MenuBarMargin + menuitem->maxIconWidth);
+
+    if(menuitem->menuItemType == QStyleOptionMenuItem::SubMenu)
+      ret.setWidth(ret.width() + Constants::MenuSubmenuWidth);
 
     ret = ret.expandedTo(QSize(Constants::MenuBarMinimumWidth, 0));
 

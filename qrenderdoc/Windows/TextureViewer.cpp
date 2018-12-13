@@ -540,6 +540,18 @@ TextureViewer::TextureViewer(ICaptureContext &ctx, QWidget *parent)
                      &TextureViewer::channelsWidget_mouseClicked);
   }
 
+  {
+    QMenu *extensionsMenu = new QMenu(this);
+
+    ui->extensions->setMenu(extensionsMenu);
+    ui->extensions->setPopupMode(QToolButton::InstantPopup);
+
+    QObject::connect(extensionsMenu, &QMenu::aboutToShow, [this, extensionsMenu]() {
+      extensionsMenu->clear();
+      m_Ctx.Extensions().MenuDisplaying(PanelMenu::TextureViewer, extensionsMenu, ui->extensions, {});
+    });
+  }
+
   QWidget *renderContainer = ui->renderContainer;
 
   ui->dockarea->addToolWindow(ui->renderContainer, ToolWindowManager::EmptySpace);
@@ -806,11 +818,13 @@ void TextureViewer::UI_UpdateStatusText()
   bool sintTex = (tex.format.compType == CompType::SInt);
 
   if(m_TexDisplay.overlay == DebugOverlay::QuadOverdrawPass ||
-     m_TexDisplay.overlay == DebugOverlay::QuadOverdrawDraw)
+     m_TexDisplay.overlay == DebugOverlay::QuadOverdrawDraw ||
+     m_TexDisplay.overlay == DebugOverlay::TriangleSizeDraw ||
+     m_TexDisplay.overlay == DebugOverlay::TriangleSizeDraw)
   {
     dsv = false;
     uintTex = false;
-    sintTex = true;
+    sintTex = false;
   }
 
   QColor swatchColor;
@@ -825,7 +839,7 @@ void TextureViewer::UI_UpdateStatusText()
     float g = qBound(0.0f, m_CurHoverValue.floatValue[1], 1.0f);
     float b = qBound(0.0f, m_CurHoverValue.floatValue[2], 1.0f);
 
-    if(tex.format.srgbCorrected || (tex.creationFlags & TextureCategory::SwapBuffer))
+    if(tex.format.srgbCorrected() || (tex.creationFlags & TextureCategory::SwapBuffer))
     {
       r = powf(r, 1.0f / 2.2f);
       g = powf(g, 1.0f / 2.2f);
@@ -1390,7 +1404,7 @@ void TextureViewer::UI_UpdateChannels()
   }
   else
   {
-    if(tex != NULL && !tex->format.srgbCorrected)
+    if(tex != NULL && !tex->format.srgbCorrected())
       ENABLE(ui->gammaDisplay);
     else
       DISABLE(ui->gammaDisplay);
@@ -1399,7 +1413,7 @@ void TextureViewer::UI_UpdateChannels()
         !ui->gammaDisplay->isEnabled() || ui->gammaDisplay->isChecked();
   }
 
-  if(tex != NULL && tex->format.srgbCorrected)
+  if(tex != NULL && tex->format.srgbCorrected())
     m_TexDisplay.linearDisplayAsGamma = false;
 
   bool dsv = false;
@@ -1885,7 +1899,8 @@ void TextureViewer::AddResourceUsageEntry(QMenu &menu, uint32_t start, uint32_t 
   menu.addAction(item);
 }
 
-void TextureViewer::OpenResourceContextMenu(ResourceId id, const rdcarray<EventUsage> &usage)
+void TextureViewer::OpenResourceContextMenu(ResourceId id, bool input,
+                                            const rdcarray<EventUsage> &usage)
 {
   QMenu contextMenu(this);
 
@@ -1920,6 +1935,12 @@ void TextureViewer::OpenResourceContextMenu(ResourceId id, const rdcarray<EventU
     contextMenu.addSeparator();
     contextMenu.addAction(&openLockedTab);
     contextMenu.addAction(&openResourceInspector);
+
+    contextMenu.addSeparator();
+    m_Ctx.Extensions().MenuDisplaying(input ? ContextMenu::TextureViewer_InputThumbnail
+                                            : ContextMenu::TextureViewer_OutputThumbnail,
+                                      &contextMenu, {{"resourceId", id}});
+
     contextMenu.addSeparator();
     contextMenu.addAction(&usageTitle);
 
@@ -1943,6 +1964,11 @@ void TextureViewer::OpenResourceContextMenu(ResourceId id, const rdcarray<EventU
   }
   else
   {
+    contextMenu.addSeparator();
+    m_Ctx.Extensions().MenuDisplaying(input ? ContextMenu::TextureViewer_InputThumbnail
+                                            : ContextMenu::TextureViewer_OutputThumbnail,
+                                      &contextMenu, {});
+
     RDDialog::show(&contextMenu, QCursor::pos());
   }
 }
@@ -2154,16 +2180,19 @@ void TextureViewer::thumb_clicked(QMouseEvent *e)
 
     rdcarray<EventUsage> empty;
 
+    bool input = follow.Type == FollowType::ReadOnly;
+
     if(id == ResourceId())
     {
-      OpenResourceContextMenu(id, empty);
+      OpenResourceContextMenu(id, input, empty);
     }
     else
     {
-      m_Ctx.Replay().AsyncInvoke([this, id](IReplayController *r) {
+      m_Ctx.Replay().AsyncInvoke([this, id, input](IReplayController *r) {
         rdcarray<EventUsage> usage = r->GetUsage(id);
 
-        GUIInvoke::call(this, [this, id, usage]() { OpenResourceContextMenu(id, usage); });
+        GUIInvoke::call(this,
+                        [this, id, input, usage]() { OpenResourceContextMenu(id, input, usage); });
       });
     }
   }
@@ -2178,7 +2207,8 @@ void TextureViewer::render_mouseWheel(QWheelEvent *e)
   // scroll in logarithmic scale
   double logScale = logf(m_TexDisplay.scale);
   logScale += e->delta() / 2500.0;
-  UI_SetScale((float)expf(logScale), cursorPos.x(), cursorPos.y());
+  UI_SetScale((float)expf(logScale), cursorPos.x() * ui->render->devicePixelRatio(),
+              cursorPos.y() * ui->render->devicePixelRatio());
 
   e->accept();
 }
@@ -3350,80 +3380,9 @@ void TextureViewer::on_viewTexBuffer_clicked()
 
   if(texptr)
   {
-    QString baseType;
-
-    QString varName = lit("pixels");
-
-    uint32_t w = texptr->width;
-
-    switch(texptr->format.type)
-    {
-      case ResourceFormatType::BC1:
-      case ResourceFormatType::BC2:
-      case ResourceFormatType::BC3:
-      case ResourceFormatType::BC4:
-      case ResourceFormatType::BC5:
-      case ResourceFormatType::BC6:
-      case ResourceFormatType::BC7:
-      case ResourceFormatType::ETC2:
-      case ResourceFormatType::EAC:
-      case ResourceFormatType::ASTC:
-      case ResourceFormatType::PVRTC:
-        varName = lit("block");
-        // display a 4x4 block at a time
-        w /= 4;
-      default: break;
-    }
-
-    switch(texptr->format.type)
-    {
-      case ResourceFormatType::Regular:
-      {
-        if(texptr->format.compByteWidth == 1)
-          baseType = lit("byte");
-        else if(texptr->format.compByteWidth == 2)
-          baseType = lit("short");
-        else
-          baseType = lit("int");
-
-        baseType = QFormatStr("rgb x%1%2").arg(baseType).arg(texptr->format.compCount);
-
-        break;
-      }
-      // 2x4 byte block, for 64-bit block formats
-      case ResourceFormatType::BC1:
-      case ResourceFormatType::BC4:
-      case ResourceFormatType::ETC2:
-      case ResourceFormatType::EAC:
-      case ResourceFormatType::PVRTC:
-        baseType = lit("row_major xint2x1");
-        break;
-      // 4x4 byte block, for 128-bit block formats
-      case ResourceFormatType::BC2:
-      case ResourceFormatType::BC3:
-      case ResourceFormatType::BC5:
-      case ResourceFormatType::BC6:
-      case ResourceFormatType::BC7:
-      case ResourceFormatType::ASTC: baseType = lit("row_major xint4x1"); break;
-      case ResourceFormatType::R10G10B10A2: baseType = lit("uintten"); break;
-      case ResourceFormatType::R11G11B10: baseType = lit("rgb floateleven"); break;
-      case ResourceFormatType::R5G6B5:
-      case ResourceFormatType::R5G5B5A1: baseType = lit("xshort"); break;
-      case ResourceFormatType::R9G9B9E5: baseType = lit("xint"); break;
-      case ResourceFormatType::R4G4B4A4: baseType = lit("xbyte2"); break;
-      case ResourceFormatType::R4G4: baseType = lit("xbyte"); break;
-      case ResourceFormatType::D16S8:
-      case ResourceFormatType::D24S8:
-      case ResourceFormatType::D32S8:
-      case ResourceFormatType::YUV: baseType = lit("xint4"); break;
-      case ResourceFormatType::S8:
-      case ResourceFormatType::Undefined: baseType = lit("xbyte"); break;
-    }
-
-    QString format = QFormatStr("%1 %2[%3];").arg(baseType).arg(varName).arg(w);
-
-    IBufferViewer *viewer = m_Ctx.ViewTextureAsBuffer(m_TexDisplay.sliceFace, m_TexDisplay.mip,
-                                                      texptr->resourceId, format);
+    IBufferViewer *viewer =
+        m_Ctx.ViewTextureAsBuffer(m_TexDisplay.sliceFace, m_TexDisplay.mip, texptr->resourceId,
+                                  FormatElement::GenerateTextureBufferFormat(*texptr));
 
     m_Ctx.AddDockWindow(viewer->Widget(), DockReference::AddTo, this);
   }
@@ -3495,6 +3454,15 @@ void TextureViewer::on_saveTex_clicked()
   if(saveDialog.saveOverlayInstead())
   {
     m_SaveConfig.resourceId = overlayTexID;
+
+    if(m_TexDisplay.overlay == DebugOverlay::QuadOverdrawDraw ||
+       m_TexDisplay.overlay == DebugOverlay::QuadOverdrawPass ||
+       m_TexDisplay.overlay == DebugOverlay::TriangleSizeDraw ||
+       m_TexDisplay.overlay == DebugOverlay::TriangleSizePass)
+    {
+      m_SaveConfig.comp.blackPoint = 0.0f;
+      m_SaveConfig.comp.whitePoint = 255.0f;
+    }
   }
 
   if(res)

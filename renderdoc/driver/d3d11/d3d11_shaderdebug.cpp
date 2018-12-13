@@ -817,19 +817,19 @@ ShaderDebugTrace D3D11Replay::DebugVertex(uint32_t eventId, uint32_t vertid, uin
         }
         else if(fmt.type == ResourceFormatType::R5G5B5A1)
         {
-          RDCASSERT(fmt.bgraOrder);
+          RDCASSERT(fmt.bgraOrder());
           uint16_t packed = ((uint16_t *)srcData)[0];
           *v4 = ConvertFromB5G5R5A1(packed);
         }
         else if(fmt.type == ResourceFormatType::R5G6B5)
         {
-          RDCASSERT(fmt.bgraOrder);
+          RDCASSERT(fmt.bgraOrder());
           uint16_t packed = ((uint16_t *)srcData)[0];
           *v3 = ConvertFromB5G6R5(packed);
         }
         else if(fmt.type == ResourceFormatType::R4G4B4A4)
         {
-          RDCASSERT(fmt.bgraOrder);
+          RDCASSERT(fmt.bgraOrder());
           uint16_t packed = ((uint16_t *)srcData)[0];
           *v4 = ConvertFromB4G4R4A4(packed);
         }
@@ -927,7 +927,7 @@ ShaderDebugTrace D3D11Replay::DebugVertex(uint32_t eventId, uint32_t vertid, uin
           }
         }
 
-        if(fmt.bgraOrder)
+        if(fmt.bgraOrder())
         {
           RDCASSERT(fmt.compCount == 4);
           std::swap(ret.inputs[i].value.fv[2], ret.inputs[i].value.fv[0]);
@@ -2183,7 +2183,8 @@ void ExtractInputsPS(PSInput IN, float4 debug_pixelPos : SV_Position, uint prim 
 
       if(dxbc->m_DebugInfo)
       {
-        const ASMOperation &op = dxbc->GetInstruction((size_t)s.nextInstruction);
+        size_t inst = RDCMIN((size_t)s.nextInstruction, dxbc->GetNumInstructions() - 1);
+        const ASMOperation &op = dxbc->GetInstruction(inst);
         dxbc->m_DebugInfo->GetLocals(s.nextInstruction, op.offset, s.locals);
       }
 

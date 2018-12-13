@@ -55,6 +55,8 @@ VulkanReplay::VulkanReplay()
   m_BindDepth = false;
 
   m_DebugWidth = m_DebugHeight = 1;
+
+  RDCEraseEl(m_DriverInfo);
 }
 
 VulkanDebugManager *VulkanReplay::GetDebugManager()
@@ -807,6 +809,54 @@ void VulkanReplay::FileChanged()
 {
 }
 
+void VulkanReplay::GetInitialDriverVersion()
+{
+  RDCEraseEl(m_DriverInfo);
+
+  VkInstance inst = m_pDriver->GetInstance();
+
+  uint32_t count;
+  VkResult vkr = ObjDisp(inst)->EnumeratePhysicalDevices(Unwrap(inst), &count, NULL);
+
+  if(vkr != VK_SUCCESS)
+  {
+    RDCERR("Couldn't enumerate physical devices");
+    return;
+  }
+
+  if(count == 0)
+  {
+    RDCERR("No physical devices available");
+  }
+
+  count = 1;
+  VkPhysicalDevice firstDevice = VK_NULL_HANDLE;
+
+  vkr = ObjDisp(inst)->EnumeratePhysicalDevices(Unwrap(inst), &count, &firstDevice);
+
+  // incomplete is expected if multiple GPUs are present, and we're just grabbing the first
+  if(vkr != VK_SUCCESS && vkr != VK_INCOMPLETE)
+  {
+    RDCERR("Couldn't fetch first physical device");
+    return;
+  }
+
+  VkPhysicalDeviceProperties props;
+  ObjDisp(inst)->GetPhysicalDeviceProperties(firstDevice, &props);
+
+  SetDriverInformation(props);
+}
+
+void VulkanReplay::SetDriverInformation(const VkPhysicalDeviceProperties &props)
+{
+  VkDriverInfo info(props);
+  m_DriverInfo.vendor = info.Vendor();
+  std::string versionString =
+      StringFormat::Fmt("%s %u.%u.%u", props.deviceName, info.Major(), info.Minor(), info.Patch());
+  versionString.resize(RDCMIN(versionString.size(), ARRAY_COUNT(m_DriverInfo.version) - 1));
+  memcpy(m_DriverInfo.version, versionString.c_str(), versionString.size());
+}
+
 void VulkanReplay::SavePipelineState()
 {
   const VulkanRenderState &state = m_pDriver->m_RenderState;
@@ -933,6 +983,33 @@ void VulkanReplay::SavePipelineState()
 
     m_VulkanPipelineState.tessellation.domainOriginUpperLeft =
         p.tessellationDomainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT;
+
+    // Transform feedback
+    m_VulkanPipelineState.transformFeedback.buffers.resize(state.xfbbuffers.size());
+    for(size_t i = 0; i < state.xfbbuffers.size(); i++)
+    {
+      m_VulkanPipelineState.transformFeedback.buffers[i].bufferResourceId =
+          rm->GetOriginalID(state.xfbbuffers[i].buf);
+      m_VulkanPipelineState.transformFeedback.buffers[i].byteOffset = state.xfbbuffers[i].offs;
+      m_VulkanPipelineState.transformFeedback.buffers[i].byteSize = state.xfbbuffers[i].size;
+
+      m_VulkanPipelineState.transformFeedback.buffers[i].active = false;
+      m_VulkanPipelineState.transformFeedback.buffers[i].counterBufferResourceId = ResourceId();
+      m_VulkanPipelineState.transformFeedback.buffers[i].counterBufferOffset = 0;
+
+      if(i >= state.firstxfbcounter)
+      {
+        size_t xfb = i - state.firstxfbcounter;
+        if(xfb < state.xfbcounters.size())
+        {
+          m_VulkanPipelineState.transformFeedback.buffers[i].active = true;
+          m_VulkanPipelineState.transformFeedback.buffers[i].counterBufferResourceId =
+              rm->GetOriginalID(state.xfbcounters[xfb].buf);
+          m_VulkanPipelineState.transformFeedback.buffers[i].counterBufferOffset =
+              state.xfbcounters[xfb].offs;
+        }
+      }
+    }
 
     // Viewport/Scissors
     size_t numViewScissors = p.viewportCount;
@@ -2320,6 +2397,13 @@ void VulkanReplay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mi
       };
 
       RenderTextureInternal(texDisplay, rpbegin, renderFlags);
+
+      // for textures with stencil, do another draw to copy the stencil
+      if(isStencil)
+      {
+        texDisplay.red = texDisplay.blue = texDisplay.alpha = false;
+        RenderTextureInternal(texDisplay, rpbegin, renderFlags | eTexDisplay_GreenOnly);
+      }
     }
 
     m_DebugWidth = oldW;
@@ -3480,6 +3564,8 @@ ReplayStatus Vulkan_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
   replay->SetRGP(rgp);
 
   *driver = (IReplayDriver *)replay;
+
+  replay->GetInitialDriverVersion();
 
   return ReplayStatus::Succeeded;
 }

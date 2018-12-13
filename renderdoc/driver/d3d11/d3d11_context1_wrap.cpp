@@ -27,6 +27,7 @@
 #include "strings/string_utils.h"
 #include "d3d11_renderstate.h"
 #include "d3d11_resources.h"
+#include "d3d11_video.h"
 
 /////////////////////////////////
 // implement ID3D11DeviceContext1
@@ -303,7 +304,7 @@ bool WrappedID3D11DeviceContext::Serialise_UpdateSubresource1(
         subHeight = RDCMAX(1U, desc.Height >> mipLevel);
       }
 
-      UINT SourceRowPitch = GetByteSize(subWidth, 1, 1, fmt, 0);
+      UINT SourceRowPitch = GetRowPitch(subWidth, fmt, 0);
       UINT SourceDepthPitch = GetByteSize(subWidth, subHeight, 1, fmt, 0);
 
       if(IsReplayingAndReading() && m_CurEventID > 0)
@@ -359,6 +360,8 @@ void WrappedID3D11DeviceContext::UpdateSubresource1(ID3D11Resource *pDstResource
 {
   if(m_pRealContext1 == NULL)
     return;
+
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
 
   DrainAnnotationQueue();
 
@@ -443,6 +446,8 @@ void WrappedID3D11DeviceContext::CopySubresourceRegion1(ID3D11Resource *pDstReso
 {
   if(m_pRealContext1 == NULL)
     return;
+
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
 
   DrainAnnotationQueue();
 
@@ -553,6 +558,8 @@ void WrappedID3D11DeviceContext::ClearView(ID3D11View *pView, const FLOAT Color[
   if(m_pRealContext1 == NULL)
     return;
 
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   DrainAnnotationQueue();
 
   if(pView == NULL)
@@ -560,49 +567,78 @@ void WrappedID3D11DeviceContext::ClearView(ID3D11View *pView, const FLOAT Color[
 
   m_EmptyCommandList = false;
 
+  bool isVideo = false;
+
   {
     ID3D11View *real = NULL;
 
     if(WrappedID3D11RenderTargetView1::IsAlloc(pView))
+    {
       real = UNWRAP(WrappedID3D11RenderTargetView1, pView);
+    }
     else if(WrappedID3D11DepthStencilView::IsAlloc(pView))
+    {
       real = UNWRAP(WrappedID3D11DepthStencilView, pView);
+    }
     else if(WrappedID3D11ShaderResourceView1::IsAlloc(pView))
+    {
       real = UNWRAP(WrappedID3D11ShaderResourceView1, pView);
+    }
     else if(WrappedID3D11UnorderedAccessView1::IsAlloc(pView))
+    {
       real = UNWRAP(WrappedID3D11UnorderedAccessView1, pView);
+    }
+    else if(WrappedID3D11VideoDecoderOutputView::IsAlloc(pView))
+    {
+      real = UNWRAP(WrappedID3D11VideoDecoderOutputView, pView);
+      isVideo = true;
+    }
+    else if(WrappedID3D11VideoProcessorInputView::IsAlloc(pView))
+    {
+      real = UNWRAP(WrappedID3D11VideoProcessorInputView, pView);
+      isVideo = true;
+    }
+    else if(WrappedID3D11VideoProcessorOutputView::IsAlloc(pView))
+    {
+      real = UNWRAP(WrappedID3D11VideoProcessorOutputView, pView);
+      isVideo = true;
+    }
 
     RDCASSERT(real);
 
     SERIALISE_TIME_CALL(m_pRealContext1->ClearView(real, Color, pRect, NumRects));
   }
 
-  if(IsActiveCapturing(m_State))
+  // video views don't take part in the capture at all
+  if(!isVideo)
   {
-    USE_SCRATCH_SERIALISER();
-    ser.SetDrawChunk();
-    SCOPED_SERIALISE_CHUNK(D3D11Chunk::ClearView);
-    SERIALISE_ELEMENT(m_ResourceID).Named("Context").TypedAs("ID3D11DeviceContext *");
-    Serialise_ClearView(ser, pView, Color, pRect, NumRects);
+    if(IsActiveCapturing(m_State))
+    {
+      USE_SCRATCH_SERIALISER();
+      ser.SetDrawChunk();
+      SCOPED_SERIALISE_CHUNK(D3D11Chunk::ClearView);
+      SERIALISE_ELEMENT(m_ResourceID).Named("Context").TypedAs("ID3D11DeviceContext *");
+      Serialise_ClearView(ser, pView, Color, pRect, NumRects);
 
-    ID3D11Resource *viewRes = NULL;
-    pView->GetResource(&viewRes);
+      ID3D11Resource *viewRes = NULL;
+      pView->GetResource(&viewRes);
 
-    m_MissingTracks.insert(GetIDForResource(viewRes));
-    MarkResourceReferenced(GetIDForResource(viewRes), eFrameRef_Write);
+      m_MissingTracks.insert(GetIDForResource(viewRes));
+      MarkResourceReferenced(GetIDForResource(viewRes), eFrameRef_Write);
 
-    SAFE_RELEASE(viewRes);
+      SAFE_RELEASE(viewRes);
 
-    m_ContextRecord->AddChunk(scope.Get());
-  }
-  else if(IsBackgroundCapturing(m_State))
-  {
-    ID3D11Resource *viewRes = NULL;
-    pView->GetResource(&viewRes);
+      m_ContextRecord->AddChunk(scope.Get());
+    }
+    else if(IsBackgroundCapturing(m_State))
+    {
+      ID3D11Resource *viewRes = NULL;
+      pView->GetResource(&viewRes);
 
-    MarkDirtyResource(GetIDForResource(viewRes));
+      MarkDirtyResource(GetIDForResource(viewRes));
 
-    SAFE_RELEASE(viewRes);
+      SAFE_RELEASE(viewRes);
+    }
   }
 }
 
@@ -667,6 +703,8 @@ void WrappedID3D11DeviceContext::VSSetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        const UINT *pFirstConstant,
                                                        const UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   DrainAnnotationQueue();
 
   m_EmptyCommandList = false;
@@ -796,6 +834,8 @@ void WrappedID3D11DeviceContext::HSSetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        const UINT *pFirstConstant,
                                                        const UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   DrainAnnotationQueue();
 
   m_EmptyCommandList = false;
@@ -925,6 +965,8 @@ void WrappedID3D11DeviceContext::DSSetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        const UINT *pFirstConstant,
                                                        const UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   DrainAnnotationQueue();
 
   m_EmptyCommandList = false;
@@ -1054,6 +1096,8 @@ void WrappedID3D11DeviceContext::GSSetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        const UINT *pFirstConstant,
                                                        const UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   DrainAnnotationQueue();
 
   m_EmptyCommandList = false;
@@ -1183,6 +1227,8 @@ void WrappedID3D11DeviceContext::PSSetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        const UINT *pFirstConstant,
                                                        const UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   DrainAnnotationQueue();
 
   m_EmptyCommandList = false;
@@ -1312,6 +1358,8 @@ void WrappedID3D11DeviceContext::CSSetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        const UINT *pFirstConstant,
                                                        const UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   DrainAnnotationQueue();
 
   m_EmptyCommandList = false;
@@ -1384,6 +1432,8 @@ void WrappedID3D11DeviceContext::VSGetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        ID3D11Buffer **ppConstantBuffers,
                                                        UINT *pFirstConstant, UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   if(m_pRealContext1 == NULL || !m_SetCBuffer1)
   {
     VSGetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
@@ -1425,6 +1475,8 @@ void WrappedID3D11DeviceContext::HSGetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        ID3D11Buffer **ppConstantBuffers,
                                                        UINT *pFirstConstant, UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   if(m_pRealContext1 == NULL || !m_SetCBuffer1)
   {
     HSGetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
@@ -1466,6 +1518,8 @@ void WrappedID3D11DeviceContext::DSGetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        ID3D11Buffer **ppConstantBuffers,
                                                        UINT *pFirstConstant, UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   if(m_pRealContext1 == NULL || !m_SetCBuffer1)
   {
     DSGetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
@@ -1507,6 +1561,8 @@ void WrappedID3D11DeviceContext::GSGetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        ID3D11Buffer **ppConstantBuffers,
                                                        UINT *pFirstConstant, UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   if(m_pRealContext1 == NULL || !m_SetCBuffer1)
   {
     GSGetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
@@ -1548,6 +1604,8 @@ void WrappedID3D11DeviceContext::PSGetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        ID3D11Buffer **ppConstantBuffers,
                                                        UINT *pFirstConstant, UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   if(m_pRealContext1 == NULL || !m_SetCBuffer1)
   {
     PSGetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
@@ -1589,6 +1647,8 @@ void WrappedID3D11DeviceContext::CSGetConstantBuffers1(UINT StartSlot, UINT NumB
                                                        ID3D11Buffer **ppConstantBuffers,
                                                        UINT *pFirstConstant, UINT *pNumConstants)
 {
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   if(m_pRealContext1 == NULL || !m_SetCBuffer1)
   {
     CSGetConstantBuffers(StartSlot, NumBuffers, ppConstantBuffers);
@@ -1675,6 +1735,8 @@ void WrappedID3D11DeviceContext::DiscardResource(ID3D11Resource *pResource)
 {
   if(m_pRealContext1 == NULL)
     return;
+
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
 
   DrainAnnotationQueue();
 
@@ -1799,6 +1861,8 @@ void WrappedID3D11DeviceContext::DiscardView(ID3D11View *pResourceView)
   if(m_pRealContext1 == NULL)
     return;
 
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   DrainAnnotationQueue();
 
   if(pResourceView == NULL)
@@ -1806,49 +1870,78 @@ void WrappedID3D11DeviceContext::DiscardView(ID3D11View *pResourceView)
 
   m_EmptyCommandList = false;
 
+  bool isVideo = false;
+
   {
     ID3D11View *real = NULL;
 
     if(WrappedID3D11RenderTargetView1::IsAlloc(pResourceView))
+    {
       real = UNWRAP(WrappedID3D11RenderTargetView1, pResourceView);
+    }
     else if(WrappedID3D11DepthStencilView::IsAlloc(pResourceView))
+    {
       real = UNWRAP(WrappedID3D11DepthStencilView, pResourceView);
+    }
     else if(WrappedID3D11ShaderResourceView1::IsAlloc(pResourceView))
+    {
       real = UNWRAP(WrappedID3D11ShaderResourceView1, pResourceView);
+    }
     else if(WrappedID3D11UnorderedAccessView1::IsAlloc(pResourceView))
+    {
       real = UNWRAP(WrappedID3D11UnorderedAccessView1, pResourceView);
+    }
+    else if(WrappedID3D11VideoDecoderOutputView::IsAlloc(pResourceView))
+    {
+      real = UNWRAP(WrappedID3D11VideoDecoderOutputView, pResourceView);
+      isVideo = true;
+    }
+    else if(WrappedID3D11VideoProcessorInputView::IsAlloc(pResourceView))
+    {
+      real = UNWRAP(WrappedID3D11VideoProcessorInputView, pResourceView);
+      isVideo = true;
+    }
+    else if(WrappedID3D11VideoProcessorOutputView::IsAlloc(pResourceView))
+    {
+      real = UNWRAP(WrappedID3D11VideoProcessorOutputView, pResourceView);
+      isVideo = true;
+    }
 
     RDCASSERT(real);
 
     SERIALISE_TIME_CALL(m_pRealContext1->DiscardView(real));
   }
 
-  if(IsActiveCapturing(m_State))
+  // video views don't take part in the capture at all
+  if(!isVideo)
   {
-    USE_SCRATCH_SERIALISER();
-    ser.SetDrawChunk();
-    SCOPED_SERIALISE_CHUNK(D3D11Chunk::DiscardView);
-    SERIALISE_ELEMENT(m_ResourceID).Named("Context").TypedAs("ID3D11DeviceContext *");
-    Serialise_DiscardView(ser, pResourceView);
+    if(IsActiveCapturing(m_State))
+    {
+      USE_SCRATCH_SERIALISER();
+      ser.SetDrawChunk();
+      SCOPED_SERIALISE_CHUNK(D3D11Chunk::DiscardView);
+      SERIALISE_ELEMENT(m_ResourceID).Named("Context").TypedAs("ID3D11DeviceContext *");
+      Serialise_DiscardView(ser, pResourceView);
 
-    ID3D11Resource *viewRes = NULL;
-    pResourceView->GetResource(&viewRes);
+      ID3D11Resource *viewRes = NULL;
+      pResourceView->GetResource(&viewRes);
 
-    m_MissingTracks.insert(GetIDForResource(viewRes));
-    MarkResourceReferenced(GetIDForResource(viewRes), eFrameRef_Write);
+      m_MissingTracks.insert(GetIDForResource(viewRes));
+      MarkResourceReferenced(GetIDForResource(viewRes), eFrameRef_Write);
 
-    SAFE_RELEASE(viewRes);
+      SAFE_RELEASE(viewRes);
 
-    m_ContextRecord->AddChunk(scope.Get());
-  }
-  else if(IsCaptureMode(m_State))
-  {
-    ID3D11Resource *viewRes = NULL;
-    pResourceView->GetResource(&viewRes);
+      m_ContextRecord->AddChunk(scope.Get());
+    }
+    else if(IsCaptureMode(m_State))
+    {
+      ID3D11Resource *viewRes = NULL;
+      pResourceView->GetResource(&viewRes);
 
-    MarkDirtyResource(GetIDForResource(viewRes));
+      MarkDirtyResource(GetIDForResource(viewRes));
 
-    SAFE_RELEASE(viewRes);
+      SAFE_RELEASE(viewRes);
+    }
   }
 }
 
@@ -1936,6 +2029,8 @@ void WrappedID3D11DeviceContext::DiscardView1(ID3D11View *pResourceView, const D
   if(m_pRealContext1 == NULL)
     return;
 
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
+
   DrainAnnotationQueue();
 
   if(pResourceView == NULL)
@@ -1943,49 +2038,78 @@ void WrappedID3D11DeviceContext::DiscardView1(ID3D11View *pResourceView, const D
 
   m_EmptyCommandList = false;
 
+  bool isVideo = false;
+
   {
     ID3D11View *real = NULL;
 
     if(WrappedID3D11RenderTargetView1::IsAlloc(pResourceView))
+    {
       real = UNWRAP(WrappedID3D11RenderTargetView1, pResourceView);
+    }
     else if(WrappedID3D11DepthStencilView::IsAlloc(pResourceView))
+    {
       real = UNWRAP(WrappedID3D11DepthStencilView, pResourceView);
+    }
     else if(WrappedID3D11ShaderResourceView1::IsAlloc(pResourceView))
+    {
       real = UNWRAP(WrappedID3D11ShaderResourceView1, pResourceView);
+    }
     else if(WrappedID3D11UnorderedAccessView1::IsAlloc(pResourceView))
+    {
       real = UNWRAP(WrappedID3D11UnorderedAccessView1, pResourceView);
+    }
+    else if(WrappedID3D11VideoDecoderOutputView::IsAlloc(pResourceView))
+    {
+      real = UNWRAP(WrappedID3D11VideoDecoderOutputView, pResourceView);
+      isVideo = true;
+    }
+    else if(WrappedID3D11VideoProcessorInputView::IsAlloc(pResourceView))
+    {
+      real = UNWRAP(WrappedID3D11VideoProcessorInputView, pResourceView);
+      isVideo = true;
+    }
+    else if(WrappedID3D11VideoProcessorOutputView::IsAlloc(pResourceView))
+    {
+      real = UNWRAP(WrappedID3D11VideoProcessorOutputView, pResourceView);
+      isVideo = true;
+    }
 
     RDCASSERT(real);
 
     SERIALISE_TIME_CALL(m_pRealContext1->DiscardView1(real, pRects, NumRects));
   }
 
-  if(IsActiveCapturing(m_State))
+  // video views don't take part in the capture at all
+  if(!isVideo)
   {
-    USE_SCRATCH_SERIALISER();
-    ser.SetDrawChunk();
-    SCOPED_SERIALISE_CHUNK(D3D11Chunk::DiscardView1);
-    SERIALISE_ELEMENT(m_ResourceID).Named("Context").TypedAs("ID3D11DeviceContext *");
-    Serialise_DiscardView1(ser, pResourceView, pRects, NumRects);
+    if(IsActiveCapturing(m_State))
+    {
+      USE_SCRATCH_SERIALISER();
+      ser.SetDrawChunk();
+      SCOPED_SERIALISE_CHUNK(D3D11Chunk::DiscardView1);
+      SERIALISE_ELEMENT(m_ResourceID).Named("Context").TypedAs("ID3D11DeviceContext *");
+      Serialise_DiscardView1(ser, pResourceView, pRects, NumRects);
 
-    ID3D11Resource *viewRes = NULL;
-    pResourceView->GetResource(&viewRes);
+      ID3D11Resource *viewRes = NULL;
+      pResourceView->GetResource(&viewRes);
 
-    m_MissingTracks.insert(GetIDForResource(viewRes));
-    MarkResourceReferenced(GetIDForResource(viewRes), eFrameRef_Write);
+      m_MissingTracks.insert(GetIDForResource(viewRes));
+      MarkResourceReferenced(GetIDForResource(viewRes), eFrameRef_Write);
 
-    SAFE_RELEASE(viewRes);
+      SAFE_RELEASE(viewRes);
 
-    m_ContextRecord->AddChunk(scope.Get());
-  }
-  else if(IsCaptureMode(m_State))
-  {
-    ID3D11Resource *viewRes = NULL;
-    pResourceView->GetResource(&viewRes);
+      m_ContextRecord->AddChunk(scope.Get());
+    }
+    else if(IsCaptureMode(m_State))
+    {
+      ID3D11Resource *viewRes = NULL;
+      pResourceView->GetResource(&viewRes);
 
-    MarkDirtyResource(GetIDForResource(viewRes));
+      MarkDirtyResource(GetIDForResource(viewRes));
 
-    SAFE_RELEASE(viewRes);
+      SAFE_RELEASE(viewRes);
+    }
   }
 }
 
@@ -2027,6 +2151,8 @@ void WrappedID3D11DeviceContext::SwapDeviceContextState(ID3DDeviceContextState *
 {
   if(m_pRealContext1 == NULL)
     return;
+
+  SCOPED_LOCK_OPTIONAL(m_pDevice->D3DLock(), m_pDevice->D3DThreadSafe());
 
   ID3DDeviceContextState *prev = NULL;
 

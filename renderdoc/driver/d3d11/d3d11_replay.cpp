@@ -54,6 +54,8 @@ D3D11Replay::D3D11Replay()
   m_WARP = false;
 
   m_HighlightCache.driver = this;
+
+  RDCEraseEl(m_DriverInfo);
 }
 
 D3D11Replay::~D3D11Replay()
@@ -95,14 +97,6 @@ void D3D11Replay::CreateResources()
     IDXGIAdapter *pDXGIAdapter;
     hr = pDXGIDevice->GetParent(__uuidof(IDXGIAdapter), (void **)&pDXGIAdapter);
 
-    DXGI_ADAPTER_DESC desc = {};
-    pDXGIAdapter->GetDesc(&desc);
-
-    m_Vendor = GPUVendorFromPCIVendor(desc.VendorId);
-
-    if(m_WARP)
-      m_Vendor = GPUVendor::Software;
-
     if(FAILED(hr))
     {
       RDCERR("Couldn't get DXGI adapter from DXGI device");
@@ -110,6 +104,22 @@ void D3D11Replay::CreateResources()
     }
     else
     {
+      DXGI_ADAPTER_DESC desc = {};
+      pDXGIAdapter->GetDesc(&desc);
+
+      RDCEraseEl(m_DriverInfo);
+
+      m_DriverInfo.vendor = GPUVendorFromPCIVendor(desc.VendorId);
+
+      std::string descString = GetDriverVersion(desc);
+      descString.resize(RDCMIN(descString.size(), ARRAY_COUNT(m_DriverInfo.version) - 1));
+      memcpy(m_DriverInfo.version, descString.c_str(), descString.size());
+
+      RDCLOG("Running replay on %s / %s", ToStr(m_DriverInfo.vendor).c_str(), m_DriverInfo.version);
+
+      if(m_WARP)
+        m_DriverInfo.vendor = GPUVendor::Software;
+
       hr = pDXGIAdapter->GetParent(__uuidof(IDXGIFactory), (void **)&m_pFactory);
 
       SAFE_RELEASE(pDXGIDevice);
@@ -162,24 +172,24 @@ void D3D11Replay::CreateResources()
   NVCounters *countersNV = NULL;
   IntelCounters *countersIntel = NULL;
 
-  if(m_Vendor == GPUVendor::AMD)
+  if(m_DriverInfo.vendor == GPUVendor::AMD)
   {
     RDCLOG("AMD GPU detected - trying to initialise AMD counters");
     countersAMD = new AMDCounters();
   }
-  else if(m_Vendor == GPUVendor::nVidia)
+  else if(m_DriverInfo.vendor == GPUVendor::nVidia)
   {
     RDCLOG("nVidia GPU detected - trying to initialise nVidia counters");
     countersNV = new NVCounters();
   }
-  else if(m_Vendor == GPUVendor::Intel)
+  else if(m_DriverInfo.vendor == GPUVendor::Intel)
   {
     RDCLOG("Intel GPU detected - trying to initialize Intel counters");
     countersIntel = new IntelCounters();
   }
   else
   {
-    RDCLOG("%s GPU detected - no counters available", ToStr(m_Vendor).c_str());
+    RDCLOG("%s GPU detected - no counters available", ToStr(m_DriverInfo.vendor).c_str());
   }
 
   ID3D11Device *d3dDevice = m_pDevice->GetReal();
@@ -507,7 +517,7 @@ APIProperties D3D11Replay::GetAPIProperties()
 
   ret.pipelineType = GraphicsAPI::D3D11;
   ret.localRenderer = GraphicsAPI::D3D11;
-  ret.vendor = m_Vendor;
+  ret.vendor = m_DriverInfo.vendor;
   ret.degraded = m_WARP;
   ret.shadersMutable = false;
 
@@ -799,6 +809,14 @@ void D3D11Replay::SavePipelineState()
             view.firstElement = desc.BufferEx.FirstElement;
             view.numElements = desc.BufferEx.NumElements;
             view.bufferFlags = D3DBufferViewFlags(desc.BufferEx.Flags);
+
+            D3D11_BUFFER_DESC bufdesc;
+            ((ID3D11Buffer *)res)->GetDesc(&bufdesc);
+
+            view.structured = bufdesc.StructureByteStride > 0 && desc.Format == DXGI_FORMAT_UNKNOWN;
+
+            if(view.structured)
+              view.elementByteSize = bufdesc.StructureByteStride;
           }
           else if(desc.ViewDimension == D3D11_SRV_DIMENSION_TEXTURE1D)
           {
@@ -1775,10 +1793,20 @@ void D3D11Replay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip
 
     if(params.remap != RemapTexture::NoRemap)
     {
-      RDCASSERT(params.remap == RemapTexture::RGBA8);
+      if(params.remap == RemapTexture::RGBA8)
+      {
+        desc.Format = IsSRGBFormat(desc.Format) ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
+                                                : DXGI_FORMAT_R8G8B8A8_UNORM;
+      }
+      else if(params.remap == RemapTexture::RGBA16)
+      {
+        desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+      }
+      else if(params.remap == RemapTexture::RGBA32)
+      {
+        desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+      }
 
-      desc.Format =
-          IsSRGBFormat(desc.Format) ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
       desc.ArraySize = 1;
     }
 
@@ -1798,8 +1826,6 @@ void D3D11Replay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip
 
     if(params.remap != RemapTexture::NoRemap)
     {
-      RDCASSERT(params.remap == RemapTexture::RGBA8);
-
       subresource = mip;
 
       desc.CPUAccessFlags = 0;
@@ -1911,11 +1937,21 @@ void D3D11Replay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip
 
     if(params.remap != RemapTexture::NoRemap)
     {
-      RDCASSERT(params.remap == RemapTexture::RGBA8);
+      if(params.remap == RemapTexture::RGBA8)
+      {
+        desc.Format = (IsSRGBFormat(desc.Format) || wrapTex->m_RealDescriptor)
+                          ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
+                          : DXGI_FORMAT_R8G8B8A8_UNORM;
+      }
+      else if(params.remap == RemapTexture::RGBA16)
+      {
+        desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+      }
+      else if(params.remap == RemapTexture::RGBA32)
+      {
+        desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+      }
 
-      desc.Format = (IsSRGBFormat(desc.Format) || wrapTex->m_RealDescriptor)
-                        ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
-                        : DXGI_FORMAT_R8G8B8A8_UNORM;
       desc.ArraySize = 1;
     }
 
@@ -1935,8 +1971,6 @@ void D3D11Replay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip
 
     if(params.remap != RemapTexture::NoRemap)
     {
-      RDCASSERT(params.remap == RemapTexture::RGBA8);
-
       subresource = mip;
 
       desc.CPUAccessFlags = 0;
@@ -2063,10 +2097,19 @@ void D3D11Replay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip
 
     if(params.remap != RemapTexture::NoRemap)
     {
-      RDCASSERT(params.remap == RemapTexture::RGBA8);
-
-      desc.Format =
-          IsSRGBFormat(desc.Format) ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+      if(params.remap == RemapTexture::RGBA8)
+      {
+        desc.Format = IsSRGBFormat(desc.Format) ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB
+                                                : DXGI_FORMAT_R8G8B8A8_UNORM;
+      }
+      else if(params.remap == RemapTexture::RGBA16)
+      {
+        desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+      }
+      else if(params.remap == RemapTexture::RGBA32)
+      {
+        desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+      }
     }
 
     subresource = mip;
@@ -2085,8 +2128,6 @@ void D3D11Replay::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip
 
     if(params.remap != RemapTexture::NoRemap)
     {
-      RDCASSERT(params.remap == RemapTexture::RGBA8);
-
       subresource = mip;
 
       desc.CPUAccessFlags = 0;

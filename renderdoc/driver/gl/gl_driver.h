@@ -459,21 +459,11 @@ private:
   void RenderOverlayText(float x, float y, const char *fmt, ...);
   void RenderOverlayStr(float x, float y, const char *str);
 
-  struct BackbufferImage
-  {
-    BackbufferImage() : jpgbuf(NULL), len(0), thwidth(0), thheight(0) {}
-    ~BackbufferImage() { SAFE_DELETE_ARRAY(jpgbuf); }
-    byte *jpgbuf;
-    size_t len;
-    uint16_t thwidth;
-    uint16_t thheight;
-  };
-
   void CreateReplayBackbuffer(const GLInitParams &params, ResourceId fboOrigId, GLuint &fbo,
                               std::string bbname);
 
-  BackbufferImage *SaveBackbufferImage();
-  map<void *, BackbufferImage *> m_BackbufferImages;
+  RenderDoc::FramePixels *SaveBackbufferImage();
+  map<void *, RenderDoc::FramePixels *> m_BackbufferImages;
 
   void BuildGLExtensions();
   void BuildGLESExtensions();
@@ -864,6 +854,9 @@ public:
   IMPLEMENT_FUNCTION_SERIALISED(void, glFramebufferTextureMultisampleMultiviewOVR, GLenum target,
                                 GLenum attachment, GLuint texture, GLint level, GLsizei samples,
                                 GLint baseViewIndex, GLsizei numViews);
+  IMPLEMENT_FUNCTION_SERIALISED(void, glTextureFoveationParametersQCOM, GLuint texture,
+                                GLuint layer, GLuint focalPoint, GLfloat focalX, GLfloat focalY,
+                                GLfloat gainX, GLfloat gainY, GLfloat foveaArea);
 
   IMPLEMENT_FUNCTION_SERIALISED(void, glFramebufferParameteri, GLenum target, GLenum pname,
                                 GLint param);

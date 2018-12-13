@@ -59,24 +59,29 @@ void D3D12DebugManager::CopyTex2DMSToArray(ID3D12Resource *destArray, ID3D12Reso
   dsvDesc.Texture2DArray.FirstArraySlice = 0;
   dsvDesc.Texture2DArray.MipSlice = 0;
 
-  bool depthFormat = IsDepthFormat(rtvDesc.Format);
+  bool isDepth = IsDepthFormat(rtvDesc.Format) ||
+                 (descMS.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) != 0;
   bool intFormat = IsUIntFormat(rtvDesc.Format) || IsIntFormat(rtvDesc.Format);
 
   bool stencil = false;
   DXGI_FORMAT stencilFormat = DXGI_FORMAT_UNKNOWN;
 
-  if(depthFormat)
+  if(isDepth)
   {
     switch(descMS.Format)
     {
       case DXGI_FORMAT_D32_FLOAT:
       case DXGI_FORMAT_R32_FLOAT:
-      case DXGI_FORMAT_R32_TYPELESS: srvDesc.Format = DXGI_FORMAT_R32_FLOAT; break;
+      case DXGI_FORMAT_R32_TYPELESS:
+        dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
+        srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+        break;
 
       case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
       case DXGI_FORMAT_R32G8X24_TYPELESS:
       case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
       case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
+        dsvDesc.Format = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
         srvDesc.Format = DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
         stencilFormat = DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;
         stencil = true;
@@ -86,13 +91,17 @@ void D3D12DebugManager::CopyTex2DMSToArray(ID3D12Resource *destArray, ID3D12Reso
       case DXGI_FORMAT_R24G8_TYPELESS:
       case DXGI_FORMAT_R24_UNORM_X8_TYPELESS:
       case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
+        dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
         srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
         stencilFormat = DXGI_FORMAT_X24_TYPELESS_G8_UINT;
         stencil = true;
         break;
 
       case DXGI_FORMAT_D16_UNORM:
-      case DXGI_FORMAT_R16_TYPELESS: srvDesc.Format = DXGI_FORMAT_R16_FLOAT; break;
+      case DXGI_FORMAT_R16_TYPELESS:
+        dsvDesc.Format = DXGI_FORMAT_D16_UNORM;
+        srvDesc.Format = DXGI_FORMAT_R16_FLOAT;
+        break;
     }
   }
 
@@ -129,7 +138,7 @@ void D3D12DebugManager::CopyTex2DMSToArray(ID3D12Resource *destArray, ID3D12Reso
   pipeDesc.RTVFormats[0] = rtvDesc.Format;
   pipeDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 
-  if(depthFormat)
+  if(isDepth)
   {
     pipeDesc.PS.BytecodeLength = m_DepthMS2Array->GetBufferSize();
     pipeDesc.PS.pShaderBytecode = m_DepthMS2Array->GetBufferPointer();
@@ -201,7 +210,7 @@ void D3D12DebugManager::CopyTex2DMSToArray(ID3D12Resource *destArray, ID3D12Reso
       dsvDesc.Texture2DArray.FirstArraySlice = slice * descMS.SampleDesc.Count + sample;
       rtvDesc.Texture2DArray.FirstArraySlice = slice * descMS.SampleDesc.Count + sample;
 
-      if(depthFormat)
+      if(isDepth)
       {
         m_pDevice->GetReal()->CreateDepthStencilView(destArray, &dsvDesc, dsv);
         list->OMSetRenderTargets(0, NULL, FALSE, &dsv);
@@ -314,24 +323,29 @@ void D3D12DebugManager::CopyArrayToTex2DMS(ID3D12Resource *destMS, ID3D12Resourc
   dsvDesc.Format = srvDesc.Format;
   dsvDesc.Texture2DMSArray.ArraySize = 1;
 
-  bool depthFormat = IsDepthFormat(rtvDesc.Format);
+  bool isDepth = IsDepthFormat(rtvDesc.Format) ||
+                 (descArr.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) != 0;
   bool intFormat = IsUIntFormat(rtvDesc.Format) || IsIntFormat(rtvDesc.Format);
 
   bool stencil = false;
   DXGI_FORMAT stencilFormat = DXGI_FORMAT_UNKNOWN;
 
-  if(depthFormat)
+  if(isDepth)
   {
     switch(descMS.Format)
     {
       case DXGI_FORMAT_D32_FLOAT:
       case DXGI_FORMAT_R32_FLOAT:
-      case DXGI_FORMAT_R32_TYPELESS: srvDesc.Format = DXGI_FORMAT_R32_FLOAT; break;
+      case DXGI_FORMAT_R32_TYPELESS:
+        dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
+        srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+        break;
 
       case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
       case DXGI_FORMAT_R32G8X24_TYPELESS:
       case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
       case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
+        dsvDesc.Format = DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
         srvDesc.Format = DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
         stencilFormat = DXGI_FORMAT_X32_TYPELESS_G8X24_UINT;
         stencil = true;
@@ -341,13 +355,17 @@ void D3D12DebugManager::CopyArrayToTex2DMS(ID3D12Resource *destMS, ID3D12Resourc
       case DXGI_FORMAT_R24G8_TYPELESS:
       case DXGI_FORMAT_R24_UNORM_X8_TYPELESS:
       case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
+        dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
         srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
         stencilFormat = DXGI_FORMAT_X24_TYPELESS_G8_UINT;
         stencil = true;
         break;
 
       case DXGI_FORMAT_D16_UNORM:
-      case DXGI_FORMAT_R16_TYPELESS: srvDesc.Format = DXGI_FORMAT_R16_FLOAT; break;
+      case DXGI_FORMAT_R16_TYPELESS:
+        dsvDesc.Format = DXGI_FORMAT_D16_UNORM;
+        srvDesc.Format = DXGI_FORMAT_R16_FLOAT;
+        break;
     }
   }
 
@@ -395,7 +413,7 @@ void D3D12DebugManager::CopyArrayToTex2DMS(ID3D12Resource *destMS, ID3D12Resourc
   pipeDesc.RTVFormats[0] = rtvDesc.Format;
   pipeDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 
-  if(depthFormat)
+  if(isDepth)
   {
     pipeDesc.PS.BytecodeLength = m_DepthArray2MS->GetBufferSize();
     pipeDesc.PS.pShaderBytecode = m_DepthArray2MS->GetBufferPointer();
@@ -466,7 +484,7 @@ void D3D12DebugManager::CopyArrayToTex2DMS(ID3D12Resource *destMS, ID3D12Resourc
     rtvDesc.Texture2DMSArray.FirstArraySlice = slice;
     dsvDesc.Texture2DMSArray.FirstArraySlice = slice;
 
-    if(depthFormat)
+    if(isDepth)
     {
       m_pDevice->CreateDepthStencilView(destMS, &dsvDesc, dsv);
       list->OMSetRenderTargets(0, NULL, FALSE, &dsv);

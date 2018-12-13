@@ -2,42 +2,27 @@
 
 mkdir -p "${REPO_ROOT}/dist"
 
-# Get the logfile as a windows path
-LOGFILE=$(cd ${REPO_ROOT}/dist && cmd.exe /C cd | tr -d '[:space:]')/MSBuild.log
-
-echo "Building, log in ${LOGFILE}"
-
-# Store the path to the error-mail script
-ERROR_SCRIPT=$(readlink -f "${BUILD_ROOT}"/scripts/errormail.sh)
-
 # pushd into the git checkout
 pushd "${REPO_ROOT}"
 
 # Build 32-bit Release
-MSYS2_ARG_CONV_EXCL="*" msbuild.exe /nologo /fl4 /flp4':Verbosity=minimal;Encoding=ASCII;logfile='"${LOGFILE}" renderdoc.sln /t:Rebuild /p:'Configuration=Release;Platform=x86'
-if [ $? -ne 0 ]; then
-	$ERROR_SCRIPT /tmp/MSbuild.log
-	exit 1;
-fi
+MSYS2_ARG_CONV_EXCL="*" msbuild.exe /nologo /fl4 /flp4':Verbosity=minimal;Encoding=ASCII' renderdoc.sln /t:Rebuild /p:'Configuration=Release;Platform=x86'
 
 # Build 64-bit Release
-MSYS2_ARG_CONV_EXCL="*" msbuild.exe /nologo /fl4 /flp4':Verbosity=minimal;Encoding=ASCII;logfile='"${LOGFILE}" renderdoc.sln /t:Rebuild /p:'Configuration=Release;Platform=x64'
-if [ $? -ne 0 ]; then
-	$ERROR_SCRIPT /tmp/MSbuild.log
-	exit 1;
-fi
+MSYS2_ARG_CONV_EXCL="*" msbuild.exe /nologo /fl4 /flp4':Verbosity=minimal;Encoding=ASCII' renderdoc.sln /t:Rebuild /p:'Configuration=Release;Platform=x64'
 
 # Step into the docs folder and build
 pushd docs
 ./make.sh clean
-./make.sh htmlhelp > /tmp/sphinx.log
-
-if [ $? -ne 0 ]; then
-	$ERROR_SCRIPT /tmp/sphinx.log
-	exit 1;
-fi
+./make.sh htmlhelp
 
 popd; # docs
+
+# if we didn't produce a chm file, bail out even if sphinx didn't return an error code above
+if [ ! -f ./Documentation/htmlhelp/renderdoc.chm ]; then
+	echo "Didn't auto-build chm file. Missing HTML Help Workshop?"
+	exit 1;
+fi
 
 # Transform ANDROID_SDK / ANDROID_NDK to native paths if needed
 if echo "${ANDROID_SDK}" | grep -q :; then
@@ -56,22 +41,12 @@ if echo "${ANDROID_NDK}" | grep -q :; then
         export ANDROID_NDK
 fi
 
-# if we didn't produce a chm file, bail out even if sphinx didn't return an error code above
-if [ ! -f ./Documentation/htmlhelp/renderdoc.chm ]; then
-	echo >> /tmp/sphinx.log
-	echo "Didn't auto-build chm file. Missing HTML Help Workshop?" >> /tmp/sphinx.log
-	$ERROR_SCRIPT /tmp/sphinx.log
-	exit 1;
-fi
-
 export PATH=$PATH:"${ANDROID_SDK}/tools"
 
 # Check that we're set up to build for android
 if [ ! -d "${ANDROID_SDK}"/tools ] ; then
-	echo "\$ANDROID_SDK is not correctly configured: '$ANDROID_SDK'" > /tmp/android.log
-	cat /tmp/android.log
-	$ERROR_SCRIPT /tmp/android.log
-	# Don't return an error code, consider android errors non-fatal other than emailing
+	echo "\$ANDROID_SDK is not correctly configured: '$ANDROID_SDK'"
+	# Don't return an error code, consider android errors non-fatal
 	exit 0;
 fi
 
@@ -86,10 +61,8 @@ if ! which make > /dev/null 2>&1; then
 fi
 
 if [ ! -d $LLVM_ARM32 ] || [ ! -d $LLVM_ARM64 ] ; then
-	echo "llvm is not available, expected $LLVM_ARM32 and $LLVM_ARM64 respectively." > /tmp/android.log
-	cat /tmp/android.log
-	$ERROR_SCRIPT /tmp/android.log
-	# Don't return an error code, consider android errors non-fatal other than emailing
+	echo "llvm is not available, expected $LLVM_ARM32 and $LLVM_ARM64 respectively."
+	# Don't return an error code, consider android errors non-fatal
 	exit 0;
 fi
 
@@ -99,34 +72,52 @@ if uname -a | grep -iq msys; then
 	GENERATOR="MSYS Makefiles"
 fi
 
-# Build the arm32 variant
-mkdir -p build-android-arm32
-pushd build-android-arm32
+AAPT=$(ls $ANDROID_SDK/build-tools/*/aapt{,.exe} 2>/dev/null | tail -n 1)
 
-cmake -G "${GENERATOR}" -DBUILD_ANDROID=1 -DANDROID_ABI=armeabi-v7a -DCMAKE_BUILD_TYPE=Release -DSTRIP_ANDROID_LIBRARY=On -DLLVM_DIR=$LLVM_ARM32/lib/cmake/llvm -DUSE_INTERCEPTOR_LIB=On .. 2>&1 | tee /tmp/cmake.log
-make -j$(nproc) 2>&1 | tee -a /tmp/cmake.log
+# Check to see if we already have this built, and don't rebuild
+VERSION32=$($AAPT dump badging build-android-arm32/bin/*apk 2>/dev/null | grep -Eo "versionName='[0-9a-f]*'" | grep -Eo "'.*'" | tr -d "'")
+VERSION64=$($AAPT dump badging build-android-arm64/bin/*apk 2>/dev/null | grep -Eo "versionName='[0-9a-f]*'" | grep -Eo "'.*'" | tr -d "'")
 
-if ! ls bin/*.apk; then
-	echo >> /tmp/cmake.log
-	echo "Failed to build android?" >> /tmp/cmake.log
-	$ERROR_SCRIPT /tmp/cmake.log
+if [ "$VERSION32" == "$GITTAG" ]; then
+
+	echo "Found existing compatible arm32 build at $GITTAG, not rebuilding";
+
+else
+
+	# Build the arm32 variant
+	mkdir -p build-android-arm32
+	pushd build-android-arm32
+
+	cmake -G "${GENERATOR}" -DBUILD_ANDROID=1 -DANDROID_ABI=armeabi-v7a -DCMAKE_BUILD_TYPE=Release -DSTRIP_ANDROID_LIBRARY=On -DLLVM_DIR=$LLVM_ARM32/lib/cmake/llvm -DUSE_INTERCEPTOR_LIB=On ..
+	make -j$(nproc)
+
+	if ! ls bin/*.apk; then
+		echo "Android build failed"
+	fi
+
+	popd # build-android-arm32
+
 fi
 
-popd # build-android-arm32
+if [ "$VERSION64" == "$GITTAG" ]; then
 
-mkdir -p build-android-arm64
-pushd build-android-arm64
+	echo "Found existing compatible arm64 build at $GITTAG, not rebuilding";
 
-cmake -G "${GENERATOR}" -DBUILD_ANDROID=1 -DANDROID_ABI=arm64-v8a -DCMAKE_BUILD_TYPE=Release -DSTRIP_ANDROID_LIBRARY=On -DLLVM_DIR=$LLVM_ARM64/lib/cmake/llvm -DUSE_INTERCEPTOR_LIB=On .. | tee /tmp/cmake.log
-make -j$(nproc) 2>&1 | tee -a /tmp/cmake.log
+else
 
-if ! ls bin/*.apk; then
-	echo >> /tmp/cmake.log
-	echo "Failed to build android?" >> /tmp/cmake.log
-	$ERROR_SCRIPT /tmp/cmake.log
+	mkdir -p build-android-arm64
+	pushd build-android-arm64
+
+	cmake -G "${GENERATOR}" -DBUILD_ANDROID=1 -DANDROID_ABI=arm64-v8a -DCMAKE_BUILD_TYPE=Release -DSTRIP_ANDROID_LIBRARY=On -DLLVM_DIR=$LLVM_ARM64/lib/cmake/llvm -DUSE_INTERCEPTOR_LIB=On ..
+	make -j$(nproc)
+
+	if ! ls bin/*.apk; then
+		echo "Android build failed"
+	fi
+
+	popd # build-android-arm64
+
 fi
-
-popd # build-android-arm64
 
 popd # $REPO_ROOT
 

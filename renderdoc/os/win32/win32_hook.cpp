@@ -57,7 +57,7 @@ bool ApplyHook(FunctionHook &hook, void **IATentry, bool &already)
   }
 
 #if ENABLED(VERBOSE_DEBUG_HOOK)
-  RDCDEBUG("Patching IAT for %s: %p to %p", function.c_str(), IATentry, hookptr);
+  RDCDEBUG("Patching IAT for %s: %p to %p", hook.function.c_str(), IATentry, hook.hook);
 #endif
 
   {
@@ -256,6 +256,16 @@ struct CachedHookData
           {
             // previous module is no longer loaded or there's a new file there now, add this as the
             // new location
+            RDCWARN("%s moved from %p to %p, re-initialising orig pointers", it->first.c_str(),
+                    it->second.module, module);
+
+            // we also need to re-initialise the hooks as the orig pointers are now stale
+            for(FunctionHook &hook : it->second.FunctionHooks)
+            {
+              if(hook.orig)
+                *hook.orig = GetProcAddress(module, hook.function.c_str());
+            }
+
             it->second.module = module;
           }
         }
@@ -787,7 +797,7 @@ FARPROC WINAPI Hooked_GetProcAddress(HMODULE mod, LPCSTR func)
         FARPROC realfunc = GetProcAddress(mod, func);
 
 #if ENABLED(VERBOSE_DEBUG_HOOK)
-        RDCDEBUG("Found hooked function, returning hook pointer %p", found->hookptr);
+        RDCDEBUG("Found hooked function, returning hook pointer %p", found->hook);
 #endif
 
         SetLastError(S_OK);

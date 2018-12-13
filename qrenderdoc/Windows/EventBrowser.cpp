@@ -189,6 +189,18 @@ EventBrowser::EventBrowser(ICaptureContext &ctx, QWidget *parent)
   QObject::connect(ui->events->header(), &QHeaderView::customContextMenuRequested, this,
                    &EventBrowser::events_contextMenu);
 
+  {
+    QMenu *extensionsMenu = new QMenu(this);
+
+    ui->extensions->setMenu(extensionsMenu);
+    ui->extensions->setPopupMode(QToolButton::InstantPopup);
+
+    QObject::connect(extensionsMenu, &QMenu::aboutToShow, [this, extensionsMenu]() {
+      extensionsMenu->clear();
+      m_Ctx.Extensions().MenuDisplaying(PanelMenu::EventBrowser, extensionsMenu, ui->extensions, {});
+    });
+  }
+
   OnCaptureClosed();
 
   m_redPalette = palette();
@@ -1008,6 +1020,11 @@ void EventBrowser::events_contextMenu(const QPoint &pos)
     QObject::connect(&rgpSelect, &QAction::triggered,
                      [this, rgp]() { rgp->SelectRGPEvent(m_Ctx.CurEvent()); });
   }
+
+  contextMenu.addSeparator();
+
+  m_Ctx.Extensions().MenuDisplaying(ContextMenu::EventBrowser_Event, &contextMenu,
+                                    {{"eventId", m_Ctx.CurEvent()}});
 
   RDDialog::show(&contextMenu, ui->events->viewport()->mapToGlobal(pos));
 }

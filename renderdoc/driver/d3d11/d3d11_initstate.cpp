@@ -301,7 +301,7 @@ uint32_t WrappedID3D11Device::GetSize_InitialState(ResourceId id, ID3D11DeviceCh
     {
       UINT mip = GetMipForSubresource(tex, sub);
 
-      const UINT RowPitch = GetByteSize(desc.Width, 1, 1, desc.Format, mip);
+      const UINT RowPitch = GetRowPitch(desc.Width, desc.Format, mip);
 
       ret += RowPitch;
       ret += (uint32_t)WriteSerialiser::GetChunkAlignment();
@@ -335,6 +335,8 @@ uint32_t WrappedID3D11Device::GetSize_InitialState(ResourceId id, ID3D11DeviceCh
         uint32_t numRows = RDCMAX(1U, desc.Height >> mip);
         if(IsBlockFormat(desc.Format))
           numRows = AlignUp4(numRows) / 4;
+        else if(IsYUVPlanarFormat(desc.Format))
+          numRows = GetYUVNumRows(desc.Format, numRows);
 
         if(stage)
         {
@@ -712,6 +714,8 @@ bool WrappedID3D11Device::Serialise_InitialState(SerialiserType &ser, ResourceId
         uint32_t numRows = RDCMAX(1U, desc.Height >> mip);
         if(IsBlockFormat(desc.Format))
           numRows = AlignUp4(numRows) / 4;
+        else if(IsYUVPlanarFormat(desc.Format))
+          numRows = GetYUVNumRows(desc.Format, numRows);
 
         void *SubresourceContents = NULL;
         uint32_t ContentsLength = 0;
@@ -756,7 +760,7 @@ bool WrappedID3D11Device::Serialise_InitialState(SerialiserType &ser, ResourceId
           // use the RowPitch provided when we mapped in the first place, since we read the whole
           // buffer including padding
           subData[sub].SysMemPitch = RowPitch;
-          subData[sub].SysMemSlicePitch = ContentsLength;
+          subData[sub].SysMemSlicePitch = RowPitch * numRows;
         }
       }
 
@@ -883,6 +887,8 @@ bool WrappedID3D11Device::Serialise_InitialState(SerialiserType &ser, ResourceId
       uint32_t numRows = RDCMAX(1U, desc.Height >> mip);
       if(IsBlockFormat(desc.Format))
         numRows = AlignUp4(numRows) / 4;
+      else if(IsYUVPlanarFormat(desc.Format))
+        numRows = GetYUVNumRows(desc.Format, numRows);
 
       void *SubresourceContents = NULL;
       uint32_t ContentsLength = 0;

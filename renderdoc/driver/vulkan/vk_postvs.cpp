@@ -31,6 +31,12 @@
 #include "vk_debug.h"
 #include "vk_shader_cache.h"
 
+struct VkXfbQueryResult
+{
+  uint64_t numPrimitivesWritten;
+  uint64_t numPrimitivesGenerated;
+};
+
 static const char *PatchedMeshOutputEntryPoint = "rdc";
 static const uint32_t MeshOutputDispatchWidth = 128;
 static const uint32_t MeshOutputTBufferArraySize = 16;
@@ -518,9 +524,9 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
   }
 
   SPIRVId outBufferVarID = 0;
-  SPIRVId numVertsConstID = editor.AddConstantImmediate((int32_t)numVerts);
-  SPIRVId numInstConstID = editor.AddConstantImmediate((int32_t)draw->numInstances);
-  SPIRVId numViewsConstID = editor.AddConstantImmediate((int32_t)numViews);
+  SPIRVId numVertsConstID = editor.AddConstantImmediate<uint32_t>(numVerts);
+  SPIRVId numInstConstID = editor.AddConstantImmediate<uint32_t>(draw->numInstances);
+  SPIRVId numViewsConstID = editor.AddConstantImmediate<uint32_t>(numViews);
 
   editor.SetName(numVertsConstID, "numVerts");
   editor.SetName(numInstConstID, "numInsts");
@@ -653,12 +659,45 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
   for(SPIRVIterator end = editor.EndEntries(); it < end; ++it)
     editor.Remove(it);
 
+  // Strip away any execution modes from the original shaders
+  for(it = editor.BeginEntries(); it < editor.BeginDebug(); ++it)
+  {
+    if(it.opcode() == spv::OpExecutionMode)
+    {
+      SPIRVId modeEntryID = SPIRVId(it.word(1));
+
+      // We only need to be cautious about what we are stripping for the entry
+      // that we are actually translating, the rest aren't used anyways.
+      if(modeEntryID == entryID)
+      {
+        // Lets check to make sure we don't blindly strip away execution modes that
+        // might actually have an impact on the behaviour of the shader.
+        spv::ExecutionMode execMode = spv::ExecutionMode(it.word(2));
+        switch(execMode)
+        {
+          case spv::ExecutionModeXfb: break;
+          default: RDCERR("Unexpected execution mode");
+        }
+      }
+
+      editor.PreModify(it);
+
+      SPIRVOperation op(it);
+
+      // invalid to have a nop here, but it will be stripped out later
+      op.nopRemove(1);
+      op[0] = SPV_NOP;
+
+      editor.PostModify(it);
+    }
+  }
+
+  // Add our compute shader execution mode
   editor.AddOperation(
       it, SPIRVOperation(spv::OpExecutionMode, {wrapperEntry, spv::ExecutionModeLocalSize,
                                                 MeshOutputDispatchWidth, 1, 1}));
 
   SPIRVId uint32ID = editor.DeclareType(scalar<uint32_t>());
-  SPIRVId sint32ID = editor.DeclareType(scalar<int32_t>());
 
   // add the wrapper function
   {
@@ -677,33 +716,29 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
       ops.push_back(SPIRVOperation(spv::OpLoad, {uint32Vec3ID, invocationVector, invocationId}));
 
       // uint invocation = invocationVec.x
-      uint32_t invocationID = editor.MakeId();
-      ops.push_back(
-          SPIRVOperation(spv::OpCompositeExtract, {uint32ID, invocationID, invocationVector, 0U}));
+      uint32_t uintInvocationID = editor.MakeId();
+      ops.push_back(SPIRVOperation(spv::OpCompositeExtract,
+                                   {uint32ID, uintInvocationID, invocationVector, 0U}));
 
-      // int intInvocationID = int(invocation);
-      uint32_t intInvocationID = editor.MakeId();
-      ops.push_back(SPIRVOperation(spv::OpBitcast, {sint32ID, intInvocationID, invocationID}));
+      // arraySlotID = uintInvocationID;
+      uint32_t arraySlotID = uintInvocationID;
 
-      // arraySlotID = intInvocationID;
-      uint32_t arraySlotID = intInvocationID;
+      editor.SetName(uintInvocationID, "arraySlot");
 
-      editor.SetName(intInvocationID, "arraySlot");
-
-      // int viewinst = intInvocationID / numVerts
+      // uint viewinst = uintInvocationID / numVerts
       uint32_t viewinstID = editor.MakeId();
       ops.push_back(
-          SPIRVOperation(spv::OpSDiv, {sint32ID, viewinstID, intInvocationID, numVertsConstID}));
+          SPIRVOperation(spv::OpUDiv, {uint32ID, viewinstID, uintInvocationID, numVertsConstID}));
 
       editor.SetName(viewinstID, "viewInstance");
 
       uint32_t instID = editor.MakeId();
-      ops.push_back(SPIRVOperation(spv::OpSMod, {sint32ID, instID, viewinstID, numInstConstID}));
+      ops.push_back(SPIRVOperation(spv::OpUMod, {uint32ID, instID, viewinstID, numInstConstID}));
 
       editor.SetName(instID, "instanceID");
 
       uint32_t viewID = editor.MakeId();
-      ops.push_back(SPIRVOperation(spv::OpSDiv, {sint32ID, viewID, viewinstID, numInstConstID}));
+      ops.push_back(SPIRVOperation(spv::OpUDiv, {uint32ID, viewID, viewinstID, numInstConstID}));
 
       editor.SetName(viewID, "viewID");
 
@@ -721,13 +756,13 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
       // continueLabel:
       ops.push_back(SPIRVOperation(spv::OpLabel, {continueLabel}));
 
-      // int vtx = intInvocationID % numVerts
-      uint32_t vtx = editor.MakeId();
-      ops.push_back(SPIRVOperation(spv::OpSMod, {sint32ID, vtx, intInvocationID, numVertsConstID}));
+      // uint vtx = uintInvocationID % numVerts
+      uint32_t vtxID = editor.MakeId();
+      ops.push_back(SPIRVOperation(spv::OpUMod, {uint32ID, vtxID, uintInvocationID, numVertsConstID}));
 
-      editor.SetName(vtx, "vertexID");
+      editor.SetName(vtxID, "vertexID");
 
-      uint32_t vertexIndex = vtx;
+      uint32_t vertexIndexID = vtxID;
 
       // if we're indexing, look up the index buffer. We don't have to apply vertexOffset - it was
       // already applied when we read back and uniq-ified the index buffer.
@@ -743,85 +778,100 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
 
         // uvec4 result = texelFetch(rawimg, vtxID);
         uint32_t result = editor.MakeId();
-        ops.push_back(SPIRVOperation(spv::OpImageFetch, {uint32Vec4ID, result, rawimg, vertexIndex}));
+        ops.push_back(
+            SPIRVOperation(spv::OpImageFetch, {uint32Vec4ID, result, rawimg, vertexIndexID}));
 
-        // uint vtxID = result.x;
-        uint32_t uintIndex = editor.MakeId();
-        ops.push_back(SPIRVOperation(spv::OpCompositeExtract, {uint32ID, uintIndex, result, 0}));
-
-        vertexIndex = editor.MakeId();
-        ops.push_back(SPIRVOperation(spv::OpBitcast, {sint32ID, vertexIndex, uintIndex}));
+        // vertexIndex = result.x;
+        vertexIndexID = editor.MakeId();
+        ops.push_back(SPIRVOperation(spv::OpCompositeExtract, {uint32ID, vertexIndexID, result, 0}));
       }
 
       // we use the current value of vertexIndex and use instID, to lookup per-vertex and
       // per-instance attributes. This is because when we fetched the vertex data, we advanced by
       // (in non-indexed draws) vertexOffset, and by instanceOffset. Rather than fetching data
       // that's only used as padding skipped over by these offsets.
-      uint32_t vertexLookup = vertexIndex;
-      uint32_t instanceLookup = instID;
+      uint32_t vertexLookupID = vertexIndexID;
+      uint32_t instanceLookupID = instID;
 
       if(!(draw->flags & DrawFlags::Indexed))
       {
         // for non-indexed draws, we manually apply the vertex offset, but here after we used the
         // 0-based one to calculate the array slot
-        vertexIndex = editor.MakeId();
-        ops.push_back(SPIRVOperation(
-            spv::OpIAdd, {sint32ID, vertexIndex, vtx,
-                          editor.AddConstantImmediate(int32_t(draw->vertexOffset & 0x7fffffff))}));
+        vertexIndexID = editor.MakeId();
+        ops.push_back(SPIRVOperation(spv::OpIAdd,
+                                     {uint32ID, vertexIndexID, vtxID,
+                                      editor.AddConstantImmediate<uint32_t>(draw->vertexOffset)}));
       }
-      editor.SetName(vertexIndex, "vertexIndex");
+      editor.SetName(vertexIndexID, "vertexIndex");
 
       // instIndex = inst + instOffset
-      uint32_t instIndex = editor.MakeId();
-      ops.push_back(SPIRVOperation(
-          spv::OpIAdd, {sint32ID, instIndex, instID,
-                        editor.AddConstantImmediate(int32_t(draw->instanceOffset & 0x7fffffff))}));
-      editor.SetName(instIndex, "instanceIndex");
+      uint32_t instIndexID = editor.MakeId();
+      ops.push_back(SPIRVOperation(spv::OpIAdd,
+                                   {uint32ID, instIndexID, instID,
+                                    editor.AddConstantImmediate<uint32_t>(draw->instanceOffset)}));
+      editor.SetName(instIndexID, "instanceIndex");
 
       uint32_t idxs[64] = {};
 
       for(size_t i = 0; i < refl.inputSignature.size(); i++)
       {
         ShaderBuiltin builtin = refl.inputSignature[i].systemValue;
+        if(builtin != ShaderBuiltin::Undefined)
+        {
+          uint32_t valueID = 0;
+          CompType compType = CompType::UInt;
 
-        if(builtin == ShaderBuiltin::VertexIndex)
-        {
-          ops.push_back(SPIRVOperation(spv::OpStore, {ins[i].variableID, vertexIndex}));
-        }
-        else if(builtin == ShaderBuiltin::InstanceIndex)
-        {
-          ops.push_back(SPIRVOperation(spv::OpStore, {ins[i].variableID, instIndex}));
-        }
-        else if(builtin == ShaderBuiltin::ViewportIndex)
-        {
-          ops.push_back(SPIRVOperation(spv::OpStore, {ins[i].variableID, viewID}));
-        }
-        else if(builtin == ShaderBuiltin::BaseVertex)
-        {
-          if(draw->flags & DrawFlags::Indexed)
-            ops.push_back(SPIRVOperation(
-                spv::OpStore, {ins[i].variableID, editor.AddConstantImmediate(
-                                                      int32_t(draw->vertexOffset & 0x7fffffff))}));
+          if(builtin == ShaderBuiltin::VertexIndex)
+          {
+            valueID = vertexIndexID;
+          }
+          else if(builtin == ShaderBuiltin::InstanceIndex)
+          {
+            valueID = instIndexID;
+          }
+          else if(builtin == ShaderBuiltin::ViewportIndex)
+          {
+            valueID = viewID;
+          }
+          else if(builtin == ShaderBuiltin::BaseVertex)
+          {
+            if(draw->flags & DrawFlags::Indexed)
+            {
+              valueID = editor.AddConstantImmediate<uint32_t>(draw->vertexOffset);
+            }
+            else
+            {
+              valueID = editor.AddConstantImmediate<int32_t>(draw->baseVertex);
+              compType = CompType::SInt;
+            }
+          }
+          else if(builtin == ShaderBuiltin::BaseInstance)
+          {
+            valueID = editor.AddConstantImmediate<uint32_t>(draw->instanceOffset);
+          }
+          else if(builtin == ShaderBuiltin::DrawIndex)
+          {
+            valueID = editor.AddConstantImmediate<uint32_t>(draw->drawIndex);
+          }
+
+          if(valueID)
+          {
+            if(refl.inputSignature[i].compType == compType)
+            {
+              ops.push_back(SPIRVOperation(spv::OpStore, {ins[i].variableID, valueID}));
+            }
+            else
+            {
+              uint32_t castedValue = editor.MakeId();
+              // assume we can just bitcast
+              ops.push_back(SPIRVOperation(spv::OpBitcast, {ins[i].basetypeID, castedValue, valueID}));
+              ops.push_back(SPIRVOperation(spv::OpStore, {ins[i].variableID, castedValue}));
+            }
+          }
           else
-            ops.push_back(SPIRVOperation(
-                spv::OpStore, {ins[i].variableID,
-                               editor.AddConstantImmediate(int32_t(draw->baseVertex & 0x7fffffff))}));
-        }
-        else if(builtin == ShaderBuiltin::BaseInstance)
-        {
-          ops.push_back(SPIRVOperation(
-              spv::OpStore, {ins[i].variableID, editor.AddConstantImmediate(
-                                                    int32_t(draw->instanceOffset & 0x7fffffff))}));
-        }
-        else if(builtin == ShaderBuiltin::DrawIndex)
-        {
-          ops.push_back(SPIRVOperation(
-              spv::OpStore, {ins[i].variableID,
-                             editor.AddConstantImmediate(int32_t(draw->drawIndex & 0x7fffffff))}));
-        }
-        else if(builtin != ShaderBuiltin::Undefined)
-        {
-          RDCERR("Unsupported/unsupported built-in input %s", ToStr(builtin).c_str());
+          {
+            RDCERR("Unsupported/unsupported built-in input %s", ToStr(builtin).c_str());
+          }
         }
         else
         {
@@ -830,7 +880,7 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
 
           if(idxs[refl.inputSignature[i].regIndex] == 0)
             idxs[refl.inputSignature[i].regIndex] =
-                editor.AddConstantImmediate<uint32_t>((uint32_t)refl.inputSignature[i].regIndex);
+                editor.AddConstantImmediate<uint32_t>(refl.inputSignature[i].regIndex);
 
           tbufferIDs tb = tbuffers[ins[i].tbuffer];
 
@@ -850,7 +900,7 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
           ops.push_back(SPIRVOperation(spv::OpImage, {tb.imageTypeID, rawimg, loaded}));
 
           // vec4 result = texelFetch(rawimg, vtxID or instID);
-          uint32_t idx = vertexLookup;
+          uint32_t idx = vertexLookupID;
 
           if(location < instDivisor.size())
           {
@@ -859,24 +909,24 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
             if(divisor == ~0U)
             {
               // this magic value indicates vertex-rate data
-              idx = vertexLookup;
+              idx = vertexLookupID;
             }
             else if(divisor == 0)
             {
               // if the divisor is 0, all instances read the first value.
-              idx = editor.AddConstantImmediate<int32_t>(0);
+              idx = editor.AddConstantImmediate<uint32_t>(0);
             }
             else if(divisor == 1)
             {
               // if the divisor is 1, it's just regular instancing
-              idx = instanceLookup;
+              idx = instanceLookupID;
             }
             else
             {
               // otherwise we divide by the divisor
               idx = editor.MakeId();
-              divisor = editor.AddConstantImmediate(int32_t(divisor & 0x7fffffff));
-              ops.push_back(SPIRVOperation(spv::OpSDiv, {sint32ID, idx, instanceLookup, divisor}));
+              divisor = editor.AddConstantImmediate<uint32_t>(divisor);
+              ops.push_back(SPIRVOperation(spv::OpUDiv, {uint32ID, idx, instanceLookupID, divisor}));
             }
           }
 
@@ -885,7 +935,7 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
             // since doubles are packed into two uints, we need to multiply the index by two
             uint32_t doubled = editor.MakeId();
             ops.push_back(SPIRVOperation(
-                spv::OpIMul, {sint32ID, doubled, idx, editor.AddConstantImmediate(int32_t(2))}));
+                spv::OpIMul, {uint32ID, doubled, idx, editor.AddConstantImmediate<uint32_t>(2)}));
             idx = doubled;
           }
 
@@ -900,7 +950,7 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
 
             uint32_t nextidx = editor.MakeId();
             ops.push_back(SPIRVOperation(
-                spv::OpIAdd, {sint32ID, nextidx, idx, editor.AddConstantImmediate(int32_t(1))}));
+                spv::OpIAdd, {uint32ID, nextidx, idx, editor.AddConstantImmediate<uint32_t>(1)}));
 
             uint32_t result2 = editor.MakeId();
             ops.push_back(
@@ -992,7 +1042,7 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
             for(uint32_t accessIdx : patchData.inputs[i].accessChain)
             {
               if(idxs[accessIdx] == 0)
-                idxs[accessIdx] = editor.AddConstantImmediate<uint32_t>((uint32_t)accessIdx);
+                idxs[accessIdx] = editor.AddConstantImmediate<uint32_t>(accessIdx);
 
               words.push_back(idxs[accessIdx]);
             }
@@ -1070,11 +1120,161 @@ static void ConvertToMeshOutputCompute(const ShaderReflection &refl, const SPIRV
   editor.StripNops();
 }
 
+static void AddXFBAnnotations(const ShaderReflection &refl, const SPIRVPatchData &patchData,
+                              const char *entryName, std::vector<uint32_t> &modSpirv,
+                              uint32_t &xfbStride)
+{
+  SPIRVEditor editor(modSpirv);
+
+  rdcarray<SigParameter> outsig = refl.outputSignature;
+  std::vector<SPIRVPatchData::InterfaceAccess> outpatch = patchData.outputs;
+
+  uint32_t entryid = 0;
+  for(const SPIRVEntry &entry : editor.GetEntries())
+  {
+    if(entry.name == entryName)
+    {
+      entryid = entry.id;
+      break;
+    }
+  }
+
+  bool hasXFB = false;
+
+  for(SPIRVIterator it = editor.EndEntries(); it < editor.BeginDebug(); ++it)
+  {
+    if(it.opcode() == spv::OpExecutionMode && it.word(1) == entryid &&
+       it.word(2) == spv::ExecutionModeXfb)
+    {
+      hasXFB = true;
+      break;
+    }
+  }
+
+  if(hasXFB)
+  {
+    for(SPIRVIterator it = editor.BeginDecorations(); it < editor.EndDecorations(); ++it)
+    {
+      // remove any existing xfb decorations
+      if(it.opcode() == spv::OpDecorate &&
+         (it.word(2) == spv::DecorationXfbBuffer || it.word(2) == spv::DecorationXfbStride))
+      {
+        editor.PreModify(it);
+
+        SPIRVOperation op(it);
+
+        // invalid to have a nop here, but it will be stripped out later
+        op.nopRemove(1);
+        op[0] = SPV_NOP;
+
+        editor.PostModify(it);
+      }
+
+      // offset is trickier, need to see if it'll match one we want later
+      if((it.opcode() == spv::OpDecorate && it.word(2) == spv::DecorationOffset) ||
+         (it.opcode() == spv::OpMemberDecorate && it.word(3) == spv::DecorationOffset))
+      {
+        for(size_t i = 0; i < outsig.size(); i++)
+        {
+          if(outpatch[i].structID && !outpatch[i].accessChain.empty())
+          {
+            if(it.opcode() == spv::OpMemberDecorate && it.word(1) == outpatch[i].structID &&
+               it.word(2) == outpatch[i].accessChain.back())
+            {
+              editor.PreModify(it);
+
+              SPIRVOperation op(it);
+
+              op.nopRemove(1);
+              op[0] = SPV_NOP;
+
+              editor.PostModify(it);
+            }
+          }
+          else
+          {
+            if(it.opcode() == spv::OpDecorate && it.word(1) == outpatch[i].ID)
+            {
+              editor.PreModify(it);
+
+              SPIRVOperation op(it);
+
+              op.nopRemove(1);
+              op[0] = SPV_NOP;
+
+              editor.PostModify(it);
+            }
+          }
+        }
+      }
+    }
+  }
+  else
+  {
+    editor.AddOperation(editor.EndEntries(),
+                        SPIRVOperation(spv::OpExecutionMode, {entryid, spv::ExecutionModeXfb}));
+  }
+
+  editor.AddCapability(spv::CapabilityTransformFeedback);
+
+  // find the position output and move it to the front
+  for(size_t i = 0; i < outsig.size(); i++)
+  {
+    if(outsig[i].systemValue == ShaderBuiltin::Position)
+    {
+      outsig.insert(0, outsig[i]);
+      outsig.erase(i + 1);
+
+      outpatch.insert(outpatch.begin(), outpatch[i]);
+      outpatch.erase(outpatch.begin() + i + 1);
+      break;
+    }
+  }
+
+  for(size_t i = 0; i < outsig.size(); i++)
+  {
+    if(outpatch[i].structID && !outpatch[i].accessChain.empty())
+    {
+      editor.AddDecoration(SPIRVOperation(
+          spv::OpMemberDecorate,
+          {outpatch[i].structID, outpatch[i].accessChain.back(), spv::DecorationOffset, xfbStride}));
+    }
+    else
+    {
+      editor.AddDecoration(SPIRVOperation(
+          spv::OpDecorate, {outpatch[i].ID, (uint32_t)spv::DecorationOffset, xfbStride}));
+    }
+
+    uint32_t compByteSize = 4;
+
+    if(outsig[i].compType == CompType::Double)
+      compByteSize = 8;
+
+    xfbStride += outsig[i].compCount * compByteSize;
+  }
+
+  std::set<uint32_t> vars;
+
+  for(size_t i = 0; i < outpatch.size(); i++)
+  {
+    if(vars.find(outpatch[i].ID) == vars.end())
+    {
+      editor.AddDecoration(
+          SPIRVOperation(spv::OpDecorate, {outpatch[i].ID, (uint32_t)spv::DecorationXfbBuffer, 0}));
+      editor.AddDecoration(SPIRVOperation(
+          spv::OpDecorate, {outpatch[i].ID, (uint32_t)spv::DecorationXfbStride, xfbStride}));
+      vars.insert(outpatch[i].ID);
+    }
+  }
+
+  editor.StripNops();
+}
+
 void VulkanReplay::ClearPostVSCache()
 {
   VkDevice dev = m_Device;
 
-  for(auto it = m_PostVSData.begin(); it != m_PostVSData.end(); ++it)
+  for(auto it = m_PostVS.Data.begin(); it != m_PostVS.Data.end(); ++it)
   {
     if(it->second.vsout.idxbuf != VK_NULL_HANDLE)
     {
@@ -1085,28 +1285,17 @@ void VulkanReplay::ClearPostVSCache()
     m_pDriver->vkFreeMemory(dev, it->second.vsout.bufmem, NULL);
   }
 
-  m_PostVSData.clear();
+  m_PostVS.Data.clear();
 }
 
-void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
+void VulkanReplay::FetchVSOut(uint32_t eventId)
 {
-  // go through any aliasing
-  if(m_PostVSAlias.find(eventId) != m_PostVSAlias.end())
-    eventId = m_PostVSAlias[eventId];
-
-  if(m_PostVSData.find(eventId) != m_PostVSData.end())
-    return;
-
   const VulkanRenderState &state = m_pDriver->m_RenderState;
   VulkanCreationInfo &creationInfo = m_pDriver->m_CreationInfo;
 
-  if(state.graphics.pipeline == ResourceId() || state.renderPass == ResourceId())
-    return;
-
   const VulkanCreationInfo::Pipeline &pipeInfo = creationInfo.m_Pipeline[state.graphics.pipeline];
 
-  if(pipeInfo.shaders[0].module == ResourceId())
-    return;
+  const DrawcallDescription *drawcall = m_pDriver->GetDrawcall(eventId);
 
   const VulkanCreationInfo::ShaderModule &moduleInfo =
       creationInfo.m_ShaderModule[pipeInfo.shaders[0].module];
@@ -1118,28 +1307,23 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
   if(refl->outputSignature.empty())
   {
     // empty vertex output signature
-    m_PostVSData[eventId].vsin.topo = pipeInfo.topology;
-    m_PostVSData[eventId].vsout.buf = VK_NULL_HANDLE;
-    m_PostVSData[eventId].vsout.bufmem = VK_NULL_HANDLE;
-    m_PostVSData[eventId].vsout.instStride = 0;
-    m_PostVSData[eventId].vsout.vertStride = 0;
-    m_PostVSData[eventId].vsout.numViews = 1;
-    m_PostVSData[eventId].vsout.nearPlane = 0.0f;
-    m_PostVSData[eventId].vsout.farPlane = 0.0f;
-    m_PostVSData[eventId].vsout.useIndices = false;
-    m_PostVSData[eventId].vsout.hasPosOut = false;
-    m_PostVSData[eventId].vsout.idxbuf = VK_NULL_HANDLE;
-    m_PostVSData[eventId].vsout.idxbufmem = VK_NULL_HANDLE;
+    m_PostVS.Data[eventId].vsin.topo = pipeInfo.topology;
+    m_PostVS.Data[eventId].vsout.buf = VK_NULL_HANDLE;
+    m_PostVS.Data[eventId].vsout.bufmem = VK_NULL_HANDLE;
+    m_PostVS.Data[eventId].vsout.instStride = 0;
+    m_PostVS.Data[eventId].vsout.vertStride = 0;
+    m_PostVS.Data[eventId].vsout.numViews = 1;
+    m_PostVS.Data[eventId].vsout.nearPlane = 0.0f;
+    m_PostVS.Data[eventId].vsout.farPlane = 0.0f;
+    m_PostVS.Data[eventId].vsout.useIndices = false;
+    m_PostVS.Data[eventId].vsout.hasPosOut = false;
+    m_PostVS.Data[eventId].vsout.idxbuf = VK_NULL_HANDLE;
+    m_PostVS.Data[eventId].vsout.idxbufmem = VK_NULL_HANDLE;
 
-    m_PostVSData[eventId].vsout.topo = pipeInfo.topology;
+    m_PostVS.Data[eventId].vsout.topo = pipeInfo.topology;
 
     return;
   }
-
-  const DrawcallDescription *drawcall = m_pDriver->GetDrawcall(eventId);
-
-  if(drawcall == NULL || drawcall->numIndices == 0 || drawcall->numInstances == 0)
-    return;
 
   // we go through the driver for all these creations since they need to be properly
   // registered in order to be put in the partial replay state
@@ -1161,6 +1345,7 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
   // into them
   {
     std::vector<VkCopyDescriptorSet> descCopies;
+    std::vector<VkWriteDescriptorSet> descWrites;
 
     // one for each descriptor type. 1 of each to start with plus enough for our internal resources,
     // we then increment for each descriptor we need to allocate
@@ -1299,6 +1484,7 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
 
     VkDescriptorPoolCreateInfo poolCreateInfo = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     // 1 set for each layout
+    poolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
     poolCreateInfo.maxSets = (uint32_t)setLayouts.size();
     poolCreateInfo.poolSizeCount = ARRAY_COUNT(poolSizes);
     poolCreateInfo.pPoolSizes = poolSizes;
@@ -1330,27 +1516,112 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
       if(state.graphics.descSets[i].descSet == ResourceId())
         continue;
 
-      VkCopyDescriptorSet copy = {VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};
-      copy.srcSet =
-          GetResourceManager()->GetCurrentHandle<VkDescriptorSet>(state.graphics.descSets[i].descSet);
-      copy.dstSet = descSets[i];
+      WrappedVulkan::DescriptorSetInfo &setInfo =
+          m_pDriver->m_DescriptorSetState[state.graphics.descSets[i].descSet];
 
-      for(size_t b = 0; b < origLayout.bindings.size(); b++)
+#if DISABLED(RDOC_ANDROID)
+      if(setInfo.push)
+#endif
       {
-        const DescSetLayout::Binding &bind = origLayout.bindings[b];
+        // push descriptors don't have a source to copy from, we need to add writes
+        VkWriteDescriptorSet write = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        write.dstSet = descSets[i];
 
-        // skip empty bindings
-        if(bind.descriptorCount == 0)
-          continue;
+        for(size_t b = 0; b < origLayout.bindings.size(); b++)
+        {
+          const DescSetLayout::Binding &bind = origLayout.bindings[b];
 
-        copy.srcBinding = (uint32_t)b;
-        copy.dstBinding = (uint32_t)b + MeshOutputReservedBindings;
-        copy.descriptorCount = bind.descriptorCount;
-        descCopies.push_back(copy);
+          // skip empty bindings
+          if(bind.descriptorCount == 0)
+            continue;
+
+          DescriptorSetSlot *slot = setInfo.currentBindings[b];
+
+          write.dstBinding = (uint32_t)b + MeshOutputReservedBindings;
+          write.dstArrayElement = 0;
+          write.descriptorCount = bind.descriptorCount;
+          write.descriptorType = bind.descriptorType;
+
+          switch(write.descriptorType)
+          {
+            case VK_DESCRIPTOR_TYPE_SAMPLER:
+            case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+            {
+              VkDescriptorImageInfo *out = new VkDescriptorImageInfo[write.descriptorCount];
+              for(uint32_t w = 0; w < write.descriptorCount; w++)
+                out[w] = slot[w].imageInfo;
+              write.pImageInfo = out;
+              break;
+            }
+            case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+            case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            {
+              VkBufferView *out = new VkBufferView[write.descriptorCount];
+              for(uint32_t w = 0; w < write.descriptorCount; w++)
+                out[w] = slot[w].texelBufferView;
+              write.pTexelBufferView = out;
+              break;
+            }
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+            {
+              VkDescriptorBufferInfo *out = new VkDescriptorBufferInfo[write.descriptorCount];
+              for(uint32_t w = 0; w < write.descriptorCount; w++)
+                out[w] = slot[w].bufferInfo;
+              write.pBufferInfo = out;
+              break;
+            }
+            default: RDCERR("Unexpected descriptor type %d", write.descriptorType);
+          }
+
+          descWrites.push_back(write);
+
+          // don't leak the arrays and cause double deletes, NULL them after each time
+          write.pImageInfo = NULL;
+          write.pBufferInfo = NULL;
+          write.pTexelBufferView = NULL;
+        }
       }
+#if DISABLED(RDOC_ANDROID)
+      else
+      {
+        VkCopyDescriptorSet copy = {VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET};
+        copy.srcSet = GetResourceManager()->GetCurrentHandle<VkDescriptorSet>(
+            state.graphics.descSets[i].descSet);
+        copy.dstSet = descSets[i];
+
+        for(size_t b = 0; b < origLayout.bindings.size(); b++)
+        {
+          const DescSetLayout::Binding &bind = origLayout.bindings[b];
+
+          // skip empty bindings
+          if(bind.descriptorCount == 0 || bind.stageFlags == 0)
+            continue;
+
+          copy.srcBinding = (uint32_t)b;
+          copy.dstBinding = (uint32_t)b + MeshOutputReservedBindings;
+          copy.descriptorCount = bind.descriptorCount;
+          descCopies.push_back(copy);
+        }
+      }
+#endif
     }
 
-    m_pDriver->vkUpdateDescriptorSets(dev, 0, NULL, (uint32_t)descCopies.size(), descCopies.data());
+    m_pDriver->vkUpdateDescriptorSets(dev, (uint32_t)descWrites.size(), descWrites.data(),
+                                      (uint32_t)descCopies.size(), descCopies.data());
+
+    // delete allocated arrays for descriptor writes
+    for(const VkWriteDescriptorSet &write : descWrites)
+    {
+      delete[] write.pBufferInfo;
+      delete[] write.pImageInfo;
+      delete[] write.pTexelBufferView;
+    }
   }
 
   // create pipeline layout with new descriptor set layouts
@@ -1670,7 +1941,8 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
 
     for(uint32_t vb = 0; vb < vi->vertexBindingDescriptionCount; vb++)
     {
-      VkDeviceSize offs = state.vbuffers[vb].offs;
+      uint32_t binding = vi->pVertexBindingDescriptions[vb].binding;
+      VkDeviceSize offs = state.vbuffers[binding].offs;
       uint64_t len = 0;
 
       if(vi->pVertexBindingDescriptions[vb].inputRate == VK_VERTEX_INPUT_RATE_INSTANCE)
@@ -1686,10 +1958,10 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
         offs += drawcall->vertexOffset * vi->pVertexBindingDescriptions[vb].stride;
       }
 
-      if(state.vbuffers[vb].buf != ResourceId())
+      if(state.vbuffers[binding].buf != ResourceId())
       {
         origVBs.push_back(bytebuf());
-        GetBufferData(state.vbuffers[vb].buf, offs, len, origVBs.back());
+        GetBufferData(state.vbuffers[binding].buf, offs, len, origVBs.back());
       }
     }
 
@@ -2107,7 +2379,7 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
     // fill destination buffer with 0s to ensure unwritten vertices have sane data
-    ObjDisp(dev)->CmdFillBuffer(Unwrap(cmd), Unwrap(meshBuffer), 0, bufInfo.size, 0xbaadf00d);
+    ObjDisp(dev)->CmdFillBuffer(Unwrap(cmd), Unwrap(meshBuffer), 0, bufInfo.size, 0);
 
     VkBufferMemoryBarrier meshbufbarrier = {
         VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -2279,36 +2551,36 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
     m_pDriver->vkDestroyBufferView(m_Device, uniqIdxBufView, NULL);
   }
 
-  // fill out m_PostVSData
-  m_PostVSData[eventId].vsin.topo = pipeCreateInfo.pInputAssemblyState->topology;
-  m_PostVSData[eventId].vsout.topo = pipeCreateInfo.pInputAssemblyState->topology;
-  m_PostVSData[eventId].vsout.buf = meshBuffer;
-  m_PostVSData[eventId].vsout.bufmem = meshMem;
+  // fill out m_PostVS.Data
+  m_PostVS.Data[eventId].vsin.topo = pipeCreateInfo.pInputAssemblyState->topology;
+  m_PostVS.Data[eventId].vsout.topo = pipeCreateInfo.pInputAssemblyState->topology;
+  m_PostVS.Data[eventId].vsout.buf = meshBuffer;
+  m_PostVS.Data[eventId].vsout.bufmem = meshMem;
 
-  m_PostVSData[eventId].vsout.baseVertex = 0;
+  m_PostVS.Data[eventId].vsout.baseVertex = 0;
 
-  m_PostVSData[eventId].vsout.numViews = numViews;
+  m_PostVS.Data[eventId].vsout.numViews = numViews;
 
-  m_PostVSData[eventId].vsout.vertStride = bufStride;
-  m_PostVSData[eventId].vsout.nearPlane = nearp;
-  m_PostVSData[eventId].vsout.farPlane = farp;
+  m_PostVS.Data[eventId].vsout.vertStride = bufStride;
+  m_PostVS.Data[eventId].vsout.nearPlane = nearp;
+  m_PostVS.Data[eventId].vsout.farPlane = farp;
 
-  m_PostVSData[eventId].vsout.useIndices = bool(drawcall->flags & DrawFlags::Indexed);
-  m_PostVSData[eventId].vsout.numVerts = drawcall->numIndices;
+  m_PostVS.Data[eventId].vsout.useIndices = bool(drawcall->flags & DrawFlags::Indexed);
+  m_PostVS.Data[eventId].vsout.numVerts = drawcall->numIndices;
 
-  m_PostVSData[eventId].vsout.instStride = 0;
+  m_PostVS.Data[eventId].vsout.instStride = 0;
   if(drawcall->flags & DrawFlags::Instanced)
-    m_PostVSData[eventId].vsout.instStride = uint32_t(bufSize / (drawcall->numInstances * numViews));
+    m_PostVS.Data[eventId].vsout.instStride = uint32_t(bufSize / (drawcall->numInstances * numViews));
 
-  m_PostVSData[eventId].vsout.idxbuf = VK_NULL_HANDLE;
-  if(m_PostVSData[eventId].vsout.useIndices && state.ibuffer.buf != ResourceId())
+  m_PostVS.Data[eventId].vsout.idxbuf = VK_NULL_HANDLE;
+  if(m_PostVS.Data[eventId].vsout.useIndices && state.ibuffer.buf != ResourceId())
   {
-    m_PostVSData[eventId].vsout.idxbuf = rebasedIdxBuf;
-    m_PostVSData[eventId].vsout.idxbufmem = rebasedIdxBufMem;
-    m_PostVSData[eventId].vsout.idxFmt = idxsize == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+    m_PostVS.Data[eventId].vsout.idxbuf = rebasedIdxBuf;
+    m_PostVS.Data[eventId].vsout.idxbufmem = rebasedIdxBufMem;
+    m_PostVS.Data[eventId].vsout.idxFmt = idxsize == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
   }
 
-  m_PostVSData[eventId].vsout.hasPosOut =
+  m_PostVS.Data[eventId].vsout.hasPosOut =
       refl->outputSignature[0].systemValue == ShaderBuiltin::Position;
 
   // delete descriptors. Technically we don't have to free the descriptor sets, but our tracking on
@@ -2329,6 +2601,551 @@ void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
   // delete shader/shader module
   m_pDriver->vkDestroyShaderModule(dev, module, NULL);
 }
+
+void VulkanReplay::FetchTessGSOut(uint32_t eventId)
+{
+  VulkanRenderState state = m_pDriver->m_RenderState;
+  VulkanCreationInfo &creationInfo = m_pDriver->m_CreationInfo;
+
+  const VulkanCreationInfo::Pipeline &pipeInfo = creationInfo.m_Pipeline[state.graphics.pipeline];
+
+  const DrawcallDescription *drawcall = m_pDriver->GetDrawcall(eventId);
+
+  // first try geometry stage
+  int stageIndex = 3;
+
+  // if there is no such shader bound, try tessellation
+  if(!pipeInfo.shaders[stageIndex].refl)
+    stageIndex = 2;
+
+  // if still nothing, do vertex
+  if(!pipeInfo.shaders[stageIndex].refl)
+    stageIndex = 0;
+
+  ShaderReflection *lastRefl = pipeInfo.shaders[stageIndex].refl;
+
+  RDCASSERT(lastRefl);
+
+  uint32_t primitiveMultiplier = 1;
+
+  // transform feedback expands strips to lists
+  switch(pipeInfo.shaders[stageIndex].patchData->outTopo)
+  {
+    case Topology::PointList:
+      m_PostVS.Data[eventId].gsout.topo = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+      break;
+    case Topology::LineList:
+    case Topology::LineStrip:
+      m_PostVS.Data[eventId].gsout.topo = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+      primitiveMultiplier = 2;
+      break;
+    default:
+      RDCERR("Unexpected output topology %s",
+             ToStr(pipeInfo.shaders[stageIndex].patchData->outTopo).c_str());
+    // deliberate fallthrough
+    case Topology::TriangleList:
+    case Topology::TriangleStrip:
+      m_PostVS.Data[eventId].gsout.topo = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+      primitiveMultiplier = 3;
+      break;
+  }
+
+  if(lastRefl->outputSignature.empty())
+  {
+    // empty vertex output signature
+    m_PostVS.Data[eventId].gsout.buf = VK_NULL_HANDLE;
+    m_PostVS.Data[eventId].gsout.bufmem = VK_NULL_HANDLE;
+    m_PostVS.Data[eventId].gsout.instStride = 0;
+    m_PostVS.Data[eventId].gsout.vertStride = 0;
+    m_PostVS.Data[eventId].gsout.numViews = 1;
+    m_PostVS.Data[eventId].gsout.nearPlane = 0.0f;
+    m_PostVS.Data[eventId].gsout.farPlane = 0.0f;
+    m_PostVS.Data[eventId].gsout.useIndices = false;
+    m_PostVS.Data[eventId].gsout.hasPosOut = false;
+    m_PostVS.Data[eventId].gsout.idxbuf = VK_NULL_HANDLE;
+    m_PostVS.Data[eventId].gsout.idxbufmem = VK_NULL_HANDLE;
+    return;
+  }
+
+  if(!ObjDisp(m_Device)->CmdBeginTransformFeedbackEXT)
+  {
+    RDCLOG(
+        "VK_EXT_transform_feedback_extension not available, can't fetch tessellation/geometry "
+        "output");
+    return;
+  }
+
+  const VulkanCreationInfo::ShaderModule &moduleInfo =
+      creationInfo.m_ShaderModule[pipeInfo.shaders[stageIndex].module];
+
+  std::vector<uint32_t> modSpirv = moduleInfo.spirv.spirv;
+
+  uint32_t xfbStride = 0;
+
+  // adds XFB annotations in order of the output signature (with the position first)
+  AddXFBAnnotations(*lastRefl, *pipeInfo.shaders[stageIndex].patchData,
+                    pipeInfo.shaders[stageIndex].entryPoint.c_str(), modSpirv, xfbStride);
+
+  // create vertex shader with modified code
+  VkShaderModuleCreateInfo moduleCreateInfo = {
+      VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, NULL,         0,
+      modSpirv.size() * sizeof(uint32_t),          &modSpirv[0],
+  };
+
+  VkResult vkr = VK_SUCCESS;
+  VkDevice dev = m_Device;
+
+  VkShaderModule module;
+  vkr = m_pDriver->vkCreateShaderModule(dev, &moduleCreateInfo, NULL, &module);
+  RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+  VkGraphicsPipelineCreateInfo pipeCreateInfo;
+
+  // get pipeline create info
+  m_pDriver->GetShaderCache()->MakeGraphicsPipelineInfo(pipeCreateInfo, state.graphics.pipeline);
+
+  VkPipelineRasterizationStateCreateInfo *rs =
+      (VkPipelineRasterizationStateCreateInfo *)pipeCreateInfo.pRasterizationState;
+  rs->rasterizerDiscardEnable = true;
+
+  for(uint32_t i = 0; i < pipeCreateInfo.stageCount; i++)
+  {
+    VkPipelineShaderStageCreateInfo &stage =
+        (VkPipelineShaderStageCreateInfo &)pipeCreateInfo.pStages[i];
+
+    if(StageIndex(stage.stage) == stageIndex)
+    {
+      stage.module = module;
+      break;
+    }
+  }
+
+  // create a empty renderpass and framebuffer so we can draw
+  VkFramebuffer fb = VK_NULL_HANDLE;
+  VkRenderPass rp = VK_NULL_HANDLE;
+
+  VkSubpassDescription sub = {0, VK_PIPELINE_BIND_POINT_GRAPHICS};
+  VkRenderPassCreateInfo rpinfo = {
+      VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, NULL, 0, 0, NULL, 1, &sub,
+  };
+
+  vkr = m_pDriver->vkCreateRenderPass(m_Device, &rpinfo, NULL, &rp);
+  RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+  VkFramebufferCreateInfo fbinfo = {
+      VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO, NULL, 0, rp, 0, NULL, 16U, 16U, 1,
+  };
+
+  vkr = m_pDriver->vkCreateFramebuffer(m_Device, &fbinfo, NULL, &fb);
+  RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+  pipeCreateInfo.renderPass = rp;
+  pipeCreateInfo.subpass = 0;
+
+  VkPipeline pipe = VK_NULL_HANDLE;
+  vkr = m_pDriver->vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &pipeCreateInfo, NULL,
+                                             &pipe);
+  RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+  state.graphics.pipeline = GetResID(pipe);
+  state.framebuffer = GetResID(fb);
+  state.renderPass = GetResID(rp);
+  state.renderArea.offset.x = 0;
+  state.renderArea.offset.y = 0;
+  state.renderArea.extent.width = 16;
+  state.renderArea.extent.height = 16;
+
+  // disable any existing XFB
+  state.xfbbuffers.clear();
+  state.xfbcounters.clear();
+
+  if(m_PostVS.XFBQueryPoolSize < drawcall->numInstances)
+  {
+    if(m_PostVS.XFBQueryPoolSize != VK_NULL_HANDLE)
+      m_pDriver->vkDestroyQueryPool(m_Device, m_PostVS.XFBQueryPool, NULL);
+
+    VkQueryPoolCreateInfo info = {
+        VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+        NULL,
+        0,
+        VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT,
+        drawcall->numInstances,
+        0,
+    };
+
+    vkr = m_pDriver->vkCreateQueryPool(m_Device, &info, NULL, &m_PostVS.XFBQueryPool);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    m_PostVS.XFBQueryPoolSize = drawcall->numInstances;
+  }
+
+  VkBuffer meshBuffer = VK_NULL_HANDLE;
+  VkDeviceMemory meshMem = VK_NULL_HANDLE;
+
+  // start with bare minimum size, which might be enough if no expansion happens
+  VkDeviceSize bufferSize = 0;
+  VkDeviceSize dataSize =
+      uint64_t(drawcall->numIndices) * uint64_t(drawcall->numInstances) * uint64_t(xfbStride);
+
+  VkXfbQueryResult queryResult = {};
+
+  while(bufferSize < dataSize)
+  {
+    bufferSize = dataSize;
+
+    if(meshBuffer != VK_NULL_HANDLE)
+    {
+      m_pDriver->vkDestroyBuffer(dev, meshBuffer, NULL);
+      m_pDriver->vkFreeMemory(dev, meshMem, NULL);
+
+      meshBuffer = VK_NULL_HANDLE;
+      meshMem = VK_NULL_HANDLE;
+    }
+
+    VkBufferCreateInfo bufInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+
+    bufInfo.size = bufferSize;
+
+    bufInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    bufInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bufInfo.usage |= VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT;
+    bufInfo.usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+    vkr = m_pDriver->vkCreateBuffer(dev, &bufInfo, NULL, &meshBuffer);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    VkMemoryRequirements mrq = {0};
+    m_pDriver->vkGetBufferMemoryRequirements(dev, meshBuffer, &mrq);
+
+    VkMemoryAllocateInfo allocInfo = {
+        VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, NULL, mrq.size,
+        m_pDriver->GetGPULocalMemoryIndex(mrq.memoryTypeBits),
+    };
+
+    vkr = m_pDriver->vkAllocateMemory(dev, &allocInfo, NULL, &meshMem);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    vkr = m_pDriver->vkBindBufferMemory(dev, meshBuffer, meshMem, 0);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    VkCommandBuffer cmd = m_pDriver->GetNextCmd();
+
+    VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
+                                          VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+
+    vkr = ObjDisp(dev)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    ObjDisp(dev)->CmdResetQueryPool(Unwrap(cmd), Unwrap(m_PostVS.XFBQueryPool), 0, 1);
+
+    // fill destination buffer with 0s to ensure unwritten vertices have sane data
+    ObjDisp(dev)->CmdFillBuffer(Unwrap(cmd), Unwrap(meshBuffer), 0, bufInfo.size, 0xbbaaddee);
+
+    VkBufferMemoryBarrier meshbufbarrier = {
+        VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        NULL,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT,
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_QUEUE_FAMILY_IGNORED,
+        Unwrap(meshBuffer),
+        0,
+        bufInfo.size,
+    };
+
+    // wait for the above fill to finish.
+    DoPipelineBarrier(cmd, 1, &meshbufbarrier);
+
+    state.BeginRenderPassAndApplyState(cmd, VulkanRenderState::BindGraphics);
+
+    ObjDisp(cmd)->CmdBeginQuery(Unwrap(cmd), Unwrap(m_PostVS.XFBQueryPool), 0, 0);
+
+    ObjDisp(cmd)->CmdBindTransformFeedbackBuffersEXT(Unwrap(cmd), 0, 1, UnwrapPtr(meshBuffer),
+                                                     &meshbufbarrier.offset, &meshbufbarrier.size);
+
+    ObjDisp(cmd)->CmdBeginTransformFeedbackEXT(Unwrap(cmd), 0, 1, NULL, NULL);
+
+    if(drawcall->flags & DrawFlags::Indexed)
+    {
+      ObjDisp(cmd)->CmdDrawIndexed(Unwrap(cmd), drawcall->numIndices, drawcall->numInstances,
+                                   drawcall->indexOffset, drawcall->baseVertex,
+                                   drawcall->instanceOffset);
+    }
+    else
+    {
+      ObjDisp(cmd)->CmdDraw(Unwrap(cmd), drawcall->numIndices, drawcall->numInstances,
+                            drawcall->vertexOffset, drawcall->instanceOffset);
+    }
+
+    ObjDisp(cmd)->CmdEndTransformFeedbackEXT(Unwrap(cmd), 0, 1, NULL, NULL);
+
+    ObjDisp(cmd)->CmdEndQuery(Unwrap(cmd), Unwrap(m_PostVS.XFBQueryPool), 0);
+
+    state.EndRenderPass(cmd);
+
+    vkr = ObjDisp(dev)->EndCommandBuffer(Unwrap(cmd));
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    m_pDriver->SubmitCmds();
+    m_pDriver->FlushQ();
+
+    vkr = ObjDisp(dev)->GetQueryPoolResults(
+        Unwrap(dev), Unwrap(m_PostVS.XFBQueryPool), 0, 1, sizeof(VkXfbQueryResult), &queryResult,
+        sizeof(VkXfbQueryResult), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    VkDeviceSize generatedSize = queryResult.numPrimitivesGenerated * 3 * xfbStride;
+
+    // output buffer isn't big enough, delete it and re-run so we recreate it larger
+    if(generatedSize > dataSize)
+      dataSize = generatedSize;
+  }
+
+  std::vector<VulkanPostVSData::InstData> instData;
+
+  // instanced draws must be replayed one at a time so we can record the number of primitives from
+  // each drawcall, as due to expansion this can vary per-instance.
+  if(drawcall->flags & DrawFlags::Instanced && drawcall->numInstances > 1)
+  {
+    VkCommandBuffer cmd = m_pDriver->GetNextCmd();
+
+    VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
+                                          VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+
+    vkr = ObjDisp(dev)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    ObjDisp(dev)->CmdResetQueryPool(Unwrap(cmd), Unwrap(m_PostVS.XFBQueryPool), 0,
+                                    drawcall->numInstances);
+
+    state.BeginRenderPassAndApplyState(cmd, VulkanRenderState::BindGraphics);
+
+    // do incremental draws to get the output size. We have to do this O(N^2) style because
+    // there's no way to replay only a single instance. We have to replay 1, 2, 3, ... N
+    // instances and count the total number of verts each time, then we can see from the
+    // difference how much each instance wrote.
+    for(uint32_t inst = 1; inst <= drawcall->numInstances; inst++)
+    {
+      ObjDisp(cmd)->CmdBeginQuery(Unwrap(cmd), Unwrap(m_PostVS.XFBQueryPool), inst - 1, 0);
+
+      VkDeviceSize offset = 0;
+      ObjDisp(cmd)->CmdBindTransformFeedbackBuffersEXT(Unwrap(cmd), 0, 1, UnwrapPtr(meshBuffer),
+                                                       &offset, &bufferSize);
+
+      ObjDisp(cmd)->CmdBeginTransformFeedbackEXT(Unwrap(cmd), 0, 1, NULL, NULL);
+
+      if(drawcall->flags & DrawFlags::Indexed)
+      {
+        ObjDisp(cmd)->CmdDrawIndexed(Unwrap(cmd), drawcall->numIndices, inst, drawcall->indexOffset,
+                                     drawcall->baseVertex, drawcall->instanceOffset);
+      }
+      else
+      {
+        ObjDisp(cmd)->CmdDraw(Unwrap(cmd), drawcall->numIndices, inst, drawcall->vertexOffset,
+                              drawcall->instanceOffset);
+      }
+
+      ObjDisp(cmd)->CmdEndTransformFeedbackEXT(Unwrap(cmd), 0, 1, NULL, NULL);
+
+      ObjDisp(cmd)->CmdEndQuery(Unwrap(cmd), Unwrap(m_PostVS.XFBQueryPool), inst - 1);
+    }
+
+    state.EndRenderPass(cmd);
+
+    vkr = ObjDisp(dev)->EndCommandBuffer(Unwrap(cmd));
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    m_pDriver->SubmitCmds();
+    m_pDriver->FlushQ();
+
+    std::vector<VkXfbQueryResult> queryResults;
+    queryResults.resize(drawcall->numInstances);
+    vkr = ObjDisp(dev)->GetQueryPoolResults(
+        Unwrap(dev), Unwrap(m_PostVS.XFBQueryPool), 0, drawcall->numInstances,
+        sizeof(VkXfbQueryResult) * drawcall->numInstances, queryResults.data(),
+        sizeof(VkXfbQueryResult), VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    uint64_t prevVertCount = 0;
+
+    for(uint32_t inst = 0; inst < drawcall->numInstances; inst++)
+    {
+      uint64_t vertCount = queryResults[inst].numPrimitivesWritten * primitiveMultiplier;
+
+      VulkanPostVSData::InstData d;
+      d.numVerts = uint32_t(vertCount - prevVertCount);
+      d.bufOffset = uint32_t(xfbStride * prevVertCount);
+      prevVertCount = vertCount;
+
+      instData.push_back(d);
+    }
+  }
+
+  float nearp = 0.1f;
+  float farp = 100.0f;
+
+  Vec4f pos0;
+
+  bool found = false;
+
+  // we read back the buffer in chunks, since we're likely to find a match in the first few
+  // vertices.
+
+  VkDeviceSize readbackoffset = 0;
+  const VkDeviceSize readbacksize = 1024 * 1024;
+
+  while(readbackoffset < bufferSize)
+  {
+    bytebuf data;
+    GetBufferData(GetResID(meshBuffer), readbackoffset, readbacksize, data);
+
+    if(data.empty())
+      break;
+
+    if(readbackoffset == 0)
+      memcpy(&pos0, data.data(), sizeof(pos0));
+
+    for(uint32_t i = 0; i < data.size() / xfbStride; i++)
+    {
+      //////////////////////////////////////////////////////////////////////////////////
+      // derive near/far, assuming a standard perspective matrix
+      //
+      // the transformation from from pre-projection {Z,W} to post-projection {Z,W}
+      // is linear. So we can say Zpost = Zpre*m + c . Here we assume Wpre = 1
+      // and we know Wpost = Zpre from the perspective matrix.
+      // we can then see from the perspective matrix that
+      // m = F/(F-N)
+      // c = -(F*N)/(F-N)
+      //
+      // with re-arranging and substitution, we then get:
+      // N = -c/m
+      // F = c/(1-m)
+      //
+      // so if we can derive m and c then we can determine N and F. We can do this with
+      // two points, and we pick them reasonably distinct on z to reduce floating-point
+      // error
+
+      Vec4f *pos = (Vec4f *)(data.data() + xfbStride * i);
+
+      // skip invalid vertices (w=0)
+      if(pos->w != 0.0f && fabs(pos->w - pos0.w) > 0.01f && fabs(pos->z - pos0.z) > 0.01f)
+      {
+        Vec2f A(pos0.w, pos0.z);
+        Vec2f B(pos->w, pos->z);
+
+        float m = (B.y - A.y) / (B.x - A.x);
+        float c = B.y - B.x * m;
+
+        if(m == 1.0f)
+          continue;
+
+        if(-c / m <= 0.000001f)
+          continue;
+
+        nearp = -c / m;
+        farp = c / (1 - m);
+
+        found = true;
+
+        break;
+      }
+    }
+
+    if(found)
+      break;
+
+    // read the next segment
+    readbackoffset += readbacksize;
+  }
+
+  // if we didn't find anything, all z's and w's were identical.
+  // If the z is positive and w greater for the first element then
+  // we detect this projection as reversed z with infinite far plane
+  if(!found && pos0.z > 0.0f && pos0.w > pos0.z)
+  {
+    nearp = pos0.z;
+    farp = FLT_MAX;
+  }
+
+  // fill out m_PostVS.Data
+  m_PostVS.Data[eventId].gsout.buf = meshBuffer;
+  m_PostVS.Data[eventId].gsout.bufmem = meshMem;
+
+  m_PostVS.Data[eventId].gsout.baseVertex = 0;
+
+  m_PostVS.Data[eventId].gsout.numViews = 1;
+
+  m_PostVS.Data[eventId].gsout.vertStride = xfbStride;
+  m_PostVS.Data[eventId].gsout.nearPlane = nearp;
+  m_PostVS.Data[eventId].gsout.farPlane = farp;
+
+  m_PostVS.Data[eventId].gsout.useIndices = false;
+
+  m_PostVS.Data[eventId].gsout.numVerts =
+      uint32_t(queryResult.numPrimitivesWritten) * primitiveMultiplier;
+
+  // set instance stride to 0. If there's any stride needed, it will be calculated using instData
+  m_PostVS.Data[eventId].gsout.instStride = 0;
+  m_PostVS.Data[eventId].gsout.instData = instData;
+
+  m_PostVS.Data[eventId].gsout.idxbuf = VK_NULL_HANDLE;
+  m_PostVS.Data[eventId].gsout.idxbufmem = VK_NULL_HANDLE;
+
+  m_PostVS.Data[eventId].gsout.hasPosOut = true;
+
+  // delete framebuffer and renderpass
+  m_pDriver->vkDestroyFramebuffer(dev, fb, NULL);
+  m_pDriver->vkDestroyRenderPass(dev, rp, NULL);
+
+  // delete pipeline
+  m_pDriver->vkDestroyPipeline(dev, pipe, NULL);
+
+  // delete shader/shader module
+  m_pDriver->vkDestroyShaderModule(dev, module, NULL);
+}
+
+void VulkanReplay::InitPostVSBuffers(uint32_t eventId)
+{
+  // go through any aliasing
+  if(m_PostVS.Alias.find(eventId) != m_PostVS.Alias.end())
+    eventId = m_PostVS.Alias[eventId];
+
+  if(m_PostVS.Data.find(eventId) != m_PostVS.Data.end())
+    return;
+
+  const VulkanRenderState &state = m_pDriver->m_RenderState;
+  VulkanCreationInfo &creationInfo = m_pDriver->m_CreationInfo;
+
+  if(state.graphics.pipeline == ResourceId() || state.renderPass == ResourceId())
+    return;
+
+  const VulkanCreationInfo::Pipeline &pipeInfo = creationInfo.m_Pipeline[state.graphics.pipeline];
+
+  if(pipeInfo.shaders[0].module == ResourceId())
+    return;
+
+  const DrawcallDescription *drawcall = m_pDriver->GetDrawcall(eventId);
+
+  if(drawcall == NULL || drawcall->numIndices == 0 || drawcall->numInstances == 0)
+    return;
+
+  VkMarkerRegion::Begin(StringFormat::Fmt("FetchVSOut for %u", eventId));
+
+  FetchVSOut(eventId);
+
+  VkMarkerRegion::End();
+
+  // if there's no tessellation or geometry shader active, bail out now
+  if(pipeInfo.shaders[2].module == ResourceId() && pipeInfo.shaders[3].module == ResourceId())
+    return;
+
+  VkMarkerRegion::Begin(StringFormat::Fmt("FetchTessGSOut for %u", eventId));
+
+  FetchTessGSOut(eventId);
+
+  VkMarkerRegion::End();
+}
+
 struct VulkanInitPostVSCallback : public VulkanDrawcallCallback
 {
   VulkanInitPostVSCallback(WrappedVulkan *vk, const vector<uint32_t> &events)
@@ -2383,14 +3200,14 @@ MeshFormat VulkanReplay::GetPostVSBuffers(uint32_t eventId, uint32_t instID, uin
                                           MeshDataStage stage)
 {
   // go through any aliasing
-  if(m_PostVSAlias.find(eventId) != m_PostVSAlias.end())
-    eventId = m_PostVSAlias[eventId];
+  if(m_PostVS.Alias.find(eventId) != m_PostVS.Alias.end())
+    eventId = m_PostVS.Alias[eventId];
 
   VulkanPostVSData postvs;
   RDCEraseEl(postvs);
 
-  if(m_PostVSData.find(eventId) != m_PostVSData.end())
-    postvs = m_PostVSData[eventId];
+  if(m_PostVS.Data.find(eventId) != m_PostVS.Data.end())
+    postvs = m_PostVS.Data[eventId];
 
   const DrawcallDescription *drawcall = m_pDriver->GetDrawcall(eventId);
 
@@ -2433,7 +3250,6 @@ MeshFormat VulkanReplay::GetPostVSBuffers(uint32_t eventId, uint32_t instID, uin
   ret.format.compByteWidth = 4;
   ret.format.compType = CompType::Float;
   ret.format.type = ResourceFormatType::Regular;
-  ret.format.bgraOrder = false;
 
   ret.showAlpha = false;
 
@@ -2443,6 +3259,14 @@ MeshFormat VulkanReplay::GetPostVSBuffers(uint32_t eventId, uint32_t instID, uin
   ret.unproject = s.hasPosOut;
   ret.nearPlane = s.nearPlane;
   ret.farPlane = s.farPlane;
+
+  if(instID < s.instData.size())
+  {
+    VulkanPostVSData::InstData inst = s.instData[instID];
+
+    ret.vertexByteOffset = inst.bufOffset;
+    ret.numIndices = inst.numVerts;
+  }
 
   return ret;
 }

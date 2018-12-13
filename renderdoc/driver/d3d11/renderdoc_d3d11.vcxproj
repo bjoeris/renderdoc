@@ -91,6 +91,7 @@
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -129,6 +130,7 @@
     <ClCompile Include="d3d11_shader_cache.cpp" />
     <ClCompile Include="d3d11_shaderdebug.cpp" />
     <ClCompile Include="d3d11_stringise.cpp" />
+    <ClCompile Include="d3d11_video.cpp" />
     <ClCompile Include="precompiled.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
@@ -152,6 +154,7 @@
     <ClInclude Include="..\dx\official\d3dcommon.h" />
     <ClInclude Include="..\dx\official\d3dcompiler.h" />
     <ClInclude Include="d3d11_shader_cache.h" />
+    <ClInclude Include="d3d11_video.h" />
     <ClInclude Include="precompiled.h" />
   </ItemGroup>
   <ItemGroup>

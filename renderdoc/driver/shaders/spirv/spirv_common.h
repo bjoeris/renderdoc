@@ -29,6 +29,7 @@
 #include <utility>
 #include <vector>
 #include "3rdparty/glslang/SPIRV/spirv.hpp"
+#include "3rdparty/glslang/glslang/Include/ResourceLimits.h"
 #include "api/replay/renderdoc_replay.h"
 
 using std::string;
@@ -84,6 +85,9 @@ struct SPIRVPatchData
     // ID of the base variable
     uint32_t ID;
 
+    // ID of the struct parent of this variable
+    uint32_t structID;
+
     // the access chain of indices
     std::vector<uint32_t> accessChain;
 
@@ -95,6 +99,9 @@ struct SPIRVPatchData
   // SPIR-V.
   std::vector<InterfaceAccess> inputs;
   std::vector<InterfaceAccess> outputs;
+
+  // the output topology for tessellation and geometry shaders
+  Topology outTopo = Topology::Unknown;
 };
 
 struct SPVModule
@@ -171,6 +178,8 @@ class TProgram;
 glslang::TShader *CompileShaderForReflection(SPIRVShaderStage stage,
                                              const std::vector<std::string> &sources);
 glslang::TProgram *LinkProgramForReflection(const std::vector<glslang::TShader *> &shaders);
+
+extern TBuiltInResource DefaultResources;
 
 enum class ReflectionInterface
 {

@@ -76,6 +76,13 @@ version of RenderDoc that addes a new section type. They should be considered eq
   This section contains a .rgp profile from AMD's RGP tool, which can be extracted and loaded.
 
   The name for this section will be "amd/rgp/profile".
+
+.. data:: ExtendedThumbnail
+
+  This section contains a thumbnail in format other than JPEG. For example, when it needs to be
+  lossless.
+
+  The name for this section will be "renderdoc/internal/exthumb".
 )");
 enum class SectionType : uint32_t
 {
@@ -87,6 +94,7 @@ enum class SectionType : uint32_t
   Notes,
   ResourceRenames,
   AMDRGPProfile,
+  ExtendedThumbnail,
   Count,
 };
 
@@ -1198,9 +1206,25 @@ or formats that don't have equal byte-multiple sizes for each channel.
 
   Each pixel is an 8 bit stencil value.
 
-.. data:: YUV
+.. data:: YUV8
 
-  The pixel data is in an opaque YUV format.
+  The pixel data is 8-bit in YUV subsampled format. More information about subsampling setup is
+  stored separately
+
+.. data:: YUV10
+
+  The pixel data is 10-bit in YUV subsampled format. More information about subsampling setup is
+  stored separately
+
+.. data:: YUV12
+
+  The pixel data is 12-bit in YUV subsampled format. More information about subsampling setup is
+  stored separately
+
+.. data:: YUV16
+
+  The pixel data is 16-bit in YUV subsampled format. More information about subsampling setup is
+  stored separately
 
 .. data:: PVRTC
 
@@ -1231,7 +1255,10 @@ enum class ResourceFormatType : uint8_t
   D24S8,
   D32S8,
   S8,
-  YUV,
+  YUV8,
+  YUV10,
+  YUV12,
+  YUV16,
   PVRTC,
 };
 
@@ -2875,6 +2902,17 @@ enum class GPUCounter : uint32_t
 ITERABLE_OPERATORS(GPUCounter);
 DECLARE_REFLECTION_ENUM(GPUCounter);
 
+DOCUMENT(R"(Check whether or not this is a Generic counter.
+
+:param GPUCounter c: The counter.
+:return: ``True`` if it is a generic counter, ``False`` if it's not.
+:rtype: ``bool``
+)");
+inline constexpr bool IsGenericCounter(GPUCounter c)
+{
+  return c < GPUCounter::Count;
+}
+
 DOCUMENT(R"(Check whether or not this is an AMD private counter.
 
 :param GPUCounter c: The counter.
@@ -3067,6 +3105,22 @@ a remote server.
 
   The API failed to replay the capture, with some runtime error that couldn't be determined until
   the replay began.
+
+.. data:: AndroidGrantPermissionsFailed
+
+  Failed to grant runtime permissions when installing Android remote server.
+
+.. data:: AndroidABINotFound
+
+  Couldn't determine supported ABIs when installing Android remote server.
+
+.. data:: AndroidAPKFolderNotFound
+
+  Couldn't find the build-android folder which contains the Android remote server APK.
+
+.. data:: AndroidAPKInstallFailed
+
+  Failed to install Android remote server.
 )");
 enum class ReplayStatus : uint32_t
 {
@@ -3090,6 +3144,10 @@ enum class ReplayStatus : uint32_t
   APIDataCorrupted,
   APIReplayFailed,
   JDWPFailure,
+  AndroidGrantPermissionsFailed,
+  AndroidABINotFound,
+  AndroidAPKFolderNotFound,
+  AndroidAPKInstallFailed
 };
 
 DECLARE_REFLECTION_ENUM(ReplayStatus);
@@ -3143,6 +3201,7 @@ enum class TargetControlMessageType : uint32_t
   RegisterAPI,
   NewChild,
   CaptureProgress,
+  CapturableWindowCount
 };
 
 DECLARE_REFLECTION_ENUM(TargetControlMessageType);
