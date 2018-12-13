@@ -498,6 +498,8 @@ public:
 
   bool IsActiveWindow(void *dev, void *wnd)
   {
+    if (wnd == m_ActiveWindow.wnd && wnd == NULL)
+      return true;
     return dev == m_ActiveWindow.dev && wnd == m_ActiveWindow.wnd;
   }
 

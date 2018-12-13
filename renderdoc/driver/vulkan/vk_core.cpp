@@ -1192,20 +1192,17 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
 
   VkSwapchainKHR swap = VK_NULL_HANDLE;
 
-  if(wnd)
   {
-    {
-      SCOPED_LOCK(m_SwapLookupLock);
-      auto it = m_SwapLookup.find(wnd);
-      if(it != m_SwapLookup.end())
-        swap = it->second;
-    }
+    SCOPED_LOCK(m_SwapLookupLock);
+    auto it = m_SwapLookup.find(wnd);
+    if (it != m_SwapLookup.end())
+      swap = it->second;
+  }
 
-    if(swap == VK_NULL_HANDLE)
-    {
-      RDCERR("Output window %p provided for frame capture corresponds with no known swap chain", wnd);
-      return false;
-    }
+  if(swap == VK_NULL_HANDLE)
+  {
+    RDCERR("Output window %p provided for frame capture corresponds with no known swap chain", wnd);
+    return false;
   }
 
   RDCLOG("Finished capture, Frame %u", m_FrameCounter);
@@ -1542,47 +1539,44 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
   int buflen = 0;
   FileType thformat = FileType::JPG;
 
-  if(wnd)
-  {
 #ifdef __yeti__
-    struct WriteCallbackData
+  struct WriteCallbackData
+  {
+    std::vector<byte> buffer;
+
+    static void writeData(void *context, void *data, int size)
     {
-      std::vector<byte> buffer;
-
-      static void writeData(void *context, void *data, int size)
-      {
-        WriteCallbackData *pThis = static_cast<WriteCallbackData *>(context);
-        const byte *start = static_cast<const byte *>(data);
-        pThis->buffer.insert(pThis->buffer.end(), start, start + size);
-      }
-    };
-
-    WriteCallbackData callbackData;
-    stbi_write_png_to_func(&WriteCallbackData::writeData, &callbackData, thwidth, thheight, 3,
-                           thpixels, 0);
-    buf = new byte[callbackData.buffer.size()];
-    memcpy(buf, callbackData.buffer.data(), callbackData.buffer.size());
-    buflen = static_cast<int>(callbackData.buffer.size());
-    thformat = FileType::PNG;
-#else
-    buflen = thwidth * thheight;
-    buf = new byte[buflen];
-
-    jpge::params p;
-    p.m_quality = 80;
-
-    bool success =
-        jpge::compress_image_to_jpeg_file_in_memory(buf, buflen, thwidth, thheight, 3, thpixels, p);
-
-    if(!success)
-    {
-      RDCERR("Failed to compress to jpg");
-      SAFE_DELETE_ARRAY(buf);
-      thwidth = 0;
-      thheight = 0;
+      WriteCallbackData *pThis = static_cast<WriteCallbackData *>(context);
+      const byte *start = static_cast<const byte *>(data);
+      pThis->buffer.insert(pThis->buffer.end(), start, start + size);
     }
-#endif
+  };
+
+  WriteCallbackData callbackData;
+  stbi_write_png_to_func(&WriteCallbackData::writeData, &callbackData, thwidth, thheight, 3,
+                         thpixels, 0);
+  buf = new byte[callbackData.buffer.size()];
+  memcpy(buf, callbackData.buffer.data(), callbackData.buffer.size());
+  buflen = static_cast<int>(callbackData.buffer.size());
+  thformat = FileType::PNG;
+#else
+  buflen = thwidth * thheight;
+  buf = new byte[buflen];
+
+  jpge::params p;
+  p.m_quality = 80;
+
+  bool success =
+      jpge::compress_image_to_jpeg_file_in_memory(buf, buflen, thwidth, thheight, 3, thpixels, p);
+
+  if(!success)
+  {
+    RDCERR("Failed to compress to jpg");
+    SAFE_DELETE_ARRAY(buf);
+    thwidth = 0;
+    thheight = 0;
   }
+#endif
 
   RDCFile *rdc = RenderDoc::Inst().CreateRDC(RDCDriver::Vulkan, m_CapturedFrames.back().frameNumber,
                                              buf, buflen, thwidth, thheight, thformat);
