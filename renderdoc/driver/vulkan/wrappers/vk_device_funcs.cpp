@@ -235,10 +235,16 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
 #if ENABLED(RDOC_DEVEL)
   bool hasValidationLayers = false;
 #endif
+  int64_t virtualSwapchainIndex = -1;
 
   // verify that extensions & layers are supported
   for(size_t i = 0; i < params.Layers.size(); i++)
   {
+    if (params.Layers[i] == "VirtualSwapchain") {
+      virtualSwapchainIndex = (int64_t) i;
+      continue;
+    }
+
     if(supportedLayers.find(params.Layers[i]) == supportedLayers.end())
     {
       RDCERR("Capture requires layer '%s' which is not supported", params.Layers[i].c_str());
@@ -255,6 +261,10 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
   if(!hasValidationLayers)
     params.Layers.push_back("VK_LAYER_LUNARG_standard_validation");
 #endif
+
+  if (IsReplayMode(m_State) && virtualSwapchainIndex != -1) {
+    params.Layers.erase(params.Layers.begin() + virtualSwapchainIndex);
+  }
 
   for(size_t i = 0; i < params.Extensions.size(); i++)
   {
