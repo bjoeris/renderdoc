@@ -54,6 +54,7 @@ GLReplay::GLReplay()
   m_OutputWindowID = 1;
 
   RDCEraseEl(m_GetTexturePrevData);
+  RDCEraseEl(m_DriverInfo);
 }
 
 void GLReplay::Shutdown()
@@ -151,7 +152,7 @@ APIProperties GLReplay::GetAPIProperties()
   ret.pipelineType = GraphicsAPI::OpenGL;
   ret.localRenderer = GraphicsAPI::OpenGL;
   ret.degraded = m_Degraded;
-  ret.vendor = m_Vendor;
+  ret.vendor = m_DriverInfo.vendor;
   ret.shadersMutable = true;
 
   return ret;
@@ -223,14 +224,51 @@ void GLReplay::SetReplayData(GLWindowingData data)
 
   AMDCounters *counters = NULL;
 
-  if(m_Vendor == GPUVendor::AMD)
+  bool isMesa = false;
+
+  // try to identify mesa - don't enable any IHV counters when running mesa.
   {
-    RDCLOG("AMD GPU detected - trying to initialise AMD counters");
-    counters = new AMDCounters();
+    WrappedOpenGL &drv = *m_pDriver;
+
+    const char *version = (const char *)drv.glGetString(eGL_VERSION);
+    const char *vendor = (const char *)drv.glGetString(eGL_VENDOR);
+    const char *renderer = (const char *)drv.glGetString(eGL_RENDERER);
+
+    for(std::string haystack : {strlower(version), strlower(vendor), strlower(renderer)})
+    {
+      haystack = " " + haystack + " ";
+
+      // the version should always contain 'mesa', but it's also commonly present in either vendor
+      // or renderer - except for nouveau which we look for separately
+      for(const char *needle : {" mesa ", "nouveau"})
+      {
+        if(haystack.find(needle) != std::string::npos)
+        {
+          isMesa = true;
+          break;
+        }
+      }
+
+      if(isMesa)
+        break;
+    }
+  }
+
+  if(isMesa)
+  {
+    RDCLOG("Mesa driver detected - skipping IHV counter initialisation");
   }
   else
   {
-    RDCLOG("%s GPU detected - no counters available", ToStr(m_Vendor).c_str());
+    if(m_DriverInfo.vendor == GPUVendor::AMD)
+    {
+      RDCLOG("AMD GPU detected - trying to initialise AMD counters");
+      counters = new AMDCounters();
+    }
+    else
+    {
+      RDCLOG("%s GPU detected - no counters available", ToStr(m_DriverInfo.vendor).c_str());
+    }
   }
 
   if(counters && counters->Init(AMDCounters::ApiType::Ogl, m_ReplayCtx.ctx))
@@ -820,7 +858,7 @@ void GLReplay::SavePipelineState()
     {
       fmt.compByteWidth = 1;
       fmt.compCount = 4;
-      fmt.bgraOrder = true;
+      fmt.setBgraOrder(true);
       fmt.compType = CompType::UNorm;
 
       if(type == eGL_UNSIGNED_INT_2_10_10_10_REV || type == eGL_INT_2_10_10_10_REV)
@@ -2959,7 +2997,7 @@ ResourceId GLReplay::CreateProxyTexture(const TextureDescription &templateTex)
   }
 
   // Swizzle R/B channels only for non BGRA textures
-  if(templateTex.format.bgraOrder && target != eGL_NONE && baseFormat != eGL_BGRA)
+  if(templateTex.format.bgraOrder() && target != eGL_NONE && baseFormat != eGL_BGRA)
   {
     if(HasExt[ARB_texture_swizzle] || HasExt[EXT_texture_swizzle])
     {
@@ -3158,7 +3196,7 @@ bool GLReplay::IsTextureSupported(const ResourceFormat &format)
 
   // BGRA is not accepted as an internal format in case of GL
   // EXT_texture_format_BGRA8888 is required for creating BGRA proxy textures in case of GLES
-  if(format.bgraOrder)
+  if(format.bgraOrder())
     return IsGLES && HasExt[EXT_texture_format_BGRA8888];
 
   return true;

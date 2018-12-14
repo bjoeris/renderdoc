@@ -43,8 +43,9 @@ enum TexDisplayFlags
 {
   eTexDisplay_None = 0,
   eTexDisplay_LinearRender = 0x1,
-  eTexDisplay_F32Render = 0x2,
-  eTexDisplay_BlendAlpha = 0x4,
+  eTexDisplay_F16Render = 0x2,
+  eTexDisplay_F32Render = 0x4,
+  eTexDisplay_BlendAlpha = 0x8,
 };
 
 class D3D12Replay : public IReplayDriver
@@ -56,11 +57,13 @@ public:
   void SetRGP(AMDRGPControl *rgp) { m_RGP = rgp; }
   void SetProxy(bool proxy) { m_Proxy = proxy; }
   bool IsRemoteProxy() { return m_Proxy; }
+  void Initialise();
   void Shutdown();
 
   void SetDevice(WrappedID3D12Device *d) { m_pDevice = d; }
   void CreateResources();
   void DestroyResources();
+  DriverInformation GetDriverInfo() { return m_DriverInfo; }
   APIProperties GetAPIProperties();
 
   ResourceDescription &GetResourceDesc(ResourceId id);
@@ -275,8 +278,6 @@ private:
 
   bool m_Proxy;
 
-  GPUVendor m_Vendor = GPUVendor::Unknown;
-
   vector<ID3D12Resource *> m_ProxyResources;
 
   struct OutputWindow
@@ -334,6 +335,7 @@ private:
     ID3D12RootSignature *RootSig = NULL;
     ID3D12PipelineState *SRGBPipe = NULL;
     ID3D12PipelineState *LinearPipe = NULL;
+    ID3D12PipelineState *F16Pipe = NULL;
     ID3D12PipelineState *F32Pipe = NULL;
     ID3D12PipelineState *BlendPipe = NULL;
   } m_TexRender;
@@ -408,6 +410,8 @@ private:
 
   AMDCounters *m_pAMDCounters = NULL;
   AMDRGPControl *m_RGP = NULL;
+
+  DriverInformation m_DriverInfo;
 
   D3D12AMDDrawCallback *m_pAMDDrawCallback = NULL;
 

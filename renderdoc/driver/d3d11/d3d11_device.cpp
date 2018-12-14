@@ -96,9 +96,10 @@ WrappedID3D11Device::WrappedID3D11Device(ID3D11Device *realDevice, D3D11InitPara
   m_Alive = true;
 
   m_DummyInfoQueue.m_pDevice = this;
-  m_DummyD3D10Multithread.m_pDevice = this;
   m_DummyDebug.m_pDevice = this;
   m_WrappedDebug.m_pDevice = this;
+  m_WrappedMultithread.m_pDevice = this;
+  m_WrappedVideo.m_pDevice = this;
 
   m_FrameCounter = 0;
   m_FailedFrame = 0;
@@ -146,6 +147,36 @@ WrappedID3D11Device::WrappedID3D11Device(ID3D11Device *realDevice, D3D11InitPara
     m_DeviceRecord->SubResources = NULL;
 
     RenderDoc::Inst().AddDeviceFrameCapturer((ID3D11Device *)this, this);
+
+    {
+      IDXGIDevice *pDXGIDevice = NULL;
+      HRESULT hr = m_pDevice->QueryInterface(__uuidof(IDXGIDevice), (void **)&pDXGIDevice);
+
+      if(FAILED(hr))
+      {
+        RDCERR("Couldn't get DXGI device from D3D device");
+      }
+      else
+      {
+        IDXGIAdapter *pDXGIAdapter = NULL;
+        hr = pDXGIDevice->GetParent(__uuidof(IDXGIAdapter), (void **)&pDXGIAdapter);
+
+        if(SUCCEEDED(hr))
+        {
+          DXGI_ADAPTER_DESC desc = {};
+          pDXGIAdapter->GetDesc(&desc);
+
+          GPUVendor vendor = GPUVendorFromPCIVendor(desc.VendorId);
+          std::string descString = GetDriverVersion(desc);
+
+          RDCLOG("New D3D11 device created: %s / %s", ToStr(vendor).c_str(), descString.c_str());
+
+          SAFE_RELEASE(pDXGIAdapter);
+        }
+      }
+
+      SAFE_RELEASE(pDXGIDevice);
+    }
   }
 
   ID3D11DeviceContext *context = NULL;
@@ -162,6 +193,10 @@ WrappedID3D11Device::WrappedID3D11Device(ID3D11Device *realDevice, D3D11InitPara
   {
     realDevice->QueryInterface(__uuidof(ID3D11InfoQueue), (void **)&m_pInfoQueue);
     realDevice->QueryInterface(__uuidof(ID3D11Debug), (void **)&m_WrappedDebug.m_pDebug);
+    realDevice->QueryInterface(__uuidof(ID3D11Multithread), (void **)&m_WrappedMultithread.m_pReal);
+    realDevice->QueryInterface(__uuidof(ID3D11VideoDevice), (void **)&m_WrappedVideo.m_pReal);
+    realDevice->QueryInterface(__uuidof(ID3D11VideoDevice1), (void **)&m_WrappedVideo.m_pReal1);
+    realDevice->QueryInterface(__uuidof(ID3D11VideoDevice2), (void **)&m_WrappedVideo.m_pReal2);
   }
 
   // useful for marking regions during replay for self-captures
@@ -281,6 +316,10 @@ WrappedID3D11Device::~WrappedID3D11Device()
   SAFE_DELETE(m_ResourceManager);
 
   SAFE_RELEASE(m_pInfoQueue);
+  SAFE_RELEASE(m_WrappedMultithread.m_pReal);
+  SAFE_RELEASE(m_WrappedVideo.m_pReal);
+  SAFE_RELEASE(m_WrappedVideo.m_pReal1);
+  SAFE_RELEASE(m_WrappedVideo.m_pReal2);
   SAFE_RELEASE(m_WrappedDebug.m_pDebug);
   SAFE_RELEASE(m_pDevice);
 
@@ -314,18 +353,6 @@ void WrappedID3D11Device::CheckForDeath()
   }
 }
 
-ULONG STDMETHODCALLTYPE DummyID3D10Multithread::AddRef()
-{
-  m_pDevice->AddRef();
-  return 1;
-}
-
-ULONG STDMETHODCALLTYPE DummyID3D10Multithread::Release()
-{
-  m_pDevice->Release();
-  return 1;
-}
-
 ULONG STDMETHODCALLTYPE DummyID3D11InfoQueue::AddRef()
 {
   m_pDevice->AddRef();
@@ -353,6 +380,65 @@ ULONG STDMETHODCALLTYPE DummyID3D11Debug::Release()
 {
   m_pDevice->Release();
   return 1;
+}
+
+HRESULT STDMETHODCALLTYPE WrappedD3D11Multithread::QueryInterface(REFIID riid, void **ppvObject)
+{
+  if(riid == __uuidof(IUnknown))
+  {
+    *ppvObject = (IUnknown *)this;
+    AddRef();
+    return S_OK;
+  }
+  if(riid == __uuidof(ID3D11Multithread))
+  {
+    *ppvObject = (ID3D11Multithread *)this;
+    AddRef();
+    return S_OK;
+  }
+  return E_NOINTERFACE;
+}
+
+ULONG STDMETHODCALLTYPE WrappedD3D11Multithread::AddRef()
+{
+  m_pDevice->AddRef();
+  return 1;
+}
+
+ULONG STDMETHODCALLTYPE WrappedD3D11Multithread::Release()
+{
+  m_pDevice->Release();
+  return 1;
+}
+
+void STDMETHODCALLTYPE WrappedD3D11Multithread::Enter()
+{
+  m_pDevice->D3DLock().Lock();
+  if(m_pReal)
+    m_pReal->Enter();
+}
+
+void STDMETHODCALLTYPE WrappedD3D11Multithread::Leave()
+{
+  if(m_pReal)
+    m_pReal->Leave();
+  m_pDevice->D3DLock().Unlock();
+}
+
+BOOL STDMETHODCALLTYPE WrappedD3D11Multithread::SetMultithreadProtected(BOOL bMTProtect)
+{
+  bool old = m_pDevice->D3DThreadSafe();
+  m_pDevice->SetD3DThreadSafe(bMTProtect == TRUE);
+  if(m_pReal)
+    m_pReal->SetMultithreadProtected(bMTProtect);
+  // TODO - unclear if m_MultithreadProtected just enables Enter/Leave to work, or if it enables
+  // auto-thread safety on all D3D interfaces
+  return old ? TRUE : FALSE;
+}
+
+BOOL STDMETHODCALLTYPE WrappedD3D11Multithread::GetMultithreadProtected()
+{
+  return m_pDevice->D3DThreadSafe() ? TRUE : FALSE;
 }
 
 HRESULT STDMETHODCALLTYPE WrappedID3D11Debug::QueryInterface(REFIID riid, void **ppvObject)
@@ -397,6 +483,10 @@ HRESULT WrappedID3D11Device::QueryInterface(REFIID riid, void **ppvObject)
   // ID3D10Device UUID {9B7E4C0F-342C-4106-A19F-4F2704F689F0}
   static const GUID ID3D10Device_uuid = {
       0x9b7e4c0f, 0x342c, 0x4106, {0xa1, 0x9f, 0x4f, 0x27, 0x04, 0xf6, 0x89, 0xf0}};
+
+  // ID3D12Device UUID {189819f1-1db6-4b57-be54-1821339b85f7}
+  static const GUID ID3D12Device_uuid = {
+      0x189819f1, 0x1db6, 0x4b57, {0xbe, 0x54, 0x18, 0x21, 0x33, 0x9b, 0x85, 0xf7}};
 
   // ID3D11ShaderTraceFactory UUID {1fbad429-66ab-41cc-9617-667ac10e4459}
   static const GUID ID3D11ShaderTraceFactory_uuid = {
@@ -494,6 +584,12 @@ HRESULT WrappedID3D11Device::QueryInterface(REFIID riid, void **ppvObject)
     *ppvObject = NULL;
     return E_NOINTERFACE;
   }
+  else if(riid == ID3D12Device_uuid)
+  {
+    RDCWARN("Trying to get ID3D12Device - not supported.");
+    *ppvObject = NULL;
+    return E_NOINTERFACE;
+  }
   else if(riid == IDirect3DDevice9_uuid)
   {
     RDCWARN("Trying to get IDirect3DDevice9 - not supported.");
@@ -567,13 +663,10 @@ HRESULT WrappedID3D11Device::QueryInterface(REFIID riid, void **ppvObject)
       return E_NOINTERFACE;
     }
   }
-  else if(riid == __uuidof(ID3D10Multithread))
+  else if(riid == __uuidof(ID3D11Multithread))
   {
-    RDCWARN(
-        "Returning a dummy ID3D10Multithread that does nothing. This ID3D10Multithread will not "
-        "work!");
-    *ppvObject = (ID3D10Multithread *)&m_DummyD3D10Multithread;
-    m_DummyD3D10Multithread.AddRef();
+    AddRef();
+    *ppvObject = (ID3D11Multithread *)&m_WrappedMultithread;
     return S_OK;
   }
   else if(riid == ID3D11ShaderTraceFactory_uuid)
@@ -640,10 +733,13 @@ HRESULT WrappedID3D11Device::QueryInterface(REFIID riid, void **ppvObject)
     *ppvObject = (IUnknown *)this;
     return S_OK;
   }
-  else
+  else if(riid == __uuidof(ID3D11VideoDevice) || riid == __uuidof(ID3D11VideoDevice1) ||
+          riid == __uuidof(ID3D11VideoDevice2))
   {
-    WarnUnknownGUID("ID3D11Device", riid);
+    return m_WrappedVideo.QueryInterface(riid, ppvObject);
   }
+
+  WarnUnknownGUID("ID3D11Device", riid);
 
   return m_RefCounter.QueryInterface(riid, ppvObject);
 }
@@ -1081,8 +1177,7 @@ ReplayStatus WrappedID3D11Device::ReadLogInitialisation(RDCFile *rdc, bool store
 
   if(!IsStructuredExporting(m_State))
   {
-    DrawcallDescription *previous = NULL;
-    SetupDrawcallPointers(m_Drawcalls, GetFrameRecord().drawcallList, NULL, previous);
+    SetupDrawcallPointers(m_Drawcalls, GetFrameRecord().drawcallList);
   }
 
 #if ENABLED(RDOC_DEVEL)
@@ -1481,10 +1576,7 @@ bool WrappedID3D11Device::EndFrameCapture(void *dev, void *wnd)
     }
 
     const uint32_t maxSize = 2048;
-
-    byte *thpixels = NULL;
-    uint16_t thwidth = 0;
-    uint16_t thheight = 0;
+    RenderDoc::FramePixels fp;
 
     if(swap != NULL)
     {
@@ -1564,91 +1656,36 @@ bool WrappedID3D11Device::EndFrameCapture(void *dev, void *wnd)
           }
           else
           {
-            byte *data = (byte *)mapped.pData;
-
-            float aspect = float(desc.Width) / float(desc.Height);
-
-            thwidth = (uint16_t)RDCMIN(maxSize, desc.Width);
-            thwidth &= ~0x7;    // align down to multiple of 8
-            thheight = uint16_t(float(thwidth) / aspect);
-
-            thpixels = new byte[3U * thwidth * thheight];
-
-            float widthf = float(desc.Width);
-            float heightf = float(desc.Height);
-
-            uint32_t stride = fmt.compByteWidth * fmt.compCount;
-
-            bool buf1010102 = false;
-            bool bufBGRA = (fmt.bgraOrder != false);
-
-            if(fmt.type == ResourceFormatType::R10G10B10A2)
-            {
-              stride = 4;
-              buf1010102 = true;
-            }
-
-            byte *dst = thpixels;
-
-            for(uint32_t y = 0; y < thheight; y++)
-            {
-              for(uint32_t x = 0; x < thwidth; x++)
-              {
-                float xf = float(x) / float(thwidth);
-                float yf = float(y) / float(thheight);
-
-                byte *src =
-                    &data[stride * uint32_t(xf * widthf) + mapped.RowPitch * uint32_t(yf * heightf)];
-
-                if(buf1010102)
-                {
-                  uint32_t *src1010102 = (uint32_t *)src;
-                  Vec4f unorm = ConvertFromR10G10B10A2(*src1010102);
-                  dst[0] = (byte)(unorm.x * 255.0f);
-                  dst[1] = (byte)(unorm.y * 255.0f);
-                  dst[2] = (byte)(unorm.z * 255.0f);
-                }
-                else if(bufBGRA)
-                {
-                  dst[0] = src[2];
-                  dst[1] = src[1];
-                  dst[2] = src[0];
-                }
-                else if(fmt.compByteWidth == 2)    // R16G16B16A16 backbuffer
-                {
-                  uint16_t *src16 = (uint16_t *)src;
-
-                  float linearR = RDCCLAMP(ConvertFromHalf(src16[0]), 0.0f, 1.0f);
-                  float linearG = RDCCLAMP(ConvertFromHalf(src16[1]), 0.0f, 1.0f);
-                  float linearB = RDCCLAMP(ConvertFromHalf(src16[2]), 0.0f, 1.0f);
-
-                  if(linearR < 0.0031308f)
-                    dst[0] = byte(255.0f * (12.92f * linearR));
-                  else
-                    dst[0] = byte(255.0f * (1.055f * powf(linearR, 1.0f / 2.4f) - 0.055f));
-
-                  if(linearG < 0.0031308f)
-                    dst[1] = byte(255.0f * (12.92f * linearG));
-                  else
-                    dst[1] = byte(255.0f * (1.055f * powf(linearG, 1.0f / 2.4f) - 0.055f));
-
-                  if(linearB < 0.0031308f)
-                    dst[2] = byte(255.0f * (12.92f * linearB));
-                  else
-                    dst[2] = byte(255.0f * (1.055f * powf(linearB, 1.0f / 2.4f) - 0.055f));
-                }
-                else
-                {
-                  dst[0] = src[0];
-                  dst[1] = src[1];
-                  dst[2] = src[2];
-                }
-
-                dst += 3;
-              }
-            }
+            fp.len = (uint32_t)mapped.RowPitch * desc.Height;
+            fp.data = new uint8_t[fp.len];
+            memcpy(fp.data, mapped.pData, fp.len);
 
             m_pImmediateContext->GetReal()->Unmap(stagingTex, 0);
+
+            fp.width = (uint32_t)desc.Width;
+            fp.height = (uint32_t)desc.Height;
+            fp.pitch = mapped.RowPitch;
+            fp.stride = fmt.compByteWidth * fmt.compCount;
+            fp.bpc = fmt.compByteWidth;
+            fp.bgra = fmt.bgraOrder();
+            fp.max_width = maxSize;
+            fp.pitch_requirement = 8;
+            switch(fmt.type)
+            {
+              case ResourceFormatType::R10G10B10A2:
+                fp.stride = 4;
+                fp.buf1010102 = true;
+                break;
+              case ResourceFormatType::R5G6B5:
+                fp.stride = 2;
+                fp.buf565 = true;
+                break;
+              case ResourceFormatType::R5G5B5A1:
+                fp.stride = 2;
+                fp.buf5551 = true;
+                break;
+              default: break;
+            }
           }
         }
 
@@ -1656,33 +1693,8 @@ bool WrappedID3D11Device::EndFrameCapture(void *dev, void *wnd)
       }
     }
 
-    byte *jpgbuf = NULL;
-    int len = thwidth * thheight;
-
-    if(wnd)
-    {
-      jpgbuf = new byte[len];
-
-      jpge::params p;
-      p.m_quality = 80;
-
-      bool success = jpge::compress_image_to_jpeg_file_in_memory(jpgbuf, len, thwidth, thheight, 3,
-                                                                 thpixels, p);
-
-      if(!success)
-      {
-        RDCERR("Failed to compress to jpg");
-        SAFE_DELETE_ARRAY(jpgbuf);
-        thwidth = 0;
-        thheight = 0;
-      }
-    }
-
-    RDCFile *rdc = RenderDoc::Inst().CreateRDC(RDCDriver::D3D11, m_CapturedFrames.back().frameNumber,
-                                               jpgbuf, len, thwidth, thheight, FileType::JPG);
-
-    SAFE_DELETE_ARRAY(jpgbuf);
-    SAFE_DELETE_ARRAY(thpixels);
+    RDCFile *rdc =
+        RenderDoc::Inst().CreateRDC(RDCDriver::D3D11, m_CapturedFrames.back().frameNumber, fp);
 
     StreamWriter *captureWriter = NULL;
 

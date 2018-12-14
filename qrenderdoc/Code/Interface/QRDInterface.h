@@ -1,3 +1,27 @@
+/******************************************************************************
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2017-2018 Baldur Karlsson
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ ******************************************************************************/
+
 #pragma once
 
 // don't add any Qt headers visible to SWIG, as we don't want a Qt dependency for the SWIG-generated
@@ -29,6 +53,7 @@
 
 // this is pre-declared as an opaque type as we only support converting to QWidget* via PySide
 class QWidget;
+class QMenu;
 
 // we only support QVariant as an 'internal' interface, it's not exposed to python. However we need
 // to use it in constructors/operators so conditionally compile it rather than split small structs
@@ -60,11 +85,12 @@ class QWidget;
 // we depend on the internal RenderDoc API, but the bindings for that are imported entirely
 #include "renderdoc_replay.h"
 
+struct ICaptureContext;
+
 #include "Analytics.h"
+#include "Extensions.h"
 #include "PersistantConfig.h"
 #include "RemoteHost.h"
-
-struct ICaptureContext;
 
 DOCUMENT("Contains all of the settings that control how to capture an executable.");
 struct CaptureSettings
@@ -1512,7 +1538,7 @@ If no bookmark exists, this function will do nothing.
   DOCUMENT(R"(Retrieve the current singleton :class:`EventBrowser`.
 
 :return: The current window, which is created (but not shown) it there wasn't one open.
-:rtype: EventBrowser
+:rtype: ~qrenderdoc.EventBrowser
 )");
   virtual IEventBrowser *GetEventBrowser() = 0;
 
@@ -1526,7 +1552,7 @@ If no bookmark exists, this function will do nothing.
   DOCUMENT(R"(Retrieve the current singleton :class:`TextureViewer`.
 
 :return: The current window, which is created (but not shown) it there wasn't one open.
-:rtype: TextureViewer
+:rtype: ~qrenderdoc.TextureViewer
 )");
   virtual ITextureViewer *GetTextureViewer() = 0;
 
@@ -1540,7 +1566,7 @@ If no bookmark exists, this function will do nothing.
   DOCUMENT(R"(Retrieve the current singleton :class:`PipelineStateViewer`.
 
 :return: The current window, which is created (but not shown) it there wasn't one open.
-:rtype: PipelineStateViewer
+:rtype: ~qrenderdoc.PipelineStateViewer
 )");
   virtual IPipelineStateViewer *GetPipelineViewer() = 0;
 
@@ -1923,6 +1949,13 @@ capture's API.
 :rtype: PersistantConfig
 )");
   virtual PersistantConfig &Config() = 0;
+
+  DOCUMENT(R"(Retrieve the manager for extensions.
+
+:return: The current extension manager.
+:rtype: ExtensionManager
+)");
+  virtual IExtensionManager &Extensions() = 0;
 
 protected:
   ICaptureContext() = default;

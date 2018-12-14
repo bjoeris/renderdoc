@@ -173,6 +173,8 @@ void D3D11DebugManager::CopyArrayToTex2DMS(ID3D11Texture2D *destMS, ID3D11Textur
 {
   bool singleSliceMode = (selectedSlice != ~0U);
 
+  D3D11MarkerRegion copy("CopyArrayToTex2DMS");
+
   // unlike CopyTex2DMSToArray we can use the wrapped context here, but for consistency
   // we accept unwrapped parameters.
 
@@ -514,6 +516,8 @@ void D3D11DebugManager::CopyTex2DMSToArray(ID3D11Texture2D *destArray, ID3D11Tex
   // the unwrapped context
   Tex2DMSToArrayStateTracker tracker(m_pImmediateContext);
 
+  D3D11MarkerRegion copy("CopyTex2DMSToArray");
+
   ID3D11Device *dev = m_pDevice->GetReal();
   ID3D11DeviceContext *ctx = m_pImmediateContext->GetReal();
 
@@ -588,6 +592,7 @@ void D3D11DebugManager::CopyTex2DMSToArray(ID3D11Texture2D *destArray, ID3D11Tex
   ctx->RSSetViewports(1, &view);
 
   ctx->IASetInputLayout(NULL);
+  ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   float blendFactor[] = {1.0f, 1.0f, 1.0f, 1.0f};
   ctx->OMSetBlendState(NULL, blendFactor, ~0U);
 
@@ -808,6 +813,8 @@ void D3D11DebugManager::CopyTex2DMSToArray(ID3D11Texture2D *destArray, ID3D11Tex
 
           ctx->Draw(3, 0);
         }
+
+        ctx->Flush();
 
         SAFE_RELEASE(dsvArray);
       }

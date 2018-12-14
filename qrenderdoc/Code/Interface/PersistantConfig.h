@@ -332,6 +332,8 @@ DECLARE_REFLECTION_STRUCT(BugReport);
   CONFIG_SETTING_VAL(public, QDateTime, rdcdatetime, DegradedCapture_LastUpdate,           \
                      rdcdatetime(2015, 01, 01))                                            \
                                                                                            \
+  CONFIG_SETTING_VAL(public, bool, bool, ExternalTool_RGPIntegration, false)               \
+                                                                                           \
   CONFIG_SETTING_VAL(public, QString, rdcstr, ExternalTool_RadeonGPUProfiler, "")          \
                                                                                            \
   CONFIG_SETTING_VAL(public, bool, bool, Tips_HasSeenFirst, false)                         \
@@ -353,6 +355,8 @@ DECLARE_REFLECTION_STRUCT(BugReport);
   CONFIG_SETTING_VAL(public, QString, rdcstr, CrashReport_LastOpenedCapture, "")           \
                                                                                            \
   CONFIG_SETTING(public, QVariantList, rdcarray<BugReport>, CrashReport_ReportedBugs)      \
+                                                                                           \
+  CONFIG_SETTING(public, QVariantList, rdcarray<rdcstr>, AlwaysLoad_Extensions)            \
                                                                                            \
   CONFIG_SETTING(private, QVariantMap, rdcstrpairs, ConfigSettings)                        \
                                                                                            \
@@ -625,6 +629,10 @@ For more information about some of these settings that are user-facing see
   A date containing the last time that the user was warned about captures being loaded in degraded
   support. This prevents the user being spammed if their hardware is low spec.
 
+.. data:: ExternalTool_RGPIntegration
+
+  Whether to enable integration with the external Radeon GPU Profiler tool.
+
 .. data:: ExternalTool_RadeonGPUProfiler
 
   The path to the executable of the external Radeon GPU Profiler tool.
@@ -690,6 +698,12 @@ For more information about some of these settings that are user-facing see
 .. data:: CrashReport_ReportedBugs
 
   A list of :class:`BugReport` detailing previously submitted bugs that we're watching for updates.
+
+.. data:: AlwaysLoad_Extensions
+
+  A list of strings with extension packages to always load on startup, without needing manual
+  enabling.
+
 
 )");
 class PersistantConfig

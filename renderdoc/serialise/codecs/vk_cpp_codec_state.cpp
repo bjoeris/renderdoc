@@ -822,7 +822,7 @@ ImageState::ImageState(uint64_t aImage, ExtObject *ci) : image(aImage)
   else
   {
     // Color image
-    switch(FormatNumPlanes(format))
+    switch(GetYUVPlaneCount(format))
     {
       case 1: availableAspects = VK_IMAGE_ASPECT_COLOR_BIT; break;
       case 2: availableAspects = VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT; break;
@@ -851,7 +851,7 @@ VkImageAspectFlags ImageState::NormalizeAspectMask(VkImageAspectFlags aspectMask
   {
     return availableAspects;
   }
-  if((aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) && FormatNumPlanes(format) > 1)
+  if((aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) && GetYUVPlaneCount(format) > 1)
   {
     // Accessing the Color aspect of a multi-planar image is equivilanet to accessing all planes.
     RDCASSERT(aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);

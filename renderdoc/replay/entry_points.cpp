@@ -180,6 +180,11 @@ extern "C" RENDERDOC_API const char *RENDERDOC_CC RENDERDOC_GetCommitHash()
   return GitVersionHash;
 }
 
+extern "C" RENDERDOC_API DriverInformation RENDERDOC_CC RENDERDOC_GetDriverInformation(GraphicsAPI api)
+{
+  return RenderDoc::Inst().GetDriverInformation(api);
+}
+
 extern "C" RENDERDOC_API const char *RENDERDOC_CC RENDERDOC_GetConfigSetting(const char *name)
 {
   return RenderDoc::Inst().GetConfigSetting(name).c_str();
@@ -480,8 +485,8 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_EndSelfHostCapture(const ch
   rdoc->EndFrameCapture(NULL, NULL);
 }
 
-extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_NeedVulkanLayerRegistration(
-    VulkanLayerFlags *flagsPtr, rdcarray<rdcstr> *myJSONsPtr, rdcarray<rdcstr> *otherJSONsPtr)
+extern "C" RENDERDOC_API bool RENDERDOC_CC
+RENDERDOC_NeedVulkanLayerRegistration(VulkanLayerRegistrationInfo *info)
 {
   VulkanLayerFlags flags = VulkanLayerFlags::NoFlags;
   std::vector<std::string> myJSONs;
@@ -489,21 +494,17 @@ extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_NeedVulkanLayerRegistration
 
   bool ret = RenderDoc::Inst().NeedVulkanLayerRegistration(flags, myJSONs, otherJSONs);
 
-  if(flagsPtr)
-    *flagsPtr = flags;
-
-  if(myJSONsPtr)
+  if(info)
   {
-    myJSONsPtr->resize(myJSONs.size());
+    info->flags = flags;
+
+    info->myJSONs.resize(myJSONs.size());
     for(size_t i = 0; i < myJSONs.size(); i++)
-      (*myJSONsPtr)[i] = myJSONs[i];
-  }
+      info->myJSONs[i] = myJSONs[i];
 
-  if(otherJSONsPtr)
-  {
-    otherJSONsPtr->resize(otherJSONs.size());
+    info->otherJSONs.resize(otherJSONs.size());
     for(size_t i = 0; i < otherJSONs.size(); i++)
-      (*otherJSONsPtr)[i] = otherJSONs[i];
+      info->otherJSONs[i] = otherJSONs[i];
   }
 
   return ret;
@@ -619,15 +620,15 @@ static std::string ResourceFormatName(const ResourceFormat &fmt)
       case ResourceFormatType::BC1:
         if(fmt.compType == CompType::Typeless)
           return "BC1_TYPELESS";
-        return fmt.srgbCorrected ? "BC1_SRGB" : "BC1_UNORM";
+        return fmt.srgbCorrected() ? "BC1_SRGB" : "BC1_UNORM";
       case ResourceFormatType::BC2:
         if(fmt.compType == CompType::Typeless)
           return "BC2_TYPELESS";
-        return fmt.srgbCorrected ? "BC2_SRGB" : "BC2_UNORM";
+        return fmt.srgbCorrected() ? "BC2_SRGB" : "BC2_UNORM";
       case ResourceFormatType::BC3:
         if(fmt.compType == CompType::Typeless)
           return "BC3_TYPELESS";
-        return fmt.srgbCorrected ? "BC3_SRGB" : "BC3_UNORM";
+        return fmt.srgbCorrected() ? "BC3_SRGB" : "BC3_UNORM";
       case ResourceFormatType::BC4:
         if(fmt.compType == CompType::Typeless)
           return "BC4_TYPELESS";
@@ -643,8 +644,8 @@ static std::string ResourceFormatName(const ResourceFormat &fmt)
       case ResourceFormatType::BC7:
         if(fmt.compType == CompType::Typeless)
           return "BC7_TYPELESS";
-        return fmt.srgbCorrected ? "BC7_SRGB" : "BC7_UNORM";
-      case ResourceFormatType::ETC2: return fmt.srgbCorrected ? "ETC2_SRGB" : "ETC_UNORM";
+        return fmt.srgbCorrected() ? "BC7_SRGB" : "BC7_UNORM";
+      case ResourceFormatType::ETC2: return fmt.srgbCorrected() ? "ETC2_SRGB" : "ETC_UNORM";
       case ResourceFormatType::EAC:
       {
         if(fmt.compCount == 1)
@@ -653,17 +654,19 @@ static std::string ResourceFormatName(const ResourceFormat &fmt)
           return fmt.compType == CompType::UNorm ? "EAC_RG_UNORM" : "EAC_RG_SNORM";
       }
       case ResourceFormatType::ASTC:
-        return fmt.srgbCorrected ? "ASTC_SRGB" : "ASTC_UNORM";
+        return fmt.srgbCorrected() ? "ASTC_SRGB" : "ASTC_UNORM";
       // 10:10:10 A2 is the only format that can have all the usual format types (unorm, snorm,
       // etc). So we break and handle it like any other format below.
       case ResourceFormatType::R10G10B10A2:
-        ret = fmt.bgraOrder ? "B10G10R10A2" : "R10G10B10A2";
+        ret = fmt.bgraOrder() ? "B10G10R10A2" : "R10G10B10A2";
         break;
       case ResourceFormatType::R11G11B10: return "R11G11B10_FLOAT";
-      case ResourceFormatType::R5G6B5: return fmt.bgraOrder ? "R5G6B5_UNORM" : "B5G6R5_UNORM";
-      case ResourceFormatType::R5G5B5A1: return fmt.bgraOrder ? "R5G5B5A1_UNORM" : "B5G5R5A1_UNORM";
+      case ResourceFormatType::R5G6B5: return fmt.bgraOrder() ? "R5G6B5_UNORM" : "B5G6R5_UNORM";
+      case ResourceFormatType::R5G5B5A1:
+        return fmt.bgraOrder() ? "R5G5B5A1_UNORM" : "B5G5R5A1_UNORM";
       case ResourceFormatType::R9G9B9E5: return "R9G9B9E5_FLOAT";
-      case ResourceFormatType::R4G4B4A4: return fmt.bgraOrder ? "R4G4B4A4_UNORM" : "B4G4R4A4_UNORM";
+      case ResourceFormatType::R4G4B4A4:
+        return fmt.bgraOrder() ? "R4G4B4A4_UNORM" : "B4G4R4A4_UNORM";
       case ResourceFormatType::R4G4: return "R4G4_UNORM";
       case ResourceFormatType::D16S8:
         return fmt.compType == CompType::Typeless ? "D16S8_TYPELESS" : "D16S8";
@@ -672,7 +675,61 @@ static std::string ResourceFormatName(const ResourceFormat &fmt)
       case ResourceFormatType::D32S8:
         return fmt.compType == CompType::Typeless ? "D32S8_TYPELESS" : "D32S8";
       case ResourceFormatType::S8: return "S8";
-      case ResourceFormatType::YUV: return "YUV";
+      case ResourceFormatType::YUV8:
+      case ResourceFormatType::YUV10:
+      case ResourceFormatType::YUV12:
+      case ResourceFormatType::YUV16:
+      {
+        int yuvbits = 0;
+
+        switch(fmt.type)
+        {
+          case ResourceFormatType::YUV8: yuvbits = 8; break;
+          case ResourceFormatType::YUV10: yuvbits = 10; break;
+          case ResourceFormatType::YUV12: yuvbits = 12; break;
+          case ResourceFormatType::YUV16: yuvbits = 16; break;
+          default: break;
+        }
+
+        uint32_t planeCount = fmt.yuvPlaneCount();
+        uint32_t subsampling = fmt.yuvSubsampling();
+
+        // special case formats that don't match the FOURCC format
+        if(yuvbits == 8 && planeCount == 2 && subsampling == 420)
+          return "NV12";
+        if(yuvbits == 8 && planeCount == 1 && subsampling == 444)
+          return "AYUV";
+        if(yuvbits == 8 && planeCount == 1 && subsampling == 422)
+          return "YUY2";
+
+        switch(subsampling)
+        {
+          case 444:
+            if(planeCount == 1)
+              return StringFormat::Fmt("Y4%02u", yuvbits);
+            else if(planeCount == 2)
+              return StringFormat::Fmt("P4%02u", yuvbits);
+            else
+              return StringFormat::Fmt("YUV_%uPlane_%ubit", planeCount, yuvbits);
+          case 422:
+            if(planeCount == 1)
+              return StringFormat::Fmt("Y2%02u", yuvbits);
+            else if(planeCount == 2)
+              return StringFormat::Fmt("P2%02u", yuvbits);
+            else
+              return StringFormat::Fmt("YUV_%uPlane_%ubit", planeCount, yuvbits);
+          case 420:
+            if(planeCount == 1)
+              return StringFormat::Fmt("Y0%02u", yuvbits);
+            else if(planeCount == 2)
+              return StringFormat::Fmt("P0%02u", yuvbits);
+            else
+              return StringFormat::Fmt("YUV_%uPlane_%ubit", planeCount, yuvbits);
+          default: RDCERR("Unexpected YUV Subsampling amount %u", subsampling);
+        }
+
+        return StringFormat::Fmt("YUV_%u_%uPlane_%ubit", subsampling, planeCount, yuvbits);
+      }
       case ResourceFormatType::PVRTC: return "PVRTC";
     }
   }
@@ -684,14 +741,14 @@ static std::string ResourceFormatName(const ResourceFormat &fmt)
   {
     char comps[] = "RGBA";
 
-    if(fmt.bgraOrder)
+    if(fmt.bgraOrder())
       std::swap(comps[0], comps[2]);
 
     for(uint32_t i = 0; i < fmt.compCount; i++)
       ret += StringFormat::Fmt("%c%u", comps[i], fmt.compByteWidth * 8);
   }
 
-  if(fmt.srgbCorrected)
+  if(fmt.srgbCorrected())
     return ret + "_SRGB";
 
   switch(fmt.compType)

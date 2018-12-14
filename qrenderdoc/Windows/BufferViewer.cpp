@@ -844,7 +844,10 @@ private:
         case ResourceFormatType::D32S8: compCount = 2; break;
         case ResourceFormatType::BC4:
         case ResourceFormatType::S8: compCount = 1; break;
-        case ResourceFormatType::YUV:
+        case ResourceFormatType::YUV8:
+        case ResourceFormatType::YUV10:
+        case ResourceFormatType::YUV12:
+        case ResourceFormatType::YUV16:
         case ResourceFormatType::EAC:
         default: compCount = fmt.format.compCount;
       }
@@ -928,7 +931,7 @@ private:
     else if(vt == QMetaType::Int || vt == QMetaType::Short || vt == QMetaType::SChar)
     {
       int i = v.toInt();
-      if(i > 0)
+      if(i >= 0)
         ret = lit(" ") + Formatter::Format(i);
       else
         ret = Formatter::Format(i);
@@ -1132,6 +1135,18 @@ BufferViewer::BufferViewer(ICaptureContext &ctx, bool meshview, QWidget *parent)
   QObject::connect(ui->matrixType, OverloadedSlot<int>::of(&QComboBox::currentIndexChanged),
                    [this](int) { camGuess_changed(0.0); });
 
+  {
+    QMenu *extensionsMenu = new QMenu(this);
+
+    ui->extensions->setMenu(extensionsMenu);
+    ui->extensions->setPopupMode(QToolButton::InstantPopup);
+
+    QObject::connect(extensionsMenu, &QMenu::aboutToShow, [this, extensionsMenu]() {
+      extensionsMenu->clear();
+      m_Ctx.Extensions().MenuDisplaying(PanelMenu::MeshPreview, extensionsMenu, ui->extensions, {});
+    });
+  }
+
   Reset();
 
   m_Ctx.AddCaptureViewer(this);
@@ -1328,6 +1343,30 @@ void BufferViewer::stageRowMenu(MeshDataStage stage, QMenu *menu, const QPoint &
   menu->addAction(m_ExportBytes);
 
   menu->popup(m_CurView->viewport()->mapToGlobal(pos));
+
+  ContextMenu contextMenu = ContextMenu::MeshPreview_VSInVertex;
+
+  if(stage == MeshDataStage::VSOut)
+    contextMenu = ContextMenu::MeshPreview_VSOutVertex;
+  else if(stage == MeshDataStage::GSOut)
+    contextMenu = ContextMenu::MeshPreview_GSOutVertex;
+
+  QModelIndex idx = m_CurView->selectionModel()->currentIndex();
+
+  ExtensionCallbackData callbackdata = {make_pyarg("stage", (uint32_t)stage)};
+
+  if(idx.isValid())
+  {
+    uint32_t vertid =
+        m_CurView->model()->data(m_CurView->model()->index(idx.row(), 0), Qt::DisplayRole).toUInt();
+    uint32_t index =
+        m_CurView->model()->data(m_CurView->model()->index(idx.row(), 1), Qt::DisplayRole).toUInt();
+
+    callbackdata.push_back(make_pyarg("vertex", vertid));
+    callbackdata.push_back(make_pyarg("index", index));
+  }
+
+  m_Ctx.Extensions().MenuDisplaying(contextMenu, menu, callbackdata);
 }
 
 BufferViewer::~BufferViewer()
@@ -2449,7 +2488,7 @@ void BufferViewer::configureMeshColumns()
       uint numComps = sig.format.compCount;
       uint elemSize = sig.format.compType == CompType::Double ? 8U : 4U;
 
-      if(m_Ctx.CurPipelineState().HasAlignedPostVSData())
+      if(m_Ctx.CurPipelineState().HasAlignedPostVSData(MeshDataStage::VSOut))
       {
         if(numComps == 2)
           offset = AlignUp(offset, 2U * elemSize);
@@ -2516,7 +2555,7 @@ void BufferViewer::configureMeshColumns()
         uint numComps = sig.format.compCount;
         uint elemSize = sig.format.compType == CompType::Double ? 8U : 4U;
 
-        if(m_Ctx.CurPipelineState().HasAlignedPostVSData())
+        if(m_Ctx.CurPipelineState().HasAlignedPostVSData(MeshDataStage::GSOut))
         {
           if(numComps == 2)
             offset = AlignUp(offset, 2U * elemSize);

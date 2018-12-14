@@ -24,6 +24,7 @@
 
 #include "GLPipelineStateViewer.h"
 #include <float.h>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QScrollBar>
 #include <QXmlStreamWriter>
@@ -36,14 +37,16 @@
 struct GLVBIBTag
 {
   GLVBIBTag() { offset = 0; }
-  GLVBIBTag(ResourceId i, uint64_t offs)
+  GLVBIBTag(ResourceId i, uint64_t offs, QString f = QString())
   {
     id = i;
     offset = offs;
+    format = f;
   }
 
   ResourceId id;
   uint64_t offset;
+  QString format;
 };
 
 Q_DECLARE_METATYPE(GLVBIBTag);
@@ -165,6 +168,19 @@ GLPipelineStateViewer::GLPipelineStateViewer(ICaptureContext &ctx, PipelineState
   for(RDTreeWidget *res : readwrites)
     QObject::connect(res, &RDTreeWidget::itemActivated, this,
                      &GLPipelineStateViewer::resource_itemActivated);
+
+  {
+    QMenu *extensionsMenu = new QMenu(this);
+
+    ui->extensions->setMenu(extensionsMenu);
+    ui->extensions->setPopupMode(QToolButton::InstantPopup);
+
+    QObject::connect(extensionsMenu, &QMenu::aboutToShow, [this, extensionsMenu]() {
+      extensionsMenu->clear();
+      m_Ctx.Extensions().MenuDisplaying(PanelMenu::PipelineStateViewer, extensionsMenu,
+                                        ui->extensions, {});
+    });
+  }
 
   addGridLines(ui->rasterizerGridLayout, palette().color(QPalette::WindowText));
   addGridLines(ui->MSAAGridLayout, palette().color(QPalette::WindowText));
@@ -1220,6 +1236,8 @@ void GLPipelineStateViewer::setState()
                                   a.enabled ? QString(a.format.Name()) : genericVal,
                                   a.vertexBufferSlot, a.byteOffset, QString()});
 
+        node->setTag(i);
+
         if(a.enabled)
           usedBindings[a.vertexBufferSlot] = true;
 
@@ -1293,8 +1311,22 @@ void GLPipelineStateViewer::setState()
                                                      draw ? draw->indexByteWidth : 0, 0, 0,
                                                      (qulonglong)length, QString()});
 
-      node->setTag(QVariant::fromValue(GLVBIBTag(
-          state.vertexInput.indexBuffer, draw ? draw->indexOffset * draw->indexByteWidth : 0)));
+      QString iformat;
+      if(draw)
+      {
+        if(draw->indexByteWidth == 1)
+          iformat = lit("ubyte");
+        else if(draw->indexByteWidth == 2)
+          iformat = lit("ushort");
+        else if(draw->indexByteWidth == 4)
+          iformat = lit("uint");
+
+        iformat += lit(" indices[%1]").arg(RENDERDOC_NumVerticesPerPrimitive(draw->topology));
+      }
+
+      node->setTag(QVariant::fromValue(GLVBIBTag(state.vertexInput.indexBuffer,
+                                                 draw ? draw->indexOffset * draw->indexByteWidth : 0,
+                                                 iformat)));
 
       if(!ibufferUsed)
         setInactiveRow(node);
@@ -1315,8 +1347,22 @@ void GLPipelineStateViewer::setState()
       RDTreeWidgetItem *node = new RDTreeWidgetItem(
           {tr("Element"), tr("No Buffer Set"), lit("-"), lit("-"), lit("-"), lit("-"), QString()});
 
-      node->setTag(QVariant::fromValue(GLVBIBTag(
-          state.vertexInput.indexBuffer, draw ? draw->indexOffset * draw->indexByteWidth : 0)));
+      QString iformat;
+      if(draw)
+      {
+        if(draw->indexByteWidth == 1)
+          iformat = lit("ubyte");
+        else if(draw->indexByteWidth == 2)
+          iformat = lit("ushort");
+        else if(draw->indexByteWidth == 4)
+          iformat = lit("uint");
+
+        iformat += lit(" indices[%1]").arg(RENDERDOC_NumVerticesPerPrimitive(draw->topology));
+      }
+
+      node->setTag(QVariant::fromValue(GLVBIBTag(state.vertexInput.indexBuffer,
+                                                 draw ? draw->indexOffset * draw->indexByteWidth : 0,
+                                                 iformat)));
 
       setEmptyRow(node);
       m_EmptyNodes.push_back(node);
@@ -1348,7 +1394,8 @@ void GLPipelineStateViewer::setState()
           new RDTreeWidgetItem({i, v.resourceId, v.byteStride, (qulonglong)offset,
                                 v.instanceDivisor, (qulonglong)length, QString()});
 
-      node->setTag(QVariant::fromValue(GLVBIBTag(v.resourceId, v.byteOffset)));
+      node->setTag(QVariant::fromValue(
+          GLVBIBTag(v.resourceId, v.byteOffset, m_Common.GetVBufferFormatString(i))));
 
       if(!filledSlot)
       {
@@ -1362,6 +1409,10 @@ void GLPipelineStateViewer::setState()
       m_VBNodes.push_back(node);
 
       ui->viBuffers->addTopLevelItem(node);
+    }
+    else
+    {
+      m_VBNodes.push_back(NULL);
     }
   }
   ui->viBuffers->clearSelection();
@@ -1739,7 +1790,7 @@ void GLPipelineStateViewer::setState()
           format = tex->format.Name();
           typeName = ToQStr(tex->type);
 
-          if(tex->format.srgbCorrected && !state.framebuffer.framebufferSRGB)
+          if(tex->format.srgbCorrected() && !state.framebuffer.framebufferSRGB)
             format += lit(" (GL_FRAMEBUFFER_SRGB = 0)");
         }
 
@@ -1828,9 +1879,9 @@ void GLPipelineStateViewer::setState()
           typeName = ToQStr(tex->type);
         }
 
-        QString slot = tr("Depth");
+        QString slot = tr("Depth Only");
         if(i == 1)
-          slot = tr("Stencil");
+          slot = tr("Stencil Only");
 
         bool depthstencil = false;
 
@@ -2082,7 +2133,8 @@ void GLPipelineStateViewer::resource_itemActivated(RDTreeWidgetItem *item, int c
     {
       if(tex->type == TextureType::Buffer)
       {
-        IBufferViewer *viewer = m_Ctx.ViewTextureAsBuffer(0, 0, tex->resourceId);
+        IBufferViewer *viewer = m_Ctx.ViewTextureAsBuffer(
+            0, 0, tex->resourceId, FormatElement::GenerateTextureBufferFormat(*tex));
 
         m_Ctx.AddDockWindow(viewer->Widget(), DockReference::AddTo, this);
       }
@@ -2184,7 +2236,7 @@ void GLPipelineStateViewer::on_viBuffers_itemActivated(RDTreeWidgetItem *item, i
 
     if(buf.id != ResourceId())
     {
-      IBufferViewer *viewer = m_Ctx.ViewBuffer(buf.offset, UINT64_MAX, buf.id);
+      IBufferViewer *viewer = m_Ctx.ViewBuffer(buf.offset, UINT64_MAX, buf.id, buf.format);
 
       m_Ctx.AddDockWindow(viewer->Widget(), DockReference::AddTo, this);
     }
@@ -2205,7 +2257,7 @@ void GLPipelineStateViewer::highlightIABind(int slot)
 
   if(slot < m_VBNodes.count())
   {
-    if(!m_EmptyNodes.contains(m_VBNodes[slot]))
+    if(m_VBNodes[slot] && !m_EmptyNodes.contains(m_VBNodes[slot]))
     {
       m_VBNodes[slot]->setBackgroundColor(col);
       m_VBNodes[slot]->setForegroundColor(contrastingColor(col, QColor(0, 0, 0)));
@@ -2216,7 +2268,7 @@ void GLPipelineStateViewer::highlightIABind(int slot)
   {
     RDTreeWidgetItem *item = ui->viAttrs->topLevelItem(i);
 
-    if((int)VI.attributes[i].vertexBufferSlot != slot)
+    if((int)VI.attributes[item->tag().toUInt()].vertexBufferSlot != slot)
     {
       item->setBackground(QBrush());
       item->setForeground(QBrush());
@@ -2237,20 +2289,17 @@ void GLPipelineStateViewer::on_viAttrs_mouseMove(QMouseEvent *e)
   if(!m_Ctx.IsCaptureLoaded())
     return;
 
-  QModelIndex idx = ui->viAttrs->indexAt(e->pos());
+  RDTreeWidgetItem *item = ui->viAttrs->itemAt(e->pos());
 
   vertex_leave(NULL);
 
   const GLPipe::VertexInput &VI = m_Ctx.CurGLPipelineState()->vertexInput;
 
-  if(idx.isValid())
+  if(item)
   {
-    if(idx.row() >= 0 && idx.row() < VI.attributes.count())
-    {
-      uint32_t buffer = VI.attributes[idx.row()].vertexBufferSlot;
+    uint32_t buffer = VI.attributes[item->tag().toUInt()].vertexBufferSlot;
 
-      highlightIABind((int)buffer);
-    }
+    highlightIABind((int)buffer);
   }
 }
 

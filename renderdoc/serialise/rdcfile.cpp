@@ -610,12 +610,12 @@ void RDCFile::Init(StreamReader &reader)
       {
         thumbData = new byte[thumbHeader.len];
         bool succeeded = thumbReader->Read(thumbData, thumbHeader.len) && !thumbReader->IsErrored();
-        if(succeeded && thumbHeader.format < static_cast<uint32_t>(FileType::Count))
+        if(succeeded && thumbHeader.format < (uint32_t)FileType::Count)
         {
           m_Thumb.width = thumbHeader.width;
           m_Thumb.height = thumbHeader.height;
           m_Thumb.len = thumbHeader.len;
-          m_Thumb.format = static_cast<FileType>(thumbHeader.format);
+          m_Thumb.format = (FileType)thumbHeader.format;
           delete[] m_Thumb.pixels;
           m_Thumb.pixels = thumbData;
         }
@@ -731,8 +731,7 @@ void RDCFile::Create(const char *filename)
       thumbHeader.length = 0;
       jpgPixels = NULL;
     }
-
-    if (rawBuffer)
+    if(rawBuffer)
       stbi_image_free(rawBuffer);
   }
 

@@ -1356,6 +1356,9 @@ The details of the types of messages that can be received are listed under
 )");
   virtual TargetControlMessage ReceiveMessage(RENDERDOC_ProgressCallback progress) = 0;
 
+  DOCUMENT("Cycle the currently active window if there are more windows to capture.");
+  virtual void CycleActiveWindow() = 0;
+
 protected:
   ITargetControl() = default;
   ~ITargetControl() = default;
@@ -2155,9 +2158,22 @@ extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_EndSelfHostCapture(const ch
 // Vulkan layer handling
 //////////////////////////////////////////////////////////////////////////
 
+DOCUMENT("Structure containing all the information about vulkan layer registration");
+struct VulkanLayerRegistrationInfo
+{
+  DOCUMENT(":class:`VulkanLayerFlags` detailing the current registration.");
+  VulkanLayerFlags flags;
+
+  DOCUMENT("A list of jsons that should be registered");
+  rdcarray<rdcstr> myJSONs;
+
+  DOCUMENT("A list of jsons that should be unregistered / updated");
+  rdcarray<rdcstr> otherJSONs;
+};
+
 DOCUMENT("Internal function for determining vulkan layer registration status.");
-extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_NeedVulkanLayerRegistration(
-    VulkanLayerFlags *flags, rdcarray<rdcstr> *myJSONs, rdcarray<rdcstr> *otherJSONs);
+extern "C" RENDERDOC_API bool RENDERDOC_CC
+RENDERDOC_NeedVulkanLayerRegistration(VulkanLayerRegistrationInfo *info);
 
 DOCUMENT("Internal function for updating vulkan layer registration.");
 extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_UpdateVulkanLayerRegistration(bool systemLevel);
@@ -2225,6 +2241,14 @@ This will be in the form "0123456789abcdef0123456789abcdef01234567"
 )");
 extern "C" RENDERDOC_API const char *RENDERDOC_CC RENDERDOC_GetCommitHash();
 
+DOCUMENT(R"(Retrieves the driver information (if available) for a given graphics API.
+
+:param GraphicsAPI api: The API to get driver information for.
+:return: A :class:`DriverInformation` containing the driver information.
+:rtype: DriverInformation
+)");
+extern "C" RENDERDOC_API DriverInformation RENDERDOC_CC RENDERDOC_GetDriverInformation(GraphicsAPI api);
+
 DOCUMENT("Internal function for retrieving a config setting.");
 extern "C" RENDERDOC_API const char *RENDERDOC_CC RENDERDOC_GetConfigSetting(const char *name);
 
@@ -2254,7 +2278,8 @@ DOCUMENT("Internal function for checking android support.");
 extern "C" RENDERDOC_API bool RENDERDOC_CC RENDERDOC_IsAndroidSupported(const char *device);
 
 DOCUMENT("Internal function for starting an android remote server.");
-extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_StartAndroidRemoteServer(const char *device);
+extern "C" RENDERDOC_API ReplayStatus RENDERDOC_CC
+RENDERDOC_StartAndroidRemoteServer(const char *device);
 
 DOCUMENT("Internal function for checking remote Android package for requirements");
 extern "C" RENDERDOC_API void RENDERDOC_CC RENDERDOC_CheckAndroidPackage(const char *hostname,

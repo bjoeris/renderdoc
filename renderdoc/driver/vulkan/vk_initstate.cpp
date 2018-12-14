@@ -88,7 +88,7 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
     WrappedVkBuffer *buffer = (WrappedVkBuffer *)res;
 
     // buffers are only dirty if they are sparse
-    RDCASSERT(buffer->record->sparseInfo);
+    RDCASSERT(buffer->record->resInfo && buffer->record->resInfo->IsSparse());
 
     return Prepare_SparseInitialState(buffer);
   }
@@ -98,7 +98,7 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
 
     WrappedVkImage *im = (WrappedVkImage *)res;
 
-    if(im->record->sparseInfo)
+    if(im->record->resInfo && im->record->resInfo->IsSparse())
     {
       // if the image is sparse we have to do a different kind of initial state prepare,
       // to serialise out the page mapping. The fetching of memory is also different
@@ -457,6 +457,11 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
     for(uint32_t i = 0; i < bufInfo.queueFamilyIndexCount; i++)
       queues.push_back(i);
     bufInfo.pQueueFamilyIndices = queues.data();
+
+    // spec requires that CONCURRENT must specify more than one queue family. If there is only one
+    // queue family, we can safely use exclusive.
+    if(bufInfo.queueFamilyIndexCount == 1)
+      bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     // since this happens during capture, we don't want to start serialising extra buffer creates,
     // so we manually create & then just wrap.

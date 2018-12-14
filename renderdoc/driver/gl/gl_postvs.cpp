@@ -50,6 +50,8 @@ void GLReplay::InitPostVSBuffers(uint32_t eventId)
   if(m_PostVSData.find(eventId) != m_PostVSData.end())
     return;
 
+  GLMarkerRegion postvs(StringFormat::Fmt("PostVS for %u", eventId));
+
   MakeCurrentReplayContext(&m_ReplayCtx);
 
   WrappedOpenGL &drv = *m_pDriver;
@@ -1457,7 +1459,6 @@ MeshFormat GLReplay::GetPostVSBuffers(uint32_t eventId, uint32_t instID, uint32_
   ret.format.compByteWidth = 4;
   ret.format.compType = CompType::Float;
   ret.format.type = ResourceFormatType::Regular;
-  ret.format.bgraOrder = false;
 
   ret.showAlpha = false;
 

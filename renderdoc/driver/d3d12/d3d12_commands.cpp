@@ -204,6 +204,7 @@ WrappedID3D12CommandQueue::WrappedID3D12CommandQueue(ID3D12CommandQueue *real,
     RenderDoc::Inst().GetCrashHandler()->RegisterMemoryRegion(this,
                                                               sizeof(WrappedID3D12CommandQueue));
 
+  m_WrappedDebug.m_pReal = NULL;
   if(m_pReal)
     m_pReal->QueryInterface(__uuidof(ID3D12DebugCommandQueue), (void **)&m_WrappedDebug.m_pReal);
 
@@ -237,6 +238,10 @@ WrappedID3D12CommandQueue::WrappedID3D12CommandQueue(ID3D12CommandQueue *real,
 
 WrappedID3D12CommandQueue::~WrappedID3D12CommandQueue()
 {
+  SAFE_DELETE(m_FrameReader);
+
+  if(m_QueueRecord)
+    m_QueueRecord->Delete(m_pDevice->GetResourceManager());
   m_pDevice->GetResourceManager()->ReleaseCurrentResource(GetResourceID());
   m_pDevice->RemoveQueue(this);
 
@@ -260,6 +265,19 @@ HRESULT STDMETHODCALLTYPE WrappedID3D12CommandQueue::QueryInterface(REFIID riid,
     *ppvObject = (ID3D12CommandQueue *)this;
     AddRef();
     return S_OK;
+  }
+  else if(riid == __uuidof(ID3D12DebugCommandQueue))
+  {
+    if(m_WrappedDebug.m_pReal)
+    {
+      AddRef();
+      *ppvObject = (ID3D12DebugCommandQueue *)&m_WrappedDebug;
+      return S_OK;
+    }
+    else
+    {
+      return E_NOINTERFACE;
+    }
   }
   else if(riid == __uuidof(ID3D12Pageable))
   {
@@ -541,6 +559,10 @@ bool WrappedID3D12CommandQueue::ProcessChunk(ReadSerialiser &ser, D3D12Chunk chu
     case D3D12Chunk::Resource_WriteToSubresource:
       ret = m_pDevice->Serialise_WriteToSubresource(ser, NULL, 0, NULL, NULL, 0, 0);
       break;
+    case D3D12Chunk::List_IndirectSubCommand:
+      // this is a fake chunk generated at runtime as part of indirect draws.
+      // Just in case it gets exported and imported, completely ignore it.
+      return true;
 
     default:
     {
@@ -778,12 +800,18 @@ WrappedID3D12GraphicsCommandList2::WrappedID3D12GraphicsCommandList2(ID3D12Graph
     RenderDoc::Inst().GetCrashHandler()->RegisterMemoryRegion(
         this, sizeof(WrappedID3D12GraphicsCommandList2));
 
+  m_pList1 = NULL;
+  m_pList2 = NULL;
+
+  m_WrappedDebug.m_pReal = NULL;
+  m_WrappedDebug.m_pReal1 = NULL;
+  m_WrappedDebug.m_pReal2 = NULL;
+
   if(m_pList)
   {
     m_pList->QueryInterface(__uuidof(ID3D12DebugCommandList), (void **)&m_WrappedDebug.m_pReal);
-
-    m_pList1 = NULL;
-    m_pList2 = NULL;
+    m_pList->QueryInterface(__uuidof(ID3D12DebugCommandList1), (void **)&m_WrappedDebug.m_pReal1);
+    m_pList->QueryInterface(__uuidof(ID3D12DebugCommandList2), (void **)&m_WrappedDebug.m_pReal2);
 
     m_pList->QueryInterface(__uuidof(ID3D12GraphicsCommandList1), (void **)&m_pList1);
     m_pList->QueryInterface(__uuidof(ID3D12GraphicsCommandList2), (void **)&m_pList2);
@@ -855,9 +883,14 @@ WrappedID3D12GraphicsCommandList2::~WrappedID3D12GraphicsCommandList2()
   if(m_ListRecord && m_ListRecord->bakedCommands)
     m_ListRecord->bakedCommands->Delete(m_pDevice->GetResourceManager());
 
+  if(m_ListRecord)
+    m_ListRecord->Delete(m_pDevice->GetResourceManager());
+
   m_pDevice->GetResourceManager()->ReleaseCurrentResource(GetResourceID());
 
   SAFE_RELEASE(m_WrappedDebug.m_pReal);
+  SAFE_RELEASE(m_WrappedDebug.m_pReal1);
+  SAFE_RELEASE(m_WrappedDebug.m_pReal2);
   SAFE_RELEASE(m_pList2);
   SAFE_RELEASE(m_pList1);
   SAFE_RELEASE(m_pList);
@@ -909,6 +942,45 @@ HRESULT STDMETHODCALLTYPE WrappedID3D12GraphicsCommandList2::QueryInterface(REFI
     *ppvObject = (ID3D12GraphicsCommandList *)this;
     AddRef();
     return S_OK;
+  }
+  else if(riid == __uuidof(ID3D12DebugCommandList))
+  {
+    if(m_WrappedDebug.m_pReal)
+    {
+      AddRef();
+      *ppvObject = (ID3D12DebugCommandList *)&m_WrappedDebug;
+      return S_OK;
+    }
+    else
+    {
+      return E_NOINTERFACE;
+    }
+  }
+  else if(riid == __uuidof(ID3D12DebugCommandList1))
+  {
+    if(m_WrappedDebug.m_pReal1)
+    {
+      AddRef();
+      *ppvObject = (ID3D12DebugCommandList1 *)&m_WrappedDebug;
+      return S_OK;
+    }
+    else
+    {
+      return E_NOINTERFACE;
+    }
+  }
+  else if(riid == __uuidof(ID3D12DebugCommandList2))
+  {
+    if(m_WrappedDebug.m_pReal2)
+    {
+      AddRef();
+      *ppvObject = (ID3D12DebugCommandList2 *)&m_WrappedDebug;
+      return S_OK;
+    }
+    else
+    {
+      return E_NOINTERFACE;
+    }
   }
   else if(riid == __uuidof(ID3D12GraphicsCommandList1))
   {

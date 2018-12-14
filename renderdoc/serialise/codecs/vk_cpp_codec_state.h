@@ -24,6 +24,22 @@
 #pragma once
 
 #include "ext_object.h"
+#if defined(WIN32)
+#define VK_USE_PLATFORM_WIN32_KHR 1
+#elif defined(__yeti__)
+#define VK_USE_PLATFORM_YETI_GOOGLE 1
+#elif defined()
+#define VK_USE_PLATFORM_XLIB_KHR 1
+#endif
+#include "driver/vulkan/vk_common.h"
+#include "driver/vulkan/vk_resources.h"
+#if defined(WIN32)
+#undef VK_USE_PLATFORM_WIN32_KHR
+#elif defined(__yeti__)
+#undef VK_USE_PLATFORM_YETI_GOOGLE
+#elif defined()
+#undef VK_USE_PLATFORM_XLIB_KHR
+#endif
 
 namespace vk_cpp_codec
 {

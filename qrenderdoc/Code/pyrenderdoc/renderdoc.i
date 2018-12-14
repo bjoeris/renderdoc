@@ -291,6 +291,7 @@ TEMPLATE_NAMESPACE_ARRAY_INSTANTIATE(rdcarray, VKPipe, DescriptorSet)
 TEMPLATE_NAMESPACE_ARRAY_INSTANTIATE(rdcarray, VKPipe, ImageData)
 TEMPLATE_NAMESPACE_ARRAY_INSTANTIATE(rdcarray, VKPipe, ImageLayout)
 TEMPLATE_NAMESPACE_ARRAY_INSTANTIATE(rdcarray, VKPipe, SpecializationConstant)
+TEMPLATE_NAMESPACE_ARRAY_INSTANTIATE(rdcarray, VKPipe, XFBBuffer)
 TEMPLATE_NAMESPACE_ARRAY_INSTANTIATE(rdcarray, VKPipe, VertexBuffer)
 TEMPLATE_NAMESPACE_ARRAY_INSTANTIATE(rdcarray, VKPipe, VertexAttribute)
 TEMPLATE_NAMESPACE_ARRAY_INSTANTIATE(rdcarray, VKPipe, VertexBinding)
@@ -329,6 +330,15 @@ PyObject *PassObjectToPython(const char *type, void *obj)
     return NULL;
 
   return SWIG_InternalNewPointerObj(obj, t, 0);
+}
+
+PyObject *PassNewObjectToPython(const char *type, void *obj)
+{
+  swig_type_info *t = SWIG_TypeQuery(type);
+  if(t == NULL)
+    return NULL;
+
+  return SWIG_InternalNewPointerObj(obj, t, SWIG_POINTER_OWN);
 }
 
 %}

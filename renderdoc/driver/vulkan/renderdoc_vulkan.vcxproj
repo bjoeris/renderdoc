@@ -91,6 +91,7 @@
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -105,6 +106,7 @@
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="vk_msaa_array_conv.cpp" />
+    <ClCompile Include="vk_next_chains.cpp" />
     <ClCompile Include="vk_outputwindow.cpp" />
     <ClCompile Include="vk_overlay.cpp" />
     <ClCompile Include="vk_postvs.cpp" />
@@ -161,9 +163,9 @@
     <ClInclude Include="official\vulkan.h" />
     <ClInclude Include="official\vulkan_android.h" />
     <ClInclude Include="official\vulkan_core.h" />
+    <ClInclude Include="official\vulkan_fuchsia.h" />
     <ClInclude Include="official\vulkan_ios.h" />
     <ClInclude Include="official\vulkan_macos.h" />
-    <ClInclude Include="official\vulkan_mir.h" />
     <ClInclude Include="official\vulkan_vi.h" />
     <ClInclude Include="official\vulkan_wayland.h" />
     <ClInclude Include="official\vulkan_win32.h" />

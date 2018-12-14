@@ -322,6 +322,9 @@ bool WrappedVulkan::Serialise_vkCreateSwapchainKHR(SerialiserType &ser, VkDevice
     swapinfo.extent = CreateInfo.imageExtent;
     swapinfo.arraySize = CreateInfo.imageArrayLayers;
 
+    swapinfo.shared = (CreateInfo.presentMode == VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR ||
+                       CreateInfo.presentMode == VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR);
+
     swapinfo.images.resize(NumImages);
 
     const VkImageCreateInfo imInfo = {
@@ -618,14 +621,7 @@ VkResult WrappedVulkan::vkCreateSwapchainKHR(VkDevice device,
 
 VkResult WrappedVulkan::vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 {
-  if(IsBackgroundCapturing(m_State))
-  {
-    RenderDoc::Inst().Tick();
-
-    GetResourceManager()->FlushPendingDirty();
-  }
-
-  m_FrameCounter++;    // first present becomes frame #1, this function is at the end of the frame
+  AdvanceFrame();
 
   if(pPresentInfo->swapchainCount > 1 && (m_FrameCounter % 100) == 0)
   {
@@ -651,7 +647,8 @@ VkResult WrappedVulkan::vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR 
   {
     // allowed (and ignored) pNext structs
     if(next->sType != VK_STRUCTURE_TYPE_DISPLAY_PRESENT_INFO_KHR &&
-       next->sType != VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHR)
+       next->sType != VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHR &&
+       next->sType != VK_STRUCTURE_TYPE_PRESENT_REGIONS_KHR)
     {
       RDCWARN("Unsupported pNext structure in pPresentInfo: %s", ToStr(next->sType).c_str());
     }
@@ -718,6 +715,9 @@ VkResult WrappedVulkan::vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR 
           {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
       };
 
+      if(swapInfo.shared)
+        bbBarrier.oldLayout = VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR;
+
       bbBarrier.srcAccessMask = VK_ACCESS_ALL_READ_BITS;
       bbBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
@@ -780,21 +780,7 @@ VkResult WrappedVulkan::vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR 
 
   VkResult vkr = ObjDisp(queue)->QueuePresentKHR(Unwrap(queue), &unwrappedInfo);
 
-  RenderDoc::Inst().AddActiveDriver(RDCDriver::Vulkan, true);
-
-  if(!activeWindow)
-    return vkr;
-
-  // kill any current capture that isn't application defined
-  if(IsActiveCapturing(m_State) && !m_AppControlledCapture)
-    RenderDoc::Inst().EndFrameCapture(LayerDisp(m_Instance), swapInfo.wndHandle);
-
-  if(RenderDoc::Inst().ShouldTriggerCapture(m_FrameCounter) && IsBackgroundCapturing(m_State))
-  {
-    RenderDoc::Inst().StartFrameCapture(LayerDisp(m_Instance), swapInfo.wndHandle);
-
-    m_AppControlledCapture = false;
-  }
+  Present(LayerDisp(m_Instance), swapInfo.wndHandle);
 
   return vkr;
 }
@@ -1040,6 +1026,11 @@ VkResult WrappedVulkan::vkGetDisplayPlaneCapabilities2KHR(
 {
   return ObjDisp(physicalDevice)
       ->GetDisplayPlaneCapabilities2KHR(Unwrap(physicalDevice), pDisplayPlaneInfo, pCapabilities);
+}
+
+VkResult WrappedVulkan::vkGetSwapchainStatusKHR(VkDevice device, VkSwapchainKHR swapchain)
+{
+  return ObjDisp(device)->GetSwapchainStatusKHR(Unwrap(device), Unwrap(swapchain));
 }
 
 INSTANTIATE_FUNCTION_SERIALISED(VkResult, vkCreateSwapchainKHR, VkDevice device,

@@ -222,7 +222,13 @@ void WrappedVulkan::vkGetImageSubresourceLayout(VkDevice device, VkImage image,
 void WrappedVulkan::vkGetBufferMemoryRequirements(VkDevice device, VkBuffer buffer,
                                                   VkMemoryRequirements *pMemoryRequirements)
 {
-  ObjDisp(device)->GetBufferMemoryRequirements(Unwrap(device), Unwrap(buffer), pMemoryRequirements);
+  // if we have cached memory requirements, use them. These were fetched at create time (which is
+  // still valid, they don't change over the lifetime of the resource) and may be slightly more
+  // pessimistic for the case of external memory bound resources. See vkCreateBuffer/vkCreateImage
+  if(IsCaptureMode(m_State) && GetRecord(buffer)->resInfo)
+    *pMemoryRequirements = GetRecord(buffer)->resInfo->memreqs;
+  else
+    ObjDisp(device)->GetBufferMemoryRequirements(Unwrap(device), Unwrap(buffer), pMemoryRequirements);
 
   // don't do remapping here on replay.
   if(IsReplayMode(m_State))
@@ -243,7 +249,13 @@ void WrappedVulkan::vkGetBufferMemoryRequirements(VkDevice device, VkBuffer buff
 void WrappedVulkan::vkGetImageMemoryRequirements(VkDevice device, VkImage image,
                                                  VkMemoryRequirements *pMemoryRequirements)
 {
-  ObjDisp(device)->GetImageMemoryRequirements(Unwrap(device), Unwrap(image), pMemoryRequirements);
+  // if we have cached memory requirements, use them. These were fetched at create time (which is
+  // still valid, they don't change over the lifetime of the resource) and may be slightly more
+  // pessimistic for the case of external memory bound resources. See vkCreateBuffer/vkCreateImage
+  if(IsCaptureMode(m_State) && GetRecord(image)->resInfo)
+    *pMemoryRequirements = GetRecord(image)->resInfo->memreqs;
+  else
+    ObjDisp(device)->GetImageMemoryRequirements(Unwrap(device), Unwrap(image), pMemoryRequirements);
 
   // don't do remapping here on replay.
   if(IsReplayMode(m_State))
@@ -301,6 +313,12 @@ void WrappedVulkan::vkGetBufferMemoryRequirements2(VkDevice device,
   unwrappedInfo.buffer = Unwrap(unwrappedInfo.buffer);
   ObjDisp(device)->GetBufferMemoryRequirements2(Unwrap(device), &unwrappedInfo, pMemoryRequirements);
 
+  // if we have cached memory requirements, use them. These were fetched at create time (which is
+  // still valid, they don't change over the lifetime of the resource) and may be slightly more
+  // pessimistic for the case of external memory bound resources. See vkCreateBuffer/vkCreateImage
+  if(IsCaptureMode(m_State) && GetRecord(pInfo->buffer)->resInfo)
+    pMemoryRequirements->memoryRequirements = GetRecord(pInfo->buffer)->resInfo->memreqs;
+
   // don't do remapping here on replay.
   if(IsReplayMode(m_State))
     return;
@@ -324,6 +342,12 @@ void WrappedVulkan::vkGetImageMemoryRequirements2(VkDevice device,
   VkImageMemoryRequirementsInfo2 unwrappedInfo = *pInfo;
   unwrappedInfo.image = Unwrap(unwrappedInfo.image);
   ObjDisp(device)->GetImageMemoryRequirements2(Unwrap(device), &unwrappedInfo, pMemoryRequirements);
+
+  // if we have cached memory requirements, use them. These were fetched at create time (which is
+  // still valid, they don't change over the lifetime of the resource) and may be slightly more
+  // pessimistic for the case of external memory bound resources. See vkCreateBuffer/vkCreateImage
+  if(IsCaptureMode(m_State) && GetRecord(pInfo->image)->resInfo)
+    pMemoryRequirements->memoryRequirements = GetRecord(pInfo->image)->resInfo->memreqs;
 
   // don't do remapping here on replay.
   if(IsReplayMode(m_State))
@@ -643,4 +667,35 @@ void WrappedVulkan::vkGetDeviceGroupPeerMemoryFeatures(VkDevice device, uint32_t
 {
   return ObjDisp(device)->GetDeviceGroupPeerMemoryFeatures(
       Unwrap(device), heapIndex, localDeviceIndex, remoteDeviceIndex, pPeerMemoryFeatures);
+}
+
+VkResult WrappedVulkan::vkCreateValidationCacheEXT(VkDevice device,
+                                                   const VkValidationCacheCreateInfoEXT *pCreateInfo,
+                                                   const VkAllocationCallbacks *pAllocator,
+                                                   VkValidationCacheEXT *pValidationCache)
+{
+  return ObjDisp(device)->CreateValidationCacheEXT(Unwrap(device), pCreateInfo, pAllocator,
+                                                   pValidationCache);
+}
+
+void WrappedVulkan::vkDestroyValidationCacheEXT(VkDevice device, VkValidationCacheEXT validationCache,
+                                                const VkAllocationCallbacks *pAllocator)
+{
+  return ObjDisp(device)->DestroyValidationCacheEXT(Unwrap(device), validationCache, pAllocator);
+}
+
+VkResult WrappedVulkan::vkMergeValidationCachesEXT(VkDevice device, VkValidationCacheEXT dstCache,
+                                                   uint32_t srcCacheCount,
+                                                   const VkValidationCacheEXT *pSrcCaches)
+{
+  return ObjDisp(device)->MergeValidationCachesEXT(Unwrap(device), dstCache, srcCacheCount,
+                                                   pSrcCaches);
+}
+
+VkResult WrappedVulkan::vkGetValidationCacheDataEXT(VkDevice device,
+                                                    VkValidationCacheEXT validationCache,
+                                                    size_t *pDataSize, void *pData)
+{
+  return ObjDisp(device)->GetValidationCacheDataEXT(Unwrap(device), validationCache, pDataSize,
+                                                    pData);
 }

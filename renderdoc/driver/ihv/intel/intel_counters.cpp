@@ -43,14 +43,19 @@ IntelCounters::IntelCounters()
 
 IntelCounters::~IntelCounters()
 {
-  if(CloseMetricsDevice)
-  {
+  SAFE_RELEASE(m_deviceContext);
+
+  if(CloseMetricsDevice && m_metricsDevice)
     CloseMetricsDevice(m_metricsDevice);
-    m_metricsDevice = NULL;
-  }
+
+  m_metricsDevice = NULL;
 
   if(m_MDLibraryHandle)
     FreeLibrary(m_MDLibraryHandle);
+
+  m_MDLibraryHandle = (HMODULE)0;
+  OpenMetricsDevice = NULL;
+  CloseMetricsDevice = NULL;
 }
 
 void IntelCounters::Load()
@@ -93,8 +98,11 @@ bool IntelCounters::Init(void *pContext)
   {
     CloseMetricsDevice(m_metricsDevice);
     FreeLibrary(m_MDLibraryHandle);
+
     m_metricsDevice = NULL;
     m_MDLibraryHandle = (HMODULE)0;
+    OpenMetricsDevice = NULL;
+    CloseMetricsDevice = NULL;
     return false;
   }
 

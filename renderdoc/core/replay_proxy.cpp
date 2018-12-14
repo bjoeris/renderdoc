@@ -27,6 +27,75 @@
 #include "3rdparty/lz4/lz4.h"
 #include "serialise/lz4io.h"
 
+template <>
+std::string DoStringise(const ReplayProxyPacket &el)
+{
+  BEGIN_ENUM_STRINGISE(ReplayProxyPacket);
+  {
+    STRINGISE_ENUM_NAMED(eReplayProxy_RemoteExecutionKeepAlive, "RemoteExecutionKeepAlive");
+    STRINGISE_ENUM_NAMED(eReplayProxy_RemoteExecutionFinished, "RemoteExecutionFinished");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_ReplayLog, "ReplayLog");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_CacheBufferData, "CacheBufferData");
+    STRINGISE_ENUM_NAMED(eReplayProxy_CacheTextureData, "CacheTextureData");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetAPIProperties, "GetAPIProperties");
+    STRINGISE_ENUM_NAMED(eReplayProxy_FetchStructuredFile, "FetchStructuredFile");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetPassEvents, "GetPassEvents");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetResources, "GetResources");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetTextures, "GetTextures");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetTexture, "GetTexture");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetBuffers, "GetBuffers");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetBuffer, "GetBuffer");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetShaderEntryPoints, "GetShaderEntryPoints");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetShader, "GetShader");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetDebugMessages, "GetDebugMessages");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetBufferData, "GetBufferData");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetTextureData, "GetTextureData");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_SavePipelineState, "SavePipelineState");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetUsage, "GetUsage");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetLiveID, "GetLiveID");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetFrameRecord, "GetFrameRecord");
+    STRINGISE_ENUM_NAMED(eReplayProxy_IsRenderOutput, "IsRenderOutput");
+    STRINGISE_ENUM_NAMED(eReplayProxy_NeedRemapForFetch, "NeedRemapForFetch");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_FreeTargetResource, "FreeTargetResource");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_FetchCounters, "FetchCounters");
+    STRINGISE_ENUM_NAMED(eReplayProxy_EnumerateCounters, "EnumerateCounters");
+    STRINGISE_ENUM_NAMED(eReplayProxy_DescribeCounter, "DescribeCounter");
+    STRINGISE_ENUM_NAMED(eReplayProxy_FillCBufferVariables, "FillCBufferVariables");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_InitPostVS, "InitPostVS");
+    STRINGISE_ENUM_NAMED(eReplayProxy_InitPostVSVec, "InitPostVSVec");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetPostVS, "GetPostVS");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_BuildTargetShader, "BuildTargetShader");
+    STRINGISE_ENUM_NAMED(eReplayProxy_ReplaceResource, "ReplaceResource");
+    STRINGISE_ENUM_NAMED(eReplayProxy_RemoveReplacement, "RemoveReplacement");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_DebugVertex, "DebugVertex");
+    STRINGISE_ENUM_NAMED(eReplayProxy_DebugPixel, "DebugPixel");
+    STRINGISE_ENUM_NAMED(eReplayProxy_DebugThread, "DebugThread");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_RenderOverlay, "RenderOverlay");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_PixelHistory, "PixelHistory");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_DisassembleShader, "DisassembleShader");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetDisassemblyTargets, "GetDisassemblyTargets");
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetTargetShaderEncodings, "GetTargetShaderEncodings");
+
+    STRINGISE_ENUM_NAMED(eReplayProxy_GetDriverInfo, "GetDriverInfo");
+  }
+  END_ENUM_STRINGISE();
+}
+
 // utility macros for implementing proxied functions
 
 // begins a chunk with the given packet type, and if reading verifies that the
@@ -45,22 +114,72 @@
     ser.BeginChunk(packet, 0);
 
 // end the set of parameters, and that chunk.
-#define END_PARAMS() ser.EndChunk();
+#define END_PARAMS()                            \
+  {                                             \
+    GET_SERIALISER.Serialise("packet", packet); \
+    ser.EndChunk();                             \
+    CheckError(packet, expectedPacket);         \
+  }
 
 // begin serialising a return value. We begin a chunk here in either the writing or reading case
 // since this chunk is used purely to send/receive the return value and is fully handled within the
 // function.
-#define SERIALISE_RETURN(retval)    \
-  {                                 \
-    ReturnSerialiser &ser = retser; \
-    PACKET_HEADER(packet);          \
-    SERIALISE_ELEMENT(retval);      \
-    ser.EndChunk();                 \
+#define SERIALISE_RETURN(retval)                \
+  {                                             \
+    ReturnSerialiser &ser = retser;             \
+    PACKET_HEADER(packet);                      \
+    SERIALISE_ELEMENT(retval);                  \
+    GET_SERIALISER.Serialise("packet", packet); \
+    ser.EndChunk();                             \
+    CheckError(packet, expectedPacket);         \
   }
+
+// similar to the above, but for void functions that don't return anything. We still want to check
+// that both sides of the communication are on the same page.
+#define SERIALISE_RETURN_VOID()         \
+  {                                     \
+    ReturnSerialiser &ser = retser;     \
+    PACKET_HEADER(packet);              \
+    SERIALISE_ELEMENT(packet);          \
+    ser.EndChunk();                     \
+    CheckError(packet, expectedPacket); \
+  }
+
+// defines the area where we're executing on the remote host. To avoid timeouts, the remote side
+// will pass over to a thread and begin sending periodic keepalive packets. Once complete, it will
+// send a finished packet and continue. The host side will accept any keepalive packets and continue
+// once it reads the finished packet. This is very synchronous, but by design the whole replay proxy
+// is very synchronous.
+// The host side will also abort under the usual circumstances - if some network error happens, or
+// if there is a true timeout.
+// Only the remote side needs a thread because the main thread will be busy inside the actual
+// workload, on the host side our thread can do the packet searching itself.
+struct RemoteExecution
+{
+  ReplayProxy *m_Proxy;
+  RemoteExecution(ReplayProxy *proxy)
+  {
+    m_Proxy = proxy;
+    m_Proxy->BeginRemoteExecution();
+  }
+  ~RemoteExecution() { m_Proxy->EndRemoteExecution(); }
+};
+#define REMOTE_EXECUTION() RemoteExecution exec(this);
+
+// uncomment the following to print verbose debugging prints for the remote proxy packets
+//#define PROXY_DEBUG(...) RDCDEBUG(__VA_ARGS__)
+
+#if !defined(PROXY_DEBUG)
+#define PROXY_DEBUG(...) \
+  do                     \
+  {                      \
+  } while(0)
+#endif
 
 // dispatches to the right implementation of the Proxied_ function, depending on whether we're on
 // the remote server or not.
 #define PROXY_FUNCTION(name, ...)                                     \
+  PROXY_DEBUG("Proxying out %s", #name);                              \
   if(m_RemoteServer)                                                  \
     return CONCAT(Proxied_, name)(m_Reader, m_Writer, ##__VA_ARGS__); \
   else                                                                \
@@ -68,6 +187,8 @@
 
 ReplayProxy::~ReplayProxy()
 {
+  ShutdownRemoteExecutionThread();
+
   ShutdownPreviewWindow();
 
   if(m_Proxy)
@@ -84,7 +205,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 bool ReplayProxy::Proxied_NeedRemapForFetch(ParamSerialiser &paramser, ReturnSerialiser &retser,
                                             const ResourceFormat &format)
 {
-  const ReplayProxyPacket packet = eReplayProxy_NeedRemapForFetch;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_NeedRemapForFetch;
+  ReplayProxyPacket packet = eReplayProxy_NeedRemapForFetch;
   bool ret = false;
 
   {
@@ -93,8 +215,11 @@ bool ReplayProxy::Proxied_NeedRemapForFetch(ParamSerialiser &paramser, ReturnSer
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->NeedRemapForFetch(format);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->NeedRemapForFetch(format);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -110,7 +235,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 bool ReplayProxy::Proxied_IsRenderOutput(ParamSerialiser &paramser, ReturnSerialiser &retser,
                                          ResourceId id)
 {
-  const ReplayProxyPacket packet = eReplayProxy_IsRenderOutput;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_IsRenderOutput;
+  ReplayProxyPacket packet = eReplayProxy_IsRenderOutput;
   bool ret = false;
 
   {
@@ -119,8 +245,11 @@ bool ReplayProxy::Proxied_IsRenderOutput(ParamSerialiser &paramser, ReturnSerial
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->IsRenderOutput(id);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->IsRenderOutput(id);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -136,7 +265,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 APIProperties ReplayProxy::Proxied_GetAPIProperties(ParamSerialiser &paramser,
                                                     ReturnSerialiser &retser)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetAPIProperties;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetAPIProperties;
+  ReplayProxyPacket packet = eReplayProxy_GetAPIProperties;
   APIProperties ret = {};
 
   {
@@ -144,8 +274,11 @@ APIProperties ReplayProxy::Proxied_GetAPIProperties(ParamSerialiser &paramser,
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetAPIProperties();
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetAPIProperties();
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -163,10 +296,40 @@ APIProperties ReplayProxy::GetAPIProperties()
 }
 
 template <typename ParamSerialiser, typename ReturnSerialiser>
+DriverInformation ReplayProxy::Proxied_GetDriverInfo(ParamSerialiser &paramser,
+                                                     ReturnSerialiser &retser)
+{
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetDriverInfo;
+  ReplayProxyPacket packet = eReplayProxy_GetDriverInfo;
+  DriverInformation ret = {};
+
+  {
+    BEGIN_PARAMS();
+    END_PARAMS();
+  }
+
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetDriverInfo();
+  }
+
+  SERIALISE_RETURN(ret);
+
+  return ret;
+}
+
+DriverInformation ReplayProxy::GetDriverInfo()
+{
+  PROXY_FUNCTION(GetDriverInfo);
+}
+
+template <typename ParamSerialiser, typename ReturnSerialiser>
 std::vector<DebugMessage> ReplayProxy::Proxied_GetDebugMessages(ParamSerialiser &paramser,
                                                                 ReturnSerialiser &retser)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetDebugMessages;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetDebugMessages;
+  ReplayProxyPacket packet = eReplayProxy_GetDebugMessages;
   std::vector<DebugMessage> ret;
 
   {
@@ -174,8 +337,11 @@ std::vector<DebugMessage> ReplayProxy::Proxied_GetDebugMessages(ParamSerialiser 
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetDebugMessages();
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetDebugMessages();
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -191,7 +357,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 std::vector<ResourceId> ReplayProxy::Proxied_GetTextures(ParamSerialiser &paramser,
                                                          ReturnSerialiser &retser)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetTextures;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetTextures;
+  ReplayProxyPacket packet = eReplayProxy_GetTextures;
   std::vector<ResourceId> ret;
 
   {
@@ -199,8 +366,11 @@ std::vector<ResourceId> ReplayProxy::Proxied_GetTextures(ParamSerialiser &params
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetTextures();
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetTextures();
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -216,7 +386,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 TextureDescription ReplayProxy::Proxied_GetTexture(ParamSerialiser &paramser,
                                                    ReturnSerialiser &retser, ResourceId id)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetTexture;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetTexture;
+  ReplayProxyPacket packet = eReplayProxy_GetTexture;
   TextureDescription ret = {};
 
   {
@@ -225,8 +396,11 @@ TextureDescription ReplayProxy::Proxied_GetTexture(ParamSerialiser &paramser,
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetTexture(id);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetTexture(id);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -245,7 +419,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 std::vector<ResourceId> ReplayProxy::Proxied_GetBuffers(ParamSerialiser &paramser,
                                                         ReturnSerialiser &retser)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetBuffers;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetBuffers;
+  ReplayProxyPacket packet = eReplayProxy_GetBuffers;
   std::vector<ResourceId> ret;
 
   {
@@ -253,8 +428,11 @@ std::vector<ResourceId> ReplayProxy::Proxied_GetBuffers(ParamSerialiser &paramse
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetBuffers();
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetBuffers();
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -270,15 +448,19 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 const std::vector<ResourceDescription> &ReplayProxy::Proxied_GetResources(ParamSerialiser &paramser,
                                                                           ReturnSerialiser &retser)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetResources;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetResources;
+  ReplayProxyPacket packet = eReplayProxy_GetResources;
 
   {
     BEGIN_PARAMS();
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Resources = m_Remote->GetResources();
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Resources = m_Remote->GetResources();
+  }
 
   SERIALISE_RETURN(m_Resources);
 
@@ -294,7 +476,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 BufferDescription ReplayProxy::Proxied_GetBuffer(ParamSerialiser &paramser,
                                                  ReturnSerialiser &retser, ResourceId id)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetBuffer;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetBuffer;
+  ReplayProxyPacket packet = eReplayProxy_GetBuffer;
   BufferDescription ret = {};
 
   {
@@ -303,8 +486,11 @@ BufferDescription ReplayProxy::Proxied_GetBuffer(ParamSerialiser &paramser,
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetBuffer(id);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetBuffer(id);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -320,7 +506,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 std::vector<uint32_t> ReplayProxy::Proxied_GetPassEvents(ParamSerialiser &paramser,
                                                          ReturnSerialiser &retser, uint32_t eventId)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetPassEvents;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetPassEvents;
+  ReplayProxyPacket packet = eReplayProxy_GetPassEvents;
   std::vector<uint32_t> ret;
 
   {
@@ -329,8 +516,11 @@ std::vector<uint32_t> ReplayProxy::Proxied_GetPassEvents(ParamSerialiser &params
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetPassEvents(eventId);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetPassEvents(eventId);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -346,7 +536,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 std::vector<EventUsage> ReplayProxy::Proxied_GetUsage(ParamSerialiser &paramser,
                                                       ReturnSerialiser &retser, ResourceId id)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetUsage;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetUsage;
+  ReplayProxyPacket packet = eReplayProxy_GetUsage;
   std::vector<EventUsage> ret;
 
   {
@@ -355,8 +546,11 @@ std::vector<EventUsage> ReplayProxy::Proxied_GetUsage(ParamSerialiser &paramser,
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetUsage(id);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetUsage(id);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -371,7 +565,8 @@ std::vector<EventUsage> ReplayProxy::GetUsage(ResourceId id)
 template <typename ParamSerialiser, typename ReturnSerialiser>
 FrameRecord ReplayProxy::Proxied_GetFrameRecord(ParamSerialiser &paramser, ReturnSerialiser &retser)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetFrameRecord;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetFrameRecord;
+  ReplayProxyPacket packet = eReplayProxy_GetFrameRecord;
   FrameRecord ret = {};
 
   {
@@ -379,16 +574,18 @@ FrameRecord ReplayProxy::Proxied_GetFrameRecord(ParamSerialiser &paramser, Retur
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetFrameRecord();
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetFrameRecord();
+  }
 
   SERIALISE_RETURN(ret);
 
   if(paramser.IsWriting())
   {
     // re-configure the drawcall pointers, since they will be invalid
-    DrawcallDescription *previous = NULL;
-    SetupDrawcallPointers(m_Drawcalls, ret.drawcallList, NULL, previous);
+    SetupDrawcallPointers(m_Drawcalls, ret.drawcallList);
   }
 
   return ret;
@@ -415,7 +612,8 @@ ResourceId ReplayProxy::Proxied_GetLiveID(ParamSerialiser &paramser, ReturnSeria
   if(paramser.IsErrored() || retser.IsErrored() || m_IsErrored)
     return ResourceId();
 
-  const ReplayProxyPacket packet = eReplayProxy_GetLiveID;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetLiveID;
+  ReplayProxyPacket packet = eReplayProxy_GetLiveID;
   ResourceId ret;
 
   {
@@ -424,8 +622,11 @@ ResourceId ReplayProxy::Proxied_GetLiveID(ParamSerialiser &paramser, ReturnSeria
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetLiveID(id);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetLiveID(id);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -445,7 +646,8 @@ std::vector<CounterResult> ReplayProxy::Proxied_FetchCounters(ParamSerialiser &p
                                                               ReturnSerialiser &retser,
                                                               const std::vector<GPUCounter> &counters)
 {
-  const ReplayProxyPacket packet = eReplayProxy_FetchCounters;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_FetchCounters;
+  ReplayProxyPacket packet = eReplayProxy_FetchCounters;
   std::vector<CounterResult> ret;
 
   {
@@ -454,8 +656,11 @@ std::vector<CounterResult> ReplayProxy::Proxied_FetchCounters(ParamSerialiser &p
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->FetchCounters(counters);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->FetchCounters(counters);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -471,7 +676,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 std::vector<GPUCounter> ReplayProxy::Proxied_EnumerateCounters(ParamSerialiser &paramser,
                                                                ReturnSerialiser &retser)
 {
-  const ReplayProxyPacket packet = eReplayProxy_EnumerateCounters;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_EnumerateCounters;
+  ReplayProxyPacket packet = eReplayProxy_EnumerateCounters;
   std::vector<GPUCounter> ret;
 
   {
@@ -479,8 +685,11 @@ std::vector<GPUCounter> ReplayProxy::Proxied_EnumerateCounters(ParamSerialiser &
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->EnumerateCounters();
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->EnumerateCounters();
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -497,7 +706,8 @@ CounterDescription ReplayProxy::Proxied_DescribeCounter(ParamSerialiser &paramse
                                                         ReturnSerialiser &retser,
                                                         GPUCounter counterID)
 {
-  const ReplayProxyPacket packet = eReplayProxy_DescribeCounter;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_DescribeCounter;
+  ReplayProxyPacket packet = eReplayProxy_DescribeCounter;
   CounterDescription ret = {};
 
   {
@@ -506,8 +716,11 @@ CounterDescription ReplayProxy::Proxied_DescribeCounter(ParamSerialiser &paramse
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->DescribeCounter(counterID);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->DescribeCounter(counterID);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -526,7 +739,8 @@ void ReplayProxy::Proxied_FillCBufferVariables(ParamSerialiser &paramser, Return
                                                std::vector<ShaderVariable> &outvars,
                                                const bytebuf &data)
 {
-  const ReplayProxyPacket packet = eReplayProxy_FillCBufferVariables;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_FillCBufferVariables;
+  ReplayProxyPacket packet = eReplayProxy_FillCBufferVariables;
 
   {
     BEGIN_PARAMS();
@@ -537,8 +751,11 @@ void ReplayProxy::Proxied_FillCBufferVariables(ParamSerialiser &paramser, Return
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->FillCBufferVariables(shader, entryPoint, cbufSlot, outvars, data);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->FillCBufferVariables(shader, entryPoint, cbufSlot, outvars, data);
+  }
 
   SERIALISE_RETURN(outvars);
 }
@@ -554,7 +771,8 @@ void ReplayProxy::Proxied_GetBufferData(ParamSerialiser &paramser, ReturnSeriali
                                         ResourceId buff, uint64_t offset, uint64_t len,
                                         bytebuf &retData)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetBufferData;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetBufferData;
+  ReplayProxyPacket packet = eReplayProxy_GetBufferData;
 
   {
     BEGIN_PARAMS();
@@ -564,8 +782,11 @@ void ReplayProxy::Proxied_GetBufferData(ParamSerialiser &paramser, ReturnSeriali
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->GetBufferData(buff, offset, len, retData);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->GetBufferData(buff, offset, len, retData);
+  }
 
   // over-estimate of total uncompressed data written. Since the decompression chain needs to know
   // the exact uncompressed size, we over-estimate (to allow for length/padding/etc) and then pad
@@ -575,6 +796,7 @@ void ReplayProxy::Proxied_GetBufferData(ParamSerialiser &paramser, ReturnSeriali
   {
     ReturnSerialiser &ser = retser;
     PACKET_HEADER(packet);
+    SERIALISE_ELEMENT(packet);
     SERIALISE_ELEMENT(dataSize);
   }
 
@@ -611,6 +833,8 @@ void ReplayProxy::Proxied_GetBufferData(ParamSerialiser &paramser, ReturnSeriali
   }
 
   retser.EndChunk();
+
+  CheckError(packet, expectedPacket);
 }
 
 void ReplayProxy::GetBufferData(ResourceId buff, uint64_t offset, uint64_t len, bytebuf &retData)
@@ -623,7 +847,8 @@ void ReplayProxy::Proxied_GetTextureData(ParamSerialiser &paramser, ReturnSerial
                                          ResourceId tex, uint32_t arrayIdx, uint32_t mip,
                                          const GetTextureDataParams &params, bytebuf &data)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetTextureData;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetTextureData;
+  ReplayProxyPacket packet = eReplayProxy_GetTextureData;
 
   {
     BEGIN_PARAMS();
@@ -634,8 +859,11 @@ void ReplayProxy::Proxied_GetTextureData(ParamSerialiser &paramser, ReturnSerial
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->GetTextureData(tex, arrayIdx, mip, params, data);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->GetTextureData(tex, arrayIdx, mip, params, data);
+  }
 
   // over-estimate of total uncompressed data written. Since the decompression chain needs to know
   // the exact uncompressed size, we over-estimate (to allow for length/padding/etc) and then pad
@@ -645,6 +873,7 @@ void ReplayProxy::Proxied_GetTextureData(ParamSerialiser &paramser, ReturnSerial
   {
     ReturnSerialiser &ser = retser;
     PACKET_HEADER(packet);
+    SERIALISE_ELEMENT(packet);
     SERIALISE_ELEMENT(dataSize);
   }
 
@@ -681,6 +910,8 @@ void ReplayProxy::Proxied_GetTextureData(ParamSerialiser &paramser, ReturnSerial
   }
 
   retser.EndChunk();
+
+  CheckError(packet, expectedPacket);
 }
 
 void ReplayProxy::GetTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
@@ -693,7 +924,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 void ReplayProxy::Proxied_InitPostVSBuffers(ParamSerialiser &paramser, ReturnSerialiser &retser,
                                             uint32_t eventId)
 {
-  const ReplayProxyPacket packet = eReplayProxy_InitPostVS;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_InitPostVS;
+  ReplayProxyPacket packet = eReplayProxy_InitPostVS;
 
   {
     BEGIN_PARAMS();
@@ -701,8 +933,13 @@ void ReplayProxy::Proxied_InitPostVSBuffers(ParamSerialiser &paramser, ReturnSer
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->InitPostVSBuffers(eventId);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->InitPostVSBuffers(eventId);
+  }
+
+  SERIALISE_RETURN_VOID();
 }
 
 void ReplayProxy::InitPostVSBuffers(uint32_t eventId)
@@ -714,7 +951,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 void ReplayProxy::Proxied_InitPostVSBuffers(ParamSerialiser &paramser, ReturnSerialiser &retser,
                                             const std::vector<uint32_t> &events)
 {
-  const ReplayProxyPacket packet = eReplayProxy_InitPostVSVec;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_InitPostVSVec;
+  ReplayProxyPacket packet = eReplayProxy_InitPostVSVec;
 
   {
     BEGIN_PARAMS();
@@ -722,8 +960,13 @@ void ReplayProxy::Proxied_InitPostVSBuffers(ParamSerialiser &paramser, ReturnSer
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->InitPostVSBuffers(events);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->InitPostVSBuffers(events);
+  }
+
+  SERIALISE_RETURN_VOID();
 }
 
 void ReplayProxy::InitPostVSBuffers(const std::vector<uint32_t> &events)
@@ -736,7 +979,8 @@ MeshFormat ReplayProxy::Proxied_GetPostVSBuffers(ParamSerialiser &paramser, Retu
                                                  uint32_t eventId, uint32_t instID, uint32_t viewID,
                                                  MeshDataStage stage)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetPostVS;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetPostVS;
+  ReplayProxyPacket packet = eReplayProxy_GetPostVS;
   MeshFormat ret = {};
 
   {
@@ -748,8 +992,11 @@ MeshFormat ReplayProxy::Proxied_GetPostVSBuffers(ParamSerialiser &paramser, Retu
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetPostVSBuffers(eventId, instID, viewID, stage);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetPostVSBuffers(eventId, instID, viewID, stage);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -768,7 +1015,8 @@ ResourceId ReplayProxy::Proxied_RenderOverlay(ParamSerialiser &paramser, ReturnS
                                               DebugOverlay overlay, uint32_t eventId,
                                               const std::vector<uint32_t> &passEvents)
 {
-  const ReplayProxyPacket packet = eReplayProxy_RenderOverlay;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_RenderOverlay;
+  ReplayProxyPacket packet = eReplayProxy_RenderOverlay;
   ResourceId ret;
 
   {
@@ -781,8 +1029,11 @@ ResourceId ReplayProxy::Proxied_RenderOverlay(ParamSerialiser &paramser, ReturnS
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->RenderOverlay(texid, typeHint, overlay, eventId, passEvents);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->RenderOverlay(texid, typeHint, overlay, eventId, passEvents);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -800,7 +1051,8 @@ rdcarray<ShaderEntryPoint> ReplayProxy::Proxied_GetShaderEntryPoints(ParamSerial
                                                                      ReturnSerialiser &retser,
                                                                      ResourceId id)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetShaderEntryPoints;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetShaderEntryPoints;
+  ReplayProxyPacket packet = eReplayProxy_GetShaderEntryPoints;
   rdcarray<ShaderEntryPoint> ret;
 
   {
@@ -809,15 +1061,13 @@ rdcarray<ShaderEntryPoint> ReplayProxy::Proxied_GetShaderEntryPoints(ParamSerial
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetShaderEntryPoints(id);
-
   {
-    ReturnSerialiser &ser = retser;
-    PACKET_HEADER(packet);
-    SERIALISE_ELEMENT(ret);
-    ser.EndChunk();
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetShaderEntryPoints(id);
   }
+
+  SERIALISE_RETURN(ret);
 
   return ret;
 }
@@ -831,7 +1081,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 ShaderReflection *ReplayProxy::Proxied_GetShader(ParamSerialiser &paramser, ReturnSerialiser &retser,
                                                  ResourceId id, ShaderEntryPoint entry)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetShader;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetShader;
+  ReplayProxyPacket packet = eReplayProxy_GetShader;
   ShaderReflection *ret = NULL;
 
   // only consider eventID part of the key on APIs where shaders are mutable
@@ -847,13 +1098,17 @@ ShaderReflection *ReplayProxy::Proxied_GetShader(ParamSerialiser &paramser, Retu
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetShader(id, entry);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetShader(id, entry);
+  }
 
   {
     ReturnSerialiser &ser = retser;
     PACKET_HEADER(packet);
     SERIALISE_ELEMENT_OPT(ret);
+    SERIALISE_ELEMENT(packet);
     ser.EndChunk();
 
     // if we're reading, we should have checked the cache above. If we didn't, we need to steal the
@@ -864,6 +1119,8 @@ ShaderReflection *ReplayProxy::Proxied_GetShader(ParamSerialiser &paramser, Retu
       ret = NULL;
     }
   }
+
+  CheckError(packet, expectedPacket);
 
   return m_ShaderReflectionCache[key];
 }
@@ -879,7 +1136,8 @@ std::string ReplayProxy::Proxied_DisassembleShader(ParamSerialiser &paramser,
                                                    const ShaderReflection *refl,
                                                    const std::string &target)
 {
-  const ReplayProxyPacket packet = eReplayProxy_DisassembleShader;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_DisassembleShader;
+  ReplayProxyPacket packet = eReplayProxy_DisassembleShader;
   ResourceId Shader;
   ShaderEntryPoint EntryPoint;
   std::string ret;
@@ -921,7 +1179,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 std::vector<std::string> ReplayProxy::Proxied_GetDisassemblyTargets(ParamSerialiser &paramser,
                                                                     ReturnSerialiser &retser)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetDisassemblyTargets;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetDisassemblyTargets;
+  ReplayProxyPacket packet = eReplayProxy_GetDisassemblyTargets;
   std::vector<std::string> ret;
 
   {
@@ -929,8 +1188,11 @@ std::vector<std::string> ReplayProxy::Proxied_GetDisassemblyTargets(ParamSeriali
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetDisassemblyTargets();
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetDisassemblyTargets();
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -946,7 +1208,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 void ReplayProxy::Proxied_FreeTargetResource(ParamSerialiser &paramser, ReturnSerialiser &retser,
                                              ResourceId id)
 {
-  const ReplayProxyPacket packet = eReplayProxy_FreeTargetResource;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_FreeTargetResource;
+  ReplayProxyPacket packet = eReplayProxy_FreeTargetResource;
 
   {
     BEGIN_PARAMS();
@@ -954,8 +1217,13 @@ void ReplayProxy::Proxied_FreeTargetResource(ParamSerialiser &paramser, ReturnSe
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->FreeTargetResource(id);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->FreeTargetResource(id);
+  }
+
+  SERIALISE_RETURN_VOID();
 }
 
 void ReplayProxy::FreeTargetResource(ResourceId id)
@@ -967,7 +1235,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 rdcarray<ShaderEncoding> ReplayProxy::Proxied_GetTargetShaderEncodings(ParamSerialiser &paramser,
                                                                        ReturnSerialiser &retser)
 {
-  const ReplayProxyPacket packet = eReplayProxy_GetTargetShaderEncodings;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_GetTargetShaderEncodings;
+  ReplayProxyPacket packet = eReplayProxy_GetTargetShaderEncodings;
   rdcarray<ShaderEncoding> ret;
 
   {
@@ -975,8 +1244,11 @@ rdcarray<ShaderEncoding> ReplayProxy::Proxied_GetTargetShaderEncodings(ParamSeri
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->GetTargetShaderEncodings();
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->GetTargetShaderEncodings();
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -994,7 +1266,8 @@ void ReplayProxy::Proxied_BuildTargetShader(ParamSerialiser &paramser, ReturnSer
                                             std::string entry, const ShaderCompileFlags &compileFlags,
                                             ShaderStage type, ResourceId *id, std::string *errors)
 {
-  const ReplayProxyPacket packet = eReplayProxy_BuildTargetShader;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_BuildTargetShader;
+  ReplayProxyPacket packet = eReplayProxy_BuildTargetShader;
   ResourceId ret_id;
   std::string ret_errors;
 
@@ -1008,15 +1281,19 @@ void ReplayProxy::Proxied_BuildTargetShader(ParamSerialiser &paramser, ReturnSer
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->BuildTargetShader(sourceEncoding, source, entry, compileFlags, type, &ret_id,
-                                &ret_errors);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->BuildTargetShader(sourceEncoding, source, entry, compileFlags, type, &ret_id,
+                                  &ret_errors);
+  }
 
   {
     ReturnSerialiser &ser = retser;
     PACKET_HEADER(packet);
     SERIALISE_ELEMENT(ret_id);
     SERIALISE_ELEMENT(ret_errors);
+    SERIALISE_ELEMENT(packet);
     ser.EndChunk();
 
     if(id)
@@ -1024,6 +1301,8 @@ void ReplayProxy::Proxied_BuildTargetShader(ParamSerialiser &paramser, ReturnSer
     if(errors)
       *errors = ret_errors;
   }
+
+  CheckError(packet, expectedPacket);
 }
 
 void ReplayProxy::BuildTargetShader(ShaderEncoding sourceEncoding, bytebuf source,
@@ -1037,7 +1316,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 void ReplayProxy::Proxied_ReplaceResource(ParamSerialiser &paramser, ReturnSerialiser &retser,
                                           ResourceId from, ResourceId to)
 {
-  const ReplayProxyPacket packet = eReplayProxy_ReplaceResource;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_ReplaceResource;
+  ReplayProxyPacket packet = eReplayProxy_ReplaceResource;
 
   {
     BEGIN_PARAMS();
@@ -1046,8 +1326,13 @@ void ReplayProxy::Proxied_ReplaceResource(ParamSerialiser &paramser, ReturnSeria
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->ReplaceResource(from, to);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->ReplaceResource(from, to);
+  }
+
+  SERIALISE_RETURN_VOID();
 }
 
 void ReplayProxy::ReplaceResource(ResourceId from, ResourceId to)
@@ -1059,7 +1344,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 void ReplayProxy::Proxied_RemoveReplacement(ParamSerialiser &paramser, ReturnSerialiser &retser,
                                             ResourceId id)
 {
-  const ReplayProxyPacket packet = eReplayProxy_RemoveReplacement;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_RemoveReplacement;
+  ReplayProxyPacket packet = eReplayProxy_RemoveReplacement;
 
   {
     BEGIN_PARAMS();
@@ -1067,8 +1353,13 @@ void ReplayProxy::Proxied_RemoveReplacement(ParamSerialiser &paramser, ReturnSer
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->RemoveReplacement(id);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->RemoveReplacement(id);
+  }
+
+  SERIALISE_RETURN_VOID();
 }
 
 void ReplayProxy::RemoveReplacement(ResourceId id)
@@ -1082,7 +1373,8 @@ std::vector<PixelModification> ReplayProxy::Proxied_PixelHistory(
     ResourceId target, uint32_t x, uint32_t y, uint32_t slice, uint32_t mip, uint32_t sampleIdx,
     CompType typeHint)
 {
-  const ReplayProxyPacket packet = eReplayProxy_PixelHistory;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_PixelHistory;
+  ReplayProxyPacket packet = eReplayProxy_PixelHistory;
   std::vector<PixelModification> ret;
 
   {
@@ -1098,8 +1390,11 @@ std::vector<PixelModification> ReplayProxy::Proxied_PixelHistory(
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->PixelHistory(events, target, x, y, slice, mip, sampleIdx, typeHint);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->PixelHistory(events, target, x, y, slice, mip, sampleIdx, typeHint);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -1120,7 +1415,8 @@ ShaderDebugTrace ReplayProxy::Proxied_DebugVertex(ParamSerialiser &paramser,
                                                   uint32_t vertid, uint32_t instid, uint32_t idx,
                                                   uint32_t instOffset, uint32_t vertOffset)
 {
-  const ReplayProxyPacket packet = eReplayProxy_DebugVertex;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_DebugVertex;
+  ReplayProxyPacket packet = eReplayProxy_DebugVertex;
   ShaderDebugTrace ret;
 
   {
@@ -1134,8 +1430,11 @@ ShaderDebugTrace ReplayProxy::Proxied_DebugVertex(ParamSerialiser &paramser,
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->DebugVertex(eventId, vertid, instid, idx, instOffset, vertOffset);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->DebugVertex(eventId, vertid, instid, idx, instOffset, vertOffset);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -1153,7 +1452,8 @@ ShaderDebugTrace ReplayProxy::Proxied_DebugPixel(ParamSerialiser &paramser, Retu
                                                  uint32_t eventId, uint32_t x, uint32_t y,
                                                  uint32_t sample, uint32_t primitive)
 {
-  const ReplayProxyPacket packet = eReplayProxy_DebugPixel;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_DebugPixel;
+  ReplayProxyPacket packet = eReplayProxy_DebugPixel;
   ShaderDebugTrace ret;
 
   {
@@ -1166,8 +1466,11 @@ ShaderDebugTrace ReplayProxy::Proxied_DebugPixel(ParamSerialiser &paramser, Retu
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->DebugPixel(eventId, x, y, sample, primitive);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->DebugPixel(eventId, x, y, sample, primitive);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -1185,7 +1488,8 @@ ShaderDebugTrace ReplayProxy::Proxied_DebugThread(ParamSerialiser &paramser, Ret
                                                   uint32_t eventId, const uint32_t groupid[3],
                                                   const uint32_t threadid[3])
 {
-  const ReplayProxyPacket packet = eReplayProxy_DebugThread;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_DebugThread;
+  ReplayProxyPacket packet = eReplayProxy_DebugThread;
   ShaderDebugTrace ret;
 
   uint32_t GroupID[3] = {groupid[0], groupid[1], groupid[2]};
@@ -1199,8 +1503,11 @@ ShaderDebugTrace ReplayProxy::Proxied_DebugThread(ParamSerialiser &paramser, Ret
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    ret = m_Remote->DebugThread(eventId, GroupID, ThreadID);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      ret = m_Remote->DebugThread(eventId, GroupID, ThreadID);
+  }
 
   SERIALISE_RETURN(ret);
 
@@ -1216,25 +1523,29 @@ ShaderDebugTrace ReplayProxy::DebugThread(uint32_t eventId, const uint32_t group
 template <typename ParamSerialiser, typename ReturnSerialiser>
 void ReplayProxy::Proxied_SavePipelineState(ParamSerialiser &paramser, ReturnSerialiser &retser)
 {
-  const ReplayProxyPacket packet = eReplayProxy_SavePipelineState;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_SavePipelineState;
+  ReplayProxyPacket packet = eReplayProxy_SavePipelineState;
 
   {
     BEGIN_PARAMS();
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
   {
-    m_Remote->SavePipelineState();
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+    {
+      m_Remote->SavePipelineState();
 
-    if(m_APIProps.pipelineType == GraphicsAPI::D3D11)
-      m_D3D11PipelineState = *m_Remote->GetD3D11PipelineState();
-    else if(m_APIProps.pipelineType == GraphicsAPI::D3D12)
-      m_D3D12PipelineState = *m_Remote->GetD3D12PipelineState();
-    else if(m_APIProps.pipelineType == GraphicsAPI::OpenGL)
-      m_GLPipelineState = *m_Remote->GetGLPipelineState();
-    else if(m_APIProps.pipelineType == GraphicsAPI::Vulkan)
-      m_VulkanPipelineState = *m_Remote->GetVulkanPipelineState();
+      if(m_APIProps.pipelineType == GraphicsAPI::D3D11)
+        m_D3D11PipelineState = *m_Remote->GetD3D11PipelineState();
+      else if(m_APIProps.pipelineType == GraphicsAPI::D3D12)
+        m_D3D12PipelineState = *m_Remote->GetD3D12PipelineState();
+      else if(m_APIProps.pipelineType == GraphicsAPI::OpenGL)
+        m_GLPipelineState = *m_Remote->GetGLPipelineState();
+      else if(m_APIProps.pipelineType == GraphicsAPI::Vulkan)
+        m_VulkanPipelineState = *m_Remote->GetVulkanPipelineState();
+    }
   }
 
   {
@@ -1256,6 +1567,7 @@ void ReplayProxy::Proxied_SavePipelineState(ParamSerialiser &paramser, ReturnSer
     {
       SERIALISE_ELEMENT(m_VulkanPipelineState);
     }
+    SERIALISE_ELEMENT(packet);
     ser.EndChunk();
 
     if(retser.IsReading())
@@ -1317,6 +1629,8 @@ void ReplayProxy::Proxied_SavePipelineState(ParamSerialiser &paramser, ReturnSer
       }
     }
   }
+
+  CheckError(packet, expectedPacket);
 }
 
 void ReplayProxy::SavePipelineState()
@@ -1328,7 +1642,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 void ReplayProxy::Proxied_ReplayLog(ParamSerialiser &paramser, ReturnSerialiser &retser,
                                     uint32_t endEventID, ReplayLogType replayType)
 {
-  const ReplayProxyPacket packet = eReplayProxy_ReplayLog;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_ReplayLog;
+  ReplayProxyPacket packet = eReplayProxy_ReplayLog;
 
   {
     BEGIN_PARAMS();
@@ -1337,8 +1652,11 @@ void ReplayProxy::Proxied_ReplayLog(ParamSerialiser &paramser, ReturnSerialiser 
     END_PARAMS();
   }
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->ReplayLog(endEventID, replayType);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->ReplayLog(endEventID, replayType);
+  }
 
   if(retser.IsReading())
   {
@@ -1347,6 +1665,8 @@ void ReplayProxy::Proxied_ReplayLog(ParamSerialiser &paramser, ReturnSerialiser 
   }
 
   m_EventID = endEventID;
+
+  SERIALISE_RETURN_VOID();
 }
 
 void ReplayProxy::ReplayLog(uint32_t endEventID, ReplayLogType replayType)
@@ -1357,7 +1677,8 @@ void ReplayProxy::ReplayLog(uint32_t endEventID, ReplayLogType replayType)
 template <typename ParamSerialiser, typename ReturnSerialiser>
 void ReplayProxy::Proxied_FetchStructuredFile(ParamSerialiser &paramser, ReturnSerialiser &retser)
 {
-  const ReplayProxyPacket packet = eReplayProxy_FetchStructuredFile;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_FetchStructuredFile;
+  ReplayProxyPacket packet = eReplayProxy_FetchStructuredFile;
 
   {
     BEGIN_PARAMS();
@@ -1366,8 +1687,11 @@ void ReplayProxy::Proxied_FetchStructuredFile(ParamSerialiser &paramser, ReturnS
 
   SDFile *file = &m_StructuredFile;
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    file = (SDFile *)&m_Remote->GetStructuredFile();
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      file = (SDFile *)&m_Remote->GetStructuredFile();
+  }
 
   {
     ReturnSerialiser &ser = retser;
@@ -1403,8 +1727,12 @@ void ReplayProxy::Proxied_FetchStructuredFile(ParamSerialiser &paramser, ReturnS
       ser.Serialise("buffer", *buf);
     }
 
+    SERIALISE_ELEMENT(packet);
+
     ser.EndChunk();
   }
+
+  CheckError(packet, expectedPacket);
 }
 
 void ReplayProxy::FetchStructuredFile()
@@ -1662,7 +1990,8 @@ template <typename ParamSerialiser, typename ReturnSerialiser>
 void ReplayProxy::Proxied_CacheBufferData(ParamSerialiser &paramser, ReturnSerialiser &retser,
                                           ResourceId buff)
 {
-  const ReplayProxyPacket packet = eReplayProxy_CacheBufferData;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_CacheBufferData;
+  ReplayProxyPacket packet = eReplayProxy_CacheBufferData;
 
   {
     BEGIN_PARAMS();
@@ -1672,17 +2001,23 @@ void ReplayProxy::Proxied_CacheBufferData(ParamSerialiser &paramser, ReturnSeria
 
   bytebuf data;
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->GetBufferData(buff, 0, 0, data);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->GetBufferData(buff, 0, 0, data);
+  }
 
   {
     ReturnSerialiser &ser = retser;
     PACKET_HEADER(packet);
+    SERIALISE_ELEMENT(packet);
   }
 
   DeltaTransferBytes(retser, m_ProxyBufferData[buff], data);
 
   retser.EndChunk();
+
+  CheckError(packet, expectedPacket);
 }
 
 void ReplayProxy::CacheBufferData(ResourceId buff)
@@ -1695,7 +2030,8 @@ void ReplayProxy::Proxied_CacheTextureData(ParamSerialiser &paramser, ReturnSeri
                                            ResourceId tex, uint32_t arrayIdx, uint32_t mip,
                                            const GetTextureDataParams &params)
 {
-  const ReplayProxyPacket packet = eReplayProxy_CacheTextureData;
+  const ReplayProxyPacket expectedPacket = eReplayProxy_CacheTextureData;
+  ReplayProxyPacket packet = eReplayProxy_CacheTextureData;
 
   {
     BEGIN_PARAMS();
@@ -1708,18 +2044,24 @@ void ReplayProxy::Proxied_CacheTextureData(ParamSerialiser &paramser, ReturnSeri
 
   bytebuf data;
 
-  if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
-    m_Remote->GetTextureData(tex, arrayIdx, mip, params, data);
+  {
+    REMOTE_EXECUTION();
+    if(paramser.IsReading() && !paramser.IsErrored() && !m_IsErrored)
+      m_Remote->GetTextureData(tex, arrayIdx, mip, params, data);
+  }
 
   {
     ReturnSerialiser &ser = retser;
     PACKET_HEADER(packet);
+    SERIALISE_ELEMENT(packet);
   }
 
   TextureCacheEntry entry = {tex, arrayIdx, mip};
   DeltaTransferBytes(retser, m_ProxyTextureData[entry], data);
 
   retser.EndChunk();
+
+  CheckError(packet, expectedPacket);
 }
 
 void ReplayProxy::CacheTextureData(ResourceId tex, uint32_t arrayIdx, uint32_t mip,
@@ -1779,9 +2121,9 @@ void ReplayProxy::RemapProxyTextureIfNeeded(TextureDescription &tex, GetTextureD
       params.remap = RemapTexture::RGBA8;
   }
 
-  // since the texture type is unsupported, remove the bgraOrder flag and remap it to RGBA
-  if(tex.format.bgraOrder && m_APIProps.localRenderer == GraphicsAPI::OpenGL)
-    tex.format.bgraOrder = false;
+  // since the texture type is unsupported, remove the bgraOrder() flag and remap it to RGBA
+  if(tex.format.bgraOrder() && m_APIProps.localRenderer == GraphicsAPI::OpenGL)
+    tex.format.setBgraOrder(false);
 
   switch(params.remap)
   {
@@ -2045,6 +2387,151 @@ void ReplayProxy::RefreshPreviewWindow()
   }
 }
 
+void ReplayProxy::InitRemoteExecutionThread()
+{
+  m_RemoteExecutionThread = Threading::CreateThread([this]() { RemoteExecutionThreadEntry(); });
+}
+
+void ReplayProxy::ShutdownRemoteExecutionThread()
+{
+  if(m_RemoteExecutionThread)
+  {
+    Atomic::Inc32(&m_RemoteExecutionKill);
+
+    Threading::JoinThread(m_RemoteExecutionThread);
+    Threading::CloseThread(m_RemoteExecutionThread);
+    m_RemoteExecutionThread = 0;
+  }
+}
+
+void ReplayProxy::BeginRemoteExecution()
+{
+  if(m_RemoteServer)
+  {
+    // m_RemoteExecutionActive must be inactive because it starts inactive, and we synchronise it in
+    // EndRemoteExecution
+    Atomic::CmpExch32(&m_RemoteExecutionState, RemoteExecution_Inactive, RemoteExecution_ThreadIdle);
+  }
+  else
+  {
+    // don't do anything, we go immediately to EndRemoteExecution and start reading packets
+  }
+}
+
+void ReplayProxy::EndRemoteExecution()
+{
+  if(m_RemoteServer)
+  {
+    // wait until the thread is idle, and move it to inactive. This is unlikely to contend because
+    // the thread only becomes active when it's sending a keepalive packet.
+    while(Atomic::CmpExch32(&m_RemoteExecutionState, RemoteExecution_ThreadIdle,
+                            RemoteExecution_Inactive) == RemoteExecution_ThreadIdle)
+      Threading::Sleep(0);
+
+    // send the finished packet
+    m_Writer.BeginChunk(eReplayProxy_RemoteExecutionFinished, 0);
+    m_Writer.EndChunk();
+  }
+  else
+  {
+    while(!m_Writer.IsErrored() && !m_Reader.IsErrored() && !m_IsErrored)
+    {
+      ReplayProxyPacket packet = m_Reader.ReadChunk<ReplayProxyPacket>();
+      m_Reader.EndChunk();
+
+      if(packet == eReplayProxy_RemoteExecutionKeepAlive)
+      {
+        RDCDEBUG("Got keepalive packet");
+        continue;
+      }
+
+      if(packet != eReplayProxy_RemoteExecutionFinished)
+      {
+        CheckError(packet, eReplayProxy_RemoteExecutionFinished);
+        return;
+      }
+
+      break;
+    }
+
+    CheckError(eReplayProxy_RemoteExecutionFinished, eReplayProxy_RemoteExecutionFinished);
+  }
+}
+
+void ReplayProxy::RemoteExecutionThreadEntry()
+{
+  // while we're alive
+  while(Atomic::CmpExch32(&m_RemoteExecutionKill, 0, 0) == 0)
+  {
+    if(IsThreadIdle())
+    {
+      // while we're still idle (rather than inactive), do a period of:
+      // 1. Wait for 1 second, aborting if we've been moved to inactive
+      // 2. Send a keepalive packet
+      //
+      // The wait we tradeoff between busy-waits (to catch very short-lived executions) with waits
+      // to avoid spinning too much.
+
+      while(IsThreadIdle())
+      {
+        PerformanceTimer waitTimer;
+        while(waitTimer.GetMilliseconds() < 5 && IsThreadIdle())
+          (void)waitTimer;    // wait
+
+        if(!IsThreadIdle())
+          break;
+
+        // 5ms has elapsed, wait up to 100ms in 5ms chunks
+        while(waitTimer.GetMilliseconds() < 100 && IsThreadIdle())
+          Threading::Sleep(5);
+
+        if(!IsThreadIdle())
+          break;
+
+        // 100ms has elapsed, wait up to 1000ms in 50ms chunks
+        while(waitTimer.GetMilliseconds() < 1000 && IsThreadIdle())
+          Threading::Sleep(50);
+
+        if(!IsThreadIdle())
+          break;
+
+        // if we got here, it's time to send a keepalive packet. First become active so that
+        // EndRemoteExecution() blocks until this finishes
+        if(Atomic::CmpExch32(&m_RemoteExecutionState, RemoteExecution_ThreadIdle,
+                             RemoteExecution_ThreadActive) == RemoteExecution_ThreadIdle)
+        {
+          m_Writer.BeginChunk(eReplayProxy_RemoteExecutionKeepAlive, 0);
+          m_Writer.EndChunk();
+
+          Atomic::CmpExch32(&m_RemoteExecutionState, RemoteExecution_ThreadActive,
+                            RemoteExecution_ThreadIdle);
+        }
+      }
+    }
+
+    // don't busy-wait
+    Threading::Sleep(0);
+  }
+}
+
+bool ReplayProxy::CheckError(ReplayProxyPacket receivedPacket, ReplayProxyPacket expectedPacket)
+{
+  if(m_Writer.IsErrored() || m_Reader.IsErrored() || m_IsErrored)
+  {
+    RDCERR("Error during processing of %s", ToStr(expectedPacket).c_str());
+    return true;
+  }
+
+  if(receivedPacket != expectedPacket)
+  {
+    RDCERR("Expected %s, received %s", ToStr(expectedPacket).c_str(), ToStr(receivedPacket).c_str());
+    m_IsErrored = true;
+    return true;
+  }
+
+  return false;
+}
+
 bool ReplayProxy::Tick(int type)
 {
   if(!m_RemoteServer)
@@ -2053,7 +2540,12 @@ bool ReplayProxy::Tick(int type)
   if(m_Writer.IsErrored() || m_Reader.IsErrored() || m_IsErrored)
     return false;
 
-  switch(type)
+  const ReplayProxyPacket expectedPacket = (ReplayProxyPacket)type;
+  ReplayProxyPacket packet = (ReplayProxyPacket)type;
+
+  PROXY_DEBUG("Received %s", ToStr(packet).c_str());
+
+  switch(packet)
   {
     case eReplayProxy_CacheBufferData: CacheBufferData(ResourceId()); break;
     case eReplayProxy_CacheTextureData:
@@ -2137,12 +2629,15 @@ bool ReplayProxy::Tick(int type)
     case eReplayProxy_DisassembleShader: DisassembleShader(ResourceId(), NULL, ""); break;
     case eReplayProxy_GetDisassemblyTargets: GetDisassemblyTargets(); break;
     case eReplayProxy_GetTargetShaderEncodings: GetTargetShaderEncodings(); break;
+    case eReplayProxy_GetDriverInfo: GetDriverInfo(); break;
     default: RDCERR("Unexpected command %u", type); return false;
   }
 
+  PROXY_DEBUG("Processed %s", ToStr(packet).c_str());
+
   RefreshPreviewWindow();
 
-  if(m_Writer.IsErrored() || m_Reader.IsErrored() || m_IsErrored)
+  if(CheckError(packet, packet))
     return false;
 
   return true;

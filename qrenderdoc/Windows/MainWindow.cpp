@@ -37,11 +37,11 @@
 #include <QToolTip>
 #include "Code/QRDUtils.h"
 #include "Code/Resources.h"
-#include "Resources/resource.h"
 #include "Widgets/Extended/RDLabel.h"
 #include "Windows/Dialogs/AboutDialog.h"
 #include "Windows/Dialogs/CaptureDialog.h"
 #include "Windows/Dialogs/CrashDialog.h"
+#include "Windows/Dialogs/ExtensionManager.h"
 #include "Windows/Dialogs/LiveCapture.h"
 #include "Windows/Dialogs/RemoteManager.h"
 #include "Windows/Dialogs/SettingsDialog.h"
@@ -388,6 +388,13 @@ MainWindow::MainWindow(ICaptureContext &ctx) : QMainWindow(NULL), ui(new Ui::Mai
     if(a->menu())
       actions.append(a->menu()->actions());
   }
+
+  // hide the dummy extension markers. They shouldn't be visible, they're just there so the code can
+  // easily find where to insert new extension menu items.
+  ui->extension_dummy_File->setVisible(false);
+  ui->extension_dummy_Window->setVisible(false);
+  ui->extension_dummy_Tools->setVisible(false);
+  ui->extension_dummy_Help->setVisible(false);
 }
 
 MainWindow::~MainWindow()
@@ -1257,6 +1264,9 @@ void MainWindow::CheckUpdates(bool forceCheck, UpdateResultMethod callback)
                    });
 
   QObject::connect(req, &QNetworkReply::finished, [this, req, callback]() {
+    if(req->error() != QNetworkReply::NoError)
+      return;
+
     QString response = QString::fromUtf8(req->readAll());
 
     statusText->setText(QString());
@@ -1321,6 +1331,42 @@ void MainWindow::ShowLiveCapture(LiveCapture *live)
 void MainWindow::LiveCaptureClosed(LiveCapture *live)
 {
   m_LiveCaptures.removeOne(live);
+}
+
+QMenu *MainWindow::GetBaseMenu(WindowMenu base, rdcstr name)
+{
+  switch(base)
+  {
+    case WindowMenu::File: return ui->menu_File;
+    case WindowMenu::Window: return ui->menu_Window;
+    case WindowMenu::Tools: return ui->menu_Tools;
+    case WindowMenu::Help: return ui->menu_Help;
+    case WindowMenu::NewMenu: break;
+    default: return NULL;
+  }
+
+  // new menu. See if we have one for name already. If not, create a new one and add it to the menu
+  // bar.
+  for(QAction *m : ui->menuBar->actions())
+  {
+    // if it has an object name it's a built-in, ignore it.
+    if(!m->objectName().isEmpty())
+      continue;
+
+    if(m->text() == name)
+      return m->menu();
+  }
+
+  // no existing menu, add a new one
+  QMenu *menu = new QMenu(name, this);
+  menu->setIcon(Icons::plugin());
+  ui->menuBar->insertMenu(ui->menu_Help->menuAction(), menu);
+  return menu;
+}
+
+QList<QAction *> MainWindow::GetMenuActions()
+{
+  return ui->menuBar->actions();
 }
 
 ToolWindowManager *MainWindow::mainToolManager()
@@ -1799,7 +1845,11 @@ void MainWindow::switchContext()
           statusProgress->setMaximum(0);
         });
 
-        host->Launch();
+        ReplayStatus launchStatus = host->Launch();
+        if(launchStatus != ReplayStatus::Succeeded)
+        {
+          showLaunchError(launchStatus);
+        }
 
         // check if it's running now
         host->CheckStatus();
@@ -2432,6 +2482,12 @@ void MainWindow::on_action_Attach_to_Running_Instance_triggered()
   on_action_Manage_Remote_Servers_triggered();
 }
 
+void MainWindow::on_action_Manage_Extensions_triggered()
+{
+  ExtensionManager manager(m_Ctx);
+  RDDialog::show(&manager);
+}
+
 void MainWindow::on_action_Manage_Remote_Servers_triggered()
 {
   RemoteManager *rm = new RemoteManager(m_Ctx, this);
@@ -2749,4 +2805,33 @@ bool MainWindow::LoadLayout(int layout)
   qInfo() << "Couldn't load layout from " << path << " " << f.errorString();
 
   return false;
+}
+
+void MainWindow::showLaunchError(ReplayStatus status)
+{
+  QString title;
+  QString message;
+  switch(status)
+  {
+    case ReplayStatus::AndroidGrantPermissionsFailed:
+      title = tr("Permission is required");
+      message = tr("Enable RenderDocCmd to access storage on your device.");
+      break;
+    case ReplayStatus::AndroidABINotFound:
+      title = tr("Failed to install RenderDoc server");
+      message = tr("Couldn't determine supported ABIs.");
+      break;
+    case ReplayStatus::AndroidAPKFolderNotFound:
+      title = tr("Failed to install RenderDoc server");
+      message = tr("APK folder missing.");
+      break;
+    case ReplayStatus::AndroidAPKInstallFailed:
+      title = tr("Failed to install RenderDoc server");
+      message = tr("Couldn't find any installed APKs.");
+    default:
+      title = tr("Failed to install RenderDoc server");
+      message = tr("Unknown error.");
+      break;
+  }
+  GUIInvoke::call(this, [this, title, message]() { RDDialog::warning(this, title, message); });
 }

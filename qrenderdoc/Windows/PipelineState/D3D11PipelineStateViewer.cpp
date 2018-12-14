@@ -24,6 +24,7 @@
 
 #include "D3D11PipelineStateViewer.h"
 #include <float.h>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QScrollBar>
 #include <QXmlStreamWriter>
@@ -37,14 +38,16 @@
 struct D3D11VBIBTag
 {
   D3D11VBIBTag() { offset = 0; }
-  D3D11VBIBTag(ResourceId i, uint64_t offs)
+  D3D11VBIBTag(ResourceId i, uint64_t offs, QString f = QString())
   {
     id = i;
     offset = offs;
+    format = f;
   }
 
   ResourceId id;
   uint64_t offset;
+  QString format;
 };
 
 Q_DECLARE_METATYPE(D3D11VBIBTag);
@@ -160,6 +163,8 @@ D3D11PipelineStateViewer::D3D11PipelineStateViewer(ICaptureContext &ctx,
                    &D3D11PipelineStateViewer::resource_itemActivated);
   QObject::connect(ui->csUAVs, &RDTreeWidget::itemActivated, this,
                    &D3D11PipelineStateViewer::resource_itemActivated);
+  QObject::connect(ui->gsStreamOut, &RDTreeWidget::itemActivated, this,
+                   &D3D11PipelineStateViewer::resource_itemActivated);
 
   for(RDTreeWidget *res : resources)
     QObject::connect(res, &RDTreeWidget::itemActivated, this,
@@ -168,6 +173,19 @@ D3D11PipelineStateViewer::D3D11PipelineStateViewer(ICaptureContext &ctx,
   for(RDTreeWidget *cbuffer : cbuffers)
     QObject::connect(cbuffer, &RDTreeWidget::itemActivated, this,
                      &D3D11PipelineStateViewer::cbuffer_itemActivated);
+
+  {
+    QMenu *extensionsMenu = new QMenu(this);
+
+    ui->extensions->setMenu(extensionsMenu);
+    ui->extensions->setPopupMode(QToolButton::InstantPopup);
+
+    QObject::connect(extensionsMenu, &QMenu::aboutToShow, [this, extensionsMenu]() {
+      extensionsMenu->clear();
+      m_Ctx.Extensions().MenuDisplaying(PanelMenu::PipelineStateViewer, extensionsMenu,
+                                        ui->extensions, {});
+    });
+  }
 
   addGridLines(ui->rasterizerGridLayout, palette().color(QPalette::WindowText));
   addGridLines(ui->blendStateGridLayout, palette().color(QPalette::WindowText));
@@ -258,6 +276,20 @@ D3D11PipelineStateViewer::D3D11PipelineStateViewer(ICaptureContext &ctx,
 
     cl->setClearSelectionOnFocusLoss(true);
     cl->setInstantTooltips(true);
+  }
+
+  {
+    RDHeaderView *header = new RDHeaderView(Qt::Horizontal, this);
+    ui->gsStreamOut->setHeader(header);
+
+    ui->gsStreamOut->setColumns(
+        {tr("Slot"), tr("Buffer"), tr("Byte Length"), tr("Byte Offset"), tr("Go")});
+    header->setColumnStretchHints({1, 4, 3, 2, -1});
+    header->setMinimumSectionSize(40);
+
+    ui->gsStreamOut->setHoverIconColumn(4, action, action_hover);
+    ui->gsStreamOut->setClearSelectionOnFocusLoss(true);
+    ui->gsStreamOut->setInstantTooltips(true);
   }
 
   {
@@ -1294,6 +1326,8 @@ void D3D11PipelineStateViewer::setState()
                                   byteOffs, l.perInstance ? lit("PER_INSTANCE") : lit("PER_VERTEX"),
                                   l.instanceDataStepRate, QString()});
 
+        node->setTag(i);
+
         if(usedSlot)
           usedVBuffers[l.inputSlot] = true;
 
@@ -1348,10 +1382,24 @@ void D3D11PipelineStateViewer::setState()
           {tr("Index"), state.inputAssembly.indexBuffer.resourceId, draw ? draw->indexByteWidth : 0,
            state.inputAssembly.indexBuffer.byteOffset, (qulonglong)length, QString()});
 
-      node->setTag(QVariant::fromValue(
-          D3D11VBIBTag(state.inputAssembly.indexBuffer.resourceId,
-                       state.inputAssembly.indexBuffer.byteOffset +
-                           (draw ? draw->indexOffset * draw->indexByteWidth : 0))));
+      QString iformat;
+      if(draw)
+      {
+        if(draw->indexByteWidth == 1)
+          iformat = lit("ubyte");
+        else if(draw->indexByteWidth == 2)
+          iformat = lit("ushort");
+        else if(draw->indexByteWidth == 4)
+          iformat = lit("uint");
+
+        iformat += lit(" indices[%1]").arg(RENDERDOC_NumVerticesPerPrimitive(draw->topology));
+      }
+
+      node->setTag(
+          QVariant::fromValue(D3D11VBIBTag(state.inputAssembly.indexBuffer.resourceId,
+                                           state.inputAssembly.indexBuffer.byteOffset +
+                                               (draw ? draw->indexOffset * draw->indexByteWidth : 0),
+                                           iformat)));
 
       if(!ibufferUsed)
         setInactiveRow(node);
@@ -1372,10 +1420,24 @@ void D3D11PipelineStateViewer::setState()
       RDTreeWidgetItem *node = new RDTreeWidgetItem(
           {tr("Index"), tr("No Buffer Set"), lit("-"), lit("-"), lit("-"), QString()});
 
-      node->setTag(QVariant::fromValue(
-          D3D11VBIBTag(state.inputAssembly.indexBuffer.resourceId,
-                       state.inputAssembly.indexBuffer.byteOffset +
-                           (draw ? draw->indexOffset * draw->indexByteWidth : 0))));
+      QString iformat;
+      if(draw)
+      {
+        if(draw->indexByteWidth == 1)
+          iformat = lit("ubyte");
+        else if(draw->indexByteWidth == 2)
+          iformat = lit("ushort");
+        else if(draw->indexByteWidth == 4)
+          iformat = lit("uint");
+
+        iformat += lit(" indices[%1]").arg(RENDERDOC_NumVerticesPerPrimitive(draw->topology));
+      }
+
+      node->setTag(
+          QVariant::fromValue(D3D11VBIBTag(state.inputAssembly.indexBuffer.resourceId,
+                                           state.inputAssembly.indexBuffer.byteOffset +
+                                               (draw ? draw->indexOffset * draw->indexByteWidth : 0),
+                                           iformat)));
 
       setEmptyRow(node);
       m_EmptyNodes.push_back(node);
@@ -1410,7 +1472,8 @@ void D3D11PipelineStateViewer::setState()
         node =
             new RDTreeWidgetItem({i, tr("No Buffer Set"), lit("-"), lit("-"), lit("-"), QString()});
 
-      node->setTag(QVariant::fromValue(D3D11VBIBTag(v.resourceId, v.byteOffset)));
+      node->setTag(QVariant::fromValue(
+          D3D11VBIBTag(v.resourceId, v.byteOffset, m_Common.GetVBufferFormatString(i))));
 
       if(!filledSlot)
       {
@@ -1424,6 +1487,10 @@ void D3D11PipelineStateViewer::setState()
       m_VBNodes.push_back(node);
 
       ui->iaBuffers->addTopLevelItem(node);
+    }
+    else
+    {
+      m_VBNodes.push_back(NULL);
     }
   }
   ui->iaBuffers->clearSelection();
@@ -1528,6 +1595,8 @@ void D3D11PipelineStateViewer::setState()
 
       if(!usedSlot)
         setInactiveRow(node);
+
+      streamoutSet = true;
 
       ui->gsStreamOut->addTopLevelItem(node);
     }
@@ -1826,10 +1895,31 @@ void D3D11PipelineStateViewer::setState()
   }
   else
   {
-    ui->pipeFlow->setStagesEnabled({true, true, state.hullShader.resourceId != ResourceId(),
-                                    state.domainShader.resourceId != ResourceId(),
-                                    state.geometryShader.resourceId != ResourceId(), true,
-                                    state.pixelShader.resourceId != ResourceId(), true, false});
+    bool streamOutActive = false;
+
+    for(const D3D11Pipe::StreamOutBind &o : state.streamOut.outputs)
+    {
+      if(o.resourceId != ResourceId())
+      {
+        streamOutActive = true;
+        break;
+      }
+    }
+
+    if(state.geometryShader.resourceId == ResourceId() && streamOutActive)
+    {
+      ui->pipeFlow->setStageName(4, lit("SO"), tr("Stream Out"));
+    }
+    else
+    {
+      ui->pipeFlow->setStageName(4, lit("GS"), tr("Geometry Shader"));
+    }
+
+    ui->pipeFlow->setStagesEnabled(
+        {true, true, state.hullShader.resourceId != ResourceId(),
+         state.domainShader.resourceId != ResourceId(),
+         state.geometryShader.resourceId != ResourceId() || streamOutActive, true,
+         state.pixelShader.resourceId != ResourceId(), true, false});
   }
 }
 
@@ -1902,7 +1992,8 @@ void D3D11PipelineStateViewer::resource_itemActivated(RDTreeWidgetItem *item, in
   {
     if(tex->type == TextureType::Buffer)
     {
-      IBufferViewer *viewer = m_Ctx.ViewTextureAsBuffer(0, 0, tex->resourceId);
+      IBufferViewer *viewer = m_Ctx.ViewTextureAsBuffer(
+          0, 0, tex->resourceId, FormatElement::GenerateTextureBufferFormat(*tex));
 
       m_Ctx.AddDockWindow(viewer->Widget(), DockReference::AddTo, this);
     }
@@ -1919,6 +2010,9 @@ void D3D11PipelineStateViewer::resource_itemActivated(RDTreeWidgetItem *item, in
   else if(buf)
   {
     D3D11ViewTag view;
+
+    view.res.resourceResourceId = buf->resourceId;
+
     if(tag.canConvert<D3D11ViewTag>())
       view = tag.value<D3D11ViewTag>();
 
@@ -2020,7 +2114,7 @@ void D3D11PipelineStateViewer::resource_itemActivated(RDTreeWidgetItem *item, in
       {
         const auto &desc = res.variableType.descriptor;
 
-        if(view.res.viewFormat.Name().empty())
+        if(view.res.viewFormat.type == ResourceFormatType::Undefined)
         {
           format = QString();
           if(desc.rowMajorStorage)
@@ -2173,7 +2267,7 @@ void D3D11PipelineStateViewer::on_iaBuffers_itemActivated(RDTreeWidgetItem *item
 
     if(buf.id != ResourceId())
     {
-      IBufferViewer *viewer = m_Ctx.ViewBuffer(buf.offset, UINT64_MAX, buf.id);
+      IBufferViewer *viewer = m_Ctx.ViewBuffer(buf.offset, UINT64_MAX, buf.id, buf.format);
 
       m_Ctx.AddDockWindow(viewer->Widget(), DockReference::AddTo, this);
     }
@@ -2196,7 +2290,7 @@ void D3D11PipelineStateViewer::highlightIABind(int slot)
   {
     RDTreeWidgetItem *item = m_VBNodes[(int)slot];
 
-    if(!m_EmptyNodes.contains(item))
+    if(item && !m_EmptyNodes.contains(item))
     {
       item->setBackgroundColor(col);
       item->setForegroundColor(contrastingColor(col, QColor(0, 0, 0)));
@@ -2207,7 +2301,7 @@ void D3D11PipelineStateViewer::highlightIABind(int slot)
   {
     RDTreeWidgetItem *item = ui->iaLayouts->topLevelItem(i);
 
-    if((int)IA.layouts[i].inputSlot != slot)
+    if((int)IA.layouts[item->tag().toUInt()].inputSlot != slot)
     {
       item->setBackground(QBrush());
       item->setForeground(QBrush());
@@ -2228,20 +2322,17 @@ void D3D11PipelineStateViewer::on_iaLayouts_mouseMove(QMouseEvent *e)
   if(!m_Ctx.IsCaptureLoaded())
     return;
 
-  QModelIndex idx = ui->iaLayouts->indexAt(e->pos());
+  RDTreeWidgetItem *item = ui->iaLayouts->itemAt(e->pos());
 
   vertex_leave(NULL);
 
   const D3D11Pipe::InputAssembly &IA = m_Ctx.CurD3D11PipelineState()->inputAssembly;
 
-  if(idx.isValid())
+  if(item)
   {
-    if(idx.row() >= 0 && idx.row() < IA.layouts.count())
-    {
-      uint32_t buffer = IA.layouts[idx.row()].inputSlot;
+    uint32_t buffer = IA.layouts[item->tag().toUInt()].inputSlot;
 
-      highlightIABind((int)buffer);
-    }
+    highlightIABind((int)buffer);
   }
 }
 

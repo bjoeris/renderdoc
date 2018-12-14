@@ -1,6 +1,7 @@
 set(sources
     vk_common.cpp
     vk_common.h
+    vk_next_chains.cpp
     vk_core.cpp
     vk_core.h
     vk_counters.cpp
@@ -43,7 +44,7 @@ set(sources
     official/vulkan_core.h
     official/vulkan_ios.h
     official/vulkan_macos.h
-    official/vulkan_mir.h
+    official/vulkan_fuchsia.h
     official/vulkan_vi.h
     official/vulkan_wayland.h
     official/vulkan_win32.h

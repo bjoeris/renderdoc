@@ -148,7 +148,7 @@ CaptureDialog::CaptureDialog(ICaptureContext &ctx, OnCaptureMethod captureCallba
 
   // Set up warning for host layer config
   initWarning(ui->vulkanLayerWarn);
-  ui->vulkanLayerWarn->setVisible(RENDERDOC_NeedVulkanLayerRegistration(NULL, NULL, NULL));
+  ui->vulkanLayerWarn->setVisible(RENDERDOC_NeedVulkanLayerRegistration(NULL));
   QObject::connect(ui->vulkanLayerWarn, &RDLabel::clicked, this,
                    &CaptureDialog::vulkanLayerWarn_mouseClick);
 
@@ -283,26 +283,24 @@ void CaptureDialog::vulkanLayerWarn_mouseClick()
 {
   QString caption = tr("Configure Vulkan layer settings in registry?");
 
-  VulkanLayerFlags flags = VulkanLayerFlags::NoFlags;
-  rdcarray<rdcstr> myJSONs;
-  rdcarray<rdcstr> otherJSONs;
+  VulkanLayerRegistrationInfo info;
 
-  RENDERDOC_NeedVulkanLayerRegistration(&flags, &myJSONs, &otherJSONs);
+  RENDERDOC_NeedVulkanLayerRegistration(&info);
 
-  const bool hasOtherJSON = bool(flags & VulkanLayerFlags::OtherInstallsRegistered);
-  const bool thisRegistered = bool(flags & VulkanLayerFlags::ThisInstallRegistered);
-  const bool needElevation = bool(flags & VulkanLayerFlags::NeedElevation);
-  const bool couldElevate = bool(flags & VulkanLayerFlags::CouldElevate);
-  const bool registerAll = bool(flags & VulkanLayerFlags::RegisterAll);
-  const bool updateAllowed = bool(flags & VulkanLayerFlags::UpdateAllowed);
+  const bool hasOtherJSON = bool(info.flags & VulkanLayerFlags::OtherInstallsRegistered);
+  const bool thisRegistered = bool(info.flags & VulkanLayerFlags::ThisInstallRegistered);
+  const bool needElevation = bool(info.flags & VulkanLayerFlags::NeedElevation);
+  const bool couldElevate = bool(info.flags & VulkanLayerFlags::CouldElevate);
+  const bool registerAll = bool(info.flags & VulkanLayerFlags::RegisterAll);
+  const bool updateAllowed = bool(info.flags & VulkanLayerFlags::UpdateAllowed);
 
-  if(flags & VulkanLayerFlags::Unfixable)
+  if(info.flags & VulkanLayerFlags::Unfixable)
   {
     QString msg =
         tr("There is an unfixable problem with your vulkan layer configuration. Please consult the "
            "RenderDoc documentation, or package/distribution documentation on linux\n\n");
 
-    for(const rdcstr &j : otherJSONs)
+    for(const rdcstr &j : info.otherJSONs)
       msg += j + lit("\n");
 
     RDDialog::critical(this, tr("Unfixable vulkan layer configuration"), msg);
@@ -314,7 +312,7 @@ void CaptureDialog::vulkanLayerWarn_mouseClick()
 
   if(hasOtherJSON)
   {
-    if(otherJSONs.size() > 1)
+    if(info.otherJSONs.size() > 1)
       msg +=
           tr("there are other RenderDoc builds registered already. They must be disabled so that "
              "capture can happen without nasty clashes.");
@@ -339,7 +337,7 @@ void CaptureDialog::vulkanLayerWarn_mouseClick()
 
   if(hasOtherJSON)
   {
-    for(const rdcstr &j : otherJSONs)
+    for(const rdcstr &j : info.otherJSONs)
       msg += (updateAllowed ? tr("Unregister/update: %1\n") : tr("Unregister: %1\n")).arg(j);
 
     msg += lit("\n");
@@ -349,13 +347,13 @@ void CaptureDialog::vulkanLayerWarn_mouseClick()
   {
     if(registerAll)
     {
-      for(const rdcstr &j : myJSONs)
+      for(const rdcstr &j : info.myJSONs)
         msg += (updateAllowed ? tr("Register/update: %1\n") : tr("Register: %1\n")).arg(j);
     }
     else
     {
       msg += updateAllowed ? tr("Register one of:\n") : tr("Register/update one of:\n");
-      for(const rdcstr &j : myJSONs)
+      for(const rdcstr &j : info.myJSONs)
         msg += tr("  -- %1\n").arg(j);
     }
 
@@ -454,7 +452,7 @@ void CaptureDialog::vulkanLayerWarn_mouseClick()
       }
     }
 
-    ui->vulkanLayerWarn->setVisible(RENDERDOC_NeedVulkanLayerRegistration(NULL, NULL, NULL));
+    ui->vulkanLayerWarn->setVisible(RENDERDOC_NeedVulkanLayerRegistration(NULL));
   }
 }
 
@@ -872,7 +870,7 @@ void CaptureDialog::SetSettings(CaptureSettings settings)
   ui->RefAllResources->setChecked(settings.options.refAllResources);
   ui->CaptureAllCmdLists->setChecked(settings.options.captureAllCmdLists);
   ui->DelayForDebugger->setValue(settings.options.delayForDebugger);
-  ui->VerifyMapWrites->setChecked(settings.options.verifyMapWrites);
+  ui->VerifyBufferAccess->setChecked(settings.options.verifyBufferAccess);
   ui->AutoStart->setChecked(settings.autoStart);
 
   // force flush this state
@@ -907,7 +905,7 @@ CaptureSettings CaptureDialog::Settings()
   ret.options.refAllResources = ui->RefAllResources->isChecked();
   ret.options.captureAllCmdLists = ui->CaptureAllCmdLists->isChecked();
   ret.options.delayForDebugger = (uint32_t)ui->DelayForDebugger->value();
-  ret.options.verifyMapWrites = ui->VerifyMapWrites->isChecked();
+  ret.options.verifyBufferAccess = ui->VerifyBufferAccess->isChecked();
 
   return ret;
 }

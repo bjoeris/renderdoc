@@ -145,8 +145,12 @@ struct D3D12QuadOverdrawCallback : public D3D12DrawcallCallback
 
       // disable depth/stencil writes
       pipeDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
-      pipeDesc.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-      pipeDesc.DepthStencilState.BackFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+      pipeDesc.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+      pipeDesc.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+      pipeDesc.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+      pipeDesc.DepthStencilState.BackFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+      pipeDesc.DepthStencilState.BackFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+      pipeDesc.DepthStencilState.BackFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
       pipeDesc.DepthStencilState.StencilWriteMask = 0;
 
       pipeDesc.PS = m_QuadWritePS;
@@ -267,6 +271,9 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
   if(resource == NULL)
     return ResourceId();
 
+  D3D12MarkerRegion renderoverlay(m_pDevice->GetQueue(),
+                                  StringFormat::Fmt("RenderOverlay %d", overlay));
+
   D3D12_RESOURCE_DESC resourceDesc = resource->GetDesc();
 
   std::vector<D3D12_RESOURCE_BARRIER> barriers;
@@ -278,7 +285,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
   overlayTexDesc.DepthOrArraySize = 1;
   overlayTexDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
   overlayTexDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-  overlayTexDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+  overlayTexDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
   overlayTexDesc.Height = resourceDesc.Height;
   overlayTexDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
   overlayTexDesc.MipLevels = 1;
@@ -409,7 +416,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
 
   D3D12_RENDER_TARGET_VIEW_DESC rtDesc = {};
   rtDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-  rtDesc.Format = DXGI_FORMAT_R16G16B16A16_UNORM;
+  rtDesc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
   rtDesc.Texture2D.MipSlice = 0;
   rtDesc.Texture2D.PlaneSlice = 0;
 
@@ -481,7 +488,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = 0xf;
       psoDesc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
       RDCEraseEl(psoDesc.RTVFormats.RTFormats);
-      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
       psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;
       psoDesc.SampleDesc.Count = RDCMAX(1U, psoDesc.SampleDesc.Count);
@@ -556,7 +563,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = 0xf;
       psoDesc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
       RDCEraseEl(psoDesc.RTVFormats.RTFormats);
-      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
       psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;
       psoDesc.SampleDesc.Count = RDCMAX(1U, psoDesc.SampleDesc.Count);
@@ -651,7 +658,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = 0xf;
       psoDesc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
       RDCEraseEl(psoDesc.RTVFormats.RTFormats);
-      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
       psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;
       psoDesc.SampleDesc.Count = RDCMAX(1U, psoDesc.SampleDesc.Count);
@@ -829,6 +836,18 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
 
       events.push_back(eventId);
 
+      if(overlay == DebugOverlay::TriangleSizePass)
+      {
+        list->Close();
+        list = NULL;
+
+        m_pDevice->ReplayLog(0, events[0], eReplay_WithoutDraw);
+
+        list = m_pDevice->GetNewList();
+      }
+
+      pipe = m_pDevice->GetResourceManager()->GetCurrentAs<WrappedID3D12PipelineState>(rs.pipe);
+
       D3D12_EXPANDED_PIPELINE_STATE_STREAM_DESC pipeDesc;
       pipe->Fill(pipeDesc);
       pipeDesc.pRootSignature = m_General.ConstOnlyRootSig;
@@ -838,7 +857,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
 
       RDCEraseEl(pipeDesc.RTVFormats.RTFormats);
       pipeDesc.RTVFormats.NumRenderTargets = 1;
-      pipeDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+      pipeDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
       pipeDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
       pipeDesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
       pipeDesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
@@ -896,12 +915,15 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       D3D12_RECT scissor = {0, 0, 16384, 16384};
       list->RSSetScissorRects(1, &scissor);
 
+      list->OMSetStencilRef(rs.stencilRef);
+      list->OMSetBlendFactor(rs.blendFactor);
+
       list->SetGraphicsRootSignature(m_General.ConstOnlyRootSig);
 
       list->SetGraphicsRootConstantBufferView(
           0, GetDebugManager()->UploadConstants(&vertexData, sizeof(vertexData)));
       list->SetGraphicsRootConstantBufferView(
-          1, GetDebugManager()->UploadConstants(&overdrawRamp[0].x, sizeof(overdrawRamp)));
+          1, GetDebugManager()->UploadConstants(&vertexData, sizeof(vertexData)));
       list->SetGraphicsRootConstantBufferView(
           2, GetDebugManager()->UploadConstants(&viewport, sizeof(viewport)));
       list->SetGraphicsRoot32BitConstants(3, 4, &viewport.x, 0);
@@ -1103,9 +1125,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
 
         GetDebugManager()->SetDescriptorHeaps(list, true, false);
 
-        list->SetGraphicsRootConstantBufferView(
-            0, GetDebugManager()->UploadConstants(&overdrawRamp[0].x, sizeof(overdrawRamp)));
-        list->SetGraphicsRootDescriptorTable(1, GetDebugManager()->GetGPUHandle(OVERDRAW_SRV));
+        list->SetGraphicsRootDescriptorTable(0, GetDebugManager()->GetGPUHandle(OVERDRAW_SRV));
 
         list->DrawInstanced(3, 1, 0, 0);
 
@@ -1165,7 +1185,7 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       }
 
       RDCEraseEl(psoDesc.RTVFormats.RTFormats);
-      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+      psoDesc.RTVFormats.RTFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
       psoDesc.RTVFormats.NumRenderTargets = 1;
       psoDesc.SampleMask = ~0U;
       psoDesc.SampleDesc.Count = RDCMAX(1U, psoDesc.SampleDesc.Count);
@@ -1176,12 +1196,10 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
 
       psoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-      psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
       psoDesc.RasterizerState.FrontCounterClockwise = FALSE;
       psoDesc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
       psoDesc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
       psoDesc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-      psoDesc.RasterizerState.DepthClipEnable = FALSE;
       psoDesc.RasterizerState.MultisampleEnable = FALSE;
       psoDesc.RasterizerState.AntialiasedLineEnable = FALSE;
 
@@ -1206,6 +1224,9 @@ ResourceId D3D12Replay::RenderOverlay(ResourceId texid, CompType typeHint, Debug
       psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
       psoDesc.DepthStencilState.StencilEnable = FALSE;
       psoDesc.DepthStencilState.DepthBoundsTestEnable = FALSE;
+
+      psoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+      psoDesc.RasterizerState.DepthClipEnable = FALSE;
 
       psoDesc.PS.pShaderBytecode = red->GetBufferPointer();
       psoDesc.PS.BytecodeLength = red->GetBufferSize();

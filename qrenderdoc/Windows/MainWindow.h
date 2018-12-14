@@ -89,6 +89,9 @@ public:
   void ShowLiveCapture(LiveCapture *live);
   void LiveCaptureClosed(LiveCapture *live);
 
+  QMenu *GetBaseMenu(WindowMenu base, rdcstr name);
+  QList<QAction *> GetMenuActions();
+
   void showEventBrowser() { on_action_Event_Browser_triggered(); }
   void showAPIInspector() { on_action_API_Inspector_triggered(); }
   void showMeshPreview() { on_action_Mesh_Output_triggered(); }
@@ -102,6 +105,7 @@ public:
   void showPythonShell() { on_action_Python_Shell_triggered(); }
   void showPerformanceCounterViewer() { on_action_Counter_Viewer_triggered(); }
   void showResourceInspector() { on_action_Resource_Inspector_triggered(); }
+  void showExtensionManager() { on_action_Manage_Extensions_triggered(); }
   void PopulateRecentCaptureFiles();
   void PopulateRecentCaptureSettings();
   void PopulateReportedBugs();
@@ -131,6 +135,7 @@ private slots:
   void on_action_Open_RGP_Profile_triggered();
   void on_action_Create_RGP_Profile_triggered();
   void on_action_Attach_to_Running_Instance_triggered();
+  void on_action_Manage_Extensions_triggered();
   void on_action_Manage_Remote_Servers_triggered();
   void on_action_Settings_triggered();
   void on_action_View_Documentation_triggered();
@@ -243,4 +248,6 @@ private:
   bool SaveLayout(int layout);
 
   void FillRemotesMenu(QMenu *menu, bool includeLocalhost);
+
+  void showLaunchError(ReplayStatus status);
 };

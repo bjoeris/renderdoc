@@ -83,6 +83,8 @@ public:
   static QList<FormatElement> ParseFormatString(const QString &formatString, uint64_t maxLen,
                                                 bool tightPacking, QString &errors);
 
+  static QString GenerateTextureBufferFormat(const TextureDescription &tex);
+
   QVariantList GetVariants(const byte *&data, const byte *end) const;
   ShaderVariable GetShaderVar(const byte *&data, const byte *end) const;
 
@@ -311,6 +313,17 @@ class RDProcess : public QProcess
 public:
   RDProcess(QObject *parent = NULL) : QProcess(parent) {}
   void detach() { setProcessState(QProcess::NotRunning); }
+};
+
+class RegisteredMenuItem : public QObject
+{
+private:
+  Q_OBJECT
+public:
+  ContextMenu context;
+  PanelMenu panel;
+  rdcarray<rdcstr> submenus;
+  IExtensionManager::ExtensionCallback callback;
 };
 
 class QFileFilterModel : public QSortFilterProxyModel

@@ -287,7 +287,7 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
     if(DebugData.overlayTexSamples > 1)
     {
       drv.glTextureStorage2DMultisampleEXT(DebugData.overlayTex, texBindingEnum, texDetails.samples,
-                                           eGL_RGBA16, texDetails.width, texDetails.height, true);
+                                           eGL_RGBA16F, texDetails.width, texDetails.height, true);
     }
     else
     {
@@ -325,11 +325,14 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
   drv.glDisable(eGL_SCISSOR_TEST);
   drv.glDepthMask(GL_FALSE);
   drv.glDisable(eGL_CULL_FACE);
-  if(!IsGLES)
-    drv.glPolygonMode(eGL_FRONT_AND_BACK, eGL_FILL);
   drv.glDisable(eGL_DEPTH_TEST);
   drv.glDisable(eGL_STENCIL_TEST);
   drv.glStencilMask(0);
+  if(!IsGLES)
+  {
+    drv.glPolygonMode(eGL_FRONT_AND_BACK, eGL_FILL);
+    drv.glEnable(eGL_DEPTH_CLAMP);
+  }
 
   if(overlay == DebugOverlay::NaN || overlay == DebugOverlay::Clipping)
   {
@@ -469,6 +472,25 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
       drv.glViewport((GLint)rs.Viewports[0].x, (GLint)rs.Viewports[0].y,
                      (GLsizei)rs.Viewports[0].width, (GLsizei)rs.Viewports[0].height);
     }
+
+    if(HasExt[ARB_draw_buffers_blend])
+    {
+      drv.glEnablei(eGL_BLEND, 0);
+
+      drv.glBlendFuncSeparatei(0, eGL_SRC_ALPHA, eGL_ONE_MINUS_SRC_ALPHA, eGL_SRC_ALPHA,
+                               eGL_ONE_MINUS_SRC_ALPHA);
+      drv.glBlendEquationSeparatei(0, eGL_FUNC_ADD, eGL_FUNC_ADD);
+    }
+    else
+    {
+      drv.glBlendFuncSeparate(eGL_SRC_ALPHA, eGL_ONE_MINUS_SRC_ALPHA, eGL_SRC_ALPHA,
+                              eGL_ONE_MINUS_SRC_ALPHA);
+      drv.glBlendEquationSeparate(eGL_FUNC_ADD, eGL_FUNC_ADD);
+
+      drv.glEnable(eGL_BLEND);
+    }
+
+    drv.glBlendColor(1.0f, 1.0f, 1.0f, 1.0f);
 
     drv.glBindBufferBase(eGL_UNIFORM_BUFFER, 0, DebugData.UBOs[0]);
     OutlineUBOData *cdata =
@@ -724,6 +746,11 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
       drv.glStencilMaskSeparate(eGL_BACK, rs.StencilBack.writemask);
     }
 
+    if(rs.Enabled[GLRenderState::eEnabled_CullFace])
+      drv.glEnable(eGL_CULL_FACE);
+    if(!IsGLES && !rs.Enabled[GLRenderState::eEnabled_DepthClamp])
+      drv.glDisable(eGL_DEPTH_CLAMP);
+
     // get latest depth/stencil from read FBO (existing FBO) into draw FBO (overlay FBO)
     SafeBlitFramebuffer(0, 0, DebugData.overlayTexWidth, DebugData.overlayTexHeight, 0, 0,
                         DebugData.overlayTexWidth, DebugData.overlayTexHeight,
@@ -826,16 +853,10 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
     *uboptr = uboParams;
     drv.glUnmapBuffer(eGL_COPY_WRITE_BUFFER);
 
-    drv.glBindBuffer(eGL_COPY_WRITE_BUFFER, DebugData.UBOs[1]);
-    Vec4f *v = (Vec4f *)drv.glMapBufferRange(eGL_COPY_WRITE_BUFFER, 0, sizeof(overdrawRamp),
-                                             GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-    memcpy(v, overdrawRamp, sizeof(overdrawRamp));
-    drv.glUnmapBuffer(eGL_COPY_WRITE_BUFFER);
-
     drv.glBindBuffer(eGL_COPY_WRITE_BUFFER, DebugData.UBOs[2]);
-    v = (Vec4f *)drv.glMapBufferRange(eGL_COPY_WRITE_BUFFER, 0, sizeof(Vec4f),
-                                      GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-    *v = Vec4f((float)texDetails.width, (float)texDetails.height);
+    Vec4f *v = (Vec4f *)drv.glMapBufferRange(eGL_COPY_WRITE_BUFFER, 0, sizeof(Vec4f),
+                                             GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+    *v = Vec4f(rs.Viewports[0].width, rs.Viewports[0].height);
     drv.glUnmapBuffer(eGL_COPY_WRITE_BUFFER);
 
     vector<uint32_t> events = passEvents;
@@ -898,18 +919,32 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
 
         // bind our UBOs
         drv.glBindBufferBase(eGL_UNIFORM_BUFFER, 0, DebugData.UBOs[0]);
-        drv.glBindBufferBase(eGL_UNIFORM_BUFFER, 1, DebugData.UBOs[1]);
         drv.glBindBufferBase(eGL_UNIFORM_BUFFER, 2, DebugData.UBOs[2]);
 
-        const GLenum att = eGL_DEPTH_ATTACHMENT;
-        GLuint depthObj = 0;
+        GLenum att = eGL_DEPTH_ATTACHMENT;
+        GLuint depthObj = 0, stencilObj = 0;
         GLint type = 0, level = 0, layered = 0, layer = 0;
+
+        // do we have a stencil object?
+        drv.glGetNamedFramebufferAttachmentParameterivEXT(drawFBO, eGL_STENCIL_ATTACHMENT,
+                                                          eGL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME,
+                                                          (GLint *)&stencilObj);
 
         // fetch the details of the 'real' depth attachment
         drv.glGetNamedFramebufferAttachmentParameterivEXT(
             drawFBO, att, eGL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, (GLint *)&depthObj);
         drv.glGetNamedFramebufferAttachmentParameterivEXT(
             drawFBO, att, eGL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &type);
+
+        if(depthObj && stencilObj)
+        {
+          att = eGL_DEPTH_STENCIL_ATTACHMENT;
+        }
+        else if(depthObj == 0 && stencilObj)
+        {
+          att = eGL_STENCIL_ATTACHMENT;
+          depthObj = stencilObj;
+        }
 
         if(depthObj)
         {
@@ -1344,7 +1379,7 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
 
           GLint loc = drv.glGetUniformLocation(DebugData.overlayProg, "overdrawImage");
           if(loc != -1)
-            drv.glUniform1ui(loc, 0);
+            drv.glUniform1i(loc, 0);
           else
             RDCERR("Couldn't get location of overdrawImage");
 
@@ -1389,13 +1424,6 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
           drv.glUseProgram(DebugData.quadoverdrawResolveProg);
           drv.glBindProgramPipeline(0);
 
-          drv.glBindBufferBase(eGL_UNIFORM_BUFFER, 1, DebugData.UBOs[0]);
-
-          Vec4f *v = (Vec4f *)drv.glMapBufferRange(eGL_UNIFORM_BUFFER, 0, sizeof(overdrawRamp),
-                                                   GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-          memcpy(v, overdrawRamp, sizeof(overdrawRamp));
-          drv.glUnmapBuffer(eGL_UNIFORM_BUFFER);
-
           // modify our fbo to attach the overlay texture instead
           drv.glBindFramebuffer(eGL_FRAMEBUFFER, replacefbo);
           drv.glFramebufferTexture2D(eGL_FRAMEBUFFER, eGL_COLOR_ATTACHMENT0, eGL_TEXTURE_2D,
@@ -1415,7 +1443,7 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
           drv.glStencilMask(0);
           drv.glViewport(0, 0, texDetails.width, texDetails.height);
 
-          drv.glBindImageTexture(0, quadtexs[2], 0, GL_FALSE, 0, eGL_READ_WRITE, eGL_R32UI);
+          drv.glBindImageTexture(0, quadtexs[2], 0, GL_TRUE, 0, eGL_READ_WRITE, eGL_R32UI);
 
           GLuint emptyVAO = 0;
           drv.glGenVertexArrays(1, &emptyVAO);
@@ -1445,5 +1473,8 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
 
   rs.ApplyState(m_pDriver);
 
-  return m_pDriver->GetResourceManager()->GetID(TextureRes(ctx, DebugData.overlayTex));
+  DebugData.overlayTexId =
+      m_pDriver->GetResourceManager()->GetID(TextureRes(ctx, DebugData.overlayTex));
+
+  return DebugData.overlayTexId;
 }

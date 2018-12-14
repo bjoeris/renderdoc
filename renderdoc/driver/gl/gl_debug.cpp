@@ -391,7 +391,6 @@ void GLReplay::InitDebugData()
     RDCCOMPILE_ASSERT(sizeof(TexDisplayUBOData) <= 2048, "UBO too small");
     RDCCOMPILE_ASSERT(sizeof(FontUBOData) <= 2048, "UBO too small");
     RDCCOMPILE_ASSERT(sizeof(HistogramUBOData) <= 2048, "UBO too small");
-    RDCCOMPILE_ASSERT(sizeof(overdrawRamp) <= 2048, "UBO too small");
   }
 
   DebugData.overlayTexWidth = DebugData.overlayTexHeight = DebugData.overlayTexSamples = 0;
@@ -434,10 +433,14 @@ void GLReplay::InitDebugData()
         ARRAY_COUNT(DebugData.minmaxTileProgram) >= (TEXDISPLAY_SINT_TEX | TEXDISPLAY_TYPEMASK) + 1,
         "not enough programs");
 
-    string extensions = "#extension GL_ARB_compute_shader : require\n";
+    string extensions;
 
     if(!IsGLES)
-      extensions += "#extension GL_ARB_shader_storage_buffer_object : require\n";
+    {
+      extensions =
+          "#extension GL_ARB_compute_shader : require\n"
+          "#extension GL_ARB_shader_storage_buffer_object : require\n";
+    }
 
     if(HasExt[ARB_compute_shader] && HasExt[ARB_shader_storage_buffer_object])
     {
@@ -519,26 +522,30 @@ void GLReplay::InitDebugData()
                              eGL_DYNAMIC_READ);
   }
 
-  if(HasExt[ARB_compute_shader] && HasExt[ARB_texture_multisample] &&
-     HasExt[ARB_texture_storage_multisample])
+  if(HasExt[ARB_compute_shader] && HasExt[ARB_shader_image_load_store])
   {
     GenerateGLSLShader(cs, shaderType, "", GetEmbeddedResource(glsl_ms2array_comp), glslCSVer);
     DebugData.MS2Array = CreateCShaderProgram(cs);
 
-    GenerateGLSLShader(cs, shaderType, "", GetEmbeddedResource(glsl_array2ms_comp), glslCSVer);
-    DebugData.Array2MS = CreateCShaderProgram(cs);
+    // GLES doesn't have multisampled image load/store even with any extension
+    DebugData.Array2MS = 0;
+    if(!IsGLES)
+    {
+      GenerateGLSLShader(cs, shaderType, "", GetEmbeddedResource(glsl_array2ms_comp), glslCSVer);
+      DebugData.Array2MS = CreateCShaderProgram(cs);
+    }
   }
   else
   {
     DebugData.MS2Array = 0;
     DebugData.Array2MS = 0;
     RDCWARN(
-        "GL_ARB_compute_shader, GL_ARB_texture_multisample, or ARB_texture_storage_multisample not "
-        "supported, disabling 2DMS save/load.");
-    m_pDriver->AddDebugMessage(
-        MessageCategory::Portability, MessageSeverity::Medium, MessageSource::RuntimeWarning,
-        "GL_ARB_compute_shader, GL_ARB_texture_multisample, or ARB_texture_storage_multisample not "
-        "supported, disabling 2DMS save/load.");
+        "GL_ARB_compute_shader or ARB_shader_image_load_store not supported, disabling 2DMS "
+        "save/load.");
+    m_pDriver->AddDebugMessage(MessageCategory::Portability, MessageSeverity::Medium,
+                               MessageSource::RuntimeWarning,
+                               "GL_ARB_compute_shader or ARB_shader_image_load_store not "
+                               "supported, disabling 2DMS save/load.");
   }
 
   DebugData.DepthArray2MS = DebugData.DepthMS2Array = 0;
@@ -565,10 +572,14 @@ void GLReplay::InitDebugData()
 
   if(HasExt[ARB_compute_shader])
   {
-    string defines = "#extension GL_ARB_compute_shader : require\n";
+    string defines;
 
     if(!IsGLES)
-      defines += "#extension GL_ARB_shader_storage_buffer_object : require";
+    {
+      defines =
+          "#extension GL_ARB_compute_shader : require\n"
+          "#extension GL_ARB_shader_storage_buffer_object : require";
+    }
     GenerateGLSLShader(cs, shaderType, defines, GetEmbeddedResource(glsl_mesh_comp), glslCSVer);
     DebugData.meshPickProgram = CreateCShaderProgram(cs);
   }
@@ -661,8 +672,11 @@ void GLReplay::InitDebugData()
 
   // try to identify the GPU we're running on.
   {
+    RDCEraseEl(m_DriverInfo);
+
     const char *vendor = (const char *)drv.glGetString(eGL_VENDOR);
     const char *renderer = (const char *)drv.glGetString(eGL_RENDERER);
+    const char *version = (const char *)drv.glGetString(eGL_VERSION);
 
     // we're just doing substring searches, so combine both for ease.
     std::string combined = (vendor ? vendor : "");
@@ -707,24 +721,34 @@ void GLReplay::InitDebugData()
     {
       if(combined.find(p.search) != std::string::npos)
       {
-        if(m_Vendor == GPUVendor::Unknown)
+        if(m_DriverInfo.vendor == GPUVendor::Unknown)
         {
-          m_Vendor = p.vendor;
+          m_DriverInfo.vendor = p.vendor;
         }
         else
         {
           // either we already found this with another pattern, or we've identified two patterns and
           // it's ambiguous. Keep the first one we found, arbitrarily, but print a warning.
-          if(m_Vendor != p.vendor)
+          if(m_DriverInfo.vendor != p.vendor)
           {
             RDCWARN("Already identified '%s' as %s, but now identified as %s", combined.c_str(),
-                    ToStr(m_Vendor).c_str(), ToStr(p.vendor).c_str());
+                    ToStr(m_DriverInfo.vendor).c_str(), ToStr(p.vendor).c_str());
           }
         }
       }
     }
 
-    RDCDEBUG("Identified GPU vendor '%s'", ToStr(m_Vendor).c_str());
+    RDCDEBUG("Identified GPU vendor '%s'", ToStr(m_DriverInfo.vendor).c_str());
+
+    std::string versionString = version;
+
+    versionString += " / ";
+    versionString += renderer;
+    versionString += " / ";
+    versionString += vendor;
+
+    versionString.resize(RDCMIN(versionString.size(), ARRAY_COUNT(m_DriverInfo.version) - 1));
+    memcpy(m_DriverInfo.version, versionString.c_str(), versionString.size());
   }
 
   // these below need to be made on the replay context, as they are context-specific (not shared)

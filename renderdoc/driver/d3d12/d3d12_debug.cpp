@@ -102,7 +102,6 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
     RenderDoc::Inst().GetCrashHandler()->RegisterMemoryRegion(this, sizeof(D3D12DebugManager));
 
   m_pDevice = wrapper;
-  m_pDevice->InternalRef();
 
   D3D12ResourceManager *rm = wrapper->GetResourceManager();
 
@@ -117,6 +116,7 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
   RDCCOMPILE_ASSERT(FIRST_WIN_RTV + 256 < 1024, "Increase size of RTV heap");
 
   hr = m_pDevice->CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap), (void **)&rtvHeap);
+  m_pDevice->InternalRef();
 
   if(FAILED(hr))
   {
@@ -131,6 +131,7 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
   RDCCOMPILE_ASSERT(FIRST_WIN_DSV + 32 < 64, "Increase size of DSV heap");
 
   hr = m_pDevice->CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap), (void **)&dsvHeap);
+  m_pDevice->InternalRef();
 
   if(FAILED(hr))
   {
@@ -145,6 +146,7 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
   RDCCOMPILE_ASSERT(MAX_SRV_SLOT < 4096, "Increase size of CBV/SRV/UAV heap");
 
   hr = m_pDevice->CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap), (void **)&uavClearHeap);
+  m_pDevice->InternalRef();
 
   if(FAILED(hr))
   {
@@ -157,6 +159,7 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
 
   hr = m_pDevice->CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap),
                                        (void **)&cbvsrvuavHeap);
+  m_pDevice->InternalRef();
 
   if(FAILED(hr))
   {
@@ -169,6 +172,7 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
   desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER;
 
   hr = m_pDevice->CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap), (void **)&samplerHeap);
+  m_pDevice->InternalRef();
 
   if(FAILED(hr))
   {
@@ -203,6 +207,7 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
 
   m_RingConstantBuffer = MakeCBuffer(bufsize);
   m_RingConstantOffset = 0;
+  m_pDevice->InternalRef();
 
   D3D12ShaderCache *shaderCache = m_pDevice->GetShaderCache();
 
@@ -223,6 +228,7 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
 
     hr = m_pDevice->CreateRootSignature(0, root->GetBufferPointer(), root->GetBufferSize(),
                                         __uuidof(ID3D12RootSignature), (void **)&m_CBOnlyRootSig);
+    m_pDevice->InternalRef();
 
     SAFE_RELEASE(root);
 
@@ -243,6 +249,7 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
 
     hr = m_pDevice->CreateRootSignature(0, root->GetBufferPointer(), root->GetBufferSize(),
                                         __uuidof(ID3D12RootSignature), (void **)&m_ArrayMSAARootSig);
+    m_pDevice->InternalRef();
 
     SAFE_RELEASE(root);
 
@@ -312,6 +319,7 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
   hr = m_pDevice->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &readbackDesc,
                                           D3D12_RESOURCE_STATE_COPY_DEST, NULL,
                                           __uuidof(ID3D12Resource), (void **)&m_ReadbackBuffer);
+  m_pDevice->InternalRef();
 
   m_ReadbackBuffer->SetName(L"m_ReadbackBuffer");
 
@@ -319,6 +327,7 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
 
   hr = m_pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
                                          __uuidof(ID3D12CommandAllocator), (void **)&m_DebugAlloc);
+  m_pDevice->InternalRef();
 
   if(FAILED(hr))
   {
@@ -332,6 +341,7 @@ D3D12DebugManager::D3D12DebugManager(WrappedID3D12Device *wrapper)
 
   hr = m_pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_DebugAlloc, NULL,
                                     __uuidof(ID3D12GraphicsCommandList), (void **)&list);
+  m_pDevice->InternalRef();
 
   // safe to upcast - this is a wrapped object
   m_DebugList = (ID3D12GraphicsCommandList2 *)list;
@@ -360,8 +370,23 @@ D3D12DebugManager::~D3D12DebugManager()
   SAFE_RELEASE(uavClearHeap);
   SAFE_RELEASE(samplerHeap);
 
+  SAFE_RELEASE(m_MeshVS);
+  SAFE_RELEASE(m_MeshGS);
+  SAFE_RELEASE(m_MeshPS);
+
   SAFE_RELEASE(m_CBOnlyRootSig);
   SAFE_RELEASE(m_ArrayMSAARootSig);
+  SAFE_RELEASE(m_FullscreenVS);
+
+  SAFE_RELEASE(m_IntMS2Array);
+  SAFE_RELEASE(m_FloatMS2Array);
+  SAFE_RELEASE(m_DepthMS2Array);
+
+  SAFE_RELEASE(m_IntArray2MS);
+  SAFE_RELEASE(m_FloatArray2MS);
+  SAFE_RELEASE(m_DepthArray2MS);
+
+  SAFE_RELEASE(m_ReadbackBuffer);
 
   SAFE_RELEASE(m_RingConstantBuffer);
 
@@ -369,8 +394,6 @@ D3D12DebugManager::~D3D12DebugManager()
 
   SAFE_RELEASE(m_DebugAlloc);
   SAFE_RELEASE(m_DebugList);
-
-  m_pDevice->InternalRelease();
 
   if(RenderDoc::Inst().GetCrashHandler())
     RenderDoc::Inst().GetCrashHandler()->UnregisterMemoryRegion(this);
@@ -932,6 +955,12 @@ void D3D12DebugManager::FillCBufferVariables(const std::string &prefix, size_t &
             rowDataOffset = AlignUp(rowDataOffset, sizeof(Vec4f));
           }
 
+          // arrays are also aligned to the nearest Vec4f for each element
+          if(!flatten && isArray)
+          {
+            rowDataOffset = AlignUp(rowDataOffset, sizeof(Vec4f));
+          }
+
           if(rowDataOffset < data.size())
           {
             const byte *d = &data[rowDataOffset];
@@ -1228,7 +1257,7 @@ void D3D12Replay::GeneralMisc::Init(WrappedID3D12Device *device, D3D12DebugManag
 
     pipeDesc.SampleDesc.Count = 1;
 
-    pipeDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+    pipeDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
     pipeDesc.PS.BytecodeLength = FixedColPS->GetBufferSize();
     pipeDesc.PS.pShaderBytecode = FixedColPS->GetBufferPointer();
@@ -1243,9 +1272,9 @@ void D3D12Replay::GeneralMisc::Init(WrappedID3D12Device *device, D3D12DebugManag
       RDCERR("Couldn't create m_OutlinePipe! HRESULT: %s", ToStr(hr).c_str());
     }
 
-    RDCASSERT(CheckerboardPS);
-    RDCASSERT(FullscreenVS);
-    RDCASSERT(FixedColPS);
+    SAFE_RELEASE(CheckerboardPS);
+    SAFE_RELEASE(FullscreenVS);
+    SAFE_RELEASE(FixedColPS);
   }
 
   shaderCache->SetCaching(false);
@@ -1270,7 +1299,12 @@ void D3D12Replay::TextureRendering::Init(WrappedID3D12Device *device, D3D12Debug
 
   {
     ID3DBlob *root = shaderCache->MakeRootSig({
-        cbvParam(D3D12_SHADER_VISIBILITY_VERTEX, 0, 0), cbvParam(D3D12_SHADER_VISIBILITY_PIXEL, 0, 0),
+        // VS cbuffer
+        cbvParam(D3D12_SHADER_VISIBILITY_VERTEX, 0, 0),
+        // normal FS cbuffer
+        cbvParam(D3D12_SHADER_VISIBILITY_PIXEL, 0, 0),
+        // heatmap cbuffer
+        cbvParam(D3D12_SHADER_VISIBILITY_PIXEL, 0, 1),
         // display SRVs
         tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 0, 32),
         // samplers
@@ -1367,6 +1401,16 @@ void D3D12Replay::TextureRendering::Init(WrappedID3D12Device *device, D3D12Debug
       RDCERR("Couldn't create m_TexDisplayF32Pipe! HRESULT: %s", ToStr(hr).c_str());
     }
 
+    pipeDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
+
+    hr = device->CreateGraphicsPipelineState(&pipeDesc, __uuidof(ID3D12PipelineState),
+                                             (void **)&F16Pipe);
+
+    if(FAILED(hr))
+    {
+      RDCERR("Couldn't create m_TexDisplayF16Pipe! HRESULT: %s", ToStr(hr).c_str());
+    }
+
     SAFE_RELEASE(TexDisplayPS);
   }
 
@@ -1378,6 +1422,7 @@ void D3D12Replay::TextureRendering::Release()
   SAFE_RELEASE(BlendPipe);
   SAFE_RELEASE(SRGBPipe);
   SAFE_RELEASE(LinearPipe);
+  SAFE_RELEASE(F16Pipe);
   SAFE_RELEASE(F32Pipe);
   SAFE_RELEASE(RootSig);
   SAFE_RELEASE(VS);
@@ -1412,7 +1457,6 @@ void D3D12Replay::OverlayRendering::Init(WrappedID3D12Device *device, D3D12Debug
 
   {
     ID3DBlob *root = shaderCache->MakeRootSig({
-        cbvParam(D3D12_SHADER_VISIBILITY_PIXEL, 0, 0),
         // quad overdraw results SRV
         tableParam(D3D12_SHADER_VISIBILITY_PIXEL, D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 0, 1),
     });
@@ -1453,7 +1497,7 @@ void D3D12Replay::OverlayRendering::Init(WrappedID3D12Device *device, D3D12Debug
     pipeDesc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
     pipeDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     pipeDesc.NumRenderTargets = 1;
-    pipeDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_UNORM;
+    pipeDesc.RTVFormats[0] = DXGI_FORMAT_R16G16B16A16_FLOAT;
     pipeDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
     pipeDesc.BlendState.RenderTarget[0].BlendEnable = FALSE;
     pipeDesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
@@ -1481,6 +1525,7 @@ void D3D12Replay::OverlayRendering::Init(WrappedID3D12Device *device, D3D12Debug
 
 void D3D12Replay::OverlayRendering::Release()
 {
+  SAFE_RELEASE(MeshVS);
   SAFE_RELEASE(TriangleSizeGS);
   SAFE_RELEASE(TriangleSizePS);
   SAFE_RELEASE(QuadOverdrawWritePS);

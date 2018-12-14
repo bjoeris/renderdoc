@@ -860,6 +860,8 @@ struct SwapchainInfo
   VkExtent2D extent;
   int arraySize;
 
+  bool shared;
+
   VkRenderPass rp;
 
   RENDERDOC_WindowHandle wndHandle;
@@ -875,9 +877,10 @@ struct SwapchainInfo
   uint32_t lastPresent;
 };
 
-struct SparseMapping
+// these structs are allocated for images and buffers, then pointed to (non-owning) by views
+struct ResourceInfo
 {
-  SparseMapping()
+  ResourceInfo()
   {
     RDCEraseEl(imgdim);
     RDCEraseEl(pagedim);
@@ -886,6 +889,8 @@ struct SparseMapping
 
   // for buffers or non-sparse-resident images (bound with opaque mappings)
   vector<VkSparseMemoryBind> opaquemappings;
+
+  VkMemoryRequirements memreqs;
 
   // for sparse resident images:
   // total image size (in pages)
@@ -896,6 +901,7 @@ struct SparseMapping
   // in order of width first, then height, then depth
   pair<VkDeviceMemory, VkDeviceSize> *pages[NUM_VK_IMAGE_ASPECTS];
 
+  bool IsSparse() const { return pages[0] != NULL; }
   void Update(uint32_t numBindings, const VkSparseMemoryBind *pBindings);
   void Update(uint32_t numBindings, const VkSparseImageMemoryBind *pBindings);
 };
@@ -912,7 +918,7 @@ struct CmdBufferRecordingInfo
 
   // sparse resources referenced by this command buffer (at submit time
   // need to go through the sparse mapping and reference all memory)
-  set<SparseMapping *> sparse;
+  set<ResourceInfo *> sparse;
 
   // a list of all resources dirtied by this command buffer
   set<ResourceId> dirtied;
@@ -923,6 +929,9 @@ struct CmdBufferRecordingInfo
   set<VkDescriptorSet> boundDescSets;
 
   vector<VkResourceRecord *> subcmds;
+
+  // AdvanceFrame/Present should be called after this buffer is submitted
+  bool present;
 };
 
 struct DescSetLayout;
@@ -1097,7 +1106,7 @@ public:
     void *ptrunion;                                // for initialisation to NULL
     VkPhysicalDeviceMemoryProperties *memProps;    // only for physical devices
     InstanceDeviceInfo *instDevInfo;               // only for logical devices or instances
-    SparseMapping *sparseInfo;                     // only for buffers, images, and views of them
+    ResourceInfo *resInfo;                         // only for buffers, images, and views of them
     SwapchainInfo *swapInfo;                       // only for swapchains
     MemMapState *memMapState;                      // only for device memory
     CmdBufferRecordingInfo *cmdInfo;               // only for command buffers
@@ -1217,9 +1226,8 @@ bool IsDoubleFormat(VkFormat f);
 bool IsSIntFormat(VkFormat f);
 bool IsYUVFormat(VkFormat f);
 
-uint32_t FormatNumPlanes(VkFormat f);
+uint32_t GetYUVPlaneCount(VkFormat f);
 
 VkFormat GetDepthOnlyFormat(VkFormat f);
-VkFormat GetUIntTypedFormat(VkFormat f);
 
 uint32_t GetByteSize(uint32_t Width, uint32_t Height, uint32_t Depth, VkFormat Format, uint32_t mip);

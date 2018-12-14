@@ -123,7 +123,7 @@ static void StripUnwantedLayers(vector<string> &Layers)
        *it == "VK_LAYER_LUNARG_device_limits" || *it == "VK_LAYER_LUNARG_image" ||
        *it == "VK_LAYER_LUNARG_object_tracker" || *it == "VK_LAYER_LUNARG_parameter_validation" ||
        *it == "VK_LAYER_LUNARG_swapchain" || *it == "VK_LAYER_GOOGLE_threading" ||
-       *it == "VK_LAYER_GOOGLE_unique_objects")
+       *it == "VK_LAYER_GOOGLE_unique_objects" || *it == "VK_LAYER_LUNARG_assistant_layer")
     {
       it = Layers.erase(it);
       continue;
@@ -332,11 +332,15 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
   RDCASSERTEQUAL(ret, VK_SUCCESS);
 
   GetResourceManager()->WrapResource(m_Instance, m_Instance);
-  GetResourceManager()->AddLiveResource(params.InstanceID, m_Instance);
 
   // we'll add the chunk later when we re-process it.
-  AddResource(params.InstanceID, ResourceType::Device, "Instance");
-  GetReplay()->GetResourceDesc(params.InstanceID).initialisationChunks.clear();
+  if(params.InstanceID != ResourceId())
+  {
+    GetResourceManager()->AddLiveResource(params.InstanceID, m_Instance);
+
+    AddResource(params.InstanceID, ResourceType::Device, "Instance");
+    GetReplay()->GetResourceDesc(params.InstanceID).initialisationChunks.clear();
+  }
 
   InitInstanceExtensionTables(m_Instance, &m_EnabledExtensions);
 
@@ -945,6 +949,16 @@ VkResult WrappedVulkan::vkEnumeratePhysicalDevices(VkInstance instance,
 
         ObjDisp(devices[i])->GetPhysicalDeviceMemoryProperties(Unwrap(devices[i]), record->memProps);
 
+        VkPhysicalDeviceProperties physProps;
+
+        ObjDisp(devices[i])->GetPhysicalDeviceProperties(Unwrap(devices[i]), &physProps);
+
+        VkDriverInfo capturedVersion(physProps);
+
+        RDCLOG("physical device %u: %s (ver %u.%u patch 0x%x) - %04x:%04x", i, physProps.deviceName,
+               capturedVersion.Major(), capturedVersion.Minor(), capturedVersion.Patch(),
+               physProps.vendorID, physProps.deviceID);
+
         m_PhysicalDevices[i] = devices[i];
 
         // we remap memory indices to discourage coherent maps as much as possible
@@ -1023,6 +1037,10 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       if(!strcmp(createInfo.ppEnabledExtensionNames[i], VK_EXT_DEBUG_MARKER_EXTENSION_NAME))
         continue;
 
+      // don't include the validation cache extension
+      if(!strcmp(createInfo.ppEnabledExtensionNames[i], VK_EXT_VALIDATION_CACHE_EXTENSION_NAME))
+        continue;
+
       // don't include direct-display WSI extensions
       if(!strcmp(createInfo.ppEnabledExtensionNames[i], VK_KHR_DISPLAY_SWAPCHAIN_EXTENSION_NAME) ||
          !strcmp(createInfo.ppEnabledExtensionNames[i], VK_EXT_DISPLAY_CONTROL_EXTENSION_NAME))
@@ -1093,13 +1111,27 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       RDCLOG("Enabling VK_AMD_gpa_interface");
     }
 
-    // enable VK_AMD_gpa_interface if it's available, for detecting/controlling moltenvk.
+    // enable VK_MVK_moltenvk if it's available, for detecting/controlling moltenvk.
     // Currently this is used opaquely (extension present or not) rather than using anything the
     // extension provides.
     if(supportedExtensions.find("VK_MVK_moltenvk") != supportedExtensions.end())
     {
       Extensions.push_back("VK_MVK_moltenvk");
       RDCLOG("Enabling VK_MVK_moltenvk");
+    }
+
+    // enable VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME if it's available, to fetch mesh output in
+    // tessellation/geometry stages
+    if(supportedExtensions.find(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME) != supportedExtensions.end())
+    {
+      Extensions.push_back(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME);
+      RDCLOG("Enabling VK_EXT_transform_feedback_extension");
+    }
+    else
+    {
+      RDCWARN(
+          "VK_EXT_transform_feedback_extension not available, mesh output from "
+          "geometry/tessellation stages will not be available");
     }
 
     createInfo.enabledLayerCount = (uint32_t)Layers.size();
@@ -1458,7 +1490,15 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
     VkPhysicalDeviceFeatures enabledFeatures = {0};
     if(createInfo.pEnabledFeatures != NULL)
       enabledFeatures = *createInfo.pEnabledFeatures;
-    createInfo.pEnabledFeatures = &enabledFeatures;
+
+    VkPhysicalDeviceFeatures2 *enabledFeatures2 = (VkPhysicalDeviceFeatures2 *)FindNextStruct(
+        &createInfo, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2);
+
+    // VkPhysicalDeviceFeatures2 takes priority
+    if(enabledFeatures2)
+      enabledFeatures = enabledFeatures2->features;
+    else if(createInfo.pEnabledFeatures)
+      enabledFeatures = *createInfo.pEnabledFeatures;
 
     VkPhysicalDeviceFeatures availFeatures = {0};
     ObjDisp(physicalDevice)->GetPhysicalDeviceFeatures(Unwrap(physicalDevice), &availFeatures);
@@ -1527,6 +1567,140 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
     CHECK_PHYS_FEATURE(variableMultisampleRate);
     CHECK_PHYS_FEATURE(inheritedQueries);
 
+#define BEGIN_PHYS_EXT_CHECK(struct, stype)                                                  \
+  if(struct *ext = (struct *)FindNextStruct(&createInfo, stype))                             \
+  {                                                                                          \
+    struct avail = {stype};                                                                  \
+    VkPhysicalDeviceFeatures2 availBase = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};    \
+    availBase.pNext = &avail;                                                                \
+    ObjDisp(physicalDevice)->GetPhysicalDeviceFeatures2(Unwrap(physicalDevice), &availBase); \
+    const char *structName = #struct;
+
+#define END_PHYS_EXT_CHECK() }
+
+#define CHECK_PHYS_EXT_FEATURE(feature)                          \
+  if(ext->feature && !avail.feature)                             \
+  {                                                              \
+    m_FailedReplayStatus = ReplayStatus::APIHardwareUnsupported; \
+    RDCERR("Capture requires physical device feature '" #feature \
+           "' in struct '%s' which is not supported",            \
+           structName);                                          \
+    return false;                                                \
+  }
+
+    if(ObjDisp(physicalDevice)->GetPhysicalDeviceFeatures2)
+    {
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDevice8BitStorageFeaturesKHR,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR);
+      {
+        CHECK_PHYS_EXT_FEATURE(storageBuffer8BitAccess);
+        CHECK_PHYS_EXT_FEATURE(uniformAndStorageBuffer8BitAccess);
+        CHECK_PHYS_EXT_FEATURE(storagePushConstant8);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDevice16BitStorageFeatures,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES);
+      {
+        CHECK_PHYS_EXT_FEATURE(storageBuffer16BitAccess);
+        CHECK_PHYS_EXT_FEATURE(uniformAndStorageBuffer16BitAccess);
+        CHECK_PHYS_EXT_FEATURE(storagePushConstant16);
+        CHECK_PHYS_EXT_FEATURE(storageInputOutput16);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceASTCDecodeFeaturesEXT,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ASTC_DECODE_FEATURES_EXT);
+      {
+        CHECK_PHYS_EXT_FEATURE(decodeModeSharedExponent);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_NV);
+      {
+        CHECK_PHYS_EXT_FEATURE(fragmentShaderBarycentric);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceMultiviewFeatures,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES);
+      {
+        CHECK_PHYS_EXT_FEATURE(multiview);
+        CHECK_PHYS_EXT_FEATURE(multiviewGeometryShader);
+        CHECK_PHYS_EXT_FEATURE(multiviewTessellationShader);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceProtectedMemoryFeatures,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES);
+      {
+        CHECK_PHYS_EXT_FEATURE(protectedMemory);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceSamplerYcbcrConversionFeatures,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES);
+      {
+        CHECK_PHYS_EXT_FEATURE(samplerYcbcrConversion);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceShaderAtomicInt64FeaturesKHR,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR);
+      {
+        CHECK_PHYS_EXT_FEATURE(shaderBufferInt64Atomics);
+        CHECK_PHYS_EXT_FEATURE(shaderSharedInt64Atomics);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceShaderDrawParameterFeatures,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES);
+      {
+        CHECK_PHYS_EXT_FEATURE(shaderDrawParameters);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceShaderImageFootprintFeaturesNV,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_FOOTPRINT_FEATURES_NV);
+      {
+        CHECK_PHYS_EXT_FEATURE(imageFootprint);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceTransformFeedbackFeaturesEXT,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT);
+      {
+        CHECK_PHYS_EXT_FEATURE(transformFeedback);
+        CHECK_PHYS_EXT_FEATURE(geometryStreams);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceVariablePointerFeatures,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTER_FEATURES);
+      {
+        CHECK_PHYS_EXT_FEATURE(variablePointersStorageBuffer);
+        CHECK_PHYS_EXT_FEATURE(variablePointers);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT);
+      {
+        CHECK_PHYS_EXT_FEATURE(vertexAttributeInstanceRateDivisor);
+        CHECK_PHYS_EXT_FEATURE(vertexAttributeInstanceRateZeroDivisor);
+      }
+      END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceVulkanMemoryModelFeaturesKHR,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR);
+      {
+        CHECK_PHYS_EXT_FEATURE(vulkanMemoryModel);
+        CHECK_PHYS_EXT_FEATURE(vulkanMemoryModelDeviceScope);
+      }
+      END_PHYS_EXT_CHECK();
+    }
+
     if(availFeatures.depthClamp)
       enabledFeatures.depthClamp = true;
     else
@@ -1577,6 +1751,12 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       RDCWARN(
           "sampleRateShading = false, save/load from depth 2DMS textures will not be "
           "possible");
+
+    // patch the enabled features
+    if(enabledFeatures2)
+      enabledFeatures2->features = enabledFeatures;
+    else
+      createInfo.pEnabledFeatures = &enabledFeatures;
 
     uint32_t numExts = 0;
 
@@ -1695,9 +1875,11 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
     ObjDisp(physicalDevice)
         ->GetPhysicalDeviceFeatures(Unwrap(physicalDevice), &m_PhysicalDeviceData.features);
 
+    m_Replay.SetDriverInformation(m_PhysicalDeviceData.props);
+
     // MoltenVK reports 0x3fffffff for this limit so just ignore that value if it comes up
     RDCASSERT(m_PhysicalDeviceData.props.limits.maxBoundDescriptorSets <
-                      ARRAY_COUNT(BakedCmdBufferInfo::pushDescriptorID) ||
+                      ARRAY_COUNT(BakedCmdBufferInfo::pushDescriptorID[0]) ||
                   m_PhysicalDeviceData.props.limits.maxBoundDescriptorSets >= 0x10000000,
               m_PhysicalDeviceData.props.limits.maxBoundDescriptorSets);
 
@@ -1884,8 +2066,19 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
   // default to all off. This is equivalent to createInfo.pEnabledFeatures == NULL
   VkPhysicalDeviceFeatures enabledFeatures = {0};
 
-  // if the user enabled features, of course we want to enable them.
-  if(createInfo.pEnabledFeatures)
+  // allocate and unwrap the next chain, so we can patch features if we need to, as well as removing
+  // the loader info later when it comes time to serialise
+  byte *tempMem = GetTempMemory(GetNextPatchSize(createInfo.pNext));
+
+  UnwrapNextChain(m_State, "VkDeviceCreateInfo", tempMem, (VkBaseInStructure *)&createInfo);
+
+  VkPhysicalDeviceFeatures2 *enabledFeatures2 = (VkPhysicalDeviceFeatures2 *)FindNextStruct(
+      &createInfo, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2);
+
+  // VkPhysicalDeviceFeatures2 takes priority
+  if(enabledFeatures2)
+    enabledFeatures = enabledFeatures2->features;
+  else if(createInfo.pEnabledFeatures)
     enabledFeatures = *createInfo.pEnabledFeatures;
 
   if(availFeatures.shaderStorageImageWriteWithoutFormat)
@@ -1919,14 +2112,17 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
   else
     RDCWARN("pipelineStatisticsQuery = false, pipeline counters will not work");
 
-  createInfo.pEnabledFeatures = &enabledFeatures;
+  // patch the enabled features
+  if(enabledFeatures2)
+    enabledFeatures2->features = enabledFeatures;
+  else
+    createInfo.pEnabledFeatures = &enabledFeatures;
 
   VkResult ret;
   SERIALISE_TIME_CALL(ret = createFunc(Unwrap(physicalDevice), &createInfo, pAllocator, pDevice));
 
   // don't serialise out any of the pNext stuff for layer initialisation
-  // (note that we asserted above that there was nothing else in the chain)
-  createInfo.pNext = NULL;
+  RemoveNextStruct(&createInfo, VK_STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO);
 
   if(ret == VK_SUCCESS)
   {

@@ -38,8 +38,6 @@
 
 #include "common/common.h"
 #include "core/core.h"
-#include "driver/vulkan/vk_common.h"
-#include "driver/vulkan/vk_resources.h"
 #include "serialise/rdcfile.h"
 #include "intervals.h"
 

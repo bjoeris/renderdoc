@@ -203,7 +203,7 @@ WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitPara
   m_HeaderChunk = NULL;
 
   m_Alloc = m_DataUploadAlloc = NULL;
-  m_List = m_DataUploadList = NULL;
+  m_DataUploadList = NULL;
   m_GPUSyncFence = NULL;
   m_GPUSyncHandle = NULL;
   m_GPUSyncCounter = 0;
@@ -221,6 +221,49 @@ WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitPara
     m_FrameCaptureRecord = NULL;
 
     ResourceIDGen::SetReplayResourceIDs();
+
+    // create temporary factory to print the driver version info
+    if(m_pDevice)
+    {
+      typedef HRESULT(WINAPI * PFN_CREATE_DXGI_FACTORY)(REFIID, void **);
+
+      PFN_CREATE_DXGI_FACTORY createFunc = (PFN_CREATE_DXGI_FACTORY)GetProcAddress(
+          GetModuleHandleA("dxgi.dll"), "CreateDXGIFactory1");
+
+      IDXGIFactory4 *tmpFactory = NULL;
+      HRESULT hr = createFunc(__uuidof(IDXGIFactory4), (void **)&tmpFactory);
+
+      if(FAILED(hr))
+      {
+        RDCERR("Couldn't create DXGI factory! HRESULT: %s", ToStr(hr).c_str());
+      }
+
+      if(tmpFactory)
+      {
+        IDXGIAdapter *pDXGIAdapter = NULL;
+        hr = tmpFactory->EnumAdapterByLuid(m_pDevice->GetAdapterLuid(), __uuidof(IDXGIAdapter),
+                                           (void **)&pDXGIAdapter);
+
+        if(FAILED(hr))
+        {
+          RDCERR("Couldn't get DXGI adapter by LUID from D3D12 device");
+        }
+        else
+        {
+          DXGI_ADAPTER_DESC desc = {};
+          pDXGIAdapter->GetDesc(&desc);
+
+          GPUVendor vendor = GPUVendorFromPCIVendor(desc.VendorId);
+          std::string descString = GetDriverVersion(desc);
+
+          RDCLOG("New D3D12 device created: %s / %s", ToStr(vendor).c_str(), descString.c_str());
+
+          SAFE_RELEASE(pDXGIAdapter);
+        }
+      }
+
+      SAFE_RELEASE(tmpFactory);
+    }
   }
   else
   {
@@ -256,10 +299,15 @@ WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitPara
   }
 
   m_pInfoQueue = NULL;
+  m_WrappedDebug.m_pDebug = NULL;
+  m_WrappedDebug.m_pDebug1 = NULL;
+  m_WrappedDebug.m_pDebug2 = NULL;
   if(m_pDevice)
   {
     m_pDevice->QueryInterface(__uuidof(ID3D12InfoQueue), (void **)&m_pInfoQueue);
     m_pDevice->QueryInterface(__uuidof(ID3D12DebugDevice), (void **)&m_WrappedDebug.m_pDebug);
+    m_pDevice->QueryInterface(__uuidof(ID3D12DebugDevice1), (void **)&m_WrappedDebug.m_pDebug1);
+    m_pDevice->QueryInterface(__uuidof(ID3D12DebugDevice2), (void **)&m_WrappedDebug.m_pDebug2);
   }
 
   if(m_pInfoQueue)
@@ -290,6 +338,9 @@ WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitPara
       m_pInfoQueue->SetMuteDebugOutput(false);
 
       D3D12_MESSAGE_ID mute[] = {
+          // the runtime cries foul when you use normal APIs in expected ways (for simple markers)
+          D3D12_MESSAGE_ID_CORRUPTED_PARAMETER2,
+
           // super spammy, mostly just perf warning, and impossible to fix for our cases
           D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
           D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE,
@@ -308,7 +359,7 @@ WrappedID3D12Device::WrappedID3D12Device(ID3D12Device *realDevice, D3D12InitPara
           // D3D12_MESSAGE_ID_COMMAND_LIST_STATIC_DESCRIPTOR_RESOURCE_DIMENSION_MISMATCH
           // message about mismatched SRV dimensions, which it seems to get wrong with the
           // dummy NULL descriptors on the texture sampling code
-          (D3D12_MESSAGE_ID)1023,
+          D3D12_MESSAGE_ID_COMMAND_LIST_STATIC_DESCRIPTOR_RESOURCE_DIMENSION_MISMATCH,
       };
 
       D3D12_INFO_QUEUE_FILTER filter = {};
@@ -330,6 +381,15 @@ WrappedID3D12Device::~WrappedID3D12Device()
 {
   RenderDoc::Inst().RemoveDeviceFrameCapturer((ID3D12Device *)this);
 
+  if(!m_InternalCmds.pendingcmds.empty())
+    ExecuteLists(m_Queue);
+
+  if(!m_InternalCmds.submittedcmds.empty())
+    FlushLists(true);
+
+  for(size_t i = 0; i < m_InternalCmds.freecmds.size(); i++)
+    SAFE_RELEASE(m_InternalCmds.freecmds[i]);
+
   if(!IsStructuredExporting(m_State))
     SAFE_DELETE(WrappedID3D12Resource::m_List);
 
@@ -349,6 +409,8 @@ WrappedID3D12Device::~WrappedID3D12Device()
 
   DestroyInternalResources();
 
+  SAFE_RELEASE(m_Queue);
+
   if(m_DeviceRecord)
   {
     RDCASSERT(m_DeviceRecord->GetRefCount() == 1);
@@ -365,10 +427,14 @@ WrappedID3D12Device::~WrappedID3D12Device()
 
   SAFE_DELETE(m_ResourceManager);
 
+  SAFE_RELEASE(m_pDevice3);
+  SAFE_RELEASE(m_pDevice2);
   SAFE_RELEASE(m_pDevice1);
 
   SAFE_RELEASE(m_pInfoQueue);
   SAFE_RELEASE(m_WrappedDebug.m_pDebug);
+  SAFE_RELEASE(m_WrappedDebug.m_pDebug1);
+  SAFE_RELEASE(m_WrappedDebug.m_pDebug2);
   SAFE_RELEASE(m_pDevice);
 
   for(size_t i = 0; i < m_ThreadSerialisers.size(); i++)
@@ -534,6 +600,48 @@ HRESULT WrappedID3D12Device::QueryInterface(REFIID riid, void **ppvObject)
           "Returning a dummy ID3D12DebugDevice that does nothing. This ID3D12DebugDevice will not "
           "work!");
       *ppvObject = (ID3D12DebugDevice *)&m_DummyDebug;
+      m_DummyDebug.AddRef();
+      return S_OK;
+    }
+  }
+  else if(riid == __uuidof(ID3D12DebugDevice1))
+  {
+    // we queryinterface for this at startup, so if it's present we can
+    // return our wrapper
+    if(m_WrappedDebug.m_pDebug1)
+    {
+      AddRef();
+      *ppvObject = (ID3D12DebugDevice1 *)&m_WrappedDebug;
+      return S_OK;
+    }
+    else
+    {
+      RDCWARN(
+          "Returning a dummy ID3D12DebugDevice1 that does nothing. This ID3D12DebugDevice1 will "
+          "not "
+          "work!");
+      *ppvObject = (ID3D12DebugDevice1 *)&m_DummyDebug;
+      m_DummyDebug.AddRef();
+      return S_OK;
+    }
+  }
+  else if(riid == __uuidof(ID3D12DebugDevice2))
+  {
+    // we queryinterface for this at startup, so if it's present we can
+    // return our wrapper
+    if(m_WrappedDebug.m_pDebug1)
+    {
+      AddRef();
+      *ppvObject = (ID3D12DebugDevice2 *)&m_WrappedDebug;
+      return S_OK;
+    }
+    else
+    {
+      RDCWARN(
+          "Returning a dummy ID3D12DebugDevice2 that does nothing. This ID3D12DebugDevice2 will "
+          "not "
+          "work!");
+      *ppvObject = (ID3D12DebugDevice2 *)&m_DummyDebug;
       m_DummyDebug.AddRef();
       return S_OK;
     }
@@ -1435,11 +1543,8 @@ bool WrappedID3D12Device::EndFrameCapture(void *dev, void *wnd)
         GetWrapped(it->res)->FreeShadow();
     }
 
-    byte *thpixels = NULL;
-    uint16_t thwidth = 0;
-    uint16_t thheight = 0;
-
     const uint32_t maxSize = 2048;
+    RenderDoc::FramePixels fp;
 
     // gather backbuffer screenshot
     if(backbuffer != NULL)
@@ -1452,7 +1557,6 @@ bool WrappedID3D12Device::EndFrameCapture(void *dev, void *wnd)
       heapProps.VisibleNodeMask = 1;
 
       D3D12_RESOURCE_DESC bufDesc;
-
       bufDesc.Alignment = 0;
       bufDesc.DepthOrArraySize = 1;
       bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -1519,90 +1623,35 @@ bool WrappedID3D12Device::EndFrameCapture(void *dev, void *wnd)
 
         if(SUCCEEDED(hr) && data)
         {
+          fp.len = (uint32_t)bufDesc.Width;
+          fp.data = new uint8_t[fp.len];
+          memcpy(fp.data, data, fp.len);
+
           ResourceFormat fmt = MakeResourceFormat(desc.Format);
-
-          float aspect = float(desc.Width) / float(desc.Height);
-
-          thwidth = (uint16_t)RDCMIN(maxSize, (uint32_t)desc.Width);
-          thwidth &= ~0x7;    // align down to multiple of 8
-          thheight = uint16_t(float(thwidth) / aspect);
-
-          thpixels = new byte[3U * thwidth * thheight];
-
-          float widthf = float(desc.Width);
-          float heightf = float(desc.Height);
-
-          uint32_t stride = fmt.compByteWidth * fmt.compCount;
-
-          bool buf1010102 = false;
-          bool bufBGRA = (fmt.bgraOrder != false);
-
-          if(fmt.type == ResourceFormatType::R10G10B10A2)
+          fp.width = (uint32_t)desc.Width;
+          fp.height = (uint32_t)desc.Height;
+          fp.pitch = layout.Footprint.RowPitch;
+          fp.stride = fmt.compByteWidth * fmt.compCount;
+          fp.bpc = fmt.compByteWidth;
+          fp.bgra = fmt.bgraOrder();
+          fp.max_width = maxSize;
+          fp.pitch_requirement = 8;
+          switch(fmt.type)
           {
-            stride = 4;
-            buf1010102 = true;
+            case ResourceFormatType::R10G10B10A2:
+              fp.stride = 4;
+              fp.buf1010102 = true;
+              break;
+            case ResourceFormatType::R5G6B5:
+              fp.stride = 2;
+              fp.buf565 = true;
+              break;
+            case ResourceFormatType::R5G5B5A1:
+              fp.stride = 2;
+              fp.buf5551 = true;
+              break;
+            default: break;
           }
-
-          byte *dstPixels = thpixels;
-
-          for(uint32_t y = 0; y < thheight; y++)
-          {
-            for(uint32_t x = 0; x < thwidth; x++)
-            {
-              float xf = float(x) / float(thwidth);
-              float yf = float(y) / float(thheight);
-
-              byte *srcPixels = &data[stride * uint32_t(xf * widthf) +
-                                      layout.Footprint.RowPitch * uint32_t(yf * heightf)];
-
-              if(buf1010102)
-              {
-                uint32_t *src1010102 = (uint32_t *)srcPixels;
-                Vec4f unorm = ConvertFromR10G10B10A2(*src1010102);
-                dstPixels[0] = (byte)(unorm.x * 255.0f);
-                dstPixels[1] = (byte)(unorm.y * 255.0f);
-                dstPixels[2] = (byte)(unorm.z * 255.0f);
-              }
-              else if(bufBGRA)
-              {
-                dstPixels[0] = srcPixels[2];
-                dstPixels[1] = srcPixels[1];
-                dstPixels[2] = srcPixels[0];
-              }
-              else if(fmt.compByteWidth == 2)    // R16G16B16A16 backbuffer
-              {
-                uint16_t *src16 = (uint16_t *)srcPixels;
-
-                float linearR = RDCCLAMP(ConvertFromHalf(src16[0]), 0.0f, 1.0f);
-                float linearG = RDCCLAMP(ConvertFromHalf(src16[1]), 0.0f, 1.0f);
-                float linearB = RDCCLAMP(ConvertFromHalf(src16[2]), 0.0f, 1.0f);
-
-                if(linearR < 0.0031308f)
-                  dstPixels[0] = byte(255.0f * (12.92f * linearR));
-                else
-                  dstPixels[0] = byte(255.0f * (1.055f * powf(linearR, 1.0f / 2.4f) - 0.055f));
-
-                if(linearG < 0.0031308f)
-                  dstPixels[1] = byte(255.0f * (12.92f * linearG));
-                else
-                  dstPixels[1] = byte(255.0f * (1.055f * powf(linearG, 1.0f / 2.4f) - 0.055f));
-
-                if(linearB < 0.0031308f)
-                  dstPixels[2] = byte(255.0f * (12.92f * linearB));
-                else
-                  dstPixels[2] = byte(255.0f * (1.055f * powf(linearB, 1.0f / 2.4f) - 0.055f));
-              }
-              else
-              {
-                dstPixels[0] = srcPixels[0];
-                dstPixels[1] = srcPixels[1];
-                dstPixels[2] = srcPixels[2];
-              }
-
-              dstPixels += 3;
-            }
-          }
-
           copyDst->Unmap(0, NULL);
         }
         else
@@ -1618,39 +1667,13 @@ bool WrappedID3D12Device::EndFrameCapture(void *dev, void *wnd)
       }
     }
 
-    byte *jpgbuf = NULL;
-    int len = thwidth * thheight;
-
-    if(wnd && thpixels)
-    {
-      jpgbuf = new byte[len];
-
-      jpge::params p;
-      p.m_quality = 80;
-
-      bool success = jpge::compress_image_to_jpeg_file_in_memory(jpgbuf, len, thwidth, thheight, 3,
-                                                                 thpixels, p);
-
-      if(!success)
-      {
-        RDCERR("Failed to compress to jpg");
-        SAFE_DELETE_ARRAY(jpgbuf);
-        thwidth = 0;
-        thheight = 0;
-      }
-    }
-
     queues = m_Queues;
 
     for(auto it = queues.begin(); it != queues.end(); ++it)
       if((*it)->GetResourceRecord()->ContainsExecuteIndirect)
         WrappedID3D12Resource::RefBuffers(GetResourceManager());
 
-    rdc = RenderDoc::Inst().CreateRDC(RDCDriver::D3D12, m_CapturedFrames.back().frameNumber, jpgbuf,
-                                      len, thwidth, thheight, FileType::JPG);
-
-    SAFE_DELETE_ARRAY(jpgbuf);
-    SAFE_DELETE_ARRAY(thpixels);
+    rdc = RenderDoc::Inst().CreateRDC(RDCDriver::D3D12, m_CapturedFrames.back().frameNumber, fp);
   }
 
   StreamWriter *captureWriter = NULL;
@@ -2241,7 +2264,9 @@ void WrappedID3D12Device::CreateInternalResources()
 
   CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator),
                          (void **)&m_Alloc);
+  InternalRef();
   CreateFence(0, D3D12_FENCE_FLAG_NONE, __uuidof(ID3D12Fence), (void **)&m_GPUSyncFence);
+  InternalRef();
   m_GPUSyncHandle = ::CreateEvent(NULL, FALSE, FALSE, NULL);
 
   GetResourceManager()->SetInternalResource(m_Alloc);
@@ -2249,11 +2274,13 @@ void WrappedID3D12Device::CreateInternalResources()
 
   CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator),
                          (void **)&m_DataUploadAlloc);
+  InternalRef();
 
   GetResourceManager()->SetInternalResource(m_DataUploadAlloc);
 
   CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_DataUploadAlloc, NULL,
                     __uuidof(ID3D12GraphicsCommandList), (void **)&m_DataUploadList);
+  InternalRef();
 
   D3D12_DESCRIPTOR_HEAP_DESC desc;
   desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
@@ -2262,6 +2289,7 @@ void WrappedID3D12Device::CreateInternalResources()
   desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 
   CreateDescriptorHeap(&desc, __uuidof(ID3D12DescriptorHeap), (void **)&m_RTVHeap);
+  InternalRef();
 
   GetResourceManager()->SetInternalResource(m_RTVHeap);
 
@@ -2310,8 +2338,7 @@ void WrappedID3D12Device::DestroyInternalResources()
   ExecuteLists();
   FlushLists(true);
 
-  for(size_t i = 0; i < m_InternalCmds.pendingcmds.size(); i++)
-    SAFE_RELEASE(m_InternalCmds.pendingcmds[i]);
+  SAFE_RELEASE(m_RTVHeap);
 
   SAFE_DELETE(m_TextRenderer);
   SAFE_DELETE(m_ShaderCache);
@@ -2365,6 +2392,7 @@ ID3D12GraphicsCommandList2 *WrappedID3D12Device::GetNewList()
     ID3D12GraphicsCommandList *list = NULL;
     HRESULT hr = CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_Alloc, NULL,
                                    __uuidof(ID3D12GraphicsCommandList), (void **)&list);
+    InternalRef();
 
     // safe to upcast because this is a wrapped object.
     ret = (ID3D12GraphicsCommandList2 *)list;
@@ -2377,6 +2405,10 @@ ID3D12GraphicsCommandList2 *WrappedID3D12Device::GetNewList()
     if(IsReplayMode(m_State))
     {
       GetResourceManager()->AddLiveResource(GetResID(ret), ret);
+      // add a reference here so that when we release our internal resources on destruction we don't
+      // free this too soon before the resource manager can. We still want to have it tracked as a
+      // resource in the manager though.
+      ret->AddRef();
     }
   }
 
@@ -2546,6 +2578,9 @@ bool WrappedID3D12Device::ProcessChunk(ReadSerialiser &ser, D3D12Chunk context)
     case D3D12Chunk::Device_CreateHeapFromAddress:
     case D3D12Chunk::Device_CreateHeapFromFileMapping:
       return Serialise_CreateHeap(ser, NULL, IID(), NULL);
+      break;
+    case D3D12Chunk::Device_OpenSharedHandle:
+      return Serialise_OpenSharedHandle(ser, NULL, IID(), NULL);
       break;
     default:
     {
@@ -2742,8 +2777,7 @@ ReplayStatus WrappedID3D12Device::ReadLogInitialisation(RDCFile *rdc, bool store
 
     m_Queue->GetParentDrawcall().children.clear();
 
-    DrawcallDescription *previous = NULL;
-    SetupDrawcallPointers(m_Drawcalls, GetFrameRecord().drawcallList, NULL, previous);
+    SetupDrawcallPointers(m_Drawcalls, GetFrameRecord().drawcallList);
 
     D3D12CommandData &cmd = *m_Queue->GetCommandData();
 

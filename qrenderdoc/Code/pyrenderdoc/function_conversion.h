@@ -24,8 +24,11 @@
 
 #pragma once
 
+#include <frameobject.h>
+
 // this is defined elsewhere for managing the opaque global_handle object
 extern "C" PyThreadState *GetExecutingThreadState(PyObject *global_handle);
+extern "C" PyObject *GetCurrentGlobalHandle();
 extern "C" void HandleException(PyObject *global_handle);
 extern "C" bool IsThreadBlocking(PyObject *global_handle);
 extern "C" void SetThreadBlocking(PyObject *global_handle, bool block);
@@ -46,7 +49,9 @@ struct ExceptionHandling
 inline void HandleCallbackFailure(PyObject *global_handle, ExceptionHandling &exHandle)
 {
   // if there's no global handle assume we are not running in the usual environment, so there are no
-  // external-to-python threads
+  // external-to-python threads.
+  // Specifically this is when we're imported as a module directly into python with none of our
+  // harness, so this is running as pure glue code.
   if(!global_handle)
   {
     exHandle.failFlag = true;
@@ -112,6 +117,31 @@ inline void get_return(const char *funcname, PyObject *result, PyObject *global_
 {
   Py_XDECREF(result);
 }
+
+struct PyObjectRefCounter
+{
+  PyObjectRefCounter(PyObject *o) : obj(o) { Py_INCREF(obj); }
+  PyObjectRefCounter(const PyObjectRefCounter &o)
+  {
+    obj = o.obj;
+    Py_INCREF(obj);
+  }
+  ~PyObjectRefCounter()
+  {
+// in non-release, check that we're currently executing if we're about to delete the object.
+#if !defined(RELEASE)
+    if(obj->ob_refcnt == 1 && PyGILState_Check() == 0)
+    {
+      RENDERDOC_LogMessage(LogType::Error, "QTRD", __FILE__, __LINE__,
+                           "Deleting PyObjectRefCounter without python executing on this thread");
+      // return and leak the object rather than crashing
+      return;
+    }
+#endif
+    Py_DECREF(obj);
+  }
+  PyObject *obj;
+};
 
 template <typename rettype, typename... paramTypes>
 struct varfunc
@@ -205,14 +235,31 @@ funcType ConvertFunc(const char *funcname, PyObject *func, ExceptionHandling &ex
   // async call
   PyObject *global_internal_handle = NULL;
 
-  PyObject *globals = PyEval_GetGlobals();
-  if(globals)
-    global_internal_handle = PyDict_GetItemString(globals, "_renderdoc_internal");
+  // walk the frames until we find one with _renderdoc_internal. If we call a function in another
+  // module the globals may not have the entry, but the root level is expected to.
+  {
+    _frame *frame = PyEval_GetFrame();
 
-  return [global_internal_handle, funcname, func, &exHandle](auto... param) {
+    while(frame)
+    {
+      global_internal_handle = PyDict_GetItemString(frame->f_globals, "_renderdoc_internal");
+
+      if(global_internal_handle)
+        break;
+      frame = frame->f_back;
+    }
+  }
+
+  if(!global_internal_handle)
+    global_internal_handle = GetCurrentGlobalHandle();
+
+  // create a copy that will keep the function object alive as long as the lambda is
+  PyObjectRefCounter funcptr(func);
+
+  return [global_internal_handle, funcname, funcptr, &exHandle](auto... param) {
     ScopedFuncCall gil(global_internal_handle);
 
     varfunc<typename funcType::result_type, decltype(param)...> f(funcname, param...);
-    return f.call(funcname, func, global_internal_handle, exHandle);
+    return f.call(funcname, funcptr.obj, global_internal_handle, exHandle);
   };
 }

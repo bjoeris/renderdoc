@@ -45,6 +45,7 @@ using std::pair;
 using std::set;
 
 class Chunk;
+struct RDCThumb;
 
 // not provided by tinyexr, just do by hand
 bool is_exr_file(FILE *f);
@@ -206,6 +207,18 @@ enum ReplayLogType
 
 DECLARE_REFLECTION_ENUM(ReplayLogType);
 
+enum class VendorExtensions
+{
+  NvAPI = 0,
+  First = NvAPI,
+  OpenGL_Ext,
+  Vulkan_Ext,
+  Count,
+};
+
+DECLARE_REFLECTION_ENUM(VendorExtensions);
+ITERABLE_OPERATORS(VendorExtensions);
+
 struct CaptureData
 {
   CaptureData(string p, uint64_t t, RDCDriver d, uint32_t f)
@@ -334,6 +347,26 @@ typedef void (*ShutdownFunction)();
 class RenderDoc
 {
 public:
+  struct FramePixels
+  {
+    uint8_t *data = NULL;
+    uint32_t len = 0;
+    uint32_t width = 0;
+    uint32_t pitch = 0;
+    uint32_t height = 0;
+    uint32_t stride = 0;
+    uint32_t bpc = 0;    // bytes per channel
+    bool buf1010102 = false;
+    bool buf565 = false;
+    bool buf5551 = false;
+    bool bgra = false;
+    bool is_y_flipped = true;
+    uint32_t pitch_requirement = 0;
+    uint32_t max_width = 0;
+    FramePixels() {}
+    ~FramePixels() { SAFE_DELETE_ARRAY(data); }
+  };
+
   static RenderDoc &Inst();
 
   template <typename ProgressType>
@@ -386,13 +419,21 @@ public:
   void BecomeRemoteServer(const char *listenhost, uint16_t port, RENDERDOC_KillCallback killReplay,
                           RENDERDOC_PreviewWindowCallback previewWindow);
 
+  DriverInformation GetDriverInformation(GraphicsAPI api);
+
+  // can't be disabled, only enabled then latched
+
+  bool IsVendorExtensionEnabled(VendorExtensions ext) { return m_VendorExts[(int)ext]; }
+  void EnableVendorExtensions(VendorExtensions ext);
+
   void SetCaptureOptions(const CaptureOptions &opts);
   const CaptureOptions &GetCaptureOptions() const { return m_Options; }
   void RecreateCrashHandler();
   void UnloadCrashHandler();
   ICrashHandler *GetCrashHandler() const { return m_ExHandler; }
-  RDCFile *CreateRDC(RDCDriver driver, uint32_t frameNum, void *thpixels, size_t thlen,
-                     uint16_t thwidth, uint16_t thheight, FileType thformat);
+  void ResamplePixels(const FramePixels &in, RDCThumb &out);
+  void EncodePixelsPNG(const RDCThumb &in, RDCThumb &out);
+  RDCFile *CreateRDC(RDCDriver driver, uint32_t frameNum, const FramePixels &fp);
   void FinishCaptureWriting(RDCFile *rdc, uint32_t frameNumber);
 
   void AddChildProcess(uint32_t pid, uint32_t ident)
@@ -538,6 +579,8 @@ public:
 
   string GetOverlayText(RDCDriver driver, uint32_t frameNumber, int flags);
 
+  void CycleActiveWindow();
+  uint32_t GetCapturableWindowCount() { return (uint32_t)m_WindowFrameCapturers.size(); }
 private:
   RenderDoc();
   ~RenderDoc();
@@ -641,6 +684,8 @@ private:
   map<void *, IFrameCapturer *> m_DeviceFrameCapturers;
 
   IFrameCapturer *MatchFrameCapturer(void *dev, void *wnd);
+
+  bool m_VendorExts[ENUM_ARRAY_SIZE(VendorExtensions)] = {};
 
   volatile bool m_TargetControlThreadShutdown;
   volatile bool m_ControlClientThreadShutdown;

@@ -432,7 +432,8 @@ struct GLPushPopState
   GLenum ActiveTexture;
   GLuint tex0;
   GLuint arraybuf;
-  GLuint ubo[3];
+  GLuint idxubo[3];
+  GLuint ubo;
   GLuint prog;
   GLuint pipe;
   GLuint VAO;
@@ -642,6 +643,7 @@ extern bool IsGLES;
   EXT_TO_CHECK(32, 32, ARB_geometry_shader4)                     \
   EXT_TO_CHECK(41, 31, ARB_separate_shader_objects)              \
   EXT_TO_CHECK(41, 99, ARB_viewport_array)                       \
+  EXT_TO_CHECK(41, 99, ARB_ES2_compatibility)                    \
   EXT_TO_CHECK(42, 99, ARB_base_instance)                        \
   EXT_TO_CHECK(42, 31, ARB_shader_atomic_counters)               \
   EXT_TO_CHECK(42, 31, ARB_shader_image_load_store)              \
@@ -664,6 +666,7 @@ extern bool IsGLES;
   EXT_TO_CHECK(44, 99, ARB_enhanced_layouts)                     \
   EXT_TO_CHECK(44, 99, ARB_query_buffer_object)                  \
   EXT_TO_CHECK(45, 99, ARB_clip_control)                         \
+  EXT_TO_CHECK(45, 99, ARB_direct_state_access)                  \
   EXT_TO_CHECK(46, 99, ARB_polygon_offset_clamp)                 \
   EXT_TO_CHECK(46, 99, ARB_texture_filter_anisotropic)           \
   EXT_TO_CHECK(46, 99, ARB_pipeline_statistics_query)            \
@@ -785,6 +788,8 @@ struct DrawElementsIndirectCommand
   uint32_t baseInstance;
 };
 
+DECLARE_REFLECTION_STRUCT(DrawElementsIndirectCommand);
+
 struct DrawArraysIndirectCommand
 {
   uint32_t count;
@@ -792,6 +797,8 @@ struct DrawArraysIndirectCommand
   uint32_t first;
   uint32_t baseInstance;
 };
+
+DECLARE_REFLECTION_STRUCT(DrawArraysIndirectCommand);
 
 enum class GLChunk : uint32_t
 {
@@ -2057,6 +2064,8 @@ enum class GLChunk : uint32_t
   glReleaseKeyedMutexWin32EXT,
 
   ContextConfiguration,
+
+  glTextureFoveationParametersQCOM,
 
   Max,
 };

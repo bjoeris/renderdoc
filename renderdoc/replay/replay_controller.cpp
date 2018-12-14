@@ -140,7 +140,7 @@ float ConvertComponent(const ResourceFormat &fmt, const byte *data)
     }
     else if(fmt.compType == CompType::UNorm)
     {
-      if(fmt.srgbCorrected)
+      if(fmt.srgbCorrected())
         return SRGB8_lookuptable[*u8];
       else
         return float(*u8) / 255.0f;
@@ -496,9 +496,8 @@ void ReplayController::AddFakeMarkers()
   m_FrameRecord.drawcallList = ret;
 
   // re-configure the previous/next pointeres
-  DrawcallDescription *previous = NULL;
   m_Drawcalls.clear();
-  SetupDrawcallPointers(m_Drawcalls, m_FrameRecord.drawcallList, NULL, previous);
+  SetupDrawcallPointers(m_Drawcalls, m_FrameRecord.drawcallList);
 }
 
 rdcarray<CounterResult> ReplayController::FetchCounters(const rdcarray<GPUCounter> &counters)
@@ -791,20 +790,41 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
      td.format.type == ResourceFormatType::ASTC)
     downcast = true;
 
-  // for DDS don't downcast, for non-HDR always downcast if we're not already RGBA8 unorm
-  // for HDR&EXR we can convert from most regular types as well as 10.10.10.2 and 11.11.10
-  if((sd.destType != FileType::DDS && sd.destType != FileType::HDR && sd.destType != FileType::EXR &&
-      (td.format.compByteWidth != 1 || td.format.compCount != 4 ||
-       td.format.compType != CompType::UNorm || td.format.bgraOrder)) ||
-     downcast || (sd.destType != FileType::DDS && td.format.Special() &&
-                  td.format.type != ResourceFormatType::R10G10B10A2 &&
-                  td.format.type != ResourceFormatType::R11G11B10))
-  {
+  // for non-HDR always downcast if we're not already RGBA8 unorm
+  if(sd.destType != FileType::DDS && sd.destType != FileType::HDR && sd.destType != FileType::EXR &&
+     (td.format.compByteWidth != 1 || td.format.compCount != 4 ||
+      td.format.compType != CompType::UNorm || td.format.bgraOrder()))
     downcast = true;
-    td.format.compByteWidth = 1;
-    td.format.compCount = 4;
-    td.format.compType = CompType::UNorm;
-    td.format.type = ResourceFormatType::Regular;
+
+  // for HDR & EXR we can convert from most regular types as well as 10.10.10.2 and 11.11.10
+  if(sd.destType != FileType::DDS && td.format.Special() &&
+     td.format.type != ResourceFormatType::R10G10B10A2 &&
+     td.format.type != ResourceFormatType::R11G11B10)
+    downcast = true;
+
+  // if we're downcasting, pick either RGBA8 or RGBA32 to downcast to
+  RemapTexture remap = RemapTexture::NoRemap;
+
+  if(downcast)
+  {
+    // if the source and destination are more than 1 byte per component, remap to RGBA32
+    if(td.format.compByteWidth > 1 && (sd.destType == FileType::DDS ||
+                                       sd.destType == FileType::HDR || sd.destType == FileType::EXR))
+    {
+      remap = RemapTexture::RGBA32;
+      td.format.compByteWidth = 4;
+      td.format.compCount = 4;
+      td.format.compType = CompType::Float;
+      td.format.type = ResourceFormatType::Regular;
+    }
+    else
+    {
+      remap = RemapTexture::RGBA8;
+      td.format.compByteWidth = 1;
+      td.format.compCount = 4;
+      td.format.compType = CompType::UNorm;
+      td.format.type = ResourceFormatType::Regular;
+    }
   }
 
   uint32_t rowPitch = 0;
@@ -845,7 +865,10 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
       case ResourceFormatType::R4G4B4A4: bytesPerPixel = 2; break;
       case ResourceFormatType::D32S8: bytesPerPixel = 8; break;
       case ResourceFormatType::D16S8:
-      case ResourceFormatType::YUV:
+      case ResourceFormatType::YUV8:
+      case ResourceFormatType::YUV10:
+      case ResourceFormatType::YUV12:
+      case ResourceFormatType::YUV16:
       case ResourceFormatType::R4G4:
         RDCERR("Unsupported file format %u", td.format.type);
         return false;
@@ -869,7 +892,7 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
       params.forDiskSave = true;
       params.typeHint = sd.typeHint;
       params.resolve = resolveSamples;
-      params.remap = downcast ? RemapTexture::RGBA8 : RemapTexture::NoRemap;
+      params.remap = remap;
       params.blackPoint = sd.comp.blackPoint;
       params.whitePoint = sd.comp.whitePoint;
 
@@ -941,8 +964,9 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
     }
   }
 
-  // should have been handled above, but verify incoming data is RGBA8
-  if(sd.slice.slicesAsGrid && td.format.compByteWidth == 1 && td.format.compCount == 4)
+  // should have been handled above, but verify incoming data is RGBA8 or RGBA32
+  if(sd.slice.slicesAsGrid && (td.format.compByteWidth == 1 || td.format.compByteWidth == 4) &&
+     td.format.compCount == 4 && !td.format.Special())
   {
     uint32_t sliceWidth = td.width;
     uint32_t sliceHeight = td.height;
@@ -954,9 +978,11 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
     td.width *= sd.slice.sliceGridWidth;
     td.height *= sliceGridHeight;
 
-    byte *combinedData = new byte[td.width * td.height * td.format.compCount];
+    uint32_t pixelStride = td.format.compCount * td.format.compByteWidth;
 
-    memset(combinedData, 0, td.width * td.height * td.format.compCount);
+    byte *combinedData = new byte[td.width * td.height * pixelStride];
+
+    memset(combinedData, 0, td.width * td.height * pixelStride);
 
     for(size_t i = 0; i < subdata.size(); i++)
     {
@@ -970,10 +996,11 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
       {
         for(uint32_t x = 0; x < sliceWidth; x++)
         {
-          uint32_t *srcpix = (uint32_t *)&subdata[i][(y * sliceWidth + x) * 4 + 0];
-          uint32_t *dstpix = (uint32_t *)&combinedData[((y + yoffs) * td.width + x + xoffs) * 4 + 0];
+          uint32_t *srcpix = (uint32_t *)&subdata[i][(y * sliceWidth + x) * pixelStride + 0];
+          uint32_t *dstpix =
+              (uint32_t *)&combinedData[((y + yoffs) * td.width + x + xoffs) * pixelStride + 0];
 
-          *dstpix = *srcpix;
+          memcpy(dstpix, srcpix, pixelStride);
         }
       }
 
@@ -985,9 +1012,9 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
     rowPitch = td.width * 4;
   }
 
-  // should have been handled above, but verify incoming data is RGBA8 and 6 slices
-  if(sd.slice.cubeCruciform && td.format.compByteWidth == 1 && td.format.compCount == 4 &&
-     subdata.size() == 6)
+  // should have been handled above, but verify incoming data is RGBA8 or RGBA32 and 6 slices
+  if(sd.slice.cubeCruciform && (td.format.compByteWidth == 1 || td.format.compByteWidth == 4) &&
+     td.format.compCount == 4 && !td.format.Special() && subdata.size() == 6)
   {
     uint32_t sliceWidth = td.width;
     uint32_t sliceHeight = td.height;
@@ -995,9 +1022,11 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
     td.width *= 4;
     td.height *= 3;
 
-    byte *combinedData = new byte[td.width * td.height * td.format.compCount];
+    uint32_t pixelStride = td.format.compCount * td.format.compByteWidth;
 
-    memset(combinedData, 0, td.width * td.height * td.format.compCount);
+    byte *combinedData = new byte[td.width * td.height * pixelStride];
+
+    memset(combinedData, 0, td.width * td.height * pixelStride);
 
     /*
      Y X=0   1   2   3
@@ -1026,10 +1055,11 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
       {
         for(uint32_t x = 0; x < sliceWidth; x++)
         {
-          uint32_t *srcpix = (uint32_t *)&subdata[i][(y * sliceWidth + x) * 4 + 0];
-          uint32_t *dstpix = (uint32_t *)&combinedData[((y + yoffs) * td.width + x + xoffs) * 4 + 0];
+          uint32_t *srcpix = (uint32_t *)&subdata[i][(y * sliceWidth + x) * pixelStride + 0];
+          uint32_t *dstpix =
+              (uint32_t *)&combinedData[((y + yoffs) * td.width + x + xoffs) * pixelStride + 0];
 
-          *dstpix = *srcpix;
+          memcpy(dstpix, srcpix, pixelStride);
         }
       }
 
@@ -1046,24 +1076,42 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
   // if we want a grayscale image of one channel, splat it across all channels
   // and set alpha to full
   if(sd.channelExtract >= 0 && td.format.type == ResourceFormatType::Regular &&
-     td.format.compByteWidth == 1 && (uint32_t)sd.channelExtract < td.format.compCount)
+     (td.format.compByteWidth == 1 || td.format.compByteWidth == 4) &&
+     (uint32_t)sd.channelExtract < td.format.compCount)
   {
-    uint32_t cc = td.format.compCount;
+    uint32_t pixelStride = td.format.compCount * td.format.compByteWidth;
+    uint32_t compWidth = td.format.compByteWidth;
+    uint32_t compCount = td.format.compCount;
+
+    uint32_t val = 0;
+    uint32_t max = ~0U;
 
     for(uint32_t y = 0; y < td.height; y++)
     {
       for(uint32_t x = 0; x < td.width; x++)
       {
-        subdata[0][(y * td.width + x) * cc + 0] =
-            subdata[0][(y * td.width + x) * cc + sd.channelExtract];
-        if(cc >= 2)
-          subdata[0][(y * td.width + x) * cc + 1] =
-              subdata[0][(y * td.width + x) * cc + sd.channelExtract];
-        if(cc >= 3)
-          subdata[0][(y * td.width + x) * cc + 2] =
-              subdata[0][(y * td.width + x) * cc + sd.channelExtract];
-        if(cc >= 4)
-          subdata[0][(y * td.width + x) * cc + 3] = 255;
+        memcpy(&val, &subdata[0][(y * td.width + x) * pixelStride + sd.channelExtract * compWidth],
+               td.format.compByteWidth);
+
+        switch(compCount)
+        {
+          case 4:
+            memcpy(&subdata[0][(y * td.width + x) * pixelStride + 3 * compWidth], &max,
+                   td.format.compByteWidth);
+          // deliberate fallthrough
+          case 3:
+            memcpy(&subdata[0][(y * td.width + x) * pixelStride + 2 * compWidth], &val,
+                   td.format.compByteWidth);
+          // deliberate fallthrough
+          case 2:
+            memcpy(&subdata[0][(y * td.width + x) * pixelStride + 1 * compWidth], &val,
+                   td.format.compByteWidth);
+          // deliberate fallthrough
+          case 1:
+            memcpy(&subdata[0][(y * td.width + x) * pixelStride + 0 * compWidth], &val,
+                   td.format.compByteWidth);
+            break;
+        }
       }
     }
   }
@@ -1318,7 +1366,7 @@ bool ReplayController::SaveTexture(const TextureSave &saveData, const char *path
             srcData += pixStride;
           }
 
-          if(saveFmt.bgraOrder)
+          if(saveFmt.bgraOrder())
             std::swap(r, b);
 
           // HDR can't represent negative values
@@ -1936,9 +1984,8 @@ ReplayStatus ReplayController::PostCreateInit(IReplayDriver *device, RDCFile *rd
   if(m_FrameRecord.drawcallList.empty())
     return ReplayStatus::APIReplayFailed;
 
-  DrawcallDescription *previous = NULL;
   m_Drawcalls.clear();
-  SetupDrawcallPointers(m_Drawcalls, m_FrameRecord.drawcallList, NULL, previous);
+  SetupDrawcallPointers(m_Drawcalls, m_FrameRecord.drawcallList);
 
   return ReplayStatus::Succeeded;
 }
