@@ -40,7 +40,7 @@
 #define VK_USE_PLATFORM_WIN32_KHR 1
 #elif defined(__yeti__)
 #define VK_USE_PLATFORM_YETI_GOOGLE 1
-#elif defined()
+#else
 #define VK_USE_PLATFORM_XLIB_KHR 1
 #endif
 #include "driver/vulkan/vk_common.h"
@@ -49,7 +49,7 @@
 #undef VK_USE_PLATFORM_WIN32_KHR
 #elif defined(__yeti__)
 #undef VK_USE_PLATFORM_YETI_GOOGLE
-#elif defined()
+#else
 #undef VK_USE_PLATFORM_XLIB_KHR
 #endif
 #include "serialise/rdcfile.h"
