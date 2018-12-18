@@ -36,17 +36,17 @@ void TraceTracker::AccessBufferMemory(uint64_t buf_id, uint64_t offset, uint64_t
                                       AccessAction action)
 {
   RDCASSERT(IsValidNonNullResouce(buf_id));
-  ExtObject *memBinding = FindBufferMemBinding(buf_id);
-  uint64_t mem_id = memBinding->At("memory")->U64();
-  uint64_t mem_offset = memBinding->At("memoryOffset")->U64();
+  SDObject *memBinding = FindBufferMemBinding(buf_id);
+  uint64_t mem_id = memBinding->FindChild("memory")->AsUInt64();
+  uint64_t mem_offset = memBinding->FindChild("memoryOffset")->AsUInt64();
   MemAllocWithResourcesMapIter mem_it = MemAllocFind(mem_id);
   RDCASSERT(mem_it != MemAllocEnd());
 
   ResourceWithViewsMapIter buf_it = ResourceCreateFind(buf_id);
   RDCASSERT(buf_it != ResourceCreateEnd());
-  ExtObject *ci = buf_it->second.sdobj->At("CreateInfo");
-  VkSharingMode sharingMode = (VkSharingMode)ci->At("sharingMode")->U64();
-  uint64_t buf_size = ci->At("size")->U64();
+  SDObject *ci = buf_it->second.sdobj->FindChild("CreateInfo");
+  VkSharingMode sharingMode = (VkSharingMode)ci->FindChild("sharingMode")->AsUInt64();
+  uint64_t buf_size = ci->FindChild("size")->AsUInt64();
 
   if(size > buf_size - offset)
   {
@@ -66,17 +66,17 @@ void TraceTracker::TransitionBufferQueueFamily(uint64_t buf_id, uint64_t srcQueu
                                                uint64_t size)
 {
   RDCASSERT(IsValidNonNullResouce(buf_id));
-  ExtObject *memBinding = FindBufferMemBinding(buf_id);
-  uint64_t mem_id = memBinding->At("memory")->U64();
-  uint64_t mem_offset = memBinding->At("memoryOffset")->U64();
+  SDObject *memBinding = FindBufferMemBinding(buf_id);
+  uint64_t mem_id = memBinding->FindChild("memory")->AsUInt64();
+  uint64_t mem_offset = memBinding->FindChild("memoryOffset")->AsUInt64();
   MemAllocWithResourcesMapIter mem_it = MemAllocFind(mem_id);
   RDCASSERT(mem_it != MemAllocEnd());
 
   ResourceWithViewsMapIter buf_it = ResourceCreateFind(buf_id);
   RDCASSERT(buf_it != ResourceCreateEnd());
-  ExtObject *ci = buf_it->second.sdobj->At("CreateInfo");
-  VkSharingMode sharingMode = (VkSharingMode)ci->At("sharingMode")->U64();
-  uint64_t buf_size = ci->At("size")->U64();
+  SDObject *ci = buf_it->second.sdobj->FindChild("CreateInfo");
+  VkSharingMode sharingMode = (VkSharingMode)ci->FindChild("sharingMode")->AsUInt64();
+  uint64_t buf_size = ci->FindChild("size")->AsUInt64();
 
   if(size > buf_size - offset)
   {
@@ -95,15 +95,15 @@ void TraceTracker::TransitionBufferQueueFamily(uint64_t buf_id, uint64_t srcQueu
 void TraceTracker::ReadBoundVertexBuffers(uint64_t vertexCount, uint64_t instanceCount,
                                           uint64_t firstVertex, uint64_t firstInstance)
 {
-  ExtObjectIDMapIter pipeline_it = createdPipelines.find(bindingState.graphicsPipeline.pipeline);
+  SDChunkIDMapIter pipeline_it = createdPipelines.find(bindingState.graphicsPipeline.pipeline);
   RDCASSERT(pipeline_it != createdPipelines.end());
-  ExtObject *vertexInputState = pipeline_it->second->At(3)->At(5);
-  ExtObject *boundVertexDescriptions = vertexInputState->At(4);
-  for(uint64_t i = 0; i < boundVertexDescriptions->Size(); i++)
+  SDObject *vertexInputState = pipeline_it->second->GetChild(3)->GetChild(5);
+  SDObject *boundVertexDescriptions = vertexInputState->GetChild(4);
+  for(uint64_t i = 0; i < boundVertexDescriptions->NumChildren(); i++)
   {
-    uint64_t bindingNum = boundVertexDescriptions->At(i)->At(0)->U64();
-    uint64_t stride = boundVertexDescriptions->At(i)->At(1)->U64();
-    uint64_t inputRate = boundVertexDescriptions->At(i)->At(2)->U64();
+    uint64_t bindingNum = boundVertexDescriptions->GetChild(i)->GetChild(0)->AsUInt64();
+    uint64_t stride = boundVertexDescriptions->GetChild(i)->GetChild(1)->AsUInt64();
+    uint64_t inputRate = boundVertexDescriptions->GetChild(i)->GetChild(2)->AsUInt64();
     uint64_t startVertex, numVertices;
     switch(inputRate)
     {
@@ -143,27 +143,27 @@ void TraceTracker::ReadBoundVertexBuffers(uint64_t vertexCount, uint64_t instanc
 
 void TraceTracker::AccessMemoryInBoundDescriptorSets(BoundPipeline &boundPipeline)
 {
-  ExtObjectIDMapIter pipeline_it = createdPipelines.find(boundPipeline.pipeline);
+  SDChunkIDMapIter pipeline_it = createdPipelines.find(boundPipeline.pipeline);
   RDCASSERT(pipeline_it != createdPipelines.end());
 
   uint64_t pipelineLayout_id = 0;
-  switch(pipeline_it->second->ChunkID())
+  switch(pipeline_it->second->metadata.chunkID)
   {
     case(uint32_t)VulkanChunk::vkCreateGraphicsPipelines:
-      pipelineLayout_id = pipeline_it->second->At(3)->At(14)->U64();
+      pipelineLayout_id = pipeline_it->second->GetChild(3)->GetChild(14)->AsUInt64();
       break;
     case(uint32_t)VulkanChunk::vkCreateComputePipelines:
-      pipelineLayout_id = pipeline_it->second->At(3)->At(4)->U64();
+      pipelineLayout_id = pipeline_it->second->GetChild(3)->GetChild(4)->AsUInt64();
       break;
     default: RDCASSERT(0);
   }
   ResourceWithViewsMapIter pipelineLayout_it = ResourceCreateFind(pipelineLayout_id);
   RDCASSERT(pipelineLayout_it != ResourceCreateEnd());
-  ExtObject *pipelineLayout_ci = pipelineLayout_it->second.sdobj->At(1);
+  SDObject *pipelineLayout_ci = pipelineLayout_it->second.sdobj->GetChild(1);
 
-  uint64_t setLayoutCount = pipelineLayout_ci->At(3)->U64();
-  ExtObject *setLayouts = pipelineLayout_ci->At(4);
-  RDCASSERT(setLayoutCount == setLayouts->Size());
+  uint64_t setLayoutCount = pipelineLayout_ci->GetChild(3)->AsUInt64();
+  SDObject *setLayouts = pipelineLayout_ci->GetChild(4);
+  RDCASSERT(setLayoutCount == setLayouts->NumChildren());
 
   for(uint64_t i = 0; i < setLayoutCount; i++)
   {
@@ -171,7 +171,7 @@ void TraceTracker::AccessMemoryInBoundDescriptorSets(BoundPipeline &boundPipelin
     if(descriptorSet_it != boundPipeline.descriptorSets.end())
     {
       uint64_t descriptorSet = descriptorSet_it->second;
-      uint64_t setLayout = setLayouts->At(i)->U64();
+      uint64_t setLayout = setLayouts->GetChild(i)->AsUInt64();
       AccessMemoryInDescriptorSet(descriptorSet, setLayout);
     }
   }
@@ -288,10 +288,10 @@ void TraceTracker::AccessMemoryInDescriptorSet(uint64_t descriptorSet_id, uint64
                 descriptorSet_id, it->first, i, view_id);
             continue;
           }
-          ExtObject *ci = view_it->second.sdobj->At(1);
-          uint64_t buffer = ci->At(3)->U64();
-          uint64_t offset = ci->At(5)->U64();
-          uint64_t size = ci->At(6)->U64();
+          SDObject *ci = view_it->second.sdobj->GetChild(1);
+          uint64_t buffer = ci->GetChild(3)->AsUInt64();
+          uint64_t offset = ci->GetChild(5)->AsUInt64();
+          uint64_t size = ci->GetChild(6)->AsUInt64();
           if(!IsValidNonNullResouce(buffer))
           {
             RDCWARN(
@@ -332,46 +332,46 @@ void TraceTracker::AccessImage(uint64_t image, VkImageAspectFlags aspectMask, ui
   }
 }
 
-void TraceTracker::AccessImage(uint64_t image, ExtObject *subresource, VkImageLayout layout,
+void TraceTracker::AccessImage(uint64_t image, SDObject *subresource, VkImageLayout layout,
                                AccessAction action)
 {
   RDCASSERT(std::string(subresource->Type()) == "VkImageSubresourceRange");
 
-  VkImageAspectFlags aspectMask = (VkImageAspectFlags)subresource->At(0)->U64();
-  uint64_t baseMipLevel = subresource->At(1)->U64();
-  uint64_t levelCount = subresource->At(2)->U64();
-  uint64_t baseArrayLayer = subresource->At(3)->U64();
-  uint64_t layerCount = subresource->At(4)->U64();
+  VkImageAspectFlags aspectMask = (VkImageAspectFlags)subresource->GetChild(0)->AsUInt64();
+  uint64_t baseMipLevel = subresource->GetChild(1)->AsUInt64();
+  uint64_t levelCount = subresource->GetChild(2)->AsUInt64();
+  uint64_t baseArrayLayer = subresource->GetChild(3)->AsUInt64();
+  uint64_t layerCount = subresource->GetChild(4)->AsUInt64();
 
   AccessImage(image, aspectMask, baseMipLevel, levelCount, baseArrayLayer, layerCount, false,
               layout, action);
 }
 
-bool isFullImage(ExtObject *imageExtent, ExtObject *offset, ExtObject *extent, uint64_t mipLevel)
+bool isFullImage(SDObject *imageExtent, SDObject *offset, SDObject *extent, uint64_t mipLevel)
 {
   uint64_t offsetV[3]{0, 0, 0};
   uint64_t imageExtentV[3];
   uint64_t extentV[3];
   for(uint64_t i = 0; i < 3; i++)
   {
-    uint64_t d = imageExtent->At(i)->U64();
+    uint64_t d = imageExtent->GetChild(i)->AsUInt64();
     imageExtentV[i] = extentV[i] =
         (d + (1ull << mipLevel) - 1) >> mipLevel;    // ceil(d / (2^mipLevel))
   }
   if(offset != NULL)
   {
     RDCASSERT(std::string(offset->Type()).substr(0, 8) == "VkOffset");
-    for(uint64_t i = 0; i < offset->Size(); i++)
+    for(uint64_t i = 0; i < offset->NumChildren(); i++)
     {
-      offsetV[i] = offset->At(i)->U64();
+      offsetV[i] = offset->GetChild(i)->AsUInt64();
     }
   }
   if(extent != NULL)
   {
     RDCASSERT(std::string(extent->Type()).substr(0, 8) == "VkExtent");
-    for(uint64_t i = 0; i < extent->Size(); i++)
+    for(uint64_t i = 0; i < extent->NumChildren(); i++)
     {
-      extentV[i] = extent->At(i)->U64();
+      extentV[i] = extent->GetChild(i)->AsUInt64();
     }
   }
   bool fullImage = true;
@@ -388,14 +388,14 @@ bool isFullImage(ExtObject *imageExtent, ExtObject *offset, ExtObject *extent, u
   return fullImage;
 }
 
-void TraceTracker::AccessImage(uint64_t image, ExtObject *subresource, ExtObject *offset,
-                               ExtObject *extent, VkImageLayout layout, AccessAction action)
+void TraceTracker::AccessImage(uint64_t image, SDObject *subresource, SDObject *offset,
+                               SDObject *extent, VkImageLayout layout, AccessAction action)
 {
   RDCASSERT(std::string(subresource->Type()) == "VkImageSubresourceLayers");
-  VkImageAspectFlags aspectMask = (VkImageAspectFlags)subresource->At(0)->U64();
-  uint64_t mipLevel = subresource->At(1)->U64();
-  uint64_t baseArrayLayer = subresource->At(2)->U64();
-  uint64_t layerCount = subresource->At(3)->U64();
+  VkImageAspectFlags aspectMask = (VkImageAspectFlags)subresource->GetChild(0)->AsUInt64();
+  uint64_t mipLevel = subresource->GetChild(1)->AsUInt64();
+  uint64_t baseArrayLayer = subresource->GetChild(2)->AsUInt64();
+  uint64_t layerCount = subresource->GetChild(3)->AsUInt64();
 
   if(action == ACCESS_ACTION_CLEAR)
   {
@@ -409,8 +409,8 @@ void TraceTracker::AccessImage(uint64_t image, ExtObject *subresource, ExtObject
       // RDCASSERT(0); // TODO: should this ever happen?
       return;
     }
-    ExtObject *image_ci = image_it->second.sdobj->At(1);
-    ExtObject *imageExtent = image_ci->At(5);
+    SDObject *image_ci = image_it->second.sdobj->GetChild(1);
+    SDObject *imageExtent = image_ci->GetChild(5);
 
     // TODO(akharlamov, bjoeris) I think this should include aspect for depth stencil resources.
     if(!isFullImage(imageExtent, offset, extent, mipLevel))
@@ -428,25 +428,25 @@ void TraceTracker::AccessImageView(uint64_t view, VkImageLayout layout, AccessAc
                                    uint64_t layerCount)
 {
   ResourceWithViewsMapIter view_it = ResourceCreateFind(view);
-  ExtObjectIDMapIter present_it = presentResources.find(view);
+  SDObjectIDMapIter present_it = presentResources.find(view);
   if(view_it == ResourceCreateEnd() || present_it != presentResources.end())
   {
     // This can happen for views of swapchain images
     return;
   }
-  ExtObject *view_ci = view_it->second.sdobj->At(1);
-  uint64_t image = view_ci->At(3)->U64();
-  ExtObject *subresource = view_ci->At(7);
+  SDObject *view_ci = view_it->second.sdobj->GetChild(1);
+  uint64_t image = view_ci->GetChild(3)->AsUInt64();
+  SDObject *subresource = view_ci->GetChild(7);
 
-  VkImageViewType viewType = (VkImageViewType)view_ci->At(4)->U64();
+  VkImageViewType viewType = (VkImageViewType)view_ci->GetChild(4)->AsUInt64();
 
   bool is2DView = (viewType == VK_IMAGE_VIEW_TYPE_2D) || (viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY);
 
-  uint64_t viewAspectMask = subresource->At(0)->U64();
-  uint64_t baseMipLevel = subresource->At(1)->U64();
-  uint64_t levelCount = subresource->At(2)->U64();
-  uint64_t viewBaseArrayLayer = subresource->At(3)->U64();
-  uint64_t viewLayerCount = subresource->At(4)->U64();
+  uint64_t viewAspectMask = subresource->GetChild(0)->AsUInt64();
+  uint64_t baseMipLevel = subresource->GetChild(1)->AsUInt64();
+  uint64_t levelCount = subresource->GetChild(2)->AsUInt64();
+  uint64_t viewBaseArrayLayer = subresource->GetChild(3)->AsUInt64();
+  uint64_t viewLayerCount = subresource->GetChild(4)->AsUInt64();
   uint64_t lastArrayLayer, viewLastArrayLayer;
 
   if(layerCount == VK_REMAINING_ARRAY_LAYERS)
@@ -484,7 +484,7 @@ void TraceTracker::AccessAttachment(uint64_t attachment, AccessAction action,
   {
     return;
   }
-  uint64_t view_id = bindingState.framebuffer->At(5)->At(attachment)->U64();
+  uint64_t view_id = bindingState.framebuffer->GetChild(5)->GetChild(attachment)->AsUInt64();
   VkImageLayout layout = bindingState.attachmentLayout[attachment];
   RDCASSERT(layout != VK_IMAGE_LAYOUT_MAX_ENUM);
 
@@ -493,30 +493,30 @@ void TraceTracker::AccessAttachment(uint64_t attachment, AccessAction action,
 
 void TraceTracker::AccessSubpassAttachments()
 {
-  ExtObject *subpasses = bindingState.renderPass->At(6);
+  SDObject *subpasses = bindingState.renderPass->GetChild(6);
 
-  RDCASSERT(bindingState.subpassIndex < subpasses->Size());
-  ExtObject *subpass = subpasses->At(bindingState.subpassIndex);
-  ExtObject *colorAttachments = subpass->At(5);
-  ExtObject *resolveAttachments = subpass->At(6);
-  ExtObject *depthStencilAttachment = subpass->At(7);
+  RDCASSERT(bindingState.subpassIndex < subpasses->NumChildren());
+  SDObject *subpass = subpasses->GetChild(bindingState.subpassIndex);
+  SDObject *colorAttachments = subpass->GetChild(5);
+  SDObject *resolveAttachments = subpass->GetChild(6);
+  SDObject *depthStencilAttachment = subpass->GetChild(7);
 
-  ExtObjectIDMapIter pipeline_it = createdPipelines.find(bindingState.graphicsPipeline.pipeline);
+  SDChunkIDMapIter pipeline_it = createdPipelines.find(bindingState.graphicsPipeline.pipeline);
   if(pipeline_it == createdPipelines.end())
   {
     return;
   }
-  ExtObject *pipeline_ci = pipeline_it->second->At("CreateInfo");
-  ExtObject *depthStencilState = pipeline_ci->At("pDepthStencilState");
-  ExtObject *blendState = pipeline_ci->At("pColorBlendState");
-  ExtObject *blendAttachmets = blendState->At("pAttachments");
+  SDObject *pipeline_ci = pipeline_it->second->FindChild("CreateInfo");
+  SDObject *depthStencilState = pipeline_ci->FindChild("pDepthStencilState");
+  SDObject *blendState = pipeline_ci->FindChild("pColorBlendState");
+  SDObject *blendAttachmets = blendState->FindChild("pAttachments");
 
-  for(uint64_t i = 0; i < colorAttachments->Size(); i++)
+  for(uint64_t i = 0; i < colorAttachments->NumChildren(); i++)
   {
-    ExtObject *blendAttachmentState = blendAttachmets->At(i);
-    uint64_t blendEnabled = blendAttachmentState->At("blendEnable")->U64();
+    SDObject *blendAttachmentState = blendAttachmets->GetChild(i);
+    uint64_t blendEnabled = blendAttachmentState->FindChild("blendEnable")->AsUInt64();
     VkColorComponentFlags colorWriteMask =
-        (uint32_t)blendAttachmentState->At("colorWriteMask")->U64();
+        (uint32_t)blendAttachmentState->FindChild("colorWriteMask")->AsUInt64();
     AccessAction action;
     if(blendEnabled == 0)
     {
@@ -531,21 +531,21 @@ void TraceTracker::AccessSubpassAttachments()
     if(colorWriteMask != 0)
     {
       // Writing is enabled for at least some color component
-      AccessAttachment(colorAttachments->At(i)->At(0)->U64(), action);
+      AccessAttachment(colorAttachments->GetChild(i)->GetChild(0)->AsUInt64(), action);
     }
   }
-  for(uint64_t i = 0; i < resolveAttachments->Size(); i++)
+  for(uint64_t i = 0; i < resolveAttachments->NumChildren(); i++)
   {
-    AccessAttachment(resolveAttachments->At(i)->At(0)->U64(), ACCESS_ACTION_WRITE);
+    AccessAttachment(resolveAttachments->GetChild(i)->GetChild(0)->AsUInt64(), ACCESS_ACTION_WRITE);
   }
   if(!depthStencilAttachment->IsNULL())
   {
     AccessAction action = ACCESS_ACTION_READ_WRITE;
-    if(depthStencilState->At("depthTestEnable")->U64() == 0)
+    if(depthStencilState->FindChild("depthTestEnable")->AsUInt64() == 0)
     {
       action = ACCESS_ACTION_WRITE;
     }
-    if(depthStencilState->At("depthWriteEnable")->U64() == 0)
+    if(depthStencilState->FindChild("depthWriteEnable")->AsUInt64() == 0)
     {
       switch(action)
       {
@@ -556,20 +556,20 @@ void TraceTracker::AccessSubpassAttachments()
     }
     if(action != ACCESS_ACTION_NONE)
     {
-      AccessAttachment(depthStencilAttachment->At(0)->U64(), action);
+      AccessAttachment(depthStencilAttachment->GetChild(0)->AsUInt64(), action);
     }
   }
 }
 
-void TraceTracker::TransitionImageLayout(uint64_t image, ExtObject *range, VkImageLayout oldLayout,
+void TraceTracker::TransitionImageLayout(uint64_t image, SDObject *range, VkImageLayout oldLayout,
                                          VkImageLayout newLayout, uint64_t srcQueueFamily,
                                          uint64_t dstQueueFamily)
 {
-  VkImageAspectFlags aspectMask = (VkImageAspectFlags)range->At("aspectMask")->U64();
-  uint64_t baseMip = range->At("baseMipLevel")->U64();
-  uint64_t levelCount = range->At("levelCount")->U64();
-  uint64_t baseLayer = range->At("baseArrayLayer")->U64();
-  uint64_t layerCount = range->At("layerCount")->U64();
+  VkImageAspectFlags aspectMask = (VkImageAspectFlags)range->FindChild("aspectMask")->AsUInt64();
+  uint64_t baseMip = range->FindChild("baseMipLevel")->AsUInt64();
+  uint64_t levelCount = range->FindChild("levelCount")->AsUInt64();
+  uint64_t baseLayer = range->FindChild("baseArrayLayer")->AsUInt64();
+  uint64_t layerCount = range->FindChild("layerCount")->AsUInt64();
 
   ImageStateMapIter imageState_it = imageStates.find(image);
   RDCASSERT(imageState_it != imageStates.end());
@@ -590,19 +590,19 @@ void TraceTracker::TransitionImageViewLayout(uint64_t viewID, VkImageLayout oldL
 {
   ResourceWithViewsMapIter view_it = ResourceCreateFind(viewID);
   RDCASSERT(view_it != ResourceCreateEnd());
-  ExtObject *view = view_it->second.sdobj;          // get the vkCreateImageView call
-  ExtObject *viewCI = view->At("CreateInfo");       // the VkImageViewCreateInfo
-  uint64_t imageID = viewCI->At("image")->U64();    // get the image ID
+  SDObject *view = view_it->second.sdobj;          // get the vkCreateImageView call
+  SDObject *viewCI = view->FindChild("CreateInfo");       // the VkImageViewCreateInfo
+  uint64_t imageID = viewCI->FindChild("image")->AsUInt64();    // get the image ID
                                                     // look for it in the createdResource map
 
-  ExtObject *subresource = viewCI->At("subresourceRange");
-  VkImageViewType viewType = (VkImageViewType)viewCI->At("viewType")->U64();
+  SDObject *subresource = viewCI->FindChild("subresourceRange");
+  VkImageViewType viewType = (VkImageViewType)viewCI->FindChild("viewType")->AsUInt64();
   bool is2DView = viewType == VK_IMAGE_VIEW_TYPE_2D || viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-  VkImageAspectFlags aspectMask = (VkImageAspectFlags)subresource->At("aspectMask")->U64();
-  uint64_t baseMip = subresource->At("baseMipLevel")->U64();
-  uint64_t levelCount = subresource->At("levelCount")->U64();
-  uint64_t baseLayer = subresource->At("baseArrayLayer")->U64();
-  uint64_t layerCount = subresource->At("layerCount")->U64();
+  VkImageAspectFlags aspectMask = (VkImageAspectFlags)subresource->FindChild("aspectMask")->AsUInt64();
+  uint64_t baseMip = subresource->FindChild("baseMipLevel")->AsUInt64();
+  uint64_t levelCount = subresource->FindChild("levelCount")->AsUInt64();
+  uint64_t baseLayer = subresource->FindChild("baseArrayLayer")->AsUInt64();
+  uint64_t layerCount = subresource->FindChild("layerCount")->AsUInt64();
 
   ImageStateMapIter imageState_it = imageStates.find(imageID);
   RDCASSERT(imageState_it != imageStates.end());
@@ -624,7 +624,7 @@ void TraceTracker::TransitionAttachmentLayout(uint64_t attachment, VkImageLayout
     return;
   }
   RDCASSERT(layout != VK_IMAGE_LAYOUT_UNDEFINED && layout != VK_IMAGE_LAYOUT_PREINITIALIZED);
-  uint64_t viewID = bindingState.framebuffer->At("pAttachments")->At(attachment)->U64();
+  uint64_t viewID = bindingState.framebuffer->FindChild("pAttachments")->GetChild(attachment)->AsUInt64();
 
   VkImageLayout oldLayout = bindingState.attachmentLayout[attachment];
   RDCASSERT(oldLayout != VK_IMAGE_LAYOUT_MAX_ENUM);
@@ -633,31 +633,31 @@ void TraceTracker::TransitionAttachmentLayout(uint64_t attachment, VkImageLayout
                             VK_QUEUE_FAMILY_IGNORED);
 }
 
-void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
+void TraceTracker::LoadSubpassAttachment(SDObject *attachmentRef)
 {
-  uint64_t attachment = attachmentRef->At("attachment")->U64();
-  VkImageLayout layout = (VkImageLayout)attachmentRef->At("layout")->U64();
+  uint64_t attachment = attachmentRef->FindChild("attachment")->AsUInt64();
+  VkImageLayout layout = (VkImageLayout)attachmentRef->FindChild("layout")->AsUInt64();
 
   if(attachment == VK_ATTACHMENT_UNUSED)
   {
     return;
   }
-  ExtObject *att_desc = bindingState.renderPass->At(4)->At(attachment);
-  uint64_t view_id = bindingState.framebuffer->At(5)->At(attachment)->U64();
+  SDObject *att_desc = bindingState.renderPass->GetChild(4)->GetChild(attachment);
+  uint64_t view_id = bindingState.framebuffer->GetChild(5)->GetChild(attachment)->AsUInt64();
 
   if(bindingState.subpassIndex == bindingState.attachmentFirstUse[attachment])
   {
     // This is the first subpass to use the attachment. This triggers the attachment's
     // loadOp/stencilLoadOp
 
-    VkFormat format = (VkFormat)att_desc->At("format")->U64();
-    VkImageLayout initialLayout = (VkImageLayout)att_desc->At("initialLayout")->U64();
+    VkFormat format = (VkFormat)att_desc->FindChild("format")->AsUInt64();
+    VkImageLayout initialLayout = (VkImageLayout)att_desc->FindChild("initialLayout")->AsUInt64();
 
     if(!IsStencilOnlyFormat(format))
     {
       // The attachment has a depth or color component;
       // load behaviour for depth/color component is defined by loadOp
-      VkAttachmentLoadOp loadOp = (VkAttachmentLoadOp)att_desc->At("loadOp")->U64();
+      VkAttachmentLoadOp loadOp = (VkAttachmentLoadOp)att_desc->FindChild("loadOp")->AsUInt64();
       AccessAction action;
       if(loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR ||
          (loadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE &&
@@ -683,7 +683,7 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
     {
       // The attachment has a stencil component;
       // load behaviour for stencil component is defined by stencilLoadOp
-      VkAttachmentLoadOp stencilLoadOp = (VkAttachmentLoadOp)att_desc->At("stencilLoadOp")->U64();
+      VkAttachmentLoadOp stencilLoadOp = (VkAttachmentLoadOp)att_desc->FindChild("stencilLoadOp")->AsUInt64();
       AccessAction stencilAction;
       if(stencilLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR ||
          (stencilLoadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE &&
@@ -711,28 +711,28 @@ void TraceTracker::LoadSubpassAttachment(ExtObject *attachmentRef)
 
 void TraceTracker::BeginSubpass()
 {
-  ExtObject *subpasses = bindingState.renderPass->At("pSubpasses");
-  RDCASSERT(bindingState.subpassIndex < subpasses->Size());
-  ExtObject *subpass = subpasses->At(bindingState.subpassIndex);
-  ExtObject *inputAttachments = subpass->At("pInputAttachments");
-  ExtObject *colorAttachments = subpass->At("pColorAttachments");
-  ExtObject *resolveAttachments = subpass->At("pResolveAttachments");
-  ExtObject *depthStencilAttachment = subpass->At("pDepthStencilAttachment");
+  SDObject *subpasses = bindingState.renderPass->FindChild("pSubpasses");
+  RDCASSERT(bindingState.subpassIndex < subpasses->NumChildren());
+  SDObject *subpass = subpasses->GetChild(bindingState.subpassIndex);
+  SDObject *inputAttachments = subpass->FindChild("pInputAttachments");
+  SDObject *colorAttachments = subpass->FindChild("pColorAttachments");
+  SDObject *resolveAttachments = subpass->FindChild("pResolveAttachments");
+  SDObject *depthStencilAttachment = subpass->FindChild("pDepthStencilAttachment");
 
-  for(uint64_t i = 0; i < inputAttachments->Size(); i++)
+  for(uint64_t i = 0; i < inputAttachments->NumChildren(); i++)
   {
-    ExtObject *attachmentRef = inputAttachments->At(i);
-    uint64_t a = attachmentRef->At("attachment")->U64();
+    SDObject *attachmentRef = inputAttachments->GetChild(i);
+    uint64_t a = attachmentRef->FindChild("attachment")->AsUInt64();
     LoadSubpassAttachment(attachmentRef);
     AccessAttachment(a, ACCESS_ACTION_READ);
   }
-  for(uint32_t i = 0; i < colorAttachments->Size(); i++)
+  for(uint32_t i = 0; i < colorAttachments->NumChildren(); i++)
   {
-    LoadSubpassAttachment(colorAttachments->At(i));
+    LoadSubpassAttachment(colorAttachments->GetChild(i));
   }
-  for(uint32_t i = 0; i < resolveAttachments->Size(); i++)
+  for(uint32_t i = 0; i < resolveAttachments->NumChildren(); i++)
   {
-    LoadSubpassAttachment(resolveAttachments->At(i));
+    LoadSubpassAttachment(resolveAttachments->GetChild(i));
   }
   if(!depthStencilAttachment->IsNULL())
   {
@@ -744,12 +744,12 @@ void TraceTracker::EndSubpass()
 {
 }
 
-ExtObject *TraceTracker::FindBufferMemBinding(uint64_t buf_id)
+SDObject *TraceTracker::FindBufferMemBinding(uint64_t buf_id)
 {
   ResourceWithViewsMapIter bufCreate_it = ResourceCreateFind(buf_id);
   RDCASSERT(bufCreate_it != ResourceCreateEnd());
-  ExtObject *result = 0;
-  for(ExtObjectIDMapIter v_it = bufCreate_it->second.views.begin();
+  SDObject *result = 0;
+  for(SDObjectIDMapIter v_it = bufCreate_it->second.views.begin();
       v_it != bufCreate_it->second.views.end(); v_it++)
   {
     if(v_it->second->name == std::string("vkBindBufferMemory"))
@@ -762,37 +762,37 @@ ExtObject *TraceTracker::FindBufferMemBinding(uint64_t buf_id)
   return result;
 }
 
-void TraceTracker::BufferImageCopyHelper(uint64_t buf_id, uint64_t img_id, ExtObject *regions,
+void TraceTracker::BufferImageCopyHelper(uint64_t buf_id, uint64_t img_id, SDObject *regions,
                                          VkImageLayout imageLayout, AccessAction bufferAction,
                                          AccessAction imageAction)
 {
   ResourceWithViewsMapIter imgCreate_it = ResourceCreateFind(img_id);
 
   RDCASSERT(imgCreate_it != ResourceCreateEnd());
-  ExtObject *image_ci = imgCreate_it->second.sdobj->At(1);
-  VkFormat imageFormat = (VkFormat)image_ci->At(4)->U64();
+  SDObject *image_ci = imgCreate_it->second.sdobj->GetChild(1);
+  VkFormat imageFormat = (VkFormat)image_ci->GetChild(4)->AsUInt64();
 
-  for(uint64_t i = 0; i < regions->Size(); i++)
+  for(uint64_t i = 0; i < regions->NumChildren(); i++)
   {
-    ExtObject *region = regions->At(i);
-    ExtObject *imageSubresource = region->At(3);
-    uint64_t aspectMask = imageSubresource->At(0)->U64();
+    SDObject *region = regions->GetChild(i);
+    SDObject *imageSubresource = region->GetChild(3);
+    uint64_t aspectMask = imageSubresource->GetChild(0)->AsUInt64();
 
-    uint64_t layerCount = imageSubresource->At(3)->U64();
-    ExtObject *regionOffset = region->At(4);
-    ExtObject *regionExtent = region->At(5);
-    uint32_t regionWidth = as_uint32(regionExtent->At(0)->U64());
-    uint32_t regionHeight = as_uint32(regionExtent->At(1)->U64());
-    uint32_t regionDepth = as_uint32(regionExtent->At(2)->U64());
-    uint64_t bufferOffset = region->At(0)->U64();
+    uint64_t layerCount = imageSubresource->GetChild(3)->AsUInt64();
+    SDObject *regionOffset = region->GetChild(4);
+    SDObject *regionExtent = region->GetChild(5);
+    uint32_t regionWidth = (uint32_t)regionExtent->GetChild(0)->AsUInt64();
+    uint32_t regionHeight = (uint32_t)regionExtent->GetChild(1)->AsUInt64();
+    uint32_t regionDepth = (uint32_t)regionExtent->GetChild(2)->AsUInt64();
+    uint64_t bufferOffset = region->GetChild(0)->AsUInt64();
 
     AccessImage(img_id, imageSubresource, regionOffset, regionExtent, imageLayout, imageAction);
 
-    uint32_t rowLength = as_uint32(region->At(1)->U64());
+    uint32_t rowLength = (uint32_t)region->GetChild(1)->AsUInt64();
     if(rowLength == 0)
       rowLength = regionWidth;
 
-    uint32_t imageHeight = as_uint32(region->At(2)->U64());
+    uint32_t imageHeight = (uint32_t)region->GetChild(2)->AsUInt64();
     if(imageHeight == 0)
       imageHeight = regionHeight;
     VkFormat regionFormat = imageFormat;

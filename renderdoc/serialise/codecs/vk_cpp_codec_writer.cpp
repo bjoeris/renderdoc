@@ -35,10 +35,11 @@
 #include "common/common.h"
 #include "core/core.h"
 #include "serialise/rdcfile.h"
-#include "ext_object.h"
+#include "vk_cpp_codec_common.h"
 #include "vk_cpp_codec_state.h"
 #include "vk_cpp_codec_tracker.h"
 #include "vk_cpp_codec_writer.h"
+#include "core/intervals.h"
 
 #pragma push_macro("GenericEvent")
 #ifdef GenericEvent
@@ -194,12 +195,12 @@ void CodeWriter::EarlyCreateResource(uint32_t pass)
   for(ResourceWithViewsMapIter it = tracker->ResourceCreateBegin();
       it != tracker->ResourceCreateEnd(); it++)
   {
-    if(it->second.sdobj->ChunkID() == (uint32_t)VulkanChunk::vkCreateBuffer)
+    if(it->second.sdobj->metadata.chunkID == (uint32_t)VulkanChunk::vkCreateBuffer)
     {
       tracker->CreateResource(it->second.sdobj);
       CreateBuffer(it->second.sdobj, pass, true);
     }
-    else if(it->second.sdobj->ChunkID() == (uint32_t)VulkanChunk::vkCreateImage)
+    else if(it->second.sdobj->metadata.chunkID == (uint32_t)VulkanChunk::vkCreateImage)
     {
       tracker->CreateResource(it->second.sdobj);
       CreateImage(it->second.sdobj, pass, true);
@@ -209,9 +210,9 @@ void CodeWriter::EarlyCreateResource(uint32_t pass)
 
 void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc_it)
 {
-  ExtObject *o = alloc_it->second.allocateSDObj;
-  ExtObject *memory = o->At(3);
-  const char *mem_remap = tracker->GetMemRemapVar(memory->U64());
+  SDObject *o = alloc_it->second.allocateSDObj;
+  SDObject *memory = o->GetChild(3);
+  const char *mem_remap = tracker->GetMemRemapVar(memory->AsUInt64());
 
   std::vector<size_t> order;
   bool reorder = (!alloc_it->second.HasAliasedResources()) &&
@@ -240,7 +241,7 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
   for(uint32_t resource_idx = 0; resource_idx < order.size(); resource_idx++)
   {
     const BoundResource &abr = alloc_it->second.boundResources[order[resource_idx]];
-    const char *mem_bind_offset = tracker->GetReplayBindOffsetVar(abr.resource->U64());
+    const char *mem_bind_offset = tracker->GetReplayBindOffsetVar(abr.resource->AsUInt64());
     if(reorder)
     {
       switch(reset)
@@ -254,7 +255,7 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
 
           // This is the first non-reset resource.
           // Save the current memory_size to the ResetSize_ variable.
-          const char *reset_size_name = tracker->GetMemResetSizeVar(memory->U64());
+          const char *reset_size_name = tracker->GetMemResetSizeVar(memory->AsUInt64());
           files[pass]->PrintLn("%s = memory_size;", reset_size_name);
 
           // Look for initialization resources next.
@@ -270,7 +271,7 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
 
           // This is the first non-initialization resource.
           // Save the current memory_size to the InitSize_ variable.
-          const char *init_size_name = tracker->GetMemInitSizeVar(memory->U64());
+          const char *init_size_name = tracker->GetMemInitSizeVar(memory->AsUInt64());
           files[pass]->PrintLn("%s = memory_size;", init_size_name);
 
           // all remaining resources should be not require reset nor initialization.
@@ -291,16 +292,16 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
           ->PrintLn("%s[%u].replay.offset = %s;", mem_remap, resource_idx, mem_bind_offset)
           .PrintLn("%s[%u].replay.size = %s.size;", mem_remap, resource_idx, abr.requirement->Name())
           .PrintLn("%s[%u].capture.offset = %s;", mem_remap, resource_idx,
-                   abr.offset->ValueStr().c_str())
+            ValueStr(abr.offset).c_str())
           .PrintLn("%s[%u].capture.size = VkMemoryRequirements_captured_%" PRIu64 ".size;",
-                   mem_remap, resource_idx, abr.resource->U64());
+                   mem_remap, resource_idx, abr.resource->AsUInt64());
     }
     else
     {
       // No memory reordering. Use the captured offsets.
       // Calculate the correct memory size.
       files[pass]
-          ->PrintLn("%s = %s;", mem_bind_offset, abr.offset->ValueStr().c_str())
+          ->PrintLn("%s = %s;", mem_bind_offset, ValueStr(abr.offset).c_str())
           .PrintLn("memory_size = std::max<uint64_t>(memory_size, %s + %s.size);", mem_bind_offset,
                    abr.requirement->Name());
     }
@@ -313,7 +314,7 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
     {
       // All bound resources required reset.
       // Set ResetSize_ to the final memory_size.
-      const char *reset_size_name = tracker->GetMemResetSizeVar(memory->U64());
+      const char *reset_size_name = tracker->GetMemResetSizeVar(memory->AsUInt64());
       files[pass]->PrintLn("%s = memory_size;", reset_size_name);
       // fall through to RESET_REQUIREMENT_INIT case
     }
@@ -321,7 +322,7 @@ void CodeWriter::RemapMemAlloc(uint32_t pass, MemAllocWithResourcesMapIter alloc
     {
       // All bound resources required initialization or reset.
       // Set InitSize_ to the final memory_size.
-      const char *init_size_name = tracker->GetMemInitSizeVar(memory->U64());
+      const char *init_size_name = tracker->GetMemInitSizeVar(memory->AsUInt64());
       files[pass]->PrintLn("%s = memory_size;", init_size_name);
     }
     break;
@@ -334,14 +335,14 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
   for(MemAllocWithResourcesMapIter alloc_it = tracker->MemAllocBegin();
       alloc_it != tracker->MemAllocEnd(); alloc_it++)
   {
-    ExtObject *o = alloc_it->second.allocateSDObj;
-    ExtObject *device = o->At(0);
-    ExtObject *ai = o->At(1);
-    ExtObject *memory = o->At(3);
+    SDObject *o = alloc_it->second.allocateSDObj;
+    SDObject *device = o->GetChild(0);
+    SDObject *ai = o->GetChild(1);
+    SDObject *memory = o->GetChild(3);
 
-    const char *device_name = tracker->GetResourceVar(device->U64());
-    const char *memory_name = tracker->GetResourceVar(memory->Type(), memory->U64());
-    const char *ai_name = tracker->GetMemAllocInfoVar(memory->U64(), true);
+    const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+    const char *memory_name = tracker->GetResourceVar(Type(memory), memory->AsUInt64());
+    const char *ai_name = tracker->GetMemAllocInfoVar(memory->AsUInt64(), true);
 
     files[pass]->PrintLn("{");
     LocalVariable(ai, "", pass);
@@ -354,12 +355,12 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
 
     if(alloc_it->second.HasAliasedResources())
     {
-      files[pass]->PrintLn("// Memory allocation %" PRIu64 " has aliased resources", memory->U64());
+      files[pass]->PrintLn("// Memory allocation %" PRIu64 " has aliased resources", memory->AsUInt64());
     }
     else
     {
       files[pass]->PrintLn("// Memory allocation %" PRIu64 " doesn't have aliased resources",
-                           memory->U64());
+                           memory->AsUInt64());
     }
 
     // Default values for memory_size and memory_bits
@@ -379,11 +380,11 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
     if(alloc_it->second.BoundResourceCount() == 0 || alloc_it->second.HasAliasedResources())
     {
       files[pass]->PrintLn("memory_size = %" PRIu64 "; // rdoc: reset size to capture value",
-                           ai->At(2)->U64());
+                           ai->GetChild(2)->AsUInt64());
     }
 
     files[pass]
-        ->PrintLn("%s.%s = memory_size;", ai->Name(), ai->At(2)->Name())
+        ->PrintLn("%s.%s = memory_size;", ai->Name(), ai->GetChild(2)->Name())
         .PrintLn("assert(memory_bits != 0);")
         .PrintLn(
             "%s.%s = CompatibleMemoryTypeIndex(%s, "
@@ -392,7 +393,7 @@ void CodeWriter::EarlyAllocateMemory(uint32_t pass)
             "VkPhysicalDeviceMemoryProperties_%" PRIu64
             ", "
             "memory_bits);",
-            ai->Name(), ai->At(3)->Name(), ai->At(3)->ValueStr().c_str(), tracker->PhysDevID(),
+            ai->Name(), ai->GetChild(3)->Name(), ValueStr(ai->GetChild(3)).c_str(), tracker->PhysDevID(),
             tracker->PhysDevID())
         .PrintLn("%s = %s;", ai_name, ai->Name());
     std::string resource_name_str;
@@ -415,20 +416,20 @@ void CodeWriter::EarlyBindResourceMemory(uint32_t pass)
     for(BoundResourcesIter resource_it = alloc_it->second.FirstBoundResource();
         resource_it != alloc_it->second.EndOfBoundResources(); resource_it++)
     {
-      ExtObject *o = resource_it->bindSDObj;
-      ExtObject *device = o->At(0);
-      ExtObject *object = o->At(1);
-      ExtObject *memory = o->At(2);
-      ExtObject *offset = o->At(3);
+      SDObject *o = resource_it->bindSDObj;
+      SDObject *device = o->GetChild(0);
+      SDObject *object = o->GetChild(1);
+      SDObject *memory = o->GetChild(2);
+      SDObject *offset = o->GetChild(3);
 
-      const char *device_name = tracker->GetResourceVar(device->U64());
-      const char *memory_name = tracker->GetResourceVar(memory->U64());
-      const char *object_name = tracker->GetResourceVar(object->U64());
-      const char *object_mem_reqs = tracker->GetMemReqsVar(object->U64());
-      std::string captured_bind_offset = tracker->GetCaptureBindOffsetVar(object->U64());
-      std::string replayed_bind_offset = tracker->GetReplayBindOffsetVar(object->U64());
+      const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+      const char *memory_name = tracker->GetResourceVar(memory->AsUInt64());
+      const char *object_name = tracker->GetResourceVar(object->AsUInt64());
+      const char *object_mem_reqs = tracker->GetMemReqsVar(object->AsUInt64());
+      std::string captured_bind_offset = tracker->GetCaptureBindOffsetVar(object->AsUInt64());
+      std::string replayed_bind_offset = tracker->GetReplayBindOffsetVar(object->AsUInt64());
 
-      int64_t memType = tracker->MemAllocTypeIndex(memory->U64());
+      int64_t memType = tracker->MemAllocTypeIndex(memory->AsUInt64());
 
       std::string phys_dev_mem_props_captured =
           "VkPhysicalDeviceMemoryProperties_captured_" + std::to_string(tracker->PhysDevID());
@@ -446,34 +447,34 @@ void CodeWriter::EarlyBindResourceMemory(uint32_t pass)
       if(alloc_it->second.HasAliasedResources())
       {
         files[pass]->PrintLn("result = %s(%s, %s, %s, %s);", o->Name(), device_name, object_name,
-                             memory_name, offset->ValueStr().c_str());
+                             memory_name, ValueStr(offset).c_str());
       }
       else
       {
         files[pass]
-            ->PrintLn("%s = %s;", captured_bind_offset.c_str(), offset->ValueStr().c_str())
+            ->PrintLn("%s = %s;", captured_bind_offset.c_str(), ValueStr(offset).c_str())
             .PrintLn("result = %s(%s, %s, %s, %s /* rdoc:value %" PRIu64 " */);", o->Name(),
                      device_name, object_name, memory_name, replayed_bind_offset.c_str(),
-                     offset->U64());
+                     offset->AsUInt64());
       }
       files[pass]->PrintLn("assert(result == VK_SUCCESS);").PrintLn("}");
     }
   }
 }
 
-void CodeWriter::BindResourceMemory(ExtObject *o, uint32_t pass)
+void CodeWriter::BindResourceMemory(SDObject *o, uint32_t pass)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *object = o->At(1);
-  ExtObject *memory = o->At(2);
-  ExtObject *offset = o->At(3);
+  SDObject *device = o->GetChild(0);
+  SDObject *object = o->GetChild(1);
+  SDObject *memory = o->GetChild(2);
+  SDObject *offset = o->GetChild(3);
 
-  const char *device_name = tracker->GetResourceVar(device->U64());
-  const char *memory_name = tracker->GetResourceVar(memory->U64());
-  const char *object_name = tracker->GetResourceVar(object->U64());
-  const char *object_mem_reqs = tracker->GetMemReqsVar(object->U64());
+  const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+  const char *memory_name = tracker->GetResourceVar(memory->AsUInt64());
+  const char *object_name = tracker->GetResourceVar(object->AsUInt64());
+  const char *object_mem_reqs = tracker->GetMemReqsVar(object->AsUInt64());
 
-  int64_t memType = tracker->MemAllocTypeIndex(memory->U64());
+  int64_t memType = tracker->MemAllocTypeIndex(memory->AsUInt64());
 
   std::string phys_dev_mem_props_captured =
       "VkPhysicalDeviceMemoryProperties_captured_" + std::to_string(tracker->PhysDevID());
@@ -490,7 +491,7 @@ void CodeWriter::BindResourceMemory(ExtObject *o, uint32_t pass)
 
   files[pass]
       ->PrintLn("result = %s(%s, %s, %s, %s);", o->Name(), device_name, object_name, memory_name,
-                offset->ValueStr().c_str())
+        ValueStr(offset).c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("}");
 }
@@ -514,22 +515,22 @@ void CodeWriter::Resolution(uint32_t pass)
       .PrintLnH("#endif");
 }
 
-void CodeWriter::EnumeratePhysicalDevices(ExtObject *o, uint32_t pass)
+void CodeWriter::EnumeratePhysicalDevices(SDObject *o, uint32_t pass)
 {
   // Handles vkEnumeratePhysicalDevices, and then also covers the API calls
   // vkGetPhysicalDeviceProperties, vkGetPhysicalDeviceMemoryProperties,
   // vkGetPhysicalDeviceFeatures, vkGetPhysicalDeviceQueueFamilyProperties,
-  RDCASSERT(o->Size() == 9);
+  RDCASSERT(o->NumChildren() == 9);
 
   // Make a name for the VkPhysicalDevice object that will be used throughout the code project.
-  ExtObject *instance = o->At(0);
-  ExtObject *physicalDevice = o->At(2);
+  SDObject *instance = o->GetChild(0);
+  SDObject *physicalDevice = o->GetChild(2);
 
   const char *phys_device_name =
-      tracker->GetResourceVar(physicalDevice->Type(), physicalDevice->U64());
+      tracker->GetResourceVar(Type(physicalDevice), physicalDevice->AsUInt64());
 
   // Find the name for the VkInstance variable that was used here.
-  RDCASSERT(tracker->InstanceID() == instance->U64());    // These must match.
+  RDCASSERT(tracker->InstanceID() == instance->AsUInt64());    // These must match.
   const char *instance_name = tracker->GetInstanceVar();
 
   files[pass]->PrintLn("{");    // Open bracket.
@@ -545,51 +546,51 @@ void CodeWriter::EnumeratePhysicalDevices(ExtObject *o, uint32_t pass)
                instance_name)
       .PrintLn("assert(r == VK_SUCCESS);")
       .PrintLn("%s = phys_devices[0]; // by default use device 0", phys_device_name)
-      .PrintLn("if (phys_devices.size() > %s) {", o->At(1)->ValueStr().c_str())
+      .PrintLn("if (phys_devices.size() > %s) {", ValueStr(o->GetChild(1)).c_str())
       .PrintLn("%s = phys_devices[%s]; // trace was captured on device %s", phys_device_name,
-               o->At(1)->ValueStr().c_str(), o->At(1)->ValueStr().c_str())
+        ValueStr(o->GetChild(1)).c_str(), ValueStr(o->GetChild(1)).c_str())
       .PrintLn("}");
 
   // Print device properties that were captured in comments.
-  ExtObject *phys_dev_props = o->At(4);
+  SDObject *phys_dev_props = o->GetChild(4);
   LocalVariable(phys_dev_props, "_captured", pass);
 
   // Declare the VkPhysicalDeviceProperties variable. This is what current
   // device supports. An app developer can compare and contrast properties
   // that were captured with the one that were available.
-  std::string phys_dev_props_name = AddVar("VkPhysicalDeviceProperties", physicalDevice->U64());
+  std::string phys_dev_props_name = AddVar("VkPhysicalDeviceProperties", physicalDevice->AsUInt64());
   files[pass]->PrintLn("%svkGetPhysicalDeviceProperties(%s, &%s);", shimPrefix, phys_device_name,
                        phys_dev_props_name.c_str());
 
   // Print device memory properties in comments.
-  ExtObject *dev_mem_props = o->At(5);
+  SDObject *dev_mem_props = o->GetChild(5);
   LocalVariable(dev_mem_props, "", pass);
   std::string phys_dev_mem_captured =
       AddVar("VkPhysicalDeviceMemoryProperties", "VkPhysicalDeviceMemoryProperties_captured",
-             physicalDevice->U64());
+             physicalDevice->AsUInt64());
   files[pass]->PrintLn("%s = %s;", phys_dev_mem_captured.c_str(), dev_mem_props->Name());
 
   // Declare the VkPhysicalDeviceMemoryProperties variable.
-  std::string phys_dev_mem_props = AddVar("VkPhysicalDeviceMemoryProperties", physicalDevice->U64());
+  std::string phys_dev_mem_props = AddVar("VkPhysicalDeviceMemoryProperties", physicalDevice->AsUInt64());
   files[pass]->PrintLn("%svkGetPhysicalDeviceMemoryProperties(%s, &%s);", shimPrefix,
                        phys_device_name, phys_dev_mem_props.c_str());
 
   // Print device memory features in comments.
-  ExtObject *phys_dev_feats = o->At(6);
+  SDObject *phys_dev_feats = o->GetChild(6);
   LocalVariable(phys_dev_feats, "_captured", pass);
 
   // Declare the VkPhysicalDeviceFeatures variable.
-  std::string phys_dev_feats_name = AddVar("VkPhysicalDeviceFeatures", physicalDevice->U64());
+  std::string phys_dev_feats_name = AddVar("VkPhysicalDeviceFeatures", physicalDevice->AsUInt64());
   files[pass]->PrintLn("%svkGetPhysicalDeviceFeatures(%s, &%s);", shimPrefix, phys_device_name,
                        phys_dev_feats_name.c_str());
 
   // Print queue properties in comments.
-  ExtObject *queue_props = o->At(8);
+  SDObject *queue_props = o->GetChild(8);
   LocalVariable(queue_props, "_captured", pass);
 
   // Declare the vkGetPhysicalDeviceQueueFamilyProperties variable.
   std::string queue_prop_name =
-      AddNamedVar("std::vector<VkQueueFamilyProperties>", tracker->GetQueueFamilyPropertiesVar(physicalDevice->U64()));
+      AddNamedVar("std::vector<VkQueueFamilyProperties>", tracker->GetQueueFamilyPropertiesVar(physicalDevice->AsUInt64()));
 
   files[pass]
     ->PrintLn("{")
@@ -606,23 +607,23 @@ void CodeWriter::EnumeratePhysicalDevices(ExtObject *o, uint32_t pass)
   files[pass]->PrintLn("}");    // Close bracket.
 }
 
-void CodeWriter::CreateInstance(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateInstance(SDObject *o, uint32_t pass, bool global_ci)
 {
-  RDCASSERT(o->Size() == 1);
-  ExtObject *init_params = o->At(0);
-  RDCASSERT(init_params->Size() == 8);
+  RDCASSERT(o->NumChildren() == 1);
+  SDObject *init_params = o->GetChild(0);
+  RDCASSERT(init_params->NumChildren() == 8);
 
-  ExtObject *instance = init_params->At(7);
-  tracker->InstanceID(instance->U64());
-  const char *instance_name = tracker->GetResourceVar(instance->Type(), instance->U64());
+  SDObject *instance = init_params->GetChild(7);
+  tracker->InstanceID(instance->AsUInt64());
+  const char *instance_name = tracker->GetResourceVar(Type(instance), instance->AsUInt64());
 
   files[pass]->PrintLn("{");
 
-  ExtObject *layers = init_params->At(5);
+  SDObject *layers = init_params->GetChild(5);
   bool enables_vl = false;
-  for(uint64_t i = 0; i < layers->Size(); i++)
+  for(uint64_t i = 0; i < layers->NumChildren(); i++)
   {
-    if(layers->At(i)->data.str == "VK_LAYER_LUNARG_standard_validation")
+    if(layers->GetChild(i)->data.str == "VK_LAYER_LUNARG_standard_validation")
     {
       enables_vl = true;
       break;
@@ -630,29 +631,26 @@ void CodeWriter::CreateInstance(ExtObject *o, uint32_t pass, bool global_ci)
   }
   if(!enables_vl)
   {
-    uint64_t last = layers->Size();
-    layers->AddChild(new SDObject("Validation Layer", "string"));
-    layers->At(last)->data.str = "VK_LAYER_LUNARG_standard_validation";
-    layers->At(last)->type.basetype = SDBasic::String;
+    layers->data.children.push_back(makeSDObject("Validation Layer", "VK_LAYER_LUNARG_standard_validation"));
   }
 
   if(!layers->IsNULL())
     LocalVariable(layers, "", pass);
 
-  ExtObject *extensions = init_params->At(6);
+  SDObject *extensions = init_params->GetChild(6);
   int64_t enables_surface = -1;
   bool enables_debug_report = false;
-  for(uint64_t i = 0; i < extensions->Size(); i++)
+  for(uint64_t i = 0; i < extensions->NumChildren(); i++)
   {
-    if(extensions->At(i)->data.str == "VK_GOOGLE_yeti_surface" ||
-       extensions->At(i)->data.str == "VK_KHR_win32_surface" ||
-       extensions->At(i)->data.str == "VK_KHR_xlib_surface" ||
-       extensions->At(i)->data.str == "VK_KHR_xcb_surface")
+    if(extensions->GetChild(i)->data.str == "VK_GOOGLE_yeti_surface" ||
+       extensions->GetChild(i)->data.str == "VK_KHR_win32_surface" ||
+       extensions->GetChild(i)->data.str == "VK_KHR_xlib_surface" ||
+       extensions->GetChild(i)->data.str == "VK_KHR_xcb_surface")
     {
       enables_surface = i;
     }
 
-    if(extensions->At(i)->data.str == "VK_EXT_debug_report")
+    if(extensions->GetChild(i)->data.str == "VK_EXT_debug_report")
     {
       enables_debug_report = true;
     }
@@ -660,10 +658,7 @@ void CodeWriter::CreateInstance(ExtObject *o, uint32_t pass, bool global_ci)
 
   if(!enables_debug_report)
   {
-    uint64_t last = extensions->Size();
-    extensions->AddChild(new SDObject("Debug Report Extension", "string"));
-    extensions->At(last)->data.str = "VK_EXT_debug_report";
-    extensions->At(last)->type.basetype = SDBasic::String;
+    extensions->data.children.push_back((SDObject *)makeSDObject("Debug Report Extension", "VK_EXT_debug_report"));
   }
 
   if(!extensions->IsNULL())
@@ -685,10 +680,10 @@ void CodeWriter::CreateInstance(ExtObject *o, uint32_t pass, bool global_ci)
       ->PrintLn("VkApplicationInfo ApplicationInfo = {")
       .PrintLn("/* sType */ VK_STRUCTURE_TYPE_APPLICATION_INFO,")
       .PrintLn("/* pNext */ NULL,")
-      .PrintLn("/* pApplicationName */ \"%s\",", init_params->At(0)->Str())
-      .PrintLn("/* applicationVersion */ %" PRIu64 ",", init_params->At(2)->U64())
-      .PrintLn("/* pEngineName */ \"%s\",", init_params->At(1)->Str())
-      .PrintLn("/* engineVersion */ %" PRIu64 ",", init_params->At(3)->U64())
+      .PrintLn("/* pApplicationName */ %s,", ValueStr(init_params->GetChild(0)).c_str())
+      .PrintLn("/* applicationVersion */ %" PRIu64 ",", init_params->GetChild(2)->AsUInt64())
+      .PrintLn("/* pEngineName */ %s,", ValueStr(init_params->GetChild(1)).c_str())
+      .PrintLn("/* engineVersion */ %" PRIu64 ",", init_params->GetChild(3)->AsUInt64())
       .PrintLn("/* apiVersion */ %d,", VK_API_VERSION_1_1)
       .PrintLn("};")
       .PrintLn("VkInstanceCreateInfo InstanceCreateInfo = {")
@@ -698,23 +693,23 @@ void CodeWriter::CreateInstance(ExtObject *o, uint32_t pass, bool global_ci)
       .PrintLn("/* pApplicationInfo */ &ApplicationInfo,");
   if(enables_vl)
   {    // if VL were not added by RenderDoc code gen, generate as is.
-    files[pass]->PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->Size());
+    files[pass]->PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->NumChildren());
   }
   else
   {    // otherwise include VL in debug builds only.
     files[pass]
         ->PrintLn("#if defined(_DEBUG) || defined(DEBUG)")
-        .PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->Size())
+        .PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->NumChildren())
         .PrintLn("#else")
-        .PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->Size() - 1)
+        .PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->NumChildren() - 1)
         .PrintLn("#endif");
   }
   std::string resource_name_str;
   if(*shimPrefix)
     resource_name_str.append(", \"").append(instance_name).append("\"");
   files[pass]
-      ->PrintLn("/* ppEnabledLayerNames */ %s,", layers->Size() > 0 ? layers->Name() : "NULL")
-      .PrintLn("/* enabledExtensionCount */ %" PRIu64 ",", extensions->Size())
+      ->PrintLn("/* ppEnabledLayerNames */ %s,", layers->NumChildren() > 0 ? layers->Name() : "NULL")
+      .PrintLn("/* enabledExtensionCount */ %" PRIu64 ",", extensions->NumChildren())
       .PrintLn("/* ppEnabledExtensionNames */ %s", extensions->Name())
       .PrintLn("};")
       .PrintLn("VkResult r = %svkCreateInstance(&InstanceCreateInfo, NULL, &%s%s);", shimPrefix,
@@ -729,29 +724,29 @@ void CodeWriter::CreateInstance(ExtObject *o, uint32_t pass, bool global_ci)
   files[pass]->PrintLn("}");
 }
 
-void CodeWriter::CreatePresentImageView(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreatePresentImageView(SDObject *o, uint32_t pass, bool global_ci)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *ci = o->At(1);
-  ExtObject *view = o->At(3);
-  ExtObject *image = ci->At(3);
+  SDObject *device = o->GetChild(0);
+  SDObject *ci = o->GetChild(1);
+  SDObject *view = o->GetChild(3);
+  SDObject *image = ci->GetChild(3);
 
   {
-    ExtObject *image_copy = image;
-    const char *device_name = tracker->GetResourceVar(device->U64());
+    SDObject *image_copy = image;
+    const char *device_name = tracker->GetResourceVar(device->AsUInt64());
 
     // Each ImageView actually becomes an array of views.
     const char *present_views =
-        tracker->GetResourceVar("std::vector<VkImageView>", view->Type(), view->U64());
+        tracker->GetResourceVar("std::vector<VkImageView>", Type(view), view->AsUInt64());
     files[pass]->PrintLn("%s.resize(%s);", present_views, tracker->SwapchainCountStr());
 
     // Create min(captured_swapchain_count, replayed_swapchain_count) views.
     // Basically create a view for each presentable image from swapchain.
     uint64_t i = 0;
-    for(ExtObjectVecIter it = tracker->PresentImageBegin(); it != tracker->PresentImageEnd(); it++)
+    for(SDObjectVecIter it = tracker->PresentImageBegin(); it != tracker->PresentImageEnd(); it++)
     {
       files[pass]->PrintLn("if (%s > %u) {", tracker->SwapchainCountStr(), i);
-      image->U64() = (*it)->U64();
+      image->UInt64() = (*it)->AsUInt64();
       LocalVariable(ci, "", pass);
       std::string resource_name_str;
       if(*shimPrefix)
@@ -771,18 +766,18 @@ void CodeWriter::CreatePresentImageView(ExtObject *o, uint32_t pass, bool global
   }
 }
 
-void CodeWriter::CreatePresentFramebuffer(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreatePresentFramebuffer(SDObject *o, uint32_t pass, bool global_ci)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *ci = o->At(1);
-  ExtObject *framebuffer = o->At(3);
+  SDObject *device = o->GetChild(0);
+  SDObject *ci = o->GetChild(1);
+  SDObject *framebuffer = o->GetChild(3);
 
   const char *present_fbs =
-      tracker->GetResourceVar("std::vector<VkFramebuffer>", framebuffer->Type(), framebuffer->U64());
+      tracker->GetResourceVar("std::vector<VkFramebuffer>", Type(framebuffer), framebuffer->AsUInt64());
   files[pass]->PrintLn("%s.resize(%s);", present_fbs, tracker->SwapchainCountStr());
 
-  ExtObject *presentView = tracker->FramebufferPresentView(o);
-  VariableIDMapIter var_it = tracker->GetResourceVarIt(presentView->U64());
+  SDObject *presentView = tracker->FramebufferPresentView(o);
+  VariableIDMapIter var_it = tracker->GetResourceVarIt(presentView->AsUInt64());
   std::string varName = var_it->second.name;
 
   for(uint32_t i = 0; i < tracker->SwapchainCount(); i++)
@@ -799,7 +794,7 @@ void CodeWriter::CreatePresentFramebuffer(ExtObject *o, uint32_t pass, bool glob
           .append("]\"");
     files[pass]
         ->PrintLn("VkResult result = %s(%s, &%s, NULL, &%s[%u]%s);", o->Name(),
-                  tracker->GetResourceVar(device->U64()), ci->Name(), present_fbs, i,
+                  tracker->GetResourceVar(device->AsUInt64()), ci->Name(), present_fbs, i,
                   resource_name_str.c_str())
         .PrintLn("assert(result == VK_SUCCESS);");
     files[pass]->PrintLn("}");
@@ -807,18 +802,18 @@ void CodeWriter::CreatePresentFramebuffer(ExtObject *o, uint32_t pass, bool glob
   var_it->second.name = varName;
 }
 
-void CodeWriter::CreateDescriptorPool(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateDescriptorPool(SDObject *o, uint32_t pass, bool global_ci)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *ci = o->At(1);
-  ExtObject *vk_res = o->At(3);
+  SDObject *device = o->GetChild(0);
+  SDObject *ci = o->GetChild(1);
+  SDObject *vk_res = o->GetChild(3);
 
-  const char *device_name = tracker->GetResourceVar(device->U64());
-  std::string res = AddVar("std::vector<VkDescriptorPool>", "VkDescriptorPoolVec", vk_res->U64());
-  const char *res_name = tracker->GetResourceVar(vk_res->Type(), vk_res->U64());
-  std::string ci_name = AddVar(ci->Type(), vk_res->U64());
+  const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+  std::string res = AddVar("std::vector<VkDescriptorPool>", "VkDescriptorPoolVec", vk_res->AsUInt64());
+  const char *res_name = tracker->GetResourceVar(Type(vk_res), vk_res->AsUInt64());
+  std::string ci_name = AddVar(Type(ci), vk_res->AsUInt64());
   std::string pool_vec =
-      AddVar("std::vector<VkDescriptorPoolSize>", "VkDescriptorPoolSize", vk_res->U64());
+      AddVar("std::vector<VkDescriptorPoolSize>", "VkDescriptorPoolSize", vk_res->AsUInt64());
 
   files[pass]->PrintLn("{");
   LocalVariable(ci, "", pass);
@@ -838,127 +833,127 @@ void CodeWriter::CreateDescriptorPool(ExtObject *o, uint32_t pass, bool global_c
       .PrintLn("}");
 }
 
-void CodeWriter::CreateCommandPool(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateCommandPool(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateFramebuffer(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateFramebuffer(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateRenderPass(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateRenderPass(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateSemaphore(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateSemaphore(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateFence(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateFence(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateEvent(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateEvent(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateQueryPool(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateQueryPool(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateDescriptorSetLayout(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateDescriptorSetLayout(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateDescriptorUpdateTemplate(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateDescriptorUpdateTemplate(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateImage(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateImage(SDObject *o, uint32_t pass, bool global_ci)
 {
   o->name = shimPrefix + string(o->name);
   GenericVkCreate(o, pass, global_ci);
   BufferOrImageMemoryReqs(o, "vkGetImageMemoryRequirements", pass);
 }
 
-void CodeWriter::CreateImageView(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateImageView(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateSampler(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateSampler(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateShaderModule(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateShaderModule(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 
-  uint64_t bufferID = o->At("CreateInfo")->At("pCode")->U64();
+  uint64_t bufferID = o->FindChild("CreateInfo")->FindChild("pCode")->AsUInt64();
   if(tracker->DecDataBlobCount(bufferID) == 0)
     files[pass]->PrintLn("%s.clear();", tracker->GetDataBlobVar(bufferID));
 }
 
-void CodeWriter::CreatePipelineLayout(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreatePipelineLayout(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreatePipelineCache(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreatePipelineCache(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 
-  uint64_t bufferID = o->At("CreateInfo")->At("pInitialData")->U64();
+  uint64_t bufferID = o->FindChild("CreateInfo")->FindChild("pInitialData")->AsUInt64();
   if(tracker->DecDataBlobCount(bufferID) == 0)
     files[pass]->PrintLn("%s.clear();", tracker->GetDataBlobVar(bufferID));
 }
 
-void CodeWriter::CreateBuffer(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateBuffer(SDObject *o, uint32_t pass, bool global_ci)
 {
   o->name = shimPrefix + string(o->name);
   GenericVkCreate(o, pass, global_ci);
   BufferOrImageMemoryReqs(o, "vkGetBufferMemoryRequirements", pass);
 }
 
-void CodeWriter::CreateBufferView(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateBufferView(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericVkCreate(o, pass, global_ci);
 }
 
-void CodeWriter::CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateSwapchainKHR(SDObject *o, uint32_t pass, bool global_ci)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *ci = o->At(1);
-  ExtObject *swapchain = o->At(3);
+  SDObject *device = o->GetChild(0);
+  SDObject *ci = o->GetChild(1);
+  SDObject *swapchain = o->GetChild(3);
   const char *instance_name = tracker->GetInstanceVar();
-  const char *device_name = tracker->GetResourceVar(device->U64());
-  const char *swapchain_name = tracker->GetResourceVar(swapchain->Type(), swapchain->U64());
+  const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+  const char *swapchain_name = tracker->GetResourceVar(Type(swapchain), swapchain->AsUInt64());
   const char *phys_dev_name = tracker->GetPhysDeviceVar();
 
-  std::string surface = AddVar("VkSurfaceKHR", swapchain->U64());
-  std::string supported_bool = AddVar("std::vector<VkBool32>", "SurfaceSupported", swapchain->U64());
-  std::string format_count = AddVar("uint32_t", "SurfaceFormatCount", swapchain->U64());
-  std::string formats = AddVar("std::vector<VkSurfaceFormatKHR>", "SurfaceFormats", swapchain->U64());
-  std::string surface_caps = AddVar("VkSurfaceCapabilitiesKHR", swapchain->U64());
-  std::string mode_count = AddVar("uint32_t", "SurfacePresentModeCount", swapchain->U64());
+  std::string surface = AddVar("VkSurfaceKHR", swapchain->AsUInt64());
+  std::string supported_bool = AddVar("std::vector<VkBool32>", "SurfaceSupported", swapchain->AsUInt64());
+  std::string format_count = AddVar("uint32_t", "SurfaceFormatCount", swapchain->AsUInt64());
+  std::string formats = AddVar("std::vector<VkSurfaceFormatKHR>", "SurfaceFormats", swapchain->AsUInt64());
+  std::string surface_caps = AddVar("VkSurfaceCapabilitiesKHR", swapchain->AsUInt64());
+  std::string mode_count = AddVar("uint32_t", "SurfacePresentModeCount", swapchain->AsUInt64());
   std::string modes =
-      AddVar("std::vector<VkPresentModeKHR>", "SurfacePresentModes", swapchain->U64());
+      AddVar("std::vector<VkPresentModeKHR>", "SurfacePresentModes", swapchain->AsUInt64());
 
   files[pass]
       ->PrintLn("{")
       .PrintLn("#if defined(WIN32)")
       .PrintLn("VkWin32SurfaceCreateInfoKHR VkWin32SurfaceCreateInfoKHR_%" PRIu64 " = {",
-               swapchain->U64())
+               swapchain->AsUInt64())
       .PrintLn("/* sType = */ VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,")
       .PrintLn("/* pNext = */ NULL,")
       .PrintLn("/* flags = */ VkWin32SurfaceCreateFlagsKHR(0),")
@@ -968,11 +963,11 @@ void CodeWriter::CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci)
       .PrintLn(
           "VkResult result = vkCreateWin32SurfaceKHR("
           "%s, &VkWin32SurfaceCreateInfoKHR_%" PRIu64 ", NULL, &%s);",
-          instance_name, swapchain->U64(), surface.c_str())
+          instance_name, swapchain->AsUInt64(), surface.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("#elif defined(__yeti__)")
       .PrintLn("VkYetiSurfaceCreateInfoGOOGLE VkYetiSurfaceCreateInfoGOOGLE_%" PRIu64 " = {",
-               swapchain->U64())
+               swapchain->AsUInt64())
       .PrintLn("  /* sType = */ VK_STRUCTURE_TYPE_YETI_SURFACE_CREATE_INFO_GOOGLE,")
       .PrintLn("  /* pNext = */ NULL,")
       .PrintLn("  /* streamIndex = */ 0")
@@ -980,11 +975,11 @@ void CodeWriter::CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci)
       .PrintLn(
           "VkResult result = vkCreateYetiSurfaceGOOGLE("
           "%s, &VkYetiSurfaceCreateInfoGOOGLE_%" PRIu64 ", NULL, &%s);",
-          instance_name, swapchain->U64(), surface.c_str())
+          instance_name, swapchain->AsUInt64(), surface.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("#elif defined(__linux__)")
       .PrintLn("VkXlibSurfaceCreateInfoKHR VkXlibSurfaceCreateInfoKHR_%" PRIu64 " = {",
-               swapchain->U64())
+               swapchain->AsUInt64())
       .PrintLn("/* sType = */ VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,")
       .PrintLn("/* pNext = */ NULL,")
       .PrintLn("/* VkXlibSurfaceCreateFlagsKHR = */ 0,")
@@ -994,7 +989,7 @@ void CodeWriter::CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci)
       .PrintLn("VkResult result = vkCreateXlibSurfaceKHR(%s, &VkXlibSurfaceCreateInfoKHR_%" PRIu64
                ", NULL, "
                "&%s);",
-               instance_name, swapchain->U64(), surface.c_str())
+               instance_name, swapchain->AsUInt64(), surface.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("#endif");
 
@@ -1044,26 +1039,26 @@ void CodeWriter::CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci)
   AddNamedVar("std::vector<VkImage>", tracker->PresentImagesStr());
 }
 
-void CodeWriter::CreateGraphicsPipelines(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateGraphicsPipelines(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericCreatePipelines(o, pass, global_ci);
 }
 
-void CodeWriter::CreateComputePipelines(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateComputePipelines(SDObject *o, uint32_t pass, bool global_ci)
 {
   GenericCreatePipelines(o, pass, global_ci);
 }
 
-void CodeWriter::CreateDevice(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateDevice(SDObject *o, uint32_t pass, bool global_ci)
 {
-  ExtObject *phys_dev = o->At(0);
-  ExtObject *ci = o->At(1);
-  ExtObject *vk_res = o->At(3);
+  SDObject *phys_dev = o->GetChild(0);
+  SDObject *ci = o->GetChild(1);
+  SDObject *vk_res = o->GetChild(3);
 
-  RDCASSERT(phys_dev->U64() == tracker->PhysDevID());
+  RDCASSERT(phys_dev->AsUInt64() == tracker->PhysDevID());
 
   const char *device_name = tracker->GetPhysDeviceVar();
-  const char *vk_res_name = tracker->GetResourceVar(vk_res->Type(), vk_res->U64());
+  const char *vk_res_name = tracker->GetResourceVar(Type(vk_res), vk_res->AsUInt64());
 
   files[pass]->PrintLn("{");
   LocalVariable(ci, "", pass);
@@ -1089,7 +1084,7 @@ void CodeWriter::CreateDevice(ExtObject *o, uint32_t pass, bool global_ci)
     resource_name_str.append(", \"").append(device_name).append("\"");
   files[pass]
       ->PrintLn("MakePhysicalDeviceFeaturesMatch(VkPhysicalDeviceFeatures_%" PRIu64 ", %s);",
-                tracker->PhysDevID(), ci->At(9)->Name())
+                tracker->PhysDevID(), ci->GetChild(9)->Name())
       .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s%s);", o->Name(), device_name, ci->Name(),
                vk_res_name, resource_name_str.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
@@ -1126,37 +1121,37 @@ void CodeWriter::HandleMemoryAllocationAndResourceCreation(uint32_t pass)
   EarlyBindResourceMemory(pass);
 }
 
-void CodeWriter::CreateAuxResources(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::CreateAuxResources(SDObject *o, uint32_t pass, bool global_ci)
 {
-  ExtObject *device = as_ext(o->At(3));
+  SDObject *device = o->GetChild(3);
   files[pass]->PrintLn("InitializeAuxResources(&aux, %s, %s, %s);", tracker->GetInstanceVar(),
-                       tracker->GetPhysDeviceVar(), tracker->GetResourceVar(device->U64()));
+                       tracker->GetPhysDeviceVar(), tracker->GetResourceVar(device->AsUInt64()));
 }
 
-void CodeWriter::GetDeviceQueue(ExtObject *o, uint32_t pass)
+void CodeWriter::GetDeviceQueue(SDObject *o, uint32_t pass)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *family = o->At(1);
-  ExtObject *index = o->At(2);
-  ExtObject *queue = o->At(3);
-  const char *device_name = tracker->GetResourceVar(device->U64());
-  const char *queue_name = tracker->GetResourceVar(queue->Type(), queue->U64());
+  SDObject *device = o->GetChild(0);
+  SDObject *family = o->GetChild(1);
+  SDObject *index = o->GetChild(2);
+  SDObject *queue = o->GetChild(3);
+  const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+  const char *queue_name = tracker->GetResourceVar(Type(queue), queue->AsUInt64());
   files[pass]
       ->PrintLn("{")
-      .PrintLn("%s(%s, %" PRIu64 ", %" PRIu64 ", &%s);", o->Name(), device_name, family->U64(),
-               index->U64(), queue_name)
+      .PrintLn("%s(%s, %" PRIu64 ", %" PRIu64 ", &%s);", o->Name(), device_name, family->AsUInt64(),
+               index->AsUInt64(), queue_name)
       .PrintLn("}");
 }
 
-void CodeWriter::GetSwapchainImagesKHR(ExtObject *o, uint32_t pass)
+void CodeWriter::GetSwapchainImagesKHR(SDObject *o, uint32_t pass)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *swapchain = o->At(1);
-  uint64_t swapchain_idx = o->At(2)->U64();
-  ExtObject *image = o->At(3);
+  SDObject *device = o->GetChild(0);
+  SDObject *swapchain = o->GetChild(1);
+  uint64_t swapchain_idx = o->GetChild(2)->AsUInt64();
+  SDObject *image = o->GetChild(3);
 
-  const char *device_name = tracker->GetResourceVar(device->U64());
-  const char *swapchain_name = tracker->GetResourceVar(swapchain->U64());
+  const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+  const char *swapchain_name = tracker->GetResourceVar(swapchain->AsUInt64());
   static int32_t count = (int32_t)0;
 
   // Do this only once: populate the PresentImages vector with swapchain images.
@@ -1179,7 +1174,7 @@ void CodeWriter::GetSwapchainImagesKHR(ExtObject *o, uint32_t pass)
   }
 
   // For every image that RenderDoc creates, associate it to a PresentImages[Index];
-  const char *image_name = tracker->GetResourceVar(image->Type(), image->U64());
+  const char *image_name = tracker->GetResourceVar(Type(image), image->AsUInt64());
   files[pass]
       ->PrintLn("if (%s > %u) {", tracker->SwapchainCountStr(), swapchain_idx)
       .PrintLn("%s = %s[%u];", image_name, tracker->PresentImagesStr(), swapchain_idx)
@@ -1188,14 +1183,14 @@ void CodeWriter::GetSwapchainImagesKHR(ExtObject *o, uint32_t pass)
   count++;
 }
 
-void CodeWriter::AllocateCommandBuffers(ExtObject *o, uint32_t pass)
+void CodeWriter::AllocateCommandBuffers(SDObject *o, uint32_t pass)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *ai = o->At(1);
-  ExtObject *cmd_buffer = o->At(2);
+  SDObject *device = o->GetChild(0);
+  SDObject *ai = o->GetChild(1);
+  SDObject *cmd_buffer = o->GetChild(2);
 
-  const char *device_name = tracker->GetResourceVar(device->U64());
-  const char *cmd_buffer_name = tracker->GetResourceVar(cmd_buffer->Type(), cmd_buffer->U64());
+  const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+  const char *cmd_buffer_name = tracker->GetResourceVar(Type(cmd_buffer), cmd_buffer->AsUInt64());
 
   files[pass]->PrintLn("{");
   LocalVariable(ai, "", pass);
@@ -1209,15 +1204,15 @@ void CodeWriter::AllocateCommandBuffers(ExtObject *o, uint32_t pass)
       .PrintLn("}");
 }
 
-void CodeWriter::AllocateMemory(ExtObject *o, uint32_t pass)
+void CodeWriter::AllocateMemory(SDObject *o, uint32_t pass)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *ai = o->At(1);
-  ExtObject *memory = o->At(3);
+  SDObject *device = o->GetChild(0);
+  SDObject *ai = o->GetChild(1);
+  SDObject *memory = o->GetChild(3);
 
-  const char *device_name = tracker->GetResourceVar(device->U64());
-  const char *memory_name = tracker->GetResourceVar(memory->Type(), memory->U64());
-  const char *ai_name = tracker->GetMemAllocInfoVar(memory->U64(), true);
+  const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+  const char *memory_name = tracker->GetResourceVar(Type(memory), memory->AsUInt64());
+  const char *ai_name = tracker->GetMemAllocInfoVar(memory->AsUInt64(), true);
 
   files[pass]->PrintLn("{");
   LocalVariable(ai, "", pass);
@@ -1232,7 +1227,7 @@ void CodeWriter::AllocateMemory(ExtObject *o, uint32_t pass)
                 "VkPhysicalDeviceMemoryProperties_%" PRIu64
                 ", "
                 "0xFFFFFFFF);",
-                ai->Name(), ai->At(3)->Name(), ai->At(3)->U64(), tracker->PhysDevID(),
+                ai->Name(), ai->GetChild(3)->Name(), ai->GetChild(3)->AsUInt64(), tracker->PhysDevID(),
                 tracker->PhysDevID())
       .PrintLn("%s = %s;", ai_name, ai->Name())
       .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s%s);", o->Name(), device_name, ai->Name(),
@@ -1241,19 +1236,19 @@ void CodeWriter::AllocateMemory(ExtObject *o, uint32_t pass)
       .PrintLn("}");
 }
 
-void CodeWriter::AllocateDescriptorSets(ExtObject *o, uint32_t pass)
+void CodeWriter::AllocateDescriptorSets(SDObject *o, uint32_t pass)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *ai = o->At(1);
-  ExtObject *ds = o->At(2);
+  SDObject *device = o->GetChild(0);
+  SDObject *ai = o->GetChild(1);
+  SDObject *ds = o->GetChild(2);
   // DescriptorSetAllocateInfo.descriptorSetCount must always be equal to '1'.
   // Descriptor set allocation can allocate multiple descriptor sets at the
   // same time, but RenderDoc splits these calls into multiple calls, one per
   // each descriptor set object that is still alive at the time of capture.
-  RDCASSERT(ai->At(3)->U64() == 1);
-  const char *device_name = tracker->GetResourceVar(device->U64());
-  const char *ds_name = tracker->GetResourceVar(ds->Type(), ds->U64());
-  uint64_t descPool = ai->At("descriptorPool")->U64();
+  RDCASSERT(ai->GetChild(3)->AsUInt64() == 1);
+  const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+  const char *ds_name = tracker->GetResourceVar(Type(ds), ds->AsUInt64());
+  uint64_t descPool = ai->FindChild("descriptorPool")->AsUInt64();
   std::string pools = MakeVarName("VkDescriptorPoolVec", descPool);
   std::string pools_ci = MakeVarName("VkDescriptorPoolCreateInfo", descPool);
   files[pass]->PrintLn("{");
@@ -1285,28 +1280,28 @@ void CodeWriter::AllocateDescriptorSets(ExtObject *o, uint32_t pass)
       .PrintLn("}");
 }
 
-void CodeWriter::BufferOrImageMemoryReqs(ExtObject *o, const char *get_mem_req_func, uint32_t pass)
+void CodeWriter::BufferOrImageMemoryReqs(SDObject *o, const char *get_mem_req_func, uint32_t pass)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *object = o->At(3);
-  const char *device_name = tracker->GetResourceVar(device->Type(), device->U64());
-  const char *object_name = tracker->GetResourceVar(object->Type(), object->U64());
-  const char *mem_req_name = tracker->GetMemReqsVar(object->U64());
+  SDObject *device = o->GetChild(0);
+  SDObject *object = o->GetChild(3);
+  const char *device_name = tracker->GetResourceVar(Type(device), device->AsUInt64());
+  const char *object_name = tracker->GetResourceVar(Type(object), object->AsUInt64());
+  const char *mem_req_name = tracker->GetMemReqsVar(object->AsUInt64());
   std::string captured_mem_req_name =
-      AddVar("VkMemoryRequirements", "VkMemoryRequirements_captured", object->U64());
+      AddVar("VkMemoryRequirements", "VkMemoryRequirements_captured", object->AsUInt64());
 
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(4), "_temp", pass);
+  LocalVariable(o->GetChild(4), "_temp", pass);
   files[pass]
-      ->PrintLn("%s = %s_temp;", captured_mem_req_name.c_str(), o->At(4)->Name())
+      ->PrintLn("%s = %s_temp;", captured_mem_req_name.c_str(), o->GetChild(4)->Name())
       .PrintLn("%s(%s, %s, &%s);", get_mem_req_func, device_name, object_name, mem_req_name)
       .PrintLn("}");
 }
 
-void CodeWriter::InitDstBuffer(ExtObject *o, uint32_t pass)
+void CodeWriter::InitDstBuffer(SDObject *o, uint32_t pass)
 {
-  uint64_t resourceID = o->At(1)->U64();
-  InitResourceIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
+  uint64_t resourceID = o->GetChild(1)->AsUInt64();
+  SDChunkIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
   const char *mem_dst_name = tracker->GetResourceVar(resourceID);
   std::string buf_dst_name = AddVar("VkBuffer", "VkBuffer_dst", resourceID);
   const char *init_size_name = tracker->GetMemInitSizeVar(resourceID);
@@ -1322,8 +1317,8 @@ void CodeWriter::InitDstBuffer(ExtObject *o, uint32_t pass)
   std::string size;
   if(mem_it->second.HasAliasedResources())
   {
-    ExtObject *allocateInfo = mem_it->second.allocateSDObj->At(1);
-    uint64_t allocationSize = allocateInfo->At(2)->U64();
+    SDObject *allocateInfo = mem_it->second.allocateSDObj->GetChild(1);
+    uint64_t allocationSize = allocateInfo->GetChild(2)->AsUInt64();
     size = std::to_string(allocationSize);
   }
   else
@@ -1343,11 +1338,11 @@ void CodeWriter::ClearBufferData()
   }
 }
 
-void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
+void CodeWriter::InitSrcBuffer(SDObject *o, uint32_t pass)
 {
-  uint64_t resourceID = o->At(1)->U64();
-  uint64_t bufferID = o->At(4)->U64();
-  InitResourceIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
+  uint64_t resourceID = o->GetChild(1)->AsUInt64();
+  uint64_t bufferID = o->GetChild(4)->AsUInt64();
+  SDChunkIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
 
   std::map<AccessState, std::string> stateNames;
   stateNames[ACCESS_STATE_INIT] = "Init";
@@ -1396,7 +1391,7 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
 
   bool needDiffBuffer = false;
 
-  switch(init_res_it->second.sdobj->At(0)->U64())
+  switch(init_res_it->second->GetChild(0)->AsUInt64())
   {
     case VkResourceType::eResDeviceMemory:
       needDiffBuffer = (tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF) != 0;
@@ -1439,8 +1434,8 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
   }
   else if(hasAliasedResources)
   {
-    ExtObject *allocateInfo = mem_it->second.allocateSDObj->At(1);
-    uint64_t allocationSize = allocateInfo->At(2)->U64();
+    SDObject *allocateInfo = mem_it->second.allocateSDObj->GetChild(1);
+    uint64_t allocationSize = allocateInfo->GetChild(2)->AsUInt64();
     size = std::to_string(allocationSize);
   }
   else
@@ -1463,10 +1458,10 @@ void CodeWriter::InitSrcBuffer(ExtObject *o, uint32_t pass)
     files[pass]->PrintLn("%s.clear();", tracker->GetDataBlobVar(bufferID));
 }
 
-void CodeWriter::InitDescSet(ExtObject *o)
+void CodeWriter::InitDescSet(SDObject *o)
 {
-  uint64_t descriptorSetID = o->At(1)->U64();
-  ExtObject *initBindings = o->At(2);
+  uint64_t descriptorSetID = o->GetChild(1)->AsUInt64();
+  SDObject *initBindings = o->GetChild(2);
 
   struct DescSetInfoNames
   {
@@ -1489,41 +1484,41 @@ void CodeWriter::InitDescSet(ExtObject *o)
     files[passes[p]]->PrintLn("{");
   }
 
-  for(uint32_t j = 0; j < initBindings->Size(); j++)
+  for(uint32_t j = 0; j < initBindings->NumChildren(); j++)
   {
-    ExtObject *initBinding = initBindings->At(j);
-    RDCASSERT(initBinding->Size() == 6);
-    ExtObject *binding = initBinding->At(3);
-    ExtObject *type = initBinding->At(4);
-    ExtObject *element = initBinding->At(5);
+    SDObject *initBinding = initBindings->GetChild(j);
+    RDCASSERT(initBinding->NumChildren() == 6);
+    SDObject *binding = initBinding->GetChild(3);
+    SDObject *type = initBinding->GetChild(4);
+    SDObject *element = initBinding->GetChild(5);
     DescSetInfoNames info;
-    ExtObject *srcObj = NULL;
+    SDObject *srcObj = NULL;
 
-    info.binding = as_uint32(binding->U64());
-    info.type = as_uint32(type->U64());
-    info.element = as_uint32(element->U64());
-    info.typeStr = type->Str();
+    info.binding = (uint32_t)binding->AsUInt64();
+    info.type = (uint32_t)type->AsUInt64();
+    info.element = (uint32_t)element->AsUInt64();
+    info.typeStr = type->AsString();
 
     bool needsReset = descSetInfo_it->second.NeedsReset(info.binding, info.element);
     uint64_t passIdx = needsReset ? 1 : 0;
     uint64_t passID = passes[passIdx];
 
-    switch(type->U64())
+    switch(type->AsUInt64())
     {
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
       {    // use bufferinfo
-        srcObj = initBinding->At(0);
+        srcObj = initBinding->GetChild(0);
         files[passID]
-            ->PrintLn("%s %s_%u = {", srcObj->Type(), srcObj->Type(), j)
-            .PrintLn("/* %s = */ %s,", srcObj->At(0)->Name(),
-                     tracker->GetResourceVar(srcObj->At(0)->U64()))
-            .PrintLn("/* %s = */ %s,", srcObj->At(1)->Name(), srcObj->At(1)->ValueStr().c_str())
-            .PrintLn("/* %s = */ %s,", srcObj->At(2)->Name(), srcObj->At(2)->ValueStr().c_str())
+            ->PrintLn("%s %s_%u = {", Type(srcObj), Type(srcObj), j)
+            .PrintLn("/* %s = */ %s,", srcObj->GetChild(0)->Name(),
+                     tracker->GetResourceVar(srcObj->GetChild(0)->AsUInt64()))
+            .PrintLn("/* %s = */ %s,", srcObj->GetChild(1)->Name(), ValueStr(srcObj->GetChild(1)).c_str())
+            .PrintLn("/* %s = */ %s,", srcObj->GetChild(2)->Name(), ValueStr(srcObj->GetChild(2)).c_str())
             .PrintLn("};");
-        info.buffer_info = "&" + std::string(srcObj->Type()) + "_" + std::to_string(j);
+        info.buffer_info = "&" + std::string(Type(srcObj)) + "_" + std::to_string(j);
       }
       break;
       case VK_DESCRIPTOR_TYPE_SAMPLER:
@@ -1532,24 +1527,24 @@ void CodeWriter::InitDescSet(ExtObject *o)
       case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
       case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
       {    // use image info.
-        srcObj = initBinding->At(1);
+        srcObj = initBinding->GetChild(1);
         files[passID]
-            ->PrintLn("%s %s_%u = {", srcObj->Type(), srcObj->Type(), j)
-            .PrintLn("/* %s = */ %s,", srcObj->At(0)->Name(),
-                     tracker->GetResourceVar(srcObj->At(0)->U64()))
-            .PrintLn("/* %s = */ %s,", srcObj->At(1)->Name(),
-                     tracker->GetResourceVar(srcObj->At(1)->U64()))
-            .PrintLn("/* %s = */ %s,", srcObj->At(2)->Name(), srcObj->At(2)->Str())
+            ->PrintLn("%s %s_%u = {", Type(srcObj), Type(srcObj), j)
+            .PrintLn("/* %s = */ %s,", srcObj->GetChild(0)->Name(),
+                     tracker->GetResourceVar(srcObj->GetChild(0)->AsUInt64()))
+            .PrintLn("/* %s = */ %s,", srcObj->GetChild(1)->Name(),
+                     tracker->GetResourceVar(srcObj->GetChild(1)->AsUInt64()))
+            .PrintLn("/* %s = */ %s,", srcObj->GetChild(2)->Name(), ValueStr(srcObj->GetChild(2)).c_str())
             .PrintLn("};");
-        info.image_info = "&" + std::string(srcObj->Type()) + "_" + std::to_string(j);
+        info.image_info = "&" + std::string(Type(srcObj)) + "_" + std::to_string(j);
       }
       break;
       case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
       case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
       {    // use texel buffer
-        srcObj = initBinding->At(2);
-        files[passID]->PrintLn("%s %s_%u = %s;", srcObj->Type(), srcObj->Name(), j,
-                               tracker->GetResourceVar(srcObj->U64()));
+        srcObj = initBinding->GetChild(2);
+        files[passID]->PrintLn("%s %s_%u = %s;", Type(srcObj), srcObj->Name(), j,
+                               tracker->GetResourceVar(srcObj->AsUInt64()));
         info.texel_view = "&" + std::string(srcObj->Name()) + "_" + std::to_string(j);
       }
       break;
@@ -1591,42 +1586,42 @@ void CodeWriter::InitDescSet(ExtObject *o)
       RDCWARN("No valid update for descriptor set (%" PRIu64
               ")"
               "with NumBindings (%" PRIu64 ") and Bindings.Size() (%" PRIu64 ")",
-              descriptorSetID, o->At(3)->U64(), o->At(2)->U64());
+              descriptorSetID, o->GetChild(3)->AsUInt64(), o->GetChild(2)->AsUInt64());
       files[passes[p]]->PrintLn("// No valid descriptor sets, with NumBindings (%" PRIu64
                                 ") and Bindings.Size() (%" PRIu64 ")",
-                                o->At(3)->U64(), o->At(2)->U64());
+                                o->GetChild(3)->AsUInt64(), o->GetChild(2)->AsUInt64());
       files[passes[p]]->PrintLn("}");
     }
   }
 }
 
-void CodeWriter::ImageLayoutTransition(uint64_t image_id, ExtObject *subres, const char *old_layout,
+void CodeWriter::ImageLayoutTransition(uint64_t image_id, SDObject *subres, const char *old_layout,
                                        uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(subres->At("subresourceRange"), "", pass);
+  LocalVariable(subres->FindChild("subresourceRange"), "", pass);
   files[pass]
       ->PrintLn("ImageLayoutTransition(aux, %s, %s, %s, %s);", tracker->GetResourceVar(image_id),
-                subres->At("subresourceRange")->Name(), subres->At("newLayout")->ValueStr().c_str(),
+                subres->FindChild("subresourceRange")->Name(), ValueStr(subres->FindChild("newLayout")).c_str(),
                 old_layout)
       .PrintLn("}");
 }
 
-void CodeWriter::InitialLayouts(ExtObject *o, uint32_t pass)
+void CodeWriter::InitialLayouts(SDChunk *o, uint32_t pass)
 {
-  RDCASSERT(o->ChunkID() == (uint32_t)SystemChunk::CaptureBegin);
-  RDCASSERT(o->At(0)->U64() > 0);
-  uint64_t num = o->At(0)->U64();
+  RDCASSERT(o->metadata.chunkID == (uint32_t)SystemChunk::CaptureBegin);
+  RDCASSERT(o->GetChild(0)->AsUInt64() > 0);
+  uint64_t num = o->GetChild(0)->AsUInt64();
   for(uint64_t i = 0; i < num; i++)
   {
-    ExtObject *image = o->At(i * 2 + 1);
-    ExtObject *layout = o->At(i * 2 + 2);
+    SDObject *image = o->GetChild(i * 2 + 1);
+    SDObject *layout = o->GetChild(i * 2 + 2);
 
-    uint64_t image_id = image->U64();
+    uint64_t image_id = image->AsUInt64();
 
     ResourceWithViewsMapIter rc_it = tracker->ResourceCreateFind(image_id);
 
-    ExtObject *subresources = layout->At("subresourceStates");
+    SDObject *subresources = layout->FindChild("subresourceStates");
 
     if(rc_it == tracker->ResourceCreateEnd())
       continue;
@@ -1635,11 +1630,11 @@ void CodeWriter::InitialLayouts(ExtObject *o, uint32_t pass)
     RDCASSERT(imageState_it != tracker->ImageStateEnd());
     ImageState &imageState(imageState_it->second);
 
-    for(uint64_t j = 0; j < subresources->Size(); j++)
+    for(uint64_t j = 0; j < subresources->NumChildren(); j++)
     {
-      ExtObject *imageRegionState = subresources->At(j);
+      SDObject *imageRegionState = subresources->GetChild(j);
 
-      VkImageLayout newLayout = (VkImageLayout)imageRegionState->At("newLayout")->U64();
+      VkImageLayout newLayout = (VkImageLayout)imageRegionState->FindChild("newLayout")->AsUInt64();
 
       if(newLayout == VK_IMAGE_LAYOUT_UNDEFINED || newLayout == VK_IMAGE_LAYOUT_PREINITIALIZED)
         continue;
@@ -1651,12 +1646,12 @@ void CodeWriter::InitialLayouts(ExtObject *o, uint32_t pass)
       if((tracker->Optimizations() & CODE_GEN_OPT_IMAGE_RESET_BIT) != 0)
         RDCASSERT(!(needsResourceInit && needsResourceReset));
 
-      ExtObject *subres = imageRegionState->At("subresourceRange");
-      VkImageAspectFlags aspectMask = (VkImageAspectFlags)subres->At("aspectMask")->U64();
-      uint64_t baseMip = subres->At("baseMipLevel")->U64();
-      uint64_t levelCount = subres->At("levelCount")->U64();
-      uint64_t baseLayer = subres->At("baseArrayLayer")->U64();
-      uint64_t layerCount = subres->At("layerCount")->U64();
+      SDObject *subres = imageRegionState->FindChild("subresourceRange");
+      VkImageAspectFlags aspectMask = (VkImageAspectFlags)subres->FindChild("aspectMask")->AsUInt64();
+      uint64_t baseMip = subres->FindChild("baseMipLevel")->AsUInt64();
+      uint64_t levelCount = subres->FindChild("levelCount")->AsUInt64();
+      uint64_t baseLayer = subres->FindChild("baseArrayLayer")->AsUInt64();
+      uint64_t layerCount = subres->FindChild("layerCount")->AsUInt64();
 
       ImageSubresourceRange range =
           imageState.Range(aspectMask, baseMip, levelCount, baseLayer, layerCount);
@@ -1713,9 +1708,9 @@ void CodeWriter::InitialLayouts(ExtObject *o, uint32_t pass)
   }
 }
 
-void CodeWriter::InitialContents(ExtObject *o)
+void CodeWriter::InitialContents(SDObject *o)
 {
-  switch(o->At(0)->U64())
+  switch(o->GetChild(0)->AsUInt64())
   {
     case VkResourceType::eResImage:
       InitSrcBuffer(o, ID_CREATE);
@@ -1736,15 +1731,15 @@ void CodeWriter::InitialContents(ExtObject *o)
   }
 }
 
-void CodeWriter::ImagePreDiff(ExtObject *o, uint32_t pass)
+void CodeWriter::ImagePreDiff(SDObject *o, uint32_t pass)
 {
-  uint64_t resourceID = o->At(1)->U64();
+  uint64_t resourceID = o->GetChild(1)->AsUInt64();
   const char *imageVar = tracker->GetResourceVar(resourceID);
-  InitResourceIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
+  SDChunkIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
 
   bool needDiff = false;
 
-  switch(init_res_it->second.sdobj->At(0)->U64())
+  switch(init_res_it->second->GetChild(0)->AsUInt64())
   {
     case VkResourceType::eResDeviceMemory:
       needDiff = (tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF) != 0;
@@ -1793,16 +1788,16 @@ void CodeWriter::ImagePreDiff(ExtObject *o, uint32_t pass)
   }
 }
 
-void CodeWriter::ImageDiff(ExtObject *o, uint32_t pass)
+void CodeWriter::ImageDiff(SDObject *o, uint32_t pass)
 {
-  uint64_t resourceID = o->At(1)->U64();
-  uint64_t bufferID = o->At(4)->U64();
+  uint64_t resourceID = o->GetChild(1)->AsUInt64();
+  uint64_t bufferID = o->GetChild(4)->AsUInt64();
   const char *imageVar = tracker->GetResourceVar(resourceID);
-  InitResourceIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
+  SDChunkIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
 
   bool needDiff = false;
 
-  switch(init_res_it->second.sdobj->At(0)->U64())
+  switch(init_res_it->second->GetChild(0)->AsUInt64())
   {
     case VkResourceType::eResDeviceMemory:
       needDiff = (tracker->Optimizations() & CODE_GEN_OPT_BUFFER_DIFF) != 0;
@@ -1824,10 +1819,10 @@ void CodeWriter::ImageDiff(ExtObject *o, uint32_t pass)
                        imageVar);
 }
 
-void CodeWriter::CopyResetImage(ExtObject *o, uint32_t pass)
+void CodeWriter::CopyResetImage(SDObject *o, uint32_t pass)
 {
-  uint64_t resourceID = o->At(1)->U64();
-  InitResourceIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
+  uint64_t resourceID = o->GetChild(1)->AsUInt64();
+  SDChunkIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
 
   const char *comment = "";
   if(!tracker->ResourceNeedsReset(resourceID, pass == ID_INIT, pass == ID_PRERESET))
@@ -1837,12 +1832,12 @@ void CodeWriter::CopyResetImage(ExtObject *o, uint32_t pass)
 
   files[pass]->PrintLn(
       "%sCopyResetImage(aux, %s, VkBuffer_src_%" PRIu64 ", VkImageCreateInfo_%" PRIu64 ");",
-      comment, tracker->GetResourceVar(o->At(1)->U64()), o->At(1)->U64(), o->At(1)->U64());
+      comment, tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), o->GetChild(1)->AsUInt64(), o->GetChild(1)->AsUInt64());
 }
-void CodeWriter::CopyResetBuffer(ExtObject *o, uint32_t pass)
+void CodeWriter::CopyResetBuffer(SDObject *o, uint32_t pass)
 {
-  uint64_t resourceID = o->At(1)->U64();
-  InitResourceIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
+  uint64_t resourceID = o->GetChild(1)->AsUInt64();
+  SDChunkIDMapIter init_res_it = tracker->InitResourceFind(resourceID);
 
   const char *comment = "";
   if(!tracker->ResourceNeedsReset(resourceID, pass == ID_INIT, pass == ID_PRERESET))
@@ -1853,18 +1848,18 @@ void CodeWriter::CopyResetBuffer(ExtObject *o, uint32_t pass)
   const char *reset_size_name;
   if(pass == ID_INIT)
   {
-    reset_size_name = tracker->GetMemInitSizeVar(o->At(1)->U64());
+    reset_size_name = tracker->GetMemInitSizeVar(o->GetChild(1)->AsUInt64());
   }
   else
   {
-    reset_size_name = tracker->GetMemResetSizeVar(o->At(1)->U64());
+    reset_size_name = tracker->GetMemResetSizeVar(o->GetChild(1)->AsUInt64());
   }
   files[pass]->PrintLn("%sCopyResetBuffer(aux, VkBuffer_dst_%" PRIu64 ", VkBuffer_src_%" PRIu64
                        ", %s);",
-                       comment, o->At(1)->U64(), o->At(1)->U64(), reset_size_name);
+                       comment, o->GetChild(1)->AsUInt64(), o->GetChild(1)->AsUInt64(), reset_size_name);
 }
 
-void CodeWriter::AcquireNextImage(ExtObject *o, uint32_t pass)
+void CodeWriter::AcquireNextImage(SDObject *o, uint32_t pass)
 {
   AddNamedVar("uint32_t", "acquired_frame");
   files[pass]->PrintLn(
@@ -1872,95 +1867,95 @@ void CodeWriter::AcquireNextImage(ExtObject *o, uint32_t pass)
       tracker->GetDeviceVar(), tracker->GetSwapchainVar());
 }
 
-void CodeWriter::BeginCommandBuffer(ExtObject *o, uint32_t pass)
+void CodeWriter::BeginCommandBuffer(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(1), "", pass);
+  LocalVariable(o->GetChild(1), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, &%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
+      ->PrintLn("%s(%s, &%s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), o->GetChild(1)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::EndCommandBuffer(ExtObject *o, uint32_t pass)
+void CodeWriter::EndCommandBuffer(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()));
+  files[pass]->PrintLn("%s(%s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()));
 }
 
-void CodeWriter::WaitForFences(ExtObject *o, uint32_t pass)
+void CodeWriter::WaitForFences(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(2), "", pass);
+  LocalVariable(o->GetChild(2), "", pass);
   files[pass]
-      ->PrintLn("// %s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->ValueStr().c_str(), o->At(2)->Name(), o->At(3)->ValueStr().c_str(),
-                o->At(4)->ValueStr().c_str())
+      ->PrintLn("// %s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+        ValueStr(o->GetChild(1)).c_str(), o->GetChild(2)->Name(), ValueStr(o->GetChild(3)).c_str(),
+          ValueStr(o->GetChild(4)).c_str())
       .PrintLn("}");
 }
 
-void CodeWriter::GetFenceStatus(ExtObject *o, uint32_t pass)
+void CodeWriter::GetFenceStatus(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("// %s(%s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       tracker->GetResourceVar(o->At(1)->U64()));
+  files[pass]->PrintLn("// %s(%s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                       tracker->GetResourceVar(o->GetChild(1)->AsUInt64()));
 }
 
-void CodeWriter::ResetFences(ExtObject *o, uint32_t pass)
+void CodeWriter::ResetFences(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(2), "", pass);
+  LocalVariable(o->GetChild(2), "", pass);
   files[pass]
-      ->PrintLn("// %s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->ValueStr().c_str(), o->At(2)->Name())
+      ->PrintLn("// %s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+        ValueStr(o->GetChild(1)).c_str(), o->GetChild(2)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::GetEventStatus(ExtObject *o, uint32_t pass)
+void CodeWriter::GetEventStatus(SDObject *o, uint32_t pass)
 {
   GenericEvent(o, pass);
 }
 
-void CodeWriter::SetEvent(ExtObject *o, uint32_t pass)
+void CodeWriter::SetEvent(SDObject *o, uint32_t pass)
 {
   GenericEvent(o, pass);
 }
 
-void CodeWriter::ResetEvent(ExtObject *o, uint32_t pass)
+void CodeWriter::ResetEvent(SDObject *o, uint32_t pass)
 {
   GenericEvent(o, pass);
 }
 
-void CodeWriter::QueueSubmit(ExtObject *o, uint32_t pass)
+void CodeWriter::QueueSubmit(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(2), "", pass);
-  files[pass]->PrintLn("%s(%s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       o->At(1)->ValueStr().c_str(), o->At(2)->Name(),
-                       tracker->GetResourceVar(o->At(3)->U64()));
+  LocalVariable(o->GetChild(2), "", pass);
+  files[pass]->PrintLn("%s(%s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+    ValueStr(o->GetChild(1)).c_str(), o->GetChild(2)->Name(),
+                       tracker->GetResourceVar(o->GetChild(3)->AsUInt64()));
 
-  if(tracker->IsValidNonNullResouce(o->At(3)->U64()))
+  if(tracker->IsValidNonNullResouce(o->GetChild(3)->AsUInt64()))
   {
     files[pass]
         ->PrintLn("VkResult result = vkWaitForFences(%s, 1, &%s, VK_TRUE, 0xFFFFFFFF);",
-                  tracker->GetDeviceVar(), tracker->GetResourceVar(o->At(3)->U64()))
+                  tracker->GetDeviceVar(), tracker->GetResourceVar(o->GetChild(3)->AsUInt64()))
         .PrintLn("assert(result == VK_SUCCESS);")
         .PrintLn("result = vkResetFences(%s, 1, &%s);", tracker->GetDeviceVar(),
-                 tracker->GetResourceVar(o->At(3)->U64()))
+                 tracker->GetResourceVar(o->GetChild(3)->AsUInt64()))
         .PrintLn("assert(result == VK_SUCCESS);");
   }
 
   files[pass]->PrintLn("}");
 }
 
-void CodeWriter::QueueWaitIdle(ExtObject *o, uint32_t pass)
+void CodeWriter::QueueWaitIdle(SDObject *o, uint32_t pass)
 {
   GenericWaitIdle(o, pass);
 }
 
-void CodeWriter::DeviceWaitIdle(ExtObject *o, uint32_t pass)
+void CodeWriter::DeviceWaitIdle(SDObject *o, uint32_t pass)
 {
   GenericWaitIdle(o, pass);
 }
 
-void CodeWriter::EndFramePresent(ExtObject *o, uint32_t pass)
+void CodeWriter::EndFramePresent(SDObject *o, uint32_t pass)
 {
   uint64_t semaphore_count = 0;
 
@@ -1995,29 +1990,29 @@ void CodeWriter::EndFramePresent(ExtObject *o, uint32_t pass)
       .PrintLn("}");
 }
 
-void CodeWriter::EndFrameWaitIdle(ExtObject *o, uint32_t pass)
+void CodeWriter::EndFrameWaitIdle(SDObject *o, uint32_t pass)
 {
   for(U64MapIter it = tracker->SubmittedQueuesBegin(); it != tracker->SubmittedQueuesEnd(); it++)
     files[pass]->PrintLn("vkQueueWaitIdle(VkQueue_%" PRIu64 ");", it->second);
 }
 
-void CodeWriter::FlushMappedMemoryRanges(ExtObject *o, uint32_t pass)
+void CodeWriter::FlushMappedMemoryRanges(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  ExtObject *device = o->At(0);
-  ExtObject *regions = o->At(2);
-  ExtObject *memory = regions->At(2);
-  ExtObject *buffer = o->At(3);
+  SDObject *device = o->GetChild(0);
+  SDObject *regions = o->GetChild(2);
+  SDObject *memory = regions->GetChild(2);
+  SDObject *buffer = o->GetChild(3);
 
-  MemAllocWithResourcesMapIter it = tracker->MemAllocFind(memory->U64());
+  MemAllocWithResourcesMapIter it = tracker->MemAllocFind(memory->AsUInt64());
 
   // fetch allocation size
-  uint64_t allocationSize = it->second.allocateSDObj->At("AllocateInfo")->At("allocationSize")->U64();
+  uint64_t allocationSize = it->second.allocateSDObj->FindChild("AllocateInfo")->FindChild("allocationSize")->AsUInt64();
   // if region.size == -1 replace with allocation size - region.offset
   RDCASSERT(!regions->IsArray());
-  uint64_t &map_size = regions->At("size")->U64();
+  uint64_t &map_size = regions->FindChild("size")->UInt64();
   if(map_size == VK_WHOLE_SIZE)
-    map_size = allocationSize - regions->At("offset")->U64();
+    map_size = allocationSize - regions->FindChild("offset")->AsUInt64();
   LocalVariable(regions, "", pass);
 
   // TODO(akharlamov) calculate real map range based on existing map range, captured reqs and
@@ -2038,108 +2033,108 @@ void CodeWriter::FlushMappedMemoryRanges(ExtObject *o, uint32_t pass)
             "VkResult result = %svkMapMemory(%s, %s, 0, VK_WHOLE_SIZE, 0, (void** ) &data); // "
             "RDOC: "
             "map the whole thing, but only copy the right subregions later",
-            shimPrefix, tracker->GetResourceVar(device->U64()),
-            tracker->GetResourceVar(memory->U64()))
+            shimPrefix, tracker->GetResourceVar(device->AsUInt64()),
+            tracker->GetResourceVar(memory->AsUInt64()))
         .PrintLn("assert(result == VK_SUCCESS);")
         .PrintLn("%s(aux, data, buffer_%" PRIu64 ".data(), %s, %s, %s, %s);", map_update_func,
-                 buffer->U64(), regions->Name(), tracker->GetMemAllocInfoVar(memory->U64()),
-                 tracker->GetMemRemapVar(memory->U64()), tracker->GetResourceVar(device->U64()))
+                 buffer->AsUInt64(), regions->Name(), tracker->GetMemAllocInfoVar(memory->AsUInt64()),
+                 tracker->GetMemRemapVar(memory->AsUInt64()), tracker->GetResourceVar(device->AsUInt64()))
         .PrintLn("assert(result == VK_SUCCESS);")
-        .PrintLn("%svkUnmapMemory(%s, %s);", shimPrefix, tracker->GetResourceVar(device->U64()),
-                 tracker->GetResourceVar(memory->U64()));
+        .PrintLn("%svkUnmapMemory(%s, %s);", shimPrefix, tracker->GetResourceVar(device->AsUInt64()),
+                 tracker->GetResourceVar(memory->AsUInt64()));
   }
   files[pass]->PrintLn("}");
 }
 
-void CodeWriter::UpdateDescriptorSets(ExtObject *o, uint32_t pass)
+void CodeWriter::UpdateDescriptorSets(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(2), "", pass);
-  LocalVariable(o->At(4), "", pass);
+  LocalVariable(o->GetChild(2), "", pass);
+  LocalVariable(o->GetChild(4), "", pass);
   files[pass]
       ->PrintLn("%s(%s, %" PRIu64 ", %s, %" PRIu64 ", %s);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->U64(), o->At(2)->Name(),
-                o->At(3)->U64(), o->At(4)->Name())
+                tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), o->GetChild(1)->AsUInt64(), o->GetChild(2)->Name(),
+                o->GetChild(3)->AsUInt64(), o->GetChild(4)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::UpdateDescriptorSetWithTemplate(ExtObject *o, uint32_t pass)
+void CodeWriter::UpdateDescriptorSetWithTemplate(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(3), "", pass);
+  LocalVariable(o->GetChild(3), "", pass);
 
   files[pass]
       ->PrintLn("%s(%s, %" PRIu64 ", %s, %" PRIu64 ", %s); // UpdateDescriptorSetWithTemplate",
-                "vkUpdateDescriptorSets", tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(3)->Size(), o->At(3)->Name(), 0, "NULL")
+                "vkUpdateDescriptorSets", tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                o->GetChild(3)->NumChildren(), o->GetChild(3)->Name(), 0, "NULL")
       .PrintLn("}");
 #if 1
   return;
 #else
-  ExtObject *write_desc_set = o->At(3);
+  SDObject *write_desc_set = o->GetChild(3);
 
-  ExtObject *desc_set_template = o->At(2);
-  ResourceWithViewsMapIter template_it = tracker->ResourceCreateFind(desc_set_template->U64());
+  SDObject *desc_set_template = o->GetChild(2);
+  ResourceWithViewsMapIter template_it = tracker->ResourceCreateFind(desc_set_template->AsUInt64());
   RDCASSERT(template_it != tracker->ResourceCreateEnd());
 
-  ExtObject *template_ci = template_it->second.sdobj->At(1);
-  ExtObject *desc_update_entry = template_ci->At(4);
-  RDCASSERT(desc_update_entry->Size() == write_desc_set->Size());
+  SDObject *template_ci = template_it->second.sdobj->GetChild(1);
+  SDObject *desc_update_entry = template_ci->GetChild(4);
+  RDCASSERT(desc_update_entry->NumChildren() == write_desc_set->NumChildren());
 
   uint32_t wds_byte_size = 0;
   uint32_t due_byte_size = 0;
 
-  for(uint32_t i = 0; i < write_desc_set->Size(); i++)
+  for(uint32_t i = 0; i < write_desc_set->NumChildren(); i++)
   {
-    ExtObject *wds = write_desc_set->At(i);
-    ExtObject *due = desc_update_entry->At(i);
+    SDObject *wds = write_desc_set->GetChild(i);
+    SDObject *due = desc_update_entry->GetChild(i);
 
-    ExtObject *wds_count = wds->At(5);
-    ExtObject *due_count = due->At(2);
-    RDCASSERT(due_count->U64() == wds_count->U64());
-    ExtObject *due_offset = due->At(4);
-    ExtObject *due_stride = due->At(5);
-    ExtObject *image = wds->At(7);
-    ExtObject *buffer = wds->At(8);
-    ExtObject *texel = wds->At(9);
-    if(image->Size() > 0)
+    SDObject *wds_count = wds->GetChild(5);
+    SDObject *due_count = due->GetChild(2);
+    RDCASSERT(due_count->AsUInt64() == wds_count->AsUInt64());
+    SDObject *due_offset = due->GetChild(4);
+    SDObject *due_stride = due->GetChild(5);
+    SDObject *image = wds->GetChild(7);
+    SDObject *buffer = wds->GetChild(8);
+    SDObject *texel = wds->GetChild(9);
+    if(image->NumChildren() > 0)
       wds_byte_size = std::max<uint64_t>(
-          wds_count->U64() * sizeof(VkDescriptorImageInfo) + due_offset->U64(), wds_byte_size);
-    if(buffer->Size() > 0)
+          wds_count->AsUInt64() * sizeof(VkDescriptorImageInfo) + due_offset->AsUInt64(), wds_byte_size);
+    if(buffer->NumChildren() > 0)
       wds_byte_size = std::max<uint64_t>(
-          wds_count->U64() * sizeof(VkDescriptorBufferInfo) + due_offset->U64(), wds_byte_size);
-    if(texel->Size() > 0)
+          wds_count->AsUInt64() * sizeof(VkDescriptorBufferInfo) + due_offset->AsUInt64(), wds_byte_size);
+    if(texel->NumChildren() > 0)
       wds_byte_size = std::max<uint64_t>(
-          wds_count->U64() * sizeof(VkBufferView) + due_offset->U64(), wds_byte_size);
+          wds_count->AsUInt64() * sizeof(VkBufferView) + due_offset->AsUInt64(), wds_byte_size);
 
     due_byte_size =
-        std::max<uint64_t>(due_count->U64() * due->At(5)->U64() + due_offset->U64(), due_byte_size);
+        std::max<uint64_t>(due_count->AsUInt64() * due->GetChild(5)->AsUInt64() + due_offset->AsUInt64(), due_byte_size);
   }
   RDCASSERT(due_byte_size >= wds_byte_size);
 
   files[pass]->PrintLn("std::vector<uint8_t> Data(%u);", due_byte_size);
 
-  for(uint64_t i = 0; i < write_desc_set->Size(); i++)
+  for(uint64_t i = 0; i < write_desc_set->NumChildren(); i++)
   {
-    ExtObject *wds = write_desc_set->At(i);
-    ExtObject *due = desc_update_entry->At(i);
+    SDObject *wds = write_desc_set->GetChild(i);
+    SDObject *due = desc_update_entry->GetChild(i);
 
-    ExtObject *count = wds->At(5);
-    ExtObject *image = wds->At(7);
-    ExtObject *buffer = wds->At(8);
-    ExtObject *texel = wds->At(9);
-    ExtObject *due_offset = due->At(4);
-    ExtObject *due_stride = due->At(5);
-    ExtObject *info = NULL;
-    if(image->Size() > 0 && buffer->Size() == 0 && texel->Size() == 0)
+    SDObject *count = wds->GetChild(5);
+    SDObject *image = wds->GetChild(7);
+    SDObject *buffer = wds->GetChild(8);
+    SDObject *texel = wds->GetChild(9);
+    SDObject *due_offset = due->GetChild(4);
+    SDObject *due_stride = due->GetChild(5);
+    SDObject *info = NULL;
+    if(image->NumChildren() > 0 && buffer->NumChildren() == 0 && texel->NumChildren() == 0)
       info = image;
-    if(image->Size() == 0 && buffer->Size() > 0 && texel->Size() == 0)
+    if(image->NumChildren() == 0 && buffer->NumChildren() > 0 && texel->NumChildren() == 0)
       info = buffer;
-    if(image->Size() == 0 && buffer->Size() == 0 && texel->Size() > 0)
+    if(image->NumChildren() == 0 && buffer->NumChildren() == 0 && texel->NumChildren() > 0)
       info = texel;
     RDCASSERT(info != NULL);
 
-    for(uint64_t j = 0; j < count->U64(); j++)
+    for(uint64_t j = 0; j < count->AsUInt64(); j++)
     {
       if(info != NULL)
       {
@@ -2147,395 +2142,395 @@ void CodeWriter::UpdateDescriptorSetWithTemplate(ExtObject *o, uint32_t pass)
             "memcpy(Data.data() + %" PRIu64 " /*rdoc:offset*/ + %" PRIu64
             " /*rdoc:stride*/"
             ", &%s_%" PRIu64 "[%" PRIu64 "], sizeof(%s_%" PRIu64 "[%" PRIu64 "]));",
-            due_offset->U64(), due_stride->U64() * j, info->Name(), i, j, info->Name(), i, j);
+            due_offset->AsUInt64(), due_stride->AsUInt64() * j, info->Name(), i, j, info->Name(), i, j);
       }
     }
   }
 
   files[pass]
       ->PrintLn("%s(%s, %s, %s, (const void *) %Data.data());", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
-                tracker->GetResourceVar(o->At(2)->U64()))
+                tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), tracker->GetResourceVar(o->GetChild(1)->AsUInt64()),
+                tracker->GetResourceVar(o->GetChild(2)->AsUInt64()))
       .PrintLn("}");
 #endif
 }
 
-void CodeWriter::UnmapMemory(ExtObject *o, uint32_t pass)
+void CodeWriter::UnmapMemory(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("// %s(%s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       tracker->GetResourceVar(o->At(1)->U64()));
+  files[pass]->PrintLn("// %s(%s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                       tracker->GetResourceVar(o->GetChild(1)->AsUInt64()));
 }
 
-void CodeWriter::CmdBeginRenderPass(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdBeginRenderPass(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(1), "", pass);
+  LocalVariable(o->GetChild(1), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, &%s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->Name(), o->At(2)->Str())
+      ->PrintLn("%s(%s, &%s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                o->GetChild(1)->Name(), ValueStr(o->GetChild(2)).c_str())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdNextSubpass(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdNextSubpass(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       o->At(1)->Str());
+  files[pass]->PrintLn("%s(%s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+    ValueStr(o->GetChild(1)).c_str());
 }
 
-void CodeWriter::CmdExecuteCommands(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdExecuteCommands(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(2), "", pass);
+  LocalVariable(o->GetChild(2), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %" PRIu64 ", %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->U64(), o->At(2)->Name())
+      ->PrintLn("%s(%s, %" PRIu64 ", %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                o->GetChild(1)->AsUInt64(), o->GetChild(2)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdEndRenderPass(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdEndRenderPass(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()));
+  files[pass]->PrintLn("%s(%s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()));
 }
 
-void CodeWriter::CmdSetViewport(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdSetViewport(SDObject *o, uint32_t pass)
 {
   GenericCmdSetRectTest(o, pass);
 }
 
-void CodeWriter::CmdSetScissor(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdSetScissor(SDObject *o, uint32_t pass)
 {
   GenericCmdSetRectTest(o, pass);
 }
 
-void CodeWriter::CmdBindDescriptorSets(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdBindDescriptorSets(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(5), "", pass);
-  LocalVariable(o->At(7), "", pass);
+  LocalVariable(o->GetChild(5), "", pass);
+  LocalVariable(o->GetChild(7), "", pass);
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s, %s);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->ValueStr().c_str(),
-                tracker->GetResourceVar(o->At(2)->U64()), o->At(3)->ValueStr().c_str(),
-                o->At(4)->ValueStr().c_str(), o->At(5)->Name(), o->At(6)->ValueStr().c_str(),
-                o->At(7)->Name())
+                tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), ValueStr(o->GetChild(1)).c_str(),
+                tracker->GetResourceVar(o->GetChild(2)->AsUInt64()), ValueStr(o->GetChild(3)).c_str(),
+                  ValueStr(o->GetChild(4)).c_str(), o->GetChild(5)->Name(), ValueStr(o->GetChild(6)).c_str(),
+                o->GetChild(7)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdBindPipeline(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdBindPipeline(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       o->At(1)->ValueStr().c_str(), tracker->GetResourceVar(o->At(2)->U64()));
+  files[pass]->PrintLn("%s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+    ValueStr(o->GetChild(1)).c_str(), tracker->GetResourceVar(o->GetChild(2)->AsUInt64()));
 }
 
-void CodeWriter::CmdBindVertexBuffers(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdBindVertexBuffers(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(3), "", pass);
-  LocalVariable(o->At(4), "", pass);
+  LocalVariable(o->GetChild(3), "", pass);
+  LocalVariable(o->GetChild(4), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->ValueStr().c_str(), o->At(2)->ValueStr().c_str(), o->At(3)->Name(),
-                o->At(4)->Name())
+      ->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+        ValueStr(o->GetChild(1)).c_str(), ValueStr(o->GetChild(2)).c_str(), o->GetChild(3)->Name(),
+                o->GetChild(4)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdBindIndexBuffer(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdBindIndexBuffer(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->ValueStr().c_str(),
-                       o->At(3)->ValueStr().c_str());
+  files[pass]->PrintLn("%s(%s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                       tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), ValueStr(o->GetChild(2)).c_str(),
+                         ValueStr(o->GetChild(3)).c_str());
 }
 
-void CodeWriter::CmdDraw(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdDraw(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       o->At(1)->ValueStr().c_str(), o->At(2)->ValueStr().c_str(),
-                       o->At(3)->ValueStr().c_str(), o->At(4)->ValueStr().c_str());
+  files[pass]->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+    ValueStr(o->GetChild(1)).c_str(), ValueStr(o->GetChild(2)).c_str(),
+      ValueStr(o->GetChild(3)).c_str(), ValueStr(o->GetChild(4)).c_str());
 }
 
-void CodeWriter::CmdDrawIndexed(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdDrawIndexed(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("%s(%s, %s, %s, %s, %s, %s);", o->Name(),
-                       tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->ValueStr().c_str(),
-                       o->At(2)->ValueStr().c_str(), o->At(3)->ValueStr().c_str(),
-                       o->At(4)->ValueStr().c_str(), o->At(4)->ValueStr().c_str());
+                       tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), ValueStr(o->GetChild(1)).c_str(),
+                         ValueStr(o->GetChild(2)).c_str(), ValueStr(o->GetChild(3)).c_str(),
+                           ValueStr(o->GetChild(4)).c_str(), ValueStr(o->GetChild(4)).c_str());
 }
 
-void CodeWriter::CmdDrawIndirect(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdDrawIndirect(SDObject *o, uint32_t pass)
 {
   GenericCmdDrawIndirect(o, pass);
 }
 
-void CodeWriter::CmdDrawIndexedIndirect(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdDrawIndexedIndirect(SDObject *o, uint32_t pass)
 {
   GenericCmdDrawIndirect(o, pass);
 }
 
-void CodeWriter::CmdDispatch(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdDispatch(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       o->At(1)->ValueStr().c_str(), o->At(2)->ValueStr().c_str(),
-                       o->At(3)->ValueStr().c_str());
+  files[pass]->PrintLn("%s(%s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+    ValueStr(o->GetChild(1)).c_str(), ValueStr(o->GetChild(2)).c_str(),
+      ValueStr(o->GetChild(3)).c_str());
 }
 
-void CodeWriter::CmdDispatchIndirect(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdDispatchIndirect(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->ValueStr().c_str());
+  files[pass]->PrintLn("%s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                       tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), ValueStr(o->GetChild(2)).c_str());
 }
 
-void CodeWriter::CmdSetEvent(ExtObject *o, uint32_t pass)
-{
-  GenericCmdEvent(o, pass);
-}
-
-void CodeWriter::CmdResetEvent(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdSetEvent(SDObject *o, uint32_t pass)
 {
   GenericCmdEvent(o, pass);
 }
 
-void CodeWriter::CmdWaitEvents(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdResetEvent(SDObject *o, uint32_t pass)
+{
+  GenericCmdEvent(o, pass);
+}
+
+void CodeWriter::CmdWaitEvents(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(2), "", pass);
-  LocalVariable(o->At(6), "", pass);
-  LocalVariable(o->At(8), "", pass);
-  LocalVariable(o->At(10), "", pass);
+  LocalVariable(o->GetChild(2), "", pass);
+  LocalVariable(o->GetChild(6), "", pass);
+  LocalVariable(o->GetChild(8), "", pass);
+  LocalVariable(o->GetChild(10), "", pass);
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->ValueStr().c_str(), o->At(2)->Name(),
-                o->At(3)->Str(), o->At(4)->Str(),
-                o->At(5)->ValueStr().c_str(), o->At(6)->Name(),
-                o->At(7)->ValueStr().c_str(), o->At(8)->Name(),
-                o->At(9)->ValueStr().c_str(), o->At(10)->Name())
+                tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                ValueStr(o->GetChild(1)).c_str(), o->GetChild(2)->Name(),
+                ValueStr(o->GetChild(3)).c_str(), ValueStr(o->GetChild(4)).c_str(),
+                ValueStr(o->GetChild(5)).c_str(), o->GetChild(6)->Name(),
+                ValueStr(o->GetChild(7)).c_str(), o->GetChild(8)->Name(),
+                ValueStr(o->GetChild(9)).c_str(), o->GetChild(10)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdPipelineBarrier(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdPipelineBarrier(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(5), "", pass);
-  LocalVariable(o->At(7), "", pass);
-  LocalVariable(o->At(9), "", pass);
+  LocalVariable(o->GetChild(5), "", pass);
+  LocalVariable(o->GetChild(7), "", pass);
+  LocalVariable(o->GetChild(9), "", pass);
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Str(), o->At(2)->Str(),
-                o->At(3)->Str(), o->At(4)->ValueStr().c_str(), o->At(5)->Name(),
-                o->At(6)->ValueStr().c_str(), o->At(7)->Name(), o->At(8)->ValueStr().c_str(),
-                o->At(9)->Name())
+                tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), ValueStr(o->GetChild(1)).c_str(), ValueStr(o->GetChild(2)).c_str(),
+                  ValueStr(o->GetChild(3)).c_str(), ValueStr(o->GetChild(4)).c_str(), o->GetChild(5)->Name(),
+                    ValueStr(o->GetChild(6)).c_str(), o->GetChild(7)->Name(), ValueStr(o->GetChild(8)).c_str(),
+                o->GetChild(9)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdPushConstants(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdPushConstants(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("%s(%s, %s, %s, %s, %s, (const void*) buffer_%" PRIu64 ".data());",
-                       o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str(),
-                       o->At(3)->ValueStr().c_str(), o->At(4)->ValueStr().c_str(), o->At(5)->U64());
+                       o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                       tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), ValueStr(o->GetChild(2)).c_str(),
+                         ValueStr(o->GetChild(3)).c_str(), ValueStr(o->GetChild(4)).c_str(), o->GetChild(5)->AsUInt64());
 }
 
-void CodeWriter::CmdSetDepthBias(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdSetDepthBias(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %f, %f, %f);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       o->At(1)->D64(), o->At(2)->D64(), o->At(3)->D64());
+  files[pass]->PrintLn("%s(%s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+    ValueStr(o->GetChild(1)).c_str(), ValueStr(o->GetChild(2)).c_str(), ValueStr(o->GetChild(3)).c_str());
 }
 
-void CodeWriter::CmdSetDepthBounds(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdSetDepthBounds(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %f, %f);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       o->At(1)->D64(), o->At(2)->D64());
+  files[pass]->PrintLn("%s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+    ValueStr(o->GetChild(1)).c_str(), ValueStr(o->GetChild(2)).c_str());
 }
 
-void CodeWriter::CmdSetStencilCompareMask(ExtObject *o, uint32_t pass)
-{
-  GenericCmdSetStencilParam(o, pass);
-}
-
-void CodeWriter::CmdSetStencilWriteMask(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdSetStencilCompareMask(SDObject *o, uint32_t pass)
 {
   GenericCmdSetStencilParam(o, pass);
 }
 
-void CodeWriter::CmdSetStencilReference(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdSetStencilWriteMask(SDObject *o, uint32_t pass)
 {
   GenericCmdSetStencilParam(o, pass);
 }
 
-void CodeWriter::CmdSetLineWidth(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdSetStencilReference(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %f);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       o->At(1)->D64());
+  GenericCmdSetStencilParam(o, pass);
 }
 
-void CodeWriter::CmdCopyBuffer(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdSetLineWidth(SDObject *o, uint32_t pass)
+{
+  files[pass]->PrintLn("%s(%s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+    ValueStr(o->GetChild(1)).c_str());
+}
+
+void CodeWriter::CmdCopyBuffer(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(4), "", pass);
+  LocalVariable(o->GetChild(4), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                tracker->GetResourceVar(o->At(1)->U64()), tracker->GetResourceVar(o->At(2)->U64()),
-                o->At(3)->ValueStr().c_str(), o->At(4)->Name())
+      ->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), tracker->GetResourceVar(o->GetChild(2)->AsUInt64()),
+        ValueStr(o->GetChild(3)).c_str(), o->GetChild(4)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdUpdateBuffer(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdUpdateBuffer(SDObject *o, uint32_t pass)
 {
   files[pass]
       ->PrintLn("{")
       .PrintLn("%s(%s, %s, %s, %s, (const void* )buffer_%" PRIu64 ".data());", o->Name(),
-               tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
-               o->At(2)->ValueStr().c_str(), o->At(3)->ValueStr().c_str(), o->At(4)->U64())
+               tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), tracker->GetResourceVar(o->GetChild(1)->AsUInt64()),
+        ValueStr(o->GetChild(2)).c_str(), ValueStr(o->GetChild(3)).c_str(), o->GetChild(4)->AsUInt64())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdFillBuffer(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdFillBuffer(SDObject *o, uint32_t pass)
 {
   files[pass]
       ->PrintLn("{")
-      .PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-               tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->ValueStr().c_str(),
-               o->At(3)->ValueStr().c_str(), o->At(4)->ValueStr().c_str())
+      .PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+               tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), ValueStr(o->GetChild(2)).c_str(),
+                 ValueStr(o->GetChild(3)).c_str(), ValueStr(o->GetChild(4)).c_str())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdCopyImage(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdCopyImage(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(6), "", pass);
-  const char *dst_image = tracker->GetResourceVar(o->At(3)->U64());
+  LocalVariable(o->GetChild(6), "", pass);
+  const char *dst_image = tracker->GetResourceVar(o->GetChild(3)->AsUInt64());
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
-                o->At(2)->Str(), dst_image, o->At(4)->Str(), o->At(5)->ValueStr().c_str(),
-                o->At(6)->Name())
+                tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), tracker->GetResourceVar(o->GetChild(1)->AsUInt64()),
+        ValueStr(o->GetChild(2)).c_str(), dst_image, ValueStr(o->GetChild(4)).c_str(), ValueStr(o->GetChild(5)).c_str(),
+                o->GetChild(6)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdBlitImage(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdBlitImage(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(6), "", pass);
-  const char *dst_image = tracker->GetResourceVar(o->At(3)->U64());
+  LocalVariable(o->GetChild(6), "", pass);
+  const char *dst_image = tracker->GetResourceVar(o->GetChild(3)->AsUInt64());
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s, %s);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
-                o->At(2)->Str(), dst_image, o->At(4)->Str(), o->At(5)->ValueStr().c_str(),
-                o->At(6)->Name(), o->At(7)->Str())
+                tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), tracker->GetResourceVar(o->GetChild(1)->AsUInt64()),
+        ValueStr(o->GetChild(2)).c_str(), dst_image, ValueStr(o->GetChild(4)).c_str(), ValueStr(o->GetChild(5)).c_str(),
+                o->GetChild(6)->Name(), ValueStr(o->GetChild(7)).c_str())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdResolveImage(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdResolveImage(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(6), "", pass);
-  const char *dst_image = tracker->GetResourceVar(o->At(3)->U64());
+  LocalVariable(o->GetChild(6), "", pass);
+  const char *dst_image = tracker->GetResourceVar(o->GetChild(3)->AsUInt64());
   files[pass]
       ->PrintLn("%s(%s, %s, %s, %s, %s, %s, %s);", o->Name(),
-                tracker->GetResourceVar(o->At(0)->U64()), tracker->GetResourceVar(o->At(1)->U64()),
-                o->At(2)->Str(), dst_image, o->At(4)->Str(), o->At(5)->ValueStr().c_str(),
-                o->At(6)->Name())
+                tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), tracker->GetResourceVar(o->GetChild(1)->AsUInt64()),
+        ValueStr(o->GetChild(2)).c_str(), dst_image, ValueStr(o->GetChild(4)).c_str(), ValueStr(o->GetChild(5)).c_str(),
+                o->GetChild(6)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdSetBlendConstants(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdSetBlendConstants(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(1), "", pass);
+  LocalVariable(o->GetChild(1), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()), o->At(1)->Name())
+      ->PrintLn("%s(%s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), o->GetChild(1)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdCopyBufferToImage(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdCopyBufferToImage(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(5), "", pass);
+  LocalVariable(o->GetChild(5), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                tracker->GetResourceVar(o->At(1)->U64()), tracker->GetResourceVar(o->At(2)->U64()),
-                o->At(3)->Str(), o->At(4)->ValueStr().c_str(), o->At(5)->Name())
+      ->PrintLn("%s(%s, %s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), tracker->GetResourceVar(o->GetChild(2)->AsUInt64()),
+        ValueStr(o->GetChild(3)).c_str(), ValueStr(o->GetChild(4)).c_str(), o->GetChild(5)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdCopyImageToBuffer(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdCopyImageToBuffer(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(5), "", pass);
+  LocalVariable(o->GetChild(5), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str(),
-                tracker->GetResourceVar(o->At(3)->U64()), o->At(4)->ValueStr().c_str(),
-                o->At(5)->Name())
+      ->PrintLn("%s(%s, %s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), ValueStr(o->GetChild(2)).c_str(),
+                tracker->GetResourceVar(o->GetChild(3)->AsUInt64()), ValueStr(o->GetChild(4)).c_str(),
+                o->GetChild(5)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdClearAttachments(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdClearAttachments(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(2), "", pass);
-  LocalVariable(o->At(4), "", pass);
+  LocalVariable(o->GetChild(2), "", pass);
+  LocalVariable(o->GetChild(4), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->ValueStr().c_str(), o->At(2)->Name(), o->At(3)->ValueStr().c_str(),
-                o->At(4)->Name())
+      ->PrintLn("%s(%s, %s, %s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+        ValueStr(o->GetChild(1)).c_str(), o->GetChild(2)->Name(), ValueStr(o->GetChild(3)).c_str(),
+                o->GetChild(4)->Name())
       .PrintLn("}");
 }
 
 // TODO(akharlamov) see to replace ClearDS and ClearImage functions with one.
-void CodeWriter::CmdClearDepthStencilImage(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdClearDepthStencilImage(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(3), "", pass);
-  LocalVariable(o->At(5), "", pass);
+  LocalVariable(o->GetChild(3), "", pass);
+  LocalVariable(o->GetChild(5), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, &%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str(), o->At(3)->Name(),
-                o->At(4)->ValueStr().c_str(), o->At(5)->Name())
+      ->PrintLn("%s(%s, %s, %s, &%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), ValueStr(o->GetChild(2)).c_str(), o->GetChild(3)->Name(),
+                  ValueStr(o->GetChild(4)).c_str(), o->GetChild(5)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdClearColorImage(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdClearColorImage(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(3), "", pass);
-  LocalVariable(o->At(5), "", pass);
+  LocalVariable(o->GetChild(3), "", pass);
+  LocalVariable(o->GetChild(5), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %s, %s, &%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str(), o->At(3)->Name(),
-                o->At(4)->ValueStr().c_str(), o->At(5)->Name())
+      ->PrintLn("%s(%s, %s, %s, &%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), ValueStr(o->GetChild(2)).c_str(), o->GetChild(3)->Name(),
+                  ValueStr(o->GetChild(4)).c_str(), o->GetChild(5)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdDebugMarkerBeginEXT(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdDebugMarkerBeginEXT(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
-  LocalVariable(o->At(1), "", pass);
+  LocalVariable(o->GetChild(1), "", pass);
   files[pass]
-      ->PrintLn("vkCmdDebugMarkerBegin(%s, &%s);", tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->Name())
+      ->PrintLn("vkCmdDebugMarkerBegin(%s, &%s);", tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                o->GetChild(1)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdDebugMarkerInsertEXT(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdDebugMarkerInsertEXT(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
-  LocalVariable(o->At(1), "", pass);
+  LocalVariable(o->GetChild(1), "", pass);
   files[pass]
-      ->PrintLn("vkCmdDebugMarkerInsert(%s, &%s);", tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->Name())
+      ->PrintLn("vkCmdDebugMarkerInsert(%s, &%s);", tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                o->GetChild(1)->Name())
       .PrintLn("}");
 }
 
-void CodeWriter::CmdDebugMarkerEndEXT(ExtObject *o, uint32_t pass)
+void CodeWriter::CmdDebugMarkerEndEXT(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("if (isDebugMarkerEXTEnabled) {");
   files[pass]
-      ->PrintLn("vkCmdDebugMarkerEnd(%s);", tracker->GetResourceVar(o->At(0)->U64()))
+      ->PrintLn("vkCmdDebugMarkerEnd(%s);", tracker->GetResourceVar(o->GetChild(0)->AsUInt64()))
       .PrintLn("}");
 }
 
-void CodeWriter::DebugMarkerSetObjectNameEXT(ExtObject *o, uint32_t pass)
+void CodeWriter::DebugMarkerSetObjectNameEXT(SDObject *o, uint32_t pass)
 {
   files[pass]
       ->PrintLn("if (isDebugMarkerEXTEnabled) {")
@@ -2543,9 +2538,9 @@ void CodeWriter::DebugMarkerSetObjectNameEXT(ExtObject *o, uint32_t pass)
       .PrintLn("/* sType = */ VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT,")
       .PrintLn("/* pNext = */ NULL,")
       .PrintLn("/* objectType = */ %s,",
-               tracker->GetResourceVarIt(o->At("Object")->U64())->second.debugType.c_str())
-      .PrintLn("/* object = */ (uint64_t) %s,", tracker->GetResourceVar(o->At("Object")->U64()))
-      .PrintLn("/* pObjectName = */ %s,", o->At("ObjectName")->ValueStr().c_str())
+               tracker->GetResourceVarIt(o->FindChild("Object")->AsUInt64())->second.debugType.c_str())
+      .PrintLn("/* object = */ (uint64_t) %s,", tracker->GetResourceVar(o->FindChild("Object")->AsUInt64()))
+      .PrintLn("/* pObjectName = */ %s,", ValueStr(o->FindChild("ObjectName")).c_str())
       .PrintLn("};")
       .PrintLn("VkResult result = vkDebugMarkerSetObjectName(%s, &%s);", tracker->GetDeviceVar(),
                "ObjectNI")

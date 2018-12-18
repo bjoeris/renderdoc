@@ -32,71 +32,71 @@ namespace vk_cpp_codec
 * capture. These track things like reads/writes of memory and images.
 ***************************************************************************/
 
-void TraceTracker::CmdBeginRenderPassAnalyze(ExtObject *o)
+void TraceTracker::CmdBeginRenderPassAnalyze(SDChunk *o)
 {
-  ExtObject *bi = o->At("RenderPassBegin");
-  uint64_t renderPass = bi->At("renderPass")->U64();
-  uint64_t framebuffer = bi->At("framebuffer")->U64();
-  ExtObject *renderPassCI = ResourceCreateFind(renderPass)->second.sdobj->At(1);
-  ExtObject *framebufferCI = ResourceCreateFind(framebuffer)->second.sdobj->At(1);
+  SDObject *bi = o->FindChild("RenderPassBegin");
+  uint64_t renderPass = bi->FindChild("renderPass")->AsUInt64();
+  uint64_t framebuffer = bi->FindChild("framebuffer")->AsUInt64();
+  SDObject *renderPassCI = ResourceCreateFind(renderPass)->second.sdobj->GetChild(1);
+  SDObject *framebufferCI = ResourceCreateFind(framebuffer)->second.sdobj->GetChild(1);
 
-  // Add the cmdBuffer ID and current ExtObject to beginRenderPassCmdBuffer map
+  // Add the cmdBuffer ID and current SDObject to beginRenderPassCmdBuffer map
   // to allow fetching it later on vkEndCmdRenderpass.
-  uint64_t cmdBuffer = o->At("commandBuffer")->U64();
+  uint64_t cmdBuffer = o->FindChild("commandBuffer")->AsUInt64();
   RDCASSERT(beginRenderPassCmdBuffer.find(cmdBuffer) == beginRenderPassCmdBuffer.end());
   beginRenderPassCmdBuffer[cmdBuffer] = o;
 
   // Renderpass attachment list should be the same as framebuffers list
-  RDCASSERT(renderPassCI->At("pAttachments")->Size() == framebufferCI->At("pAttachments")->Size());
+  RDCASSERT(renderPassCI->FindChild("pAttachments")->NumChildren() == framebufferCI->FindChild("pAttachments")->NumChildren());
 
-  bindingState.BeginRenderPass(renderPassCI, framebufferCI, bi->At(4));
+  bindingState.BeginRenderPass(renderPassCI, framebufferCI, bi->GetChild(4));
   BeginSubpass();
 }
 
-void TraceTracker::CmdNextSubpassAnalyze(ExtObject *o)
+void TraceTracker::CmdNextSubpassAnalyze(SDChunk *o)
 {
   EndSubpass();
   bindingState.subpassIndex++;
   BeginSubpass();
 }
 
-void TraceTracker::CmdEndRenderPassAnalyze(ExtObject *end)
+void TraceTracker::CmdEndRenderPassAnalyze(SDChunk *end)
 {
   EndSubpass();
-  uint64_t commandBuffer = end->At("commandBuffer")->U64();
+  uint64_t commandBuffer = end->FindChild("commandBuffer")->AsUInt64();
   RDCASSERT(beginRenderPassCmdBuffer.find(commandBuffer) != beginRenderPassCmdBuffer.end());
-  ExtObject *cmdBeginRenderPass = beginRenderPassCmdBuffer[commandBuffer];
-  ExtObject *renderPassBegin = cmdBeginRenderPass->At("RenderPassBegin");
-  uint64_t renderPassID = renderPassBegin->At("renderPass")->U64();
-  uint64_t framebufferID = renderPassBegin->At("framebuffer")->U64();
+  SDObject *cmdBeginRenderPass = beginRenderPassCmdBuffer[commandBuffer];
+  SDObject *renderPassBegin = cmdBeginRenderPass->FindChild("RenderPassBegin");
+  uint64_t renderPassID = renderPassBegin->FindChild("renderPass")->AsUInt64();
+  uint64_t framebufferID = renderPassBegin->FindChild("framebuffer")->AsUInt64();
   ResourceWithViewsMapIter rp_it = ResourceCreateFind(renderPassID);
   ResourceWithViewsMapIter fb_it = ResourceCreateFind(framebufferID);
   RDCASSERT(rp_it != ResourceCreateEnd() && fb_it != ResourceCreateEnd());
-  ExtObject *renderPassCI = rp_it->second.sdobj->At("CreateInfo");
-  ExtObject *framebufferCI = fb_it->second.sdobj->At("CreateInfo");
-  ExtObject *renderPassAttachments = renderPassCI->At("pAttachments");
-  ExtObject *framebufferAttachments = framebufferCI->At("pAttachments");
-  RDCASSERT(renderPassAttachments->Size() == framebufferAttachments->Size());
-  for(uint32_t a = 0; a < framebufferAttachments->Size(); a++)
+  SDObject *renderPassCI = rp_it->second.sdobj->FindChild("CreateInfo");
+  SDObject *framebufferCI = fb_it->second.sdobj->FindChild("CreateInfo");
+  SDObject *renderPassAttachments = renderPassCI->FindChild("pAttachments");
+  SDObject *framebufferAttachments = framebufferCI->FindChild("pAttachments");
+  RDCASSERT(renderPassAttachments->NumChildren() == framebufferAttachments->NumChildren());
+  for(uint32_t a = 0; a < framebufferAttachments->NumChildren(); a++)
   {
-    uint64_t viewID = framebufferAttachments->At(a)->U64();
-    ExtObject *attachmentDesc = renderPassAttachments->At(a);
-    VkImageLayout finalLayout = (VkImageLayout)attachmentDesc->At("finalLayout")->U64();
+    uint64_t viewID = framebufferAttachments->GetChild(a)->AsUInt64();
+    SDObject *attachmentDesc = renderPassAttachments->GetChild(a);
+    VkImageLayout finalLayout = (VkImageLayout)attachmentDesc->FindChild("finalLayout")->AsUInt64();
 
     TransitionImageViewLayout(viewID, bindingState.attachmentLayout[a], finalLayout,
                               VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED);
   }
 
   beginRenderPassCmdBuffer.erase(commandBuffer);
-  RDCASSERT(bindingState.subpassIndex == bindingState.renderPass->At(6)->Size() - 1);
+  RDCASSERT(bindingState.subpassIndex == bindingState.renderPass->GetChild(6)->NumChildren() - 1);
 }
 
-void TraceTracker::CmdExecuteCommandsAnalyze(ExtObject *o)
+void TraceTracker::CmdExecuteCommandsAnalyze(SDChunk *o)
 {
-  ExtObject *commandBuffers = o->At(2);
-  for(uint64_t j = 0; j < commandBuffers->Size(); j++)
+  SDObject *commandBuffers = o->GetChild(2);
+  for(uint64_t j = 0; j < commandBuffers->NumChildren(); j++)
   {
-    uint32_t recordIndex = fg.FindCmdBufferIndex(commandBuffers->At(j));
+    uint32_t recordIndex = fg.FindCmdBufferIndex(commandBuffers->GetChild(j));
     CmdBufferRecord &record = fg.records[recordIndex];
     for(uint64_t k = 0; k < record.cmds.size(); k++)
     {
@@ -105,10 +105,10 @@ void TraceTracker::CmdExecuteCommandsAnalyze(ExtObject *o)
   }
 }
 
-void TraceTracker::CmdBindPipelineAnalyze(ExtObject *o)
+void TraceTracker::CmdBindPipelineAnalyze(SDChunk *o)
 {
-  uint64_t pipelineBindPoint = o->At(1)->U64();
-  uint64_t pipeline = o->At(2)->U64();
+  uint64_t pipelineBindPoint = o->GetChild(1)->AsUInt64();
+  uint64_t pipeline = o->GetChild(2)->AsUInt64();
   RDCASSERT(createdPipelines.find(pipeline) != createdPipelines.end());
   switch(pipelineBindPoint)
   {
@@ -122,18 +122,18 @@ void TraceTracker::CmdBindPipelineAnalyze(ExtObject *o)
   }
 }
 
-void TraceTracker::CmdBindDescriptorSetsAnalyze(ExtObject *o)
+void TraceTracker::CmdBindDescriptorSetsAnalyze(SDChunk *o)
 {
   // TODO(akharlamov) image can be bound to pipeline
-  uint64_t pipelineBindPoint = o->At(1)->U64();
-  uint64_t firstSet = o->At(3)->U64();
-  uint64_t descriptorSetCount = o->At(4)->U64();
-  ExtObject *descriptorSets = o->At(5);
-  uint64_t dynamicOffsetCount = o->At(6)->U64();
-  ExtObject *dynamicOffsets = o->At(7);
+  uint64_t pipelineBindPoint = o->GetChild(1)->AsUInt64();
+  uint64_t firstSet = o->GetChild(3)->AsUInt64();
+  uint64_t descriptorSetCount = o->GetChild(4)->AsUInt64();
+  SDObject *descriptorSets = o->GetChild(5);
+  uint64_t dynamicOffsetCount = o->GetChild(6)->AsUInt64();
+  SDObject *dynamicOffsets = o->GetChild(7);
 
-  RDCASSERT(descriptorSetCount == descriptorSets->Size());
-  RDCASSERT(dynamicOffsetCount == dynamicOffsets->Size());
+  RDCASSERT(descriptorSetCount == descriptorSets->NumChildren());
+  RDCASSERT(dynamicOffsetCount == dynamicOffsets->NumChildren());
 
   BoundPipeline *boundPipeline = NULL;
   switch(pipelineBindPoint)
@@ -150,7 +150,7 @@ void TraceTracker::CmdBindDescriptorSetsAnalyze(ExtObject *o)
   uint64_t dynamicOffsetIndex = 0;
   for(uint64_t i = 0; i < descriptorSetCount; i++)
   {
-    uint64_t descSet_id = descriptorSets->At(i)->U64();
+    uint64_t descSet_id = descriptorSets->GetChild(i)->AsUInt64();
     uint64_t descSet_num = i + firstSet;
     boundPipeline->descriptorSets[descSet_num] = descSet_id;
 
@@ -166,9 +166,9 @@ void TraceTracker::CmdBindDescriptorSetsAnalyze(ExtObject *o)
         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
           for(uint64_t j = 0; j < binding_it->second.bufferBindings.size(); j++)
           {
-            RDCASSERT(dynamicOffsetIndex < dynamicOffsets->Size());
+            RDCASSERT(dynamicOffsetIndex < dynamicOffsets->NumChildren());
             binding_it->second.bufferBindings[j].dynamicOffset =
-                dynamicOffsets->At(dynamicOffsetIndex)->U64();
+                dynamicOffsets->GetChild(dynamicOffsetIndex)->AsUInt64();
             dynamicOffsetIndex++;
           }
         default: break;
@@ -177,127 +177,125 @@ void TraceTracker::CmdBindDescriptorSetsAnalyze(ExtObject *o)
   }
 }
 
-void TraceTracker::CmdBindIndexBufferAnalyze(ExtObject *o)
+void TraceTracker::CmdBindIndexBufferAnalyze(SDChunk *o)
 {
-  uint64_t buf_id = o->At(1)->U64();
-  uint64_t offset = o->At(2)->U64();
-  uint64_t indexType = o->At(3)->U64();
+  uint64_t buf_id = o->GetChild(1)->AsUInt64();
+  uint64_t offset = o->GetChild(2)->AsUInt64();
+  uint64_t indexType = o->GetChild(3)->AsUInt64();
   ResourceWithViewsMapIter bufCreate_it = ResourceCreateFind(buf_id);
   RDCASSERT(bufCreate_it != ResourceCreateEnd());
-  ExtObject *ci = bufCreate_it->second.sdobj->At(1);
-  uint64_t bufSize = ci->At(3)->U64();
+  SDObject *ci = bufCreate_it->second.sdobj->GetChild(1);
+  uint64_t bufSize = ci->GetChild(3)->AsUInt64();
   bindingState.indexBuffer = BoundBuffer(buf_id, offset, bufSize - offset, 0);
   bindingState.indexBufferType = indexType;
 }
 
-void TraceTracker::CmdBindVertexBuffersAnalyze(ExtObject *o)
+void TraceTracker::CmdBindVertexBuffersAnalyze(SDChunk *o)
 {
-  uint64_t firstBinding = o->At(1)->U64();
-  uint64_t bindingCount = o->At(2)->U64();
-  ExtObject *buffers = o->At(3);
-  ExtObject *offsets = o->At(4);
-  RDCASSERT(bindingCount == buffers->Size());
-  RDCASSERT(bindingCount == offsets->Size());
+  uint64_t firstBinding = o->GetChild(1)->AsUInt64();
+  uint64_t bindingCount = o->GetChild(2)->AsUInt64();
+  SDObject *buffers = o->GetChild(3);
+  SDObject *offsets = o->GetChild(4);
+  RDCASSERT(bindingCount == buffers->NumChildren());
+  RDCASSERT(bindingCount == offsets->NumChildren());
   for(uint64_t i = 0; i < bindingCount; i++)
   {
-    uint64_t buf_id = buffers->At(i)->U64();
-    uint64_t offset = offsets->At(i)->U64();
+    uint64_t buf_id = buffers->GetChild(i)->AsUInt64();
+    uint64_t offset = offsets->GetChild(i)->AsUInt64();
     ResourceWithViewsMapIter bufCreate_it = ResourceCreateFind(buf_id);
     RDCASSERT(bufCreate_it != ResourceCreateEnd());
-    ExtObject *ci = bufCreate_it->second.sdobj->At(1);
-    uint64_t bufSize = ci->At(3)->U64();
+    SDObject *ci = bufCreate_it->second.sdobj->GetChild(1);
+    uint64_t bufSize = ci->GetChild(3)->AsUInt64();
     bindingState.vertexBuffers[firstBinding + i] = BoundBuffer(buf_id, offset, bufSize - offset, 0);
   }
 }
 
-void TraceTracker::CmdCopyBufferToImageAnalyze(ExtObject *o)
+void TraceTracker::CmdCopyBufferToImageAnalyze(SDChunk *o)
 {
-  ExtObject *src = o->At(1);
-  uint64_t src_id = src->U64();
-  ExtObject *dst = o->At(2);
-  VkImageLayout dst_layout = (VkImageLayout)o->At(3)->U64();
-  uint64_t dst_id = dst->U64();
-  ExtObject *regions = o->At(5);
-  RDCASSERT(o->At(4)->U64() == regions->Size());
+  SDObject *src = o->GetChild(1);
+  uint64_t src_id = src->AsUInt64();
+  SDObject *dst = o->GetChild(2);
+  VkImageLayout dst_layout = (VkImageLayout)o->GetChild(3)->AsUInt64();
+  uint64_t dst_id = dst->AsUInt64();
+  SDObject *regions = o->GetChild(5);
+  RDCASSERT(o->GetChild(4)->AsUInt64() == regions->NumChildren());
 
   BufferImageCopyHelper(src_id, dst_id, regions, dst_layout, ACCESS_ACTION_READ, ACCESS_ACTION_CLEAR);
 }
 
-void TraceTracker::CmdCopyImageToBufferAnalyze(ExtObject *o)
+void TraceTracker::CmdCopyImageToBufferAnalyze(SDChunk *o)
 {
-  ExtObject *src = o->At(1);
-  VkImageLayout src_layout = (VkImageLayout)o->At(2)->U64();
-  uint64_t src_id = src->U64();
-  ExtObject *dst = o->At(3);
-  uint64_t dst_id = dst->U64();
-  ExtObject *regions = o->At(5);
-  RDCASSERT(o->At(4)->U64() == regions->Size());
+  SDObject *src = o->GetChild(1);
+  VkImageLayout src_layout = (VkImageLayout)o->GetChild(2)->AsUInt64();
+  uint64_t src_id = src->AsUInt64();
+  SDObject *dst = o->GetChild(3);
+  uint64_t dst_id = dst->AsUInt64();
+  SDObject *regions = o->GetChild(5);
+  RDCASSERT(o->GetChild(4)->AsUInt64() == regions->NumChildren());
 
   BufferImageCopyHelper(dst_id, src_id, regions, src_layout, ACCESS_ACTION_CLEAR, ACCESS_ACTION_READ);
 }
 
-void TraceTracker::CmdCopyImageAnalyze(ExtObject *o)
+void TraceTracker::CmdCopyImageAnalyze(SDChunk *o)
 {
-  ExtObject *src = o->At(1);
-  VkImageLayout src_layout = (VkImageLayout)o->At(2)->U64();
-  uint64_t src_id = src->U64();
-  ExtObject *dst = o->At(3);
-  VkImageLayout dst_layout = (VkImageLayout)o->At(4)->U64();
-  uint64_t dst_id = dst->U64();
+  SDObject *src = o->GetChild(1);
+  VkImageLayout src_layout = (VkImageLayout)o->GetChild(2)->AsUInt64();
+  uint64_t src_id = src->AsUInt64();
+  SDObject *dst = o->GetChild(3);
+  VkImageLayout dst_layout = (VkImageLayout)o->GetChild(4)->AsUInt64();
+  uint64_t dst_id = dst->AsUInt64();
 
-  ExtObject *regions = o->At(6);
-  for(uint64_t i = 0; i < regions->Size(); i++)
+  SDObject *regions = o->GetChild(6);
+  for(uint64_t i = 0; i < regions->NumChildren(); i++)
   {
-    ExtObject *region = regions->At(i);
-    ExtObject *srcSubresource = region->At(0);
-    ExtObject *srcOffset = region->At(1);
-    ExtObject *dstSubresource = region->At(2);
-    ExtObject *dstOffset = region->At(3);
-    ExtObject *extent = region->At(4);
+    SDObject *region = regions->GetChild(i);
+    SDObject *srcSubresource = region->GetChild(0);
+    SDObject *srcOffset = region->GetChild(1);
+    SDObject *dstSubresource = region->GetChild(2);
+    SDObject *dstOffset = region->GetChild(3);
+    SDObject *extent = region->GetChild(4);
 
     AccessImage(src_id, srcSubresource, srcOffset, extent, src_layout, ACCESS_ACTION_READ);
     AccessImage(dst_id, dstSubresource, dstOffset, extent, dst_layout, ACCESS_ACTION_CLEAR);
   }
 }
 
-void TraceTracker::CmdBlitImageAnalyze(ExtObject *o)
+void TraceTracker::CmdBlitImageAnalyze(SDChunk *o)
 {
-  ExtObject *src = o->At(1);
-  VkImageLayout src_layout = (VkImageLayout)o->At(2)->U64();
-  uint64_t src_id = src->U64();
-  ExtObject *dst = o->At(3);
-  VkImageLayout dst_layout = (VkImageLayout)o->At(4)->U64();
-  uint64_t dst_id = dst->U64();
+  SDObject *src = o->GetChild(1);
+  VkImageLayout src_layout = (VkImageLayout)o->GetChild(2)->AsUInt64();
+  uint64_t src_id = src->AsUInt64();
+  SDObject *dst = o->GetChild(3);
+  VkImageLayout dst_layout = (VkImageLayout)o->GetChild(4)->AsUInt64();
+  uint64_t dst_id = dst->AsUInt64();
 
-  ExtObject *regions = o->At(6);
-  for(uint64_t i = 0; i < regions->Size(); i++)
+  SDObject *regions = o->GetChild(6);
+  for(uint64_t i = 0; i < regions->NumChildren(); i++)
   {
-    ExtObject *region = regions->At(i);
-    ExtObject *srcSubresource = region->At(0);
-    ExtObject *srcOffsets = region->At(1);
-    ExtObject *dstSubresource = region->At(2);
-    ExtObject *dstOffsets = region->At(3);
+    SDObject *region = regions->GetChild(i);
+    SDObject *srcSubresource = region->GetChild(0);
+    SDObject *srcOffsets = region->GetChild(1);
+    SDObject *dstSubresource = region->GetChild(2);
+    SDObject *dstOffsets = region->GetChild(3);
 
     // Convert the two srcOffsets to a srcOffset and srcExtent,
     // and similarly for dst.
-    ExtObject srcOffset("srcOffset", "VkOffset3D");
-    ExtObject dstOffset("dstOffset", "VkOffset3D");
-    ExtObject srcExtent("srcExtent", "VkExtent3D");
-    ExtObject dstExtent("dstExtent", "VkExtent3D");
+    SDObject srcOffset("srcOffset", "VkOffset3D");
+    SDObject dstOffset("dstOffset", "VkOffset3D");
+    SDObject srcExtent("srcExtent", "VkExtent3D");
+    SDObject dstExtent("dstExtent", "VkExtent3D");
     const char *offset_names[3] = {"x", "y", "z"};
     const char *extent_names[3] = {"width", "height", "depth"};
     for(uint32_t j = 0; j < 3; j++)
     {
-      uint64_t src_0 = srcOffsets->At(0)->At(j)->U64();
-      uint64_t src_1 = srcOffsets->At(1)->At(j)->U64();
-      uint64_t dst_0 = dstOffsets->At(0)->At(j)->U64();
-      uint64_t dst_1 = dstOffsets->At(1)->At(j)->U64();
-      srcOffset.AddChild(new ExtObject(offset_names[j], "int32_t", std::min(src_0, src_1)));
-      dstOffset.AddChild(new ExtObject(offset_names[j], "int32_t", std::min(dst_0, dst_1)));
-      srcExtent.AddChild(new ExtObject(extent_names[j], "int32_t",
-                                       std::max(src_0, src_1) - std::min(src_0, src_1)));
-      dstExtent.AddChild(new ExtObject(extent_names[j], "int32_t",
-                                       std::max(dst_0, dst_1) - std::min(dst_0, dst_1)));
+      uint64_t src_0 = srcOffsets->GetChild(0)->GetChild(j)->AsUInt64();
+      uint64_t src_1 = srcOffsets->GetChild(1)->GetChild(j)->AsUInt64();
+      uint64_t dst_0 = dstOffsets->GetChild(0)->GetChild(j)->AsUInt64();
+      uint64_t dst_1 = dstOffsets->GetChild(1)->GetChild(j)->AsUInt64();
+      srcOffset.data.children.push_back((SDObject *)makeSDObject(offset_names[j], std::min(src_0, src_1)));
+      dstOffset.data.children.push_back((SDObject *)makeSDObject(offset_names[j], std::min(dst_0, dst_1)));
+      srcExtent.data.children.push_back((SDObject *)makeSDObject(extent_names[j], std::max(src_0, src_1) - std::min(src_0, src_1)));
+      dstExtent.data.children.push_back((SDObject *)makeSDObject(extent_names[j], std::max(dst_0, dst_1) - std::min(dst_0, dst_1)));
     }
 
     AccessImage(src_id, srcSubresource, &srcOffset, &srcExtent, src_layout, ACCESS_ACTION_READ);
@@ -305,121 +303,121 @@ void TraceTracker::CmdBlitImageAnalyze(ExtObject *o)
   }
 }
 
-void TraceTracker::CmdResolveImageAnalyze(ExtObject *o)
+void TraceTracker::CmdResolveImageAnalyze(SDChunk *o)
 {
-  ExtObject *src = o->At(1);
-  VkImageLayout src_layout = (VkImageLayout)o->At(2)->U64();
-  uint64_t src_id = src->U64();
-  ExtObject *dst = o->At(3);
-  VkImageLayout dst_layout = (VkImageLayout)o->At(4)->U64();
-  uint64_t dst_id = dst->U64();
+  SDObject *src = o->GetChild(1);
+  VkImageLayout src_layout = (VkImageLayout)o->GetChild(2)->AsUInt64();
+  uint64_t src_id = src->AsUInt64();
+  SDObject *dst = o->GetChild(3);
+  VkImageLayout dst_layout = (VkImageLayout)o->GetChild(4)->AsUInt64();
+  uint64_t dst_id = dst->AsUInt64();
 
-  ExtObject *regions = o->At(6);
-  for(uint64_t i = 0; i < regions->Size(); i++)
+  SDObject *regions = o->GetChild(6);
+  for(uint64_t i = 0; i < regions->NumChildren(); i++)
   {
-    ExtObject *region = regions->At(i);
-    ExtObject *srcSubresource = region->At(0);
-    ExtObject *srcOffset = region->At(1);
-    ExtObject *dstSubresource = region->At(2);
-    ExtObject *dstOffset = region->At(3);
-    ExtObject *extent = region->At(4);
+    SDObject *region = regions->GetChild(i);
+    SDObject *srcSubresource = region->GetChild(0);
+    SDObject *srcOffset = region->GetChild(1);
+    SDObject *dstSubresource = region->GetChild(2);
+    SDObject *dstOffset = region->GetChild(3);
+    SDObject *extent = region->GetChild(4);
 
     AccessImage(src_id, srcSubresource, srcOffset, extent, src_layout, ACCESS_ACTION_READ);
     AccessImage(dst_id, dstSubresource, dstOffset, extent, dst_layout, ACCESS_ACTION_CLEAR);
   }
 }
 
-void TraceTracker::CmdCopyBufferAnalyze(ExtObject *o)
+void TraceTracker::CmdCopyBufferAnalyze(SDChunk *o)
 {
-  uint64_t src_id = o->At(1)->U64();
-  uint64_t dst_id = o->At(2)->U64();
-  ExtObject *regions = o->At(4);
-  RDCASSERT(regions->Size() == o->At(3)->U64());
+  uint64_t src_id = o->GetChild(1)->AsUInt64();
+  uint64_t dst_id = o->GetChild(2)->AsUInt64();
+  SDObject *regions = o->GetChild(4);
+  RDCASSERT(regions->NumChildren() == o->GetChild(3)->AsUInt64());
 
-  for(uint64_t i = 0; i < regions->Size(); i++)
+  for(uint64_t i = 0; i < regions->NumChildren(); i++)
   {
-    ExtObject *region = regions->At(i);
-    uint64_t srcOffset = region->At(0)->U64();
-    uint64_t dstOffset = region->At(1)->U64();
-    uint64_t size = region->At(2)->U64();
+    SDObject *region = regions->GetChild(i);
+    uint64_t srcOffset = region->GetChild(0)->AsUInt64();
+    uint64_t dstOffset = region->GetChild(1)->AsUInt64();
+    uint64_t size = region->GetChild(2)->AsUInt64();
     AccessBufferMemory(src_id, srcOffset, size, ACCESS_ACTION_READ);
     AccessBufferMemory(dst_id, dstOffset, size, ACCESS_ACTION_CLEAR);
   }
 }
 
-void TraceTracker::CmdUpdateBufferAnalyze(ExtObject *o)
+void TraceTracker::CmdUpdateBufferAnalyze(SDChunk *o)
 {
-  uint64_t dst_id = o->At(1)->U64();
-  uint64_t offset = o->At(2)->U64();
-  uint64_t size = o->At(3)->U64();
+  uint64_t dst_id = o->GetChild(1)->AsUInt64();
+  uint64_t offset = o->GetChild(2)->AsUInt64();
+  uint64_t size = o->GetChild(3)->AsUInt64();
   AccessBufferMemory(dst_id, offset, size, ACCESS_ACTION_CLEAR);
 }
 
-void TraceTracker::CmdFillBufferAnalyze(ExtObject *o)
+void TraceTracker::CmdFillBufferAnalyze(SDChunk *o)
 {
-  uint64_t dst_id = o->At(1)->U64();
-  uint64_t offset = o->At(2)->U64();
-  uint64_t size = o->At(3)->U64();
+  uint64_t dst_id = o->GetChild(1)->AsUInt64();
+  uint64_t offset = o->GetChild(2)->AsUInt64();
+  uint64_t size = o->GetChild(3)->AsUInt64();
   AccessBufferMemory(dst_id, offset, size, ACCESS_ACTION_CLEAR);
 }
 
-void TraceTracker::CmdClearColorImageAnalyze(ExtObject *o)
+void TraceTracker::CmdClearColorImageAnalyze(SDChunk *o)
 {
-  ExtObject *image = o->At(1);
-  VkImageLayout image_layout = (VkImageLayout)o->At(2)->U64();
-  uint64_t image_id = image->U64();
+  SDObject *image = o->GetChild(1);
+  VkImageLayout image_layout = (VkImageLayout)o->GetChild(2)->AsUInt64();
+  uint64_t image_id = image->AsUInt64();
 
-  ExtObject *regions = o->At(5);
-  for(uint64_t i = 0; i < regions->Size(); i++)
+  SDObject *regions = o->GetChild(5);
+  for(uint64_t i = 0; i < regions->NumChildren(); i++)
   {
-    AccessImage(image_id, regions->At(i), image_layout, ACCESS_ACTION_CLEAR);
+    AccessImage(image_id, regions->GetChild(i), image_layout, ACCESS_ACTION_CLEAR);
   }
 }
 
-void TraceTracker::CmdClearDepthStencilImageAnalyze(ExtObject *o)
+void TraceTracker::CmdClearDepthStencilImageAnalyze(SDChunk *o)
 {
-  ExtObject *image = o->At(1);
-  VkImageLayout image_layout = (VkImageLayout)o->At(2)->U64();
-  uint64_t image_id = image->U64();
+  SDObject *image = o->GetChild(1);
+  VkImageLayout image_layout = (VkImageLayout)o->GetChild(2)->AsUInt64();
+  uint64_t image_id = image->AsUInt64();
 
-  ExtObject *regions = o->At(5);
-  for(uint64_t i = 0; i < regions->Size(); i++)
+  SDObject *regions = o->GetChild(5);
+  for(uint64_t i = 0; i < regions->NumChildren(); i++)
   {
-    AccessImage(image_id, regions->At(i), image_layout, ACCESS_ACTION_CLEAR);
+    AccessImage(image_id, regions->GetChild(i), image_layout, ACCESS_ACTION_CLEAR);
   }
 }
 
-void TraceTracker::CmdClearAttachmentsAnalyze(ExtObject *o)
+void TraceTracker::CmdClearAttachmentsAnalyze(SDChunk *o)
 {
-  ExtObject *subpasses = bindingState.renderPass->At(6);
-  uint64_t fbWidth = bindingState.framebuffer->At(6)->U64();
-  uint64_t fbHeight = bindingState.framebuffer->At(7)->U64();
+  SDObject *subpasses = bindingState.renderPass->GetChild(6);
+  uint64_t fbWidth = bindingState.framebuffer->GetChild(6)->AsUInt64();
+  uint64_t fbHeight = bindingState.framebuffer->GetChild(7)->AsUInt64();
 
   // TODO: multiview changes layers
-  uint64_t fbLayers = bindingState.framebuffer->At(8)->U64();
+  uint64_t fbLayers = bindingState.framebuffer->GetChild(8)->AsUInt64();
 
-  RDCASSERT(bindingState.subpassIndex < subpasses->Size());
-  ExtObject *subpass = subpasses->At(bindingState.subpassIndex);
-  ExtObject *colorAttachments = subpass->At(5);
-  ExtObject *depthStencilAttachment = subpass->At(7);
+  RDCASSERT(bindingState.subpassIndex < subpasses->NumChildren());
+  SDObject *subpass = subpasses->GetChild(bindingState.subpassIndex);
+  SDObject *colorAttachments = subpass->GetChild(5);
+  SDObject *depthStencilAttachment = subpass->GetChild(7);
 
-  ExtObject *attachments = o->At(2);
-  ExtObject *rects = o->At(4);
+  SDObject *attachments = o->GetChild(2);
+  SDObject *rects = o->GetChild(4);
 
   std::vector<AccessAction> layerActions(fbLayers, ACCESS_ACTION_NONE);
 
-  for(uint32_t i = 0; i < rects->Size(); i++)
+  for(uint32_t i = 0; i < rects->NumChildren(); i++)
   {
-    ExtObject *clearRect = rects->At(i);
-    ExtObject *rect2D = clearRect->At(0);
-    ExtObject *offset = rect2D->At(0);
-    uint64_t offset_x = offset->At(0)->U64();
-    uint64_t offset_y = offset->At(1)->U64();
-    ExtObject *extent = rect2D->At(1);
-    uint64_t width = extent->At(0)->U64();
-    uint64_t height = extent->At(1)->U64();
-    uint64_t baseArrayLayer = clearRect->At(1)->U64();
-    uint64_t layerCount = clearRect->At(2)->U64();
+    SDObject *clearRect = rects->GetChild(i);
+    SDObject *rect2D = clearRect->GetChild(0);
+    SDObject *offset = rect2D->GetChild(0);
+    uint64_t offset_x = offset->GetChild(0)->AsUInt64();
+    uint64_t offset_y = offset->GetChild(1)->AsUInt64();
+    SDObject *extent = rect2D->GetChild(1);
+    uint64_t width = extent->GetChild(0)->AsUInt64();
+    uint64_t height = extent->GetChild(1)->AsUInt64();
+    uint64_t baseArrayLayer = clearRect->GetChild(1)->AsUInt64();
+    uint64_t layerCount = clearRect->GetChild(2)->AsUInt64();
     RDCASSERT(layerCount < VK_REMAINING_ARRAY_LAYERS);
 
     bool fullFrame = (offset_x == 0 && offset_y == 0 && width == fbWidth && height == fbHeight);
@@ -437,11 +435,11 @@ void TraceTracker::CmdClearAttachmentsAnalyze(ExtObject *o)
     }
   }
 
-  for(uint32_t i = 0; i < attachments->Size(); i++)
+  for(uint32_t i = 0; i < attachments->NumChildren(); i++)
   {
-    ExtObject *attachment = attachments->At(i);
-    VkImageAspectFlags aspectMask = static_cast<VkImageAspectFlags>(attachment->At(0)->U64());
-    uint64_t colorAttachment = attachment->At(1)->U64();
+    SDObject *attachment = attachments->GetChild(i);
+    VkImageAspectFlags aspectMask = static_cast<VkImageAspectFlags>(attachment->GetChild(0)->AsUInt64());
+    uint64_t colorAttachment = attachment->GetChild(1)->AsUInt64();
     for(uint32_t layer = 0; layer < fbLayers; layer++)
     {
       AccessAction action = layerActions[layer];
@@ -452,38 +450,38 @@ void TraceTracker::CmdClearAttachmentsAnalyze(ExtObject *o)
 
       if(aspectMask & VK_IMAGE_ASPECT_COLOR_BIT)
       {
-        AccessAttachment(colorAttachments->At(colorAttachment)->At(0)->U64(), action, aspectMask,
+        AccessAttachment(colorAttachments->GetChild(colorAttachment)->GetChild(0)->AsUInt64(), action, aspectMask,
                          layer, 1);
       }
 
       if(aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
       {
-        AccessAttachment(depthStencilAttachment->At(0)->U64(), action, aspectMask, layer, 1);
+        AccessAttachment(depthStencilAttachment->GetChild(0)->AsUInt64(), action, aspectMask, layer, 1);
       }
     }
   }
 }
 
-void TraceTracker::CmdPipelineBarrierAnalyze(ExtObject *o)
+void TraceTracker::CmdPipelineBarrierAnalyze(SDChunk *o)
 {
-  ExtObject *bufBarriers = o->At("pBufferMemoryBarriers");
-  for(uint32_t i = 0; i < bufBarriers->Size(); i++)
+  SDObject *bufBarriers = o->FindChild("pBufferMemoryBarriers");
+  for(uint32_t i = 0; i < bufBarriers->NumChildren(); i++)
   {
-    ExtObject *barrier = bufBarriers->At(i);
-    uint64_t bufID = barrier->At("buffer")->U64();
-    uint64_t offset = barrier->At("offset")->U64();
-    uint64_t size = barrier->At("size")->U64();
+    SDObject *barrier = bufBarriers->GetChild(i);
+    uint64_t bufID = barrier->FindChild("buffer")->AsUInt64();
+    uint64_t offset = barrier->FindChild("offset")->AsUInt64();
+    uint64_t size = barrier->FindChild("size")->AsUInt64();
 
-    uint64_t srcQueueFamilyIndex = barrier->At("srcQueueFamilyIndex")->U64();
-    uint64_t dstQueueFamilyIndex = barrier->At("dstQueueFamilyIndex")->U64();
+    uint64_t srcQueueFamilyIndex = barrier->FindChild("srcQueueFamilyIndex")->AsUInt64();
+    uint64_t dstQueueFamilyIndex = barrier->FindChild("dstQueueFamilyIndex")->AsUInt64();
 
     TransitionBufferQueueFamily(bufID, srcQueueFamilyIndex, dstQueueFamilyIndex, offset, size);
   }
-  ExtObject *imgBarriers = o->At("pImageMemoryBarriers");
-  for(uint32_t i = 0; i < imgBarriers->Size(); i++)
+  SDObject *imgBarriers = o->FindChild("pImageMemoryBarriers");
+  for(uint32_t i = 0; i < imgBarriers->NumChildren(); i++)
   {
-    ExtObject *barrier = imgBarriers->At(i);
-    uint64_t imageID = barrier->At("image")->U64();
+    SDObject *barrier = imgBarriers->GetChild(i);
+    uint64_t imageID = barrier->FindChild("image")->AsUInt64();
 
     // look for imageID in the createdResource map
     ImageStateMapIter image_it = ImageStateFind(imageID);
@@ -492,31 +490,31 @@ void TraceTracker::CmdPipelineBarrierAnalyze(ExtObject *o)
     if(image_it == ImageStateEnd())
       continue;
 
-    ExtObject *range = barrier->At("subresourceRange");
-    VkImageLayout oldLayout = (VkImageLayout)barrier->At("oldLayout")->U64();
-    VkImageLayout newLayout = (VkImageLayout)barrier->At("newLayout")->U64();
-    uint64_t srcQueueFamilyIndex = barrier->At("srcQueueFamilyIndex")->U64();
-    uint64_t dstQueueFamilyIndex = barrier->At("dstQueueFamilyIndex")->U64();
+    SDObject *range = barrier->FindChild("subresourceRange");
+    VkImageLayout oldLayout = (VkImageLayout)barrier->FindChild("oldLayout")->AsUInt64();
+    VkImageLayout newLayout = (VkImageLayout)barrier->FindChild("newLayout")->AsUInt64();
+    uint64_t srcQueueFamilyIndex = barrier->FindChild("srcQueueFamilyIndex")->AsUInt64();
+    uint64_t dstQueueFamilyIndex = barrier->FindChild("dstQueueFamilyIndex")->AsUInt64();
 
     TransitionImageLayout(imageID, range, oldLayout, newLayout, srcQueueFamilyIndex,
                           dstQueueFamilyIndex);
   }
 }
 
-void TraceTracker::CmdWaitEventsAnalyze(ExtObject *o)
+void TraceTracker::CmdWaitEventsAnalyze(SDChunk *o)
 {
 }
 
-void TraceTracker::CmdDispatchAnalyze(ExtObject *o)
+void TraceTracker::CmdDispatchAnalyze(SDChunk *o)
 {
   // Pessimistically read/write all memory and images accessible through bound descriptor sets
   AccessMemoryInBoundDescriptorSets(bindingState.computePipeline);
 }
 
-void TraceTracker::CmdDispatchIndirectAnalyze(ExtObject *o)
+void TraceTracker::CmdDispatchIndirectAnalyze(SDChunk *o)
 {
-  uint64_t buf_id = o->At(1)->U64();
-  uint64_t offset = o->At(2)->U64();
+  uint64_t buf_id = o->GetChild(1)->AsUInt64();
+  uint64_t offset = o->GetChild(2)->AsUInt64();
   uint64_t size = 3 * sizeof(uint32_t);
   AccessBufferMemory(buf_id, offset, size, ACCESS_ACTION_READ);
 
@@ -524,12 +522,12 @@ void TraceTracker::CmdDispatchIndirectAnalyze(ExtObject *o)
   AccessMemoryInBoundDescriptorSets(bindingState.computePipeline);
 }
 
-void TraceTracker::CmdDrawIndirectAnalyze(ExtObject *o)
+void TraceTracker::CmdDrawIndirectAnalyze(SDChunk *o)
 {
-  uint64_t buf_id = o->At(1)->U64();
-  uint64_t offset = o->At(2)->U64();
-  uint64_t drawCount = o->At(3)->U64();
-  uint64_t stride = o->At(3)->U64();
+  uint64_t buf_id = o->GetChild(1)->AsUInt64();
+  uint64_t offset = o->GetChild(2)->AsUInt64();
+  uint64_t drawCount = o->GetChild(3)->AsUInt64();
+  uint64_t stride = o->GetChild(3)->AsUInt64();
   uint64_t drawSize = 4 * sizeof(uint32_t);
   if(stride == drawSize)
   {
@@ -553,12 +551,12 @@ void TraceTracker::CmdDrawIndirectAnalyze(ExtObject *o)
   AccessSubpassAttachments();
 }
 
-void TraceTracker::CmdDrawIndexedIndirectAnalyze(ExtObject *o)
+void TraceTracker::CmdDrawIndexedIndirectAnalyze(SDChunk *o)
 {
-  uint64_t buf_id = o->At(1)->U64();
-  uint64_t offset = o->At(2)->U64();
-  uint64_t drawCount = o->At(3)->U64();
-  uint64_t stride = o->At(3)->U64();
+  uint64_t buf_id = o->GetChild(1)->AsUInt64();
+  uint64_t offset = o->GetChild(2)->AsUInt64();
+  uint64_t drawCount = o->GetChild(3)->AsUInt64();
+  uint64_t stride = o->GetChild(3)->AsUInt64();
   uint64_t drawSize = 5 * sizeof(uint32_t);
 
   // Read indirect buffer
@@ -589,12 +587,12 @@ void TraceTracker::CmdDrawIndexedIndirectAnalyze(ExtObject *o)
   AccessSubpassAttachments();
 }
 
-void TraceTracker::CmdDrawAnalyze(ExtObject *o)
+void TraceTracker::CmdDrawAnalyze(SDChunk *o)
 {
-  uint64_t vertexCount = o->At(1)->U64();
-  uint64_t instanceCount = o->At(2)->U64();
-  uint64_t firstVertex = o->At(3)->U64();
-  uint64_t firstInstance = o->At(4)->U64();
+  uint64_t vertexCount = o->GetChild(1)->AsUInt64();
+  uint64_t instanceCount = o->GetChild(2)->AsUInt64();
+  uint64_t firstVertex = o->GetChild(3)->AsUInt64();
+  uint64_t firstInstance = o->GetChild(4)->AsUInt64();
   ReadBoundVertexBuffers(vertexCount, instanceCount, firstVertex, firstInstance);
 
   // Pessimistically read/write all memory and images accessible through bound descriptor sets
@@ -604,12 +602,12 @@ void TraceTracker::CmdDrawAnalyze(ExtObject *o)
   AccessSubpassAttachments();
 }
 
-void TraceTracker::CmdDrawIndexedAnalyze(ExtObject *o)
+void TraceTracker::CmdDrawIndexedAnalyze(SDChunk *o)
 {
-  uint64_t indexCount = o->At(1)->U64();
-  uint64_t instanceCount = o->At(2)->U64();
-  uint64_t firstIndex = o->At(3)->U64();
-  uint64_t firstInstance = o->At(5)->U64();
+  uint64_t indexCount = o->GetChild(1)->AsUInt64();
+  uint64_t instanceCount = o->GetChild(2)->AsUInt64();
+  uint64_t firstIndex = o->GetChild(3)->AsUInt64();
+  uint64_t firstInstance = o->GetChild(5)->AsUInt64();
   uint64_t indexElemSize;
   switch(bindingState.indexBufferType)
   {

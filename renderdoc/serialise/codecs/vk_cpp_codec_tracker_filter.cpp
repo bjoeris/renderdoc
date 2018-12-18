@@ -29,64 +29,64 @@ namespace vk_cpp_codec
 // --------------------------------------------------------------------------
 // Vulkan API specific tracking functions
 // --------------------------------------------------------------------------
-void TraceTracker::CreateResource(ExtObject *o)
+void TraceTracker::CreateResource(SDObject *o)
 {
-  if(InitResourceFind(o->At(3)->U64()) != InitResourceEnd())
+  if(InitResourceFind(o->GetChild(3)->AsUInt64()) != InitResourceEnd())
   {
-    ExtObject *ci = o->At(1);
+    SDObject *ci = o->GetChild(1);
     // FindChild is used here because buffers and images have different CreateInfo structures
-    ExtObject *usage = as_ext(ci->FindChild("usage"));
-    usage->U64() |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    SDObject *usage = ci->FindChild("usage");
+    usage->UInt64() |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     usage->data.str =
-        std::string(usage->Str()) + std::string("| /*rdoc:init*/ VK_IMAGE_USAGE_TRANSFER_DST_BIT");
+        usage->AsString() + std::string("| /*rdoc:init*/ VK_IMAGE_USAGE_TRANSFER_DST_BIT");
   }
 }
 
-bool TraceTracker::CreateFramebuffer(ExtObject *o)
+bool TraceTracker::CreateFramebuffer(SDObject *o)
 {
-  ExtObject *ci = o->At(1);
-  ExtObject *renderpass = ci->At(3);
-  ExtObject *attachments = ci->At(5);
-  ExtObject *framebuffer = o->At(3);
+  SDObject *ci = o->GetChild(1);
+  SDObject *renderpass = ci->GetChild(3);
+  SDObject *attachments = ci->GetChild(5);
+  SDObject *framebuffer = o->GetChild(3);
 
   bool attachment_is_swapchain_image = false;
-  for(uint64_t i = 0; i < attachments->Size(); i++)
+  for(uint64_t i = 0; i < attachments->NumChildren(); i++)
   {
-    if(IsPresentationResource(attachments->At(i)->U64()))
+    if(IsPresentationResource(attachments->GetChild(i)->AsUInt64()))
     {
       attachment_is_swapchain_image = true;
       break;
     }
   }
 
-  bool renderpass_presents = IsPresentationResource(renderpass->U64());
+  bool renderpass_presents = IsPresentationResource(renderpass->AsUInt64());
   if(attachment_is_swapchain_image || renderpass_presents)
   {
-    presentResources.insert(ExtObjectIDMapPair(framebuffer->U64(), o));
-    std::string name = code->MakeVarName(framebuffer->Type(), framebuffer->U64());
+    presentResources.insert(SDObjectIDMapPair(framebuffer->AsUInt64(), o));
+    std::string name = code->MakeVarName(Type(framebuffer), framebuffer->AsUInt64());
     std::string acquired = name + std::string("[acquired_frame]");
-    TrackVarInMap(resources, framebuffer->Type(), acquired.c_str(),
-                  framebuffer->U64() + PRESENT_VARIABLE_OFFSET);
+    TrackVarInMap(resources, Type(framebuffer), acquired.c_str(),
+                  framebuffer->AsUInt64() + PRESENT_VARIABLE_OFFSET);
     return true;
   }
   return false;
 }
 
-bool TraceTracker::CreateImageView(ExtObject *o)
+bool TraceTracker::CreateImageView(SDObject *o)
 {
-  ExtObject *ci = o->At(1);
-  ExtObject *view = o->At(3);
-  ExtObject *image = ci->At(3);
+  SDObject *ci = o->GetChild(1);
+  SDObject *view = o->GetChild(3);
+  SDObject *image = ci->GetChild(3);
 
-  if(IsPresentationResource(image->U64()))
+  if(IsPresentationResource(image->AsUInt64()))
   {
     // Mark these view are presentation.
-    presentResources.insert(ExtObjectIDMapPair(view->U64(), o));
+    presentResources.insert(SDObjectIDMapPair(view->AsUInt64(), o));
 
-    std::string name = code->MakeVarName(view->Type(), view->U64());
+    std::string name = code->MakeVarName(Type(view), view->AsUInt64());
     // For each view there is a 'VkImageView_<id>[acquired_frame]' which is used in the render loop.
     std::string acquired = name + std::string("[acquired_frame]");
-    TrackVarInMap(resources, view->Type(), acquired.c_str(), view->U64() + PRESENT_VARIABLE_OFFSET);
+    TrackVarInMap(resources, Type(view), acquired.c_str(), view->AsUInt64() + PRESENT_VARIABLE_OFFSET);
     return true;
   }
 
@@ -102,46 +102,45 @@ bool TraceTracker::CreateImageView(ExtObject *o)
 // make sure Present() waits on all signalled semaphores later.
 // 3. Any Queue that submits anything needs to do a WaitIdle at the end of the
 // frame in order to avoid synchronization problems. This can be optimized later.
-void TraceTracker::QueueSubmit(ExtObject *o)
+void TraceTracker::QueueSubmit(SDObject *o)
 {
-  ExtObject *queue = o->At(0);
+  SDObject *queue = o->GetChild(0);
   // Multiple submissions can happen at the same time in Vulkan
-  ExtObject *submits = o->At(2);
-  for(uint32_t s = 0; s < submits->Size(); s++)
+  SDObject *submits = o->GetChild(2);
+  for(uint32_t s = 0; s < submits->NumChildren(); s++)
   {
     // Multiple command buffers can be submitted at the same time
-    ExtObject *cmd_buffers = submits->At(s)->At(6);
+    SDObject *cmd_buffers = submits->GetChild(s)->GetChild(6);
 
     // Check if a command buffer is transferring an image for Presentation.
     // If it does, remember this queue as a Present Queue.
     bool is_presenting = false;
-    for(uint32_t b = 0; b < cmd_buffers->Size(); b++)
+    for(uint32_t b = 0; b < cmd_buffers->NumChildren(); b++)
     {
-      if(IsPresentationResource(cmd_buffers->At(b)->U64()))
+      if(IsPresentationResource(cmd_buffers->GetChild(b)->AsUInt64()))
       {
-        presentResources.insert(ExtObjectIDMapPair(queue->U64(), o));
-        presentQueueID = queue->U64();
+        presentResources.insert(SDObjectIDMapPair(queue->AsUInt64(), o));
+        presentQueueID = queue->AsUInt64();
         is_presenting = true;
       }
     }
 
-    ExtObject *wait = submits->At(s)->At(3);
-    ExtObject *wait_dst_stage = submits->At(s)->At(4);
-    ExtObject *signal = submits->At(s)->At(8);
-    ExtObject *wait_count = submits->At(s)->At(2);
+    SDObject *wait = submits->GetChild(s)->GetChild(3);
+    SDObject *wait_dst_stage = submits->GetChild(s)->GetChild(4);
+    SDObject *signal = submits->GetChild(s)->GetChild(8);
+    SDObject *wait_count = submits->GetChild(s)->GetChild(2);
 
     // If presenting, add a dependency on acquire_semaphore.
     if(is_presenting && signalSemaphoreIDs.find(ACQUIRE_SEMAPHORE_VAR_ID) == signalSemaphoreIDs.end())
     {
-      RDCASSERT(wait_dst_stage->Size() == wait->Size());
+      RDCASSERT(wait_dst_stage->NumChildren() == wait->NumChildren());
 
-      wait->PushOne(new ExtObject("aux.semaphore", "VkSemaphore", ACQUIRE_SEMAPHORE_VAR_ID,
-                                  SDBasic::Resource));
+      wait->data.children.push_back(acquireSemaphore);
 
-      wait_dst_stage->PushOne(new ExtObject("$el", "VkPipelineStageFlagBits",
-                                            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                            "VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT"));
-      wait_count->U64()++;
+      wait_dst_stage->data.children.push_back(makeSDEnum("$el", VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+                                              ->SetCustomString("VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT")
+                                              ->SetTypeName("VkPipelineStageFlagBits"));
+      wait_count->UInt64()++;
 
       signalSemaphoreIDs.insert(U64MapPair(ACQUIRE_SEMAPHORE_VAR_ID, 1));
     }
@@ -149,19 +148,19 @@ void TraceTracker::QueueSubmit(ExtObject *o)
     // Check that 'wait' semaphores have been signaled, otherwise, there will
     // be a deadlock during the execution. This includes removing acquire_semaphore
     // if for some reason it was added a second time.
-    std::vector<ExtObject *> remove_list;
-    for(uint32_t i = 0; i < wait->Size(); i++)
+    std::vector<SDObject *> remove_list;
+    for(uint32_t i = 0; i < wait->NumChildren(); i++)
     {
-      ExtObject *semaphore = wait->At(i);
-      ExtObject *dst_stage = wait_dst_stage->At(i);
-      U64MapIter find = signalSemaphoreIDs.find(semaphore->U64());
+      SDObject *semaphore = wait->GetChild(i);
+      SDObject *dst_stage = wait_dst_stage->GetChild(i);
+      U64MapIter find = signalSemaphoreIDs.find(semaphore->AsUInt64());
 
       if(find == signalSemaphoreIDs.end() || find->second == 0)
       {
         // We are waiting on this semaphore, but it was never signaled.
         remove_list.push_back(semaphore);
         remove_list.push_back(dst_stage);
-        wait_count->U64()--;
+        wait_count->UInt64()--;
       }
       else
       {
@@ -172,25 +171,25 @@ void TraceTracker::QueueSubmit(ExtObject *o)
     while(remove_list.size() > 0)
     {
       bool early_continue = false;
-      ExtObjectVec::iterator rem = remove_list.begin();
-      for(uint32_t i = 0; i < wait->Size(); i++)
+      SDObjectVec::iterator rem = remove_list.begin();
+      for(uint32_t i = 0; i < wait->NumChildren(); i++)
       {
-        if(wait->At(i) == *rem)
+        if(wait->GetChild(i) == *rem)
         {
           remove_list.erase(rem);
-          wait->RemoveOne(i);
+          wait->data.children.erase(i);
           early_continue = true;
           break;
         }
       }
       if(early_continue)
         continue;
-      for(uint32_t i = 0; i < wait_dst_stage->Size(); i++)
+      for(uint32_t i = 0; i < wait_dst_stage->NumChildren(); i++)
       {
-        if(wait_dst_stage->At(i) == *rem)
+        if(wait_dst_stage->GetChild(i) == *rem)
         {
           remove_list.erase(rem);
-          wait_dst_stage->RemoveOne(i);
+          wait_dst_stage->data.children.erase(i);
           break;
         }
       }
@@ -198,13 +197,13 @@ void TraceTracker::QueueSubmit(ExtObject *o)
 
     // Accumulate semaphore signals to correctly evaluate 'wait' semaphores
     // will work correctly later.
-    for(uint32_t i = 0; i < signal->Size(); i++)
+    for(uint32_t i = 0; i < signal->NumChildren(); i++)
     {
-      ExtObject *semaphore = signal->At(i);
-      U64MapIter find = signalSemaphoreIDs.find(semaphore->U64());
+      SDObject *semaphore = signal->GetChild(i);
+      U64MapIter find = signalSemaphoreIDs.find(semaphore->AsUInt64());
       if(find == signalSemaphoreIDs.end())
       {
-        signalSemaphoreIDs.insert(U64MapPair(semaphore->U64(), 1));
+        signalSemaphoreIDs.insert(U64MapPair(semaphore->AsUInt64(), 1));
       }
       else
       {
@@ -214,137 +213,137 @@ void TraceTracker::QueueSubmit(ExtObject *o)
   }
 
   // Add queue to a list of submitted queues;
-  submittedQueues.insert(U64MapPair(queue->U64(), queue->U64()));
+  submittedQueues.insert(U64MapPair(queue->AsUInt64(), queue->AsUInt64()));
 }
 
-void TraceTracker::BeginCommandBuffer(ExtObject *o)
+void TraceTracker::BeginCommandBuffer(SDObject *o)
 {
-  ExtObject *inherit = o->At(1)->At(3);
-  if(inherit == NULL || inherit->Size() == 0)
+  SDObject *inherit = o->GetChild(1)->GetChild(3);
+  if(inherit == NULL || inherit->NumChildren() == 0)
     return;
 
-  ExtObject *renderpass = inherit->At(2);
-  ExtObject *framebuffer = inherit->At(4);
+  SDObject *renderpass = inherit->GetChild(2);
+  SDObject *framebuffer = inherit->GetChild(4);
 
-  bool is_presenting_rp = IsPresentationResource(renderpass->U64());
-  bool is_presenting_fb = IsPresentationResource(framebuffer->U64());
-  ExtObject *cmd = o->At(0);
+  bool is_presenting_rp = IsPresentationResource(renderpass->AsUInt64());
+  bool is_presenting_fb = IsPresentationResource(framebuffer->AsUInt64());
+  SDObject *cmd = o->GetChild(0);
 
   if(is_presenting_rp || is_presenting_fb)
-    presentResources.insert(ExtObjectIDMapPair(cmd->U64(), o));
+    presentResources.insert(SDObjectIDMapPair(cmd->AsUInt64(), o));
 
   if(is_presenting_fb)
   {
-    framebuffer->U64() += PRESENT_VARIABLE_OFFSET;
+    framebuffer->UInt64() += PRESENT_VARIABLE_OFFSET;
   }
 }
 
-bool TraceTracker::FilterCmdPipelineBarrier(ExtObject *o)
+bool TraceTracker::CmdPipelineBarrierFilter(SDChunk *o)
 {
-  ExtObject *cmd = o->At(0);
-  ExtObject *memory_count = o->At(4);
-  ExtObject *memory = o->At(5);
-  memory_count->U64() = memory->Size();
+  SDObject *cmd = o->GetChild(0);
+  SDObject *memory_count = o->GetChild(4);
+  SDObject *memory = o->GetChild(5);
+  memory_count->UInt64() = memory->NumChildren();
 
-  ExtObject *buffer_count = o->At(6);
-  ExtObject *buffer = o->At(7);
-  for(uint64_t i = 0; i < buffer->Size();)
+  SDObject *buffer_count = o->GetChild(6);
+  SDObject *buffer = o->GetChild(7);
+  for(uint64_t i = 0; i < buffer->NumChildren();)
   {
-    ExtObject *resource = buffer->At(i)->At(6);
-    if(!IsValidNonNullResouce(resource->U64()))
+    SDObject *resource = buffer->GetChild(i)->GetChild(6);
+    if(!IsValidNonNullResouce(resource->AsUInt64()))
     {
-      buffer->RemoveOne(buffer->At(i));
+      buffer->data.children.removeOne(buffer->GetChild(i));
     }
     else
     {
       i++;
     }
   }
-  buffer_count->U64() = buffer->Size();
+  buffer_count->UInt64() = buffer->NumChildren();
 
-  ExtObject *image_count = o->At(8);
-  ExtObject *image = o->At(9);
-  for(uint64_t i = 0; i < image->Size();)
+  SDObject *image_count = o->GetChild(8);
+  SDObject *image = o->GetChild(9);
+  for(uint64_t i = 0; i < image->NumChildren();)
   {
-    ExtObject *resource = image->At(i)->At(8);
-    if(IsPresentationResource(resource->U64()))
+    SDObject *resource = image->GetChild(i)->GetChild(8);
+    if(IsPresentationResource(resource->AsUInt64()))
     {
-      resource->U64() = PRESENT_IMAGE_OFFSET;
-      presentResources.insert(ExtObjectIDMapPair(cmd->U64(), o));
+      resource->UInt64() = PRESENT_IMAGE_OFFSET;
+      presentResources.insert(SDObjectIDMapPair(cmd->AsUInt64(), o));
       i++;
     }
-    else if(!IsValidNonNullResouce(resource->U64()))
+    else if(!IsValidNonNullResouce(resource->AsUInt64()))
     {
-      image->RemoveOne(image->At(i));
+      image->data.children.removeOne(image->GetChild(i));
     }
     else
     {
       i++;
     }
   }
-  image_count->U64() = image->Size();
+  image_count->UInt64() = image->NumChildren();
 
-  return (memory->Size() != 0 || buffer->Size() != 0 || image->Size() != 0);
+  return (memory->NumChildren() != 0 || buffer->NumChildren() != 0 || image->NumChildren() != 0);
 }
 
-bool TraceTracker::FilterEventFunc(ExtObject *o) {
-  return !IsValidNonNullResouce(o->At(1)->U64());
+bool TraceTracker::EventFuncFilter(SDChunk *o) {
+  return !IsValidNonNullResouce(o->GetChild(1)->AsUInt64());
 }
 
-bool TraceTracker::CmdWaitEvents(ExtObject *o)
+bool TraceTracker::CmdWaitEvents(SDObject *o)
 {
-  ExtObject *event_count = o->At(1);
-  ExtObject *events = o->At(2);
-  for(uint64_t i = 0; i < events->Size();)
+  SDObject *event_count = o->GetChild(1);
+  SDObject *events = o->GetChild(2);
+  for(uint64_t i = 0; i < events->NumChildren();)
   {
-    if(!IsValidNonNullResouce(events->At(i)->U64()))
+    if(!IsValidNonNullResouce(events->GetChild(i)->AsUInt64()))
     {
-      events->RemoveOne(events->At(i));
+      events->data.children.removeOne(events->GetChild(i));
     }
     else
     {
       i++;
     }
   }
-  event_count->U64() = events->Size();
+  event_count->UInt64() = events->NumChildren();
 
-  ExtObject *memory_count = o->At(5);
-  ExtObject *memory = o->At(6);
-  memory_count->U64() = memory->Size();
+  SDObject *memory_count = o->GetChild(5);
+  SDObject *memory = o->GetChild(6);
+  memory_count->UInt64() = memory->NumChildren();
 
-  ExtObject *buffer_count = o->At(7);
-  ExtObject *buffer = o->At(8);
-  for(uint64_t i = 0; i < buffer->Size();)
+  SDObject *buffer_count = o->GetChild(7);
+  SDObject *buffer = o->GetChild(8);
+  for(uint64_t i = 0; i < buffer->NumChildren();)
   {
-    ExtObject *resource = buffer->At(i)->At(6);
-    if(!IsValidNonNullResouce(resource->U64()))
+    SDObject *resource = buffer->GetChild(i)->GetChild(6);
+    if(!IsValidNonNullResouce(resource->AsUInt64()))
     {
-      buffer->RemoveOne(buffer->At(i));
+      buffer->data.children.removeOne(buffer->GetChild(i));
     }
     else
     {
       i++;
     }
   }
-  buffer_count->U64() = buffer->Size();
+  buffer_count->UInt64() = buffer->NumChildren();
 
-  ExtObject *image_count = o->At(9);
-  ExtObject *image = o->At(10);
-  for(uint64_t i = 0; i < image->Size();)
+  SDObject *image_count = o->GetChild(9);
+  SDObject *image = o->GetChild(10);
+  for(uint64_t i = 0; i < image->NumChildren();)
   {
-    ExtObject *resource = image->At(i)->At(8);
-    if(!IsValidNonNullResouce(resource->U64()))
+    SDObject *resource = image->GetChild(i)->GetChild(8);
+    if(!IsValidNonNullResouce(resource->AsUInt64()))
     {
-      image->RemoveOne(image->At(i));
+      image->data.children.removeOne(image->GetChild(i));
     }
     else
     {
       i++;
     }
   }
-  image_count->U64() = image->Size();
+  image_count->UInt64() = image->NumChildren();
 
-  return (events->Size() != 0 || memory->Size() != 0 || buffer->Size() != 0 || image->Size() != 0);
+  return (events->NumChildren() != 0 || memory->NumChildren() != 0 || buffer->NumChildren() != 0 || image->NumChildren() != 0);
 }
 
 // The purpose of this function is to do several things:
@@ -352,78 +351,78 @@ bool TraceTracker::CmdWaitEvents(ExtObject *o)
 // 2. Figure out which image and which image view is transfered into Present state
 // 3. For the image view that is transfered into Present state, find it's index
 // in the swapchain
-void TraceTracker::CmdBeginRenderPass(ExtObject *o)
+void TraceTracker::CmdBeginRenderPass(SDObject *o)
 {
-  ExtObject *renderpass_bi = o->At(1);
-  ExtObject *renderpass = renderpass_bi->At(2);
-  ExtObject *framebuffer = renderpass_bi->At(3);
-  if(IsPresentationResource(renderpass->U64()) || IsPresentationResource(framebuffer->U64()))
+  SDObject *renderpass_bi = o->GetChild(1);
+  SDObject *renderpass = renderpass_bi->GetChild(2);
+  SDObject *framebuffer = renderpass_bi->GetChild(3);
+  if(IsPresentationResource(renderpass->AsUInt64()) || IsPresentationResource(framebuffer->AsUInt64()))
   {
     // If the renderpass shows up in presentResources, framebuffer
     // must be there too.
-    RDCASSERT(IsPresentationResource(framebuffer->U64()));
-    framebuffer->U64() += PRESENT_VARIABLE_OFFSET;
+    RDCASSERT(IsPresentationResource(framebuffer->AsUInt64()));
+    framebuffer->UInt64() += PRESENT_VARIABLE_OFFSET;
 
     // Save the current command buffer to the list of presentation resources.
-    ExtObject *cmd = o->At(0);
-    presentResources.insert(ExtObjectIDMapPair(cmd->U64(), o));
+    SDObject *cmd = o->GetChild(0);
+    presentResources.insert(SDObjectIDMapPair(cmd->AsUInt64(), o));
   }
 }
 
-void TraceTracker::FilterCmdCopyImageToBuffer(ExtObject *o)
+void TraceTracker::CmdCopyImageToBufferFilter(SDChunk *o)
 {
-  ExtObject *cmd = o->At(0);
-  if(IsPresentationResource(o->At(1)->U64()))
+  SDObject *cmd = o->GetChild(0);
+  if(IsPresentationResource(o->GetChild(1)->AsUInt64()))
   {
-    presentResources.insert(ExtObjectIDMapPair(cmd->U64(), o));
-    o->At(3)->U64() = PRESENT_IMAGE_OFFSET;
+    presentResources.insert(SDObjectIDMapPair(cmd->AsUInt64(), o));
+    o->GetChild(3)->UInt64() = PRESENT_IMAGE_OFFSET;
   }
 }
 
-void TraceTracker::FilterCmdCopyImage(ExtObject *o)
+void TraceTracker::CmdCopyImageFilter(SDChunk *o)
 {
-  ExtObject *cmd = o->At(0);
-  if(IsPresentationResource(o->At(1)->U64()) || IsPresentationResource(o->At(3)->U64()))
+  SDObject *cmd = o->GetChild(0);
+  if(IsPresentationResource(o->GetChild(1)->AsUInt64()) || IsPresentationResource(o->GetChild(3)->AsUInt64()))
   {
-    presentResources.insert(ExtObjectIDMapPair(cmd->U64(), o));
-    uint32_t idx = IsPresentationResource(o->At(1)->U64()) ? 1 : 3;
-    o->At(idx)->U64() = PRESENT_IMAGE_OFFSET;
+    presentResources.insert(SDObjectIDMapPair(cmd->AsUInt64(), o));
+    uint32_t idx = IsPresentationResource(o->GetChild(1)->AsUInt64()) ? 1 : 3;
+    o->GetChild(idx)->UInt64() = PRESENT_IMAGE_OFFSET;
   }
 }
 
-void TraceTracker::FilterCmdBlitImage(ExtObject *o)
+void TraceTracker::CmdBlitImageFilter(SDChunk *o)
 {
-  ExtObject *cmd = o->At(0);
-  if(IsPresentationResource(o->At(1)->U64()) || IsPresentationResource(o->At(3)->U64()))
+  SDObject *cmd = o->GetChild(0);
+  if(IsPresentationResource(o->GetChild(1)->AsUInt64()) || IsPresentationResource(o->GetChild(3)->AsUInt64()))
   {
-    presentResources.insert(ExtObjectIDMapPair(cmd->U64(), o));
-    uint32_t idx = IsPresentationResource(o->At(1)->U64()) ? 1 : 3;
-    o->At(idx)->U64() = PRESENT_IMAGE_OFFSET;
+    presentResources.insert(SDObjectIDMapPair(cmd->AsUInt64(), o));
+    uint32_t idx = IsPresentationResource(o->GetChild(1)->AsUInt64()) ? 1 : 3;
+    o->GetChild(idx)->UInt64() = PRESENT_IMAGE_OFFSET;
   }
 }
 
-void TraceTracker::FilterCmdResolveImage(ExtObject *o)
+void TraceTracker::CmdResolveImageFilter(SDChunk *o)
 {
-  ExtObject *cmd = o->At(0);
-  if(IsPresentationResource(o->At(1)->U64()) || IsPresentationResource(o->At(3)->U64()))
+  SDObject *cmd = o->GetChild(0);
+  if(IsPresentationResource(o->GetChild(1)->AsUInt64()) || IsPresentationResource(o->GetChild(3)->AsUInt64()))
   {
-    presentResources.insert(ExtObjectIDMapPair(cmd->U64(), o));
-    uint32_t idx = IsPresentationResource(o->At(1)->U64()) ? 1 : 3;
-    o->At(idx)->U64() = PRESENT_IMAGE_OFFSET;
+    presentResources.insert(SDObjectIDMapPair(cmd->AsUInt64(), o));
+    uint32_t idx = IsPresentationResource(o->GetChild(1)->AsUInt64()) ? 1 : 3;
+    o->GetChild(idx)->UInt64() = PRESENT_IMAGE_OFFSET;
   }
 }
 
-void TraceTracker::FilterCreateDevice(ExtObject *o)
+void TraceTracker::CreateDeviceFilter(SDChunk *o)
 {
-  ExtObject *ci = o->At(1);
-  uint64_t queueCreateInfoCount = ci->At("queueCreateInfoCount")->U64();
-  ExtObject *queueCreateInfos = ci->At("pQueueCreateInfos");
+  SDObject *ci = o->GetChild(1);
+  uint64_t queueCreateInfoCount = ci->FindChild("queueCreateInfoCount")->AsUInt64();
+  SDObject *queueCreateInfos = ci->FindChild("pQueueCreateInfos");
   RDCASSERT(queueCreateInfoCount <= queueUsed[PhysDevID()].size());
-  RDCASSERT(queueCreateInfoCount <= queueCreateInfos->Size());
+  RDCASSERT(queueCreateInfoCount <= queueCreateInfos->NumChildren());
   for(size_t i = 0; i < queueCreateInfoCount; i++)
   {
-    ExtObject *queueCreateInfo = queueCreateInfos->At(i);
-    uint64_t &queueCount = queueCreateInfo->At("queueCount")->U64();
+    SDObject *queueCreateInfo = queueCreateInfos->GetChild(i);
+    uint64_t &queueCount = queueCreateInfo->FindChild("queueCount")->UInt64();
     uint64_t lastUsedQueue = 0;
     for(size_t j = 0; j < queueUsed[PhysDevID()][i].size(); j++)
     {
@@ -436,58 +435,58 @@ void TraceTracker::FilterCreateDevice(ExtObject *o)
   }
 }
 
-bool TraceTracker::FilterUpdateDescriptorSetWithTemplate(ExtObject *o)
+bool TraceTracker::UpdateDescriptorSetWithTemplateFilter(SDChunk *o)
 {
-  ExtObject *writeDescriptorSets = o->At(3);
+  SDObject *writeDescriptorSets = o->GetChild(3);
   writeDescriptorSets->name = "VkWriteDescriptorSets";
-  for(uint64_t i = 0; i < writeDescriptorSets->Size(); i++)
+  for(uint64_t i = 0; i < writeDescriptorSets->NumChildren(); i++)
   {
-    ExtObject *wds = writeDescriptorSets->At(i);
-    wds->At(2)->U64() = o->At(1)->U64();
-    if(!FilterWriteDescriptorSet(wds))
+    SDObject *wds = writeDescriptorSets->GetChild(i);
+    wds->GetChild(2)->UInt64() =o->GetChild(1)->AsUInt64();
+    if(!WriteDescriptorSetFilter(wds))
     {
-      writeDescriptorSets->RemoveOne(wds);
+      writeDescriptorSets->data.children.removeOne(wds);
       i--;
     }
   }
-  return (writeDescriptorSets->Size() > 0);
+  return (writeDescriptorSets->NumChildren() > 0);
 }
 
-bool TraceTracker::FilterCreateGraphicsPipelines(ExtObject *o)
+bool TraceTracker::CreateGraphicsPipelinesFilter(SDChunk *o)
 {
-  RDCASSERT(o->At(2)->U64() == 1);    // only one pipeline gets created at a time.
-  ExtObject *ci = o->At(3);
-  ExtObject *ms = ci->At(10);
+  RDCASSERT(o->GetChild(2)->AsUInt64() == 1);    // only one pipeline gets created at a time.
+  SDObject *ci = o->GetChild(3);
+  SDObject *ms = ci->GetChild(10);
   if(!ms->IsNULL())
   {
-    ExtObject *sample_mask = ms->At(6);
+    SDObject *sample_mask = ms->GetChild(6);
     if(!sample_mask->IsNULL())
     {
-      ExtObject *sample_mask_el = as_ext(sample_mask->Duplicate());
+      SDObject *sample_mask_el = sample_mask->Duplicate();
       sample_mask->type.basetype = SDBasic::Array;
-      sample_mask->PushOne(sample_mask_el);
+      sample_mask->data.children.push_back(sample_mask_el);
     }
   }
 
   // For some reason VkSpecializationMapEntry objects have 'constantID' field duplicated.
   // This removes the duplicate fields.
-  ExtObject *stages = ci->At(4);
-  for(uint64_t i = 0; i < stages->Size(); i++)
+  SDObject *stages = ci->GetChild(4);
+  for(uint64_t i = 0; i < stages->NumChildren(); i++)
   {
-    ExtObject *specializationInfo = stages->At(i)->At(6);
+    SDObject *specializationInfo = stages->GetChild(i)->GetChild(6);
     if(specializationInfo->IsNULL())
     {
       continue;
     }
-    ExtObject *mapEntries = specializationInfo->At(1);
-    for(uint64_t j = 0; j < mapEntries->Size(); j++)
+    SDObject *mapEntries = specializationInfo->GetChild(1);
+    for(uint64_t j = 0; j < mapEntries->NumChildren(); j++)
     {
-      ExtObject *mapEntry = mapEntries->At(j);
-      if(mapEntry->Size() != 3)
+      SDObject *mapEntry = mapEntries->GetChild(j);
+      if(mapEntry->NumChildren() != 3)
       {
-        RDCASSERT(mapEntry->Size() == 4);
-        RDCASSERT(std::string(mapEntry->At(0)->Name()) == "constantID");
-        RDCASSERT(std::string(mapEntry->At(2)->Name()) == "constantID");
+        RDCASSERT(mapEntry->NumChildren() == 4);
+        RDCASSERT(std::string(mapEntry->GetChild(0)->Name()) == "constantID");
+        RDCASSERT(std::string(mapEntry->GetChild(2)->Name()) == "constantID");
         mapEntry->data.children.erase(2);
       }
     }
@@ -495,26 +494,26 @@ bool TraceTracker::FilterCreateGraphicsPipelines(ExtObject *o)
   return true;
 }
 
-bool TraceTracker::FilterCreateComputePipelines(ExtObject *o)
+bool TraceTracker::CreateComputePipelinesFilter(SDChunk *o)
 {
-  RDCASSERT(o->At(2)->U64() == 1);    // only one pipeline gets created at a time.
-  ExtObject *ci = o->At(3);
+  RDCASSERT(o->GetChild(2)->AsUInt64() == 1);    // only one pipeline gets created at a time.
+  SDObject *ci = o->GetChild(3);
 
   // For some reason VkSpecializationMapEntry objects have 'constantID' field duplicated.
   // This removes the duplicate fields.
-  ExtObject *stage = ci->At(3);
-  ExtObject *specializationInfo = stage->At(6);
+  SDObject *stage = ci->GetChild(3);
+  SDObject *specializationInfo = stage->GetChild(6);
   if(!specializationInfo->IsNULL())
   {
-    ExtObject *mapEntries = specializationInfo->At(1);
-    for(uint64_t j = 0; j < mapEntries->Size(); j++)
+    SDObject *mapEntries = specializationInfo->GetChild(1);
+    for(uint64_t j = 0; j < mapEntries->NumChildren(); j++)
     {
-      ExtObject *mapEntry = mapEntries->At(j);
-      if(mapEntry->Size() != 3)
+      SDObject *mapEntry = mapEntries->GetChild(j);
+      if(mapEntry->NumChildren() != 3)
       {
-        RDCASSERT(mapEntry->Size() == 4);
-        RDCASSERT(std::string(mapEntry->At(0)->Name()) == "constantID");
-        RDCASSERT(std::string(mapEntry->At(2)->Name()) == "constantID");
+        RDCASSERT(mapEntry->NumChildren() == 4);
+        RDCASSERT(std::string(mapEntry->GetChild(0)->Name()) == "constantID");
+        RDCASSERT(std::string(mapEntry->GetChild(2)->Name()) == "constantID");
         mapEntry->data.children.erase(2);
       }
     }
@@ -522,42 +521,43 @@ bool TraceTracker::FilterCreateComputePipelines(ExtObject *o)
   return true;
 }
 
-bool TraceTracker::FilterCreateResourceView(ExtObject *o) {
-  ExtObject *ci = o->At("CreateInfo");
-  ExtObject *pNextType = ci->At("pNextType");
+bool TraceTracker::CreateResourceViewFilter(SDChunk *o) {
+  SDObject *ci = o->FindChild("CreateInfo");
+  SDObject *pNextType = ci->FindChild("pNextType");
   if (pNextType != NULL) {
     // Since we are removing it, it's worth checking it didn't
-    // have any usefull data.
-    RDCASSERT(pNextType->Size() == 0);
-    ci->RemoveOne(pNextType);
+    // have any usefull data. If it does,this code needs to be
+    // improved to handle it.
+    RDCASSERT(pNextType->NumChildren() == 0);
+    ci->data.children.removeOne(pNextType);
   }
-  RDCASSERT(o->At(3)->Name() == std::string("View"));
-  return o->At("View")->U64() != 0;
+  return o->FindChild("View")->AsUInt64() != 0;
 }
 
-bool TraceTracker::FilterCreateImage(ExtObject *o) {
-  ExtObject *ci = o->At("CreateInfo");
-  ExtObject *pNextType = ci->At("pNextType");
+bool TraceTracker::CreateImageFilter(SDChunk *o) {
+  SDObject *ci = o->FindChild("CreateInfo");
+  SDObject *pNextType = ci->FindChild("pNextType");
   if(pNextType != NULL)
   {
     // Since we are removing it, it's worth checking it didn't
-    // have any usefull data.
-    RDCASSERT(pNextType->Size() == 0);
-    ci->RemoveOne(pNextType);
+    // have any usefull data. If it does,this code needs to be
+    // improved to handle it.
+    RDCASSERT(pNextType->NumChildren() == 0);
+    ci->data.children.removeOne(pNextType);
   }
-  return o->At("Image")->U64() != 0;
+  return o->FindChild("Image")->AsUInt64() != 0;
 }
 
-bool TraceTracker::FilterImageInfoDescSet(uint64_t type, uint64_t image_id, uint64_t sampler_id,
-                                          uint64_t immut_sampler_id, ExtObject *layout,
-                                          ExtObject *descImageInfo)
+bool TraceTracker::ImageInfoDescSetFilter(uint64_t type, uint64_t image_id, uint64_t sampler_id,
+                                          uint64_t immut_sampler_id, SDObject *layout,
+                                          SDObject *descImageInfo)
 {
   bool is_sampler = type == VK_DESCRIPTOR_TYPE_SAMPLER;
   bool has_sampler = is_sampler || type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   bool is_sampled_image = type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   bool is_presented = presentResources.find(image_id) != presentResources.end();
   if(is_presented)
-    descImageInfo->At(1)->U64() += PRESENT_VARIABLE_OFFSET;
+    descImageInfo->GetChild(1)->UInt64() += PRESENT_VARIABLE_OFFSET;
   if(has_sampler)
   {    // If descriptorType has_sampler, it may come from immutable samples in desc set layout.
     if(!IsValidNonNullResouce(sampler_id) && !IsValidNonNullResouce(immut_sampler_id))
@@ -585,7 +585,7 @@ bool TraceTracker::FilterImageInfoDescSet(uint64_t type, uint64_t image_id, uint
   {
     // TODO(akharlamov) I think this is not needed anymore.
     // Find and replace VkImageLayout<> entries.
-    std::string result = layout->Str();
+    std::string result = layout->AsString();
     size_t open_bracket = result.find("<");
     size_t close_bracket = result.find(">");
     if(open_bracket != std::string::npos && close_bracket != std::string::npos)
@@ -599,63 +599,63 @@ bool TraceTracker::FilterImageInfoDescSet(uint64_t type, uint64_t image_id, uint
   return true;
 }
 
-bool TraceTracker::FilterBufferInfoDescSet(uint64_t buffer_id, uint64_t offset, ExtObject *range)
+bool TraceTracker::BufferInfoDescSetFilter(uint64_t buffer_id, uint64_t offset, SDObject *range)
 {
   if(!IsValidNonNullResouce(buffer_id))
   {
     return false;
   }
-  ExtObject *buffer_ci = ResourceCreateFind(buffer_id)->second.sdobj->At(1);
-  ExtObject *buffer_size = buffer_ci->At(3);
-  if(range->U64() > buffer_size->U64() - offset && range->U64() != VK_WHOLE_SIZE)
+  SDObject *buffer_ci = ResourceCreateFind(buffer_id)->second.sdobj->GetChild(1);
+  SDObject *buffer_size = buffer_ci->GetChild(3);
+  if(range->AsUInt64() > buffer_size->AsUInt64() - offset && range->AsUInt64() != VK_WHOLE_SIZE)
   {
     RDCWARN(
         "Buffer %llu has size (%llu) and is bound with (range %llu, offset %llu). "
         "Replacing with ~0ULL",    // should I replace it with (range - offset) instead?
         buffer_id,
-        buffer_size->U64(), range->U64(), offset);
-    range->U64() = VK_WHOLE_SIZE;
+        buffer_size->AsUInt64(), range->AsUInt64(), offset);
+    range->UInt64() =VK_WHOLE_SIZE;
     // Force it to be unsigned int type
     range->type.basetype = SDBasic::UnsignedInteger;
   }
   return true;
 }
 
-bool TraceTracker::FilterTexelBufferViewDescSet(uint64_t texelview_id)
+bool TraceTracker::TexelBufferViewDescSetFilter(uint64_t texelview_id)
 {
   return IsValidNonNullResouce(texelview_id);
 }
 
-bool TraceTracker::FilterWriteDescriptorSet(ExtObject *wds)
+bool TraceTracker::WriteDescriptorSetFilter(SDObject *wds)
 {
-  uint64_t descriptorSet_id = wds->At(2)->U64();
+  uint64_t descriptorSet_id = wds->GetChild(2)->AsUInt64();
   if(!IsValidNonNullResouce(descriptorSet_id))
   {
     return false;
   }
   // Descriptor Set Layout Create Info aka dsLayoutCI.
-  ExtObject *dsLayoutCI = DescSetInfosFindLayout(descriptorSet_id)->At(1);
-  ExtObject *dsLayoutBindings = dsLayoutCI->At(4);
+  SDObject *dsLayoutCI = DescSetInfosFindLayout(descriptorSet_id)->GetChild(1);
+  SDObject *dsLayoutBindings = dsLayoutCI->GetChild(4);
 
-  ExtObject *dsBinding = wds->At(3);
-  ExtObject *dsArrayElement = wds->At(4);
-  ExtObject *dsType = wds->At(6);
+  SDObject *dsBinding = wds->GetChild(3);
+  SDObject *dsArrayElement = wds->GetChild(4);
+  SDObject *dsType = wds->GetChild(6);
 
   // TODO(akharlamov) is it legal to a binding # that's larger than layout binding size?
-  ExtObject *dsLayoutBinding = NULL;
-  for(uint64_t i = 0; i < dsLayoutBindings->Size(); i++)
+  SDObject *dsLayoutBinding = NULL;
+  for(uint64_t i = 0; i < dsLayoutBindings->NumChildren(); i++)
   {
-    ExtObject *layoutBinding = dsLayoutBindings->At(i);
-    if(layoutBinding->At(0)->U64() == dsBinding->U64())
+    SDObject *layoutBinding = dsLayoutBindings->GetChild(i);
+    if(layoutBinding->GetChild(0)->AsUInt64() == dsBinding->AsUInt64())
     {
       dsLayoutBinding = layoutBinding;
-      if(dsType->U64() != layoutBinding->At(1)->U64())
+      if(dsType->AsUInt64() != layoutBinding->GetChild(1)->AsUInt64())
       {
         RDCWARN(
             "Descriptor set binding type %s at %llu doesn't match descriptor set layout bindings "
             "type %s at %llu",
-            dsType->ValueStr().c_str(), dsBinding->U64(), layoutBinding->At(1)->ValueStr().c_str(),
-            dsBinding->U64());
+          ValueStr(dsType).c_str(), dsBinding->AsUInt64(), ValueStr(layoutBinding->GetChild(1)).c_str(),
+            dsBinding->AsUInt64());
         RDCASSERT(0);    // THIS SHOULD REALLY NEVER HAPPEN!
       }
       break;
@@ -667,17 +667,17 @@ bool TraceTracker::FilterWriteDescriptorSet(ExtObject *wds)
     RDCWARN(
         "Descriptor set layout with binding # == %llu is not found in "
         "VkDescriptorSetLayoutCreateInfo.CreateInfo.pBindings[%llu]",
-        dsBinding->U64(), dsLayoutBindings->Size());
+        dsBinding->AsUInt64(), dsLayoutBindings->NumChildren());
     RDCASSERT(0);    // THIS SHOULD REALLY NEVER HAPPEN!
     return false;
   }
-  ExtObject *dsImmutSamplers = dsLayoutBinding->At(4);
+  SDObject *dsImmutSamplers = dsLayoutBinding->GetChild(4);
   // Either there were no Immutable Samplers OR there is an immutable sampler for each element.
-  RDCASSERT(dsImmutSamplers->Size() == 0 || dsImmutSamplers->Size() == dsLayoutBinding->At(2)->U64());
-  if(dsImmutSamplers->Size() > 0)
-    dsImmutSamplers = dsImmutSamplers->At(dsArrayElement->U64());
+  RDCASSERT(dsImmutSamplers->NumChildren() == 0 || dsImmutSamplers->NumChildren() == dsLayoutBinding->GetChild(2)->AsUInt64());
+  if(dsImmutSamplers->NumChildren() > 0)
+    dsImmutSamplers = dsImmutSamplers->GetChild(dsArrayElement->AsUInt64());
 
-  switch(dsType->U64())
+  switch(dsType->AsUInt64())
   {
     case VK_DESCRIPTOR_TYPE_SAMPLER:
     case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
@@ -685,17 +685,17 @@ bool TraceTracker::FilterWriteDescriptorSet(ExtObject *wds)
     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
     case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
     {    // use image info
-      ExtObject *images = wds->At(7);
-      for(uint64_t i = 0; i < images->Size();)
+      SDObject *images = wds->GetChild(7);
+      for(uint64_t i = 0; i < images->NumChildren();)
       {
-        ExtObject *image = images->At(i);
-        if(!FilterImageInfoDescSet(dsType->U64(), image->At(1)->U64(), image->At(0)->U64(),
-                                   dsImmutSamplers->U64(), image->At(2), image))
-          images->RemoveOne(image);
+        SDObject *image = images->GetChild(i);
+        if(!ImageInfoDescSetFilter(dsType->AsUInt64(), image->GetChild(1)->AsUInt64(), image->GetChild(0)->AsUInt64(),
+                                   dsImmutSamplers->AsUInt64(), image->GetChild(2), image))
+          images->data.children.removeOne(image);
         else
           i++;
       }
-      if(images->Size() == 0)
+      if(images->NumChildren() == 0)
         return false;
     }
     break;
@@ -704,36 +704,36 @@ bool TraceTracker::FilterWriteDescriptorSet(ExtObject *wds)
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
     {    // use buffer info
-      ExtObject *buffers = wds->At(8);
-      for(uint64_t i = 0; i < buffers->Size();)
+      SDObject *buffers = wds->GetChild(8);
+      for(uint64_t i = 0; i < buffers->NumChildren();)
       {
-        ExtObject *buffer = buffers->At(i);
-        if(!FilterBufferInfoDescSet(buffer->At(0)->U64(), buffer->At(1)->U64(), buffer->At(2)))
+        SDObject *buffer = buffers->GetChild(i);
+        if(!BufferInfoDescSetFilter(buffer->GetChild(0)->AsUInt64(), buffer->GetChild(1)->AsUInt64(), buffer->GetChild(2)))
         {
-          buffers->RemoveOne(buffer);
+          buffers->data.children.removeOne(buffer);
         }
         else
           i++;
       }
-      if(buffers->Size() == 0)
+      if(buffers->NumChildren() == 0)
         return false;
     }
     break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
     case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
     {    // use texel view info
-      ExtObject *texelviews = wds->At(9);
-      for(uint64_t i = 0; i < texelviews->Size();)
+      SDObject *texelviews = wds->GetChild(9);
+      for(uint64_t i = 0; i < texelviews->NumChildren();)
       {
-        ExtObject *texelview = texelviews->At(i);
-        if(!FilterTexelBufferViewDescSet(texelview->U64()))
+        SDObject *texelview = texelviews->GetChild(i);
+        if(!TexelBufferViewDescSetFilter(texelview->AsUInt64()))
         {
-          texelviews->RemoveOne(texelview);
+          texelviews->data.children.removeOne(texelview);
         }
         else
           i++;
       }
-      if(texelviews->Size() == 0)
+      if(texelviews->NumChildren() == 0)
         return false;
     }
     break;
@@ -741,59 +741,59 @@ bool TraceTracker::FilterWriteDescriptorSet(ExtObject *wds)
   return true;
 }
 
-bool TraceTracker::FilterUpdateDescriptorSets(ExtObject *o)
+bool TraceTracker::UpdateDescriptorSetsFilter(SDChunk *o)
 {
-  ExtObject *dsWrite = o->At(2);
-  for(uint64_t i = 0; i < dsWrite->Size(); i++)
+  SDObject *dsWrite = o->GetChild(2);
+  for(uint64_t i = 0; i < dsWrite->NumChildren(); i++)
   {
-    ExtObject *wds = dsWrite->At(i);
-    if(!FilterWriteDescriptorSet(wds))
+    SDObject *wds = dsWrite->GetChild(i);
+    if(!WriteDescriptorSetFilter(wds))
     {
-      dsWrite->RemoveOne(wds);
+      dsWrite->data.children.removeOne(wds);
       i--;
     }
   }
 
-  ExtObject *dsWrite_count = o->At(1);
-  dsWrite_count->U64() = dsWrite->Size();
+  SDObject *dsWrite_count = o->GetChild(1);
+  dsWrite_count->UInt64() =dsWrite->NumChildren();
 
-  ExtObject *dsCopy = o->At(4);
-  for(uint64_t i = 0; i < dsCopy->Size(); i++)
+  SDObject *dsCopy = o->GetChild(4);
+  for(uint64_t i = 0; i < dsCopy->NumChildren(); i++)
   {
-    ExtObject *cds = dsCopy->At(i);
-    ExtObject *src_desc_set = cds->At(2);
-    ExtObject *dst_desc_set = cds->At(5);
-    if(!IsValidNonNullResouce(src_desc_set->U64()) || !IsValidNonNullResouce(dst_desc_set->U64()))
+    SDObject *cds = dsCopy->GetChild(i);
+    SDObject *src_desc_set = cds->GetChild(2);
+    SDObject *dst_desc_set = cds->GetChild(5);
+    if(!IsValidNonNullResouce(src_desc_set->AsUInt64()) || !IsValidNonNullResouce(dst_desc_set->AsUInt64()))
     {
-      dsCopy->RemoveOne(cds);
+      dsCopy->data.children.removeOne(cds);
       i--;
     }
   }
 
-  ExtObject *dsCopy_count = o->At(3);
-  dsCopy_count->U64() = dsCopy->Size();
-  return (dsCopy->Size() > 0) || (dsWrite->Size() > 0);
+  SDObject *dsCopy_count = o->GetChild(3);
+  dsCopy_count->UInt64() =dsCopy->NumChildren();
+  return (dsCopy->NumChildren() > 0) || (dsWrite->NumChildren() > 0);
 }
 
-bool TraceTracker::FilterInitDescSet(ExtObject *o)
+bool TraceTracker::InitDescSetFilter(SDChunk *o)
 {
-  if(o->At(0)->U64() != VkResourceType::eResDescriptorSet)
+  if(o->GetChild(0)->AsUInt64() != VkResourceType::eResDescriptorSet)
   {    // FilterInitDescSet only filters out invalid descriptor set updates.
     return true;
   }
 
-  uint64_t descriptorSet_id = o->At(1)->U64();
-  ExtObject *initBindings = o->At(2);
-  ExtObject *dsLayoutCI = DescSetInfosFindLayout(descriptorSet_id)->At(1);
-  ExtObject *dsLayoutBindings = dsLayoutCI->At(4);
+  uint64_t descriptorSet_id = o->GetChild(1)->AsUInt64();
+  SDObject *initBindings = o->GetChild(2);
+  SDObject *dsLayoutCI = DescSetInfosFindLayout(descriptorSet_id)->GetChild(1);
+  SDObject *dsLayoutBindings = dsLayoutCI->GetChild(4);
 
-  if(initBindings->Size() == 0)
+  if(initBindings->NumChildren() == 0)
     return false;
 
   std::vector<uint64_t> initBindingsSizes;
-  for(uint64_t i = 0; i < initBindings->Size(); i++)
+  for(uint64_t i = 0; i < initBindings->NumChildren(); i++)
   {
-    initBindingsSizes.push_back(initBindings->At(i)->Size());
+    initBindingsSizes.push_back(initBindings->GetChild(i)->NumChildren());
     RDCASSERT(initBindingsSizes[i] == 3);
   }
 
@@ -808,13 +808,13 @@ bool TraceTracker::FilterInitDescSet(ExtObject *o)
   };
 
   std::vector<BindingInfo> bindingInfo;
-  for(uint64_t i = 0; i < dsLayoutBindings->Size(); i++)
+  for(uint64_t i = 0; i < dsLayoutBindings->NumChildren(); i++)
   {
     BindingInfo dsInfo;
-    dsInfo.binding = dsLayoutBindings->At(i)->At(0)->U64();
-    dsInfo.type = dsLayoutBindings->At(i)->At(1)->U64();
-    dsInfo.count = dsLayoutBindings->At(i)->At(2)->U64();
-    dsInfo.typeStr = dsLayoutBindings->At(i)->At(1)->Str();
+    dsInfo.binding = dsLayoutBindings->GetChild(i)->GetChild(0)->AsUInt64();
+    dsInfo.type = dsLayoutBindings->GetChild(i)->GetChild(1)->AsUInt64();
+    dsInfo.count = dsLayoutBindings->GetChild(i)->GetChild(2)->AsUInt64();
+    dsInfo.typeStr = dsLayoutBindings->GetChild(i)->GetChild(1)->AsString();
     dsInfo.index = i;
     bindingInfo.push_back(dsInfo);
   }
@@ -834,14 +834,14 @@ bool TraceTracker::FilterInitDescSet(ExtObject *o)
     initBindings_index += std::max(layoutBinding - lastLayoutBinding - 1, 0);
     lastLayoutBinding = layoutBinding;
 
-    ExtObject *dsLayoutBinding = dsLayoutBindings->At(layoutIndex);
+    SDObject *dsLayoutBinding = dsLayoutBindings->GetChild(layoutIndex);
     for(uint64_t j = 0; j < bindingInfo[i].count; j++, initBindings_index++)
     {
-      ExtObject *dsImmutSamplers = dsLayoutBinding->At(4);
+      SDObject *dsImmutSamplers = dsLayoutBinding->GetChild(4);
       // Either there were no Immutable Samplers OR there is an immutable sampler for each element.
-      RDCASSERT(dsImmutSamplers->Size() == 0 || dsImmutSamplers->Size() == bindingInfo[i].count);
-      if(dsImmutSamplers->Size() > 0)
-        dsImmutSamplers = dsImmutSamplers->At(j);
+      RDCASSERT(dsImmutSamplers->NumChildren() == 0 || dsImmutSamplers->NumChildren() == bindingInfo[i].count);
+      if(dsImmutSamplers->NumChildren() > 0)
+        dsImmutSamplers = dsImmutSamplers->GetChild(j);
 
       switch(bindingInfo[i].type)
       {
@@ -850,8 +850,8 @@ bool TraceTracker::FilterInitDescSet(ExtObject *o)
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
         {    // use buffer info
-          ExtObject *buffer = initBindings->At(initBindings_index)->At(0);
-          if(!FilterBufferInfoDescSet(buffer->At(0)->U64(), buffer->At(1)->U64(), buffer->At(2)))
+          SDObject *buffer = initBindings->GetChild(initBindings_index)->GetChild(0);
+          if(!BufferInfoDescSetFilter(buffer->GetChild(0)->AsUInt64(), buffer->GetChild(1)->AsUInt64(), buffer->GetChild(2)))
           {
             continue;
           }
@@ -863,9 +863,9 @@ bool TraceTracker::FilterInitDescSet(ExtObject *o)
         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
         {    // use image info
-          ExtObject *image = initBindings->At(initBindings_index)->At(1);
-          if(!FilterImageInfoDescSet(bindingInfo[i].type, image->At(1)->U64(), image->At(0)->U64(),
-                                     dsImmutSamplers->U64(), image->At(2), image))
+          SDObject *image = initBindings->GetChild(initBindings_index)->GetChild(1);
+          if(!ImageInfoDescSetFilter(bindingInfo[i].type, image->GetChild(1)->AsUInt64(), image->GetChild(0)->AsUInt64(),
+                                     dsImmutSamplers->AsUInt64(), image->GetChild(2), image))
           {
             continue;
           }
@@ -874,8 +874,8 @@ bool TraceTracker::FilterInitDescSet(ExtObject *o)
         case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
         {    // use texel view info
-          ExtObject *texelview = initBindings->At(initBindings_index)->At(2);
-          if(!FilterTexelBufferViewDescSet(texelview->U64()))
+          SDObject *texelview = initBindings->GetChild(initBindings_index)->GetChild(2);
+          if(!TexelBufferViewDescSetFilter(texelview->AsUInt64()))
           {
             continue;
           }
@@ -885,25 +885,26 @@ bool TraceTracker::FilterInitDescSet(ExtObject *o)
 
       // If desc set initialization data is invalid, the loop execution won't
       // get to this point.
-      ExtObject *extBinding = new ExtObject("binding", "uint64_t", bindingInfo[i].binding);
-      ExtObject *extType =
-          new ExtObject("type", "VkDescriptorType", bindingInfo[i].type, bindingInfo[i].typeStr);
-      ExtObject *extArrayElement = new ExtObject("arrayElement", "uint64_t", j);
-      initBindings->At(initBindings_index)->PushOne(extBinding);
-      initBindings->At(initBindings_index)->PushOne(extType);
-      initBindings->At(initBindings_index)->PushOne(extArrayElement);
+      SDObject *extBinding = (SDObject *)makeSDObject("binding", bindingInfo[i].binding);
+      SDObject *extType = makeSDEnum("type", (uint32_t)bindingInfo[i].type)
+        ->SetCustomString(bindingInfo[i].typeStr.c_str())
+        ->SetTypeName("VkDescriptorType");
+      SDObject *extArrayElement = makeSDObject("arrayElement", j);
+      initBindings->GetChild(initBindings_index)->data.children.push_back(extBinding);
+      initBindings->GetChild(initBindings_index)->data.children.push_back(extType);
+      initBindings->GetChild(initBindings_index)->data.children.push_back(extArrayElement);
     }
   }
 
-  RDCASSERT(initBindings_index == initBindings->Size());
+  RDCASSERT(initBindings_index == initBindings->NumChildren());
 
   // Now remove all elements from initBindings elements that haven't changed
   // in size as they are not used by this descriptor set.
-  for(uint64_t i = 0; i < initBindings->Size();)
+  for(uint64_t i = 0; i < initBindings->NumChildren();)
   {
-    if(initBindings->At(i)->Size() == initBindingsSizes[i])
+    if(initBindings->GetChild(i)->NumChildren() == initBindingsSizes[i])
     {
-      initBindings->RemoveOne(initBindings->At(i));
+      initBindings->data.children.removeOne(initBindings->GetChild(i));
     }
     else
     {
@@ -911,7 +912,7 @@ bool TraceTracker::FilterInitDescSet(ExtObject *o)
     }
   }
 
-  return initBindings->Size() > 0;
+  return initBindings->NumChildren() > 0;
 }
 
 }    // namespace vk_cpp_codec

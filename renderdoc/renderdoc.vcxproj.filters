@@ -489,12 +489,6 @@
     <ClInclude Include="api\replay\pipestate.h">
       <Filter>API\Replay</Filter>
     </ClInclude>
-    <ClInclude Include="serialise\codecs\ext_object.h">
-      <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
-    </ClInclude>
-    <ClInclude Include="serialise\codecs\intervals.h">
-      <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
-    </ClInclude>
     <ClInclude Include="serialise\codecs\vk_cpp_codec_file.h">
       <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
     </ClInclude>
@@ -545,6 +539,12 @@
     </ClInclude>
     <ClInclude Include="serialise\codecs\profiling_shim\utils.h">
       <Filter>Common\Serialise\Codecs\CPP\profiling_shim</Filter>
+    </ClInclude>
+    <ClInclude Include="core\intervals.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\vk_cpp_codec_common.h">
+      <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -988,6 +988,9 @@
     </ClCompile>
     <ClCompile Include="serialise\codecs\profiling_shim\utils.cpp">
       <Filter>Common\Serialise\Codecs\CPP\profiling_shim</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_scan.cpp">
+      <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
