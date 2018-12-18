@@ -57,6 +57,11 @@
 #include "vk_cpp_codec_state.h"
 #include "vk_cpp_codec_tracker.h"
 
+#pragma push_macro("GenericEvent")
+#ifdef GenericEvent
+#undef GenericEvent
+#endif
+
 namespace vk_cpp_codec
 {
 class TraceTracker;
@@ -328,3 +333,5 @@ public:
 };
 
 }    // namespace vk_cpp_codec
+
+#pragma pop_macro("GenericEvent")

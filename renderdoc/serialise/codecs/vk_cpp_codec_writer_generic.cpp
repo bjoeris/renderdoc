@@ -39,6 +39,11 @@
 #include "vk_cpp_codec_tracker.h"
 #include "vk_cpp_codec_writer.h"
 
+#pragma push_macro("GenericEvent")
+#ifdef GenericEvent
+#undef GenericEvent
+#endif
+
 namespace vk_cpp_codec
 {
 void CodeWriter::InlineVariable(ExtObject *o, uint32_t pass)
@@ -301,3 +306,5 @@ void CodeWriter::GenericCmdDrawIndirect(ExtObject *o, uint32_t pass)
       tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->U64(), o->At(3)->U64(), o->At(4)->U64());
 }
 }
+
+#pragma pop_macro("GenericEvent")

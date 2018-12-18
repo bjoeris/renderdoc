@@ -40,6 +40,11 @@
 #include "vk_cpp_codec_tracker.h"
 #include "vk_cpp_codec_writer.h"
 
+#pragma push_macro("GenericEvent")
+#ifdef GenericEvent
+#undef GenericEvent
+#endif
+
 namespace vk_cpp_codec
 {
 void CodeWriter::Open()
@@ -2557,3 +2562,5 @@ void CodeWriter::ReleaseResources()
   }
 }
 }    // namespace vk_cpp_codec
+
+#pragma pop_macro("GenericEvent")
