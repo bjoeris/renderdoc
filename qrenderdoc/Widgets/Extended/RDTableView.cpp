@@ -37,11 +37,24 @@
 RDTableView::RDTableView(QWidget *parent) : QTableView(parent)
 {
   m_horizontalHeader = new RDHeaderView(Qt::Horizontal, this);
-  m_horizontalHeader->setCustomSizing(true);
   setHorizontalHeader(m_horizontalHeader);
+
+  m_delegate = new RichTextViewDelegate(this);
+  QTableView::setItemDelegate(m_delegate);
 
   QObject::connect(m_horizontalHeader, &QHeaderView::sectionResized,
                    [this](int, int, int) { viewport()->update(); });
+}
+
+void RDTableView::setItemDelegate(QAbstractItemDelegate *delegate)
+{
+  m_userDelegate = delegate;
+  m_delegate->setForwardDelegate(m_userDelegate);
+}
+
+QAbstractItemDelegate *RDTableView::itemDelegate() const
+{
+  return m_userDelegate;
 }
 
 int RDTableView::columnViewportPosition(int column) const
@@ -220,7 +233,11 @@ void RDTableView::paintEvent(QPaintEvent *e)
   int firstRow = qMax(verticalHeader()->visualIndexAt(0), 0);
   int lastRow = verticalHeader()->visualIndexAt(viewport()->height());
   if(lastRow < 0)
-    lastRow = verticalHeader()->count() - 1;
+  {
+    // if lastRow is negative, display as many will fit. This is a reasonable upper bound without
+    // displaying all rows which could be massive
+    lastRow = firstRow + (viewport()->height() / qMax(1, rowHeight(firstRow))) + 1;
+  }
   lastRow = qMin(lastRow, verticalHeader()->count() - 1);
 
   int firstCol = qMax(horizontalHeader()->visualIndexAt(horizontalHeader()->pinnedWidth() + 1), 0);
@@ -307,9 +324,37 @@ void RDTableView::paintCell(QPainter *painter, const QModelIndex &index,
   if(selectionModel() && selectionModel()->isSelected(index))
     cellopt.state |= QStyle::State_Selected;
 
+  if(cellopt.rect.contains(viewport()->mapFromGlobal(QCursor::pos())))
+    cellopt.state |= QStyle::State_MouseOver;
+
   // draw the background, then the cell
   style()->drawPrimitive(QStyle::PE_PanelItemViewRow, &cellopt, painter, this);
-  itemDelegate(index)->paint(painter, cellopt, index);
+  QTableView::itemDelegate(index)->paint(painter, cellopt, index);
+}
+
+void RDTableView::mouseMoveEvent(QMouseEvent *e)
+{
+  QModelIndex oldHover = m_currentHoverIndex;
+
+  QTableView::mouseMoveEvent(e);
+
+  QModelIndex newHover = m_currentHoverIndex = indexAt(e->pos());
+
+  update(newHover);
+
+  if(m_delegate && m_delegate->linkHover(e, newHover))
+  {
+    setCursor(QCursor(Qt::PointingHandCursor));
+  }
+  else
+  {
+    unsetCursor();
+  }
+
+  if(oldHover == newHover)
+    return;
+
+  update(oldHover);
 }
 
 void RDTableView::scrollTo(const QModelIndex &index, ScrollHint hint)
@@ -408,6 +453,9 @@ void RDTableView::scrollTo(const QModelIndex &index, ScrollHint hint)
 
 void RDTableView::updateGeometries()
 {
+  if(!m_horizontalHeader->customSizing())
+    return QTableView::updateGeometries();
+
   static bool recurse = false;
   if(recurse)
     return;

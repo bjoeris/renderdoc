@@ -27,6 +27,7 @@
 #include "api/replay/renderdoc_replay.h"
 #include "driver/dx/official/d3dcommon.h"
 #include "driver/dx/official/dxgi1_5.h"
+#include "maths/vec.h"
 
 ResourceFormat MakeResourceFormat(DXGI_FORMAT fmt);
 DXGI_FORMAT MakeDXGIFormat(ResourceFormat fmt);
@@ -48,6 +49,10 @@ DXGI_FORMAT GetNonSRGBFormat(DXGI_FORMAT f);
 bool IsBlockFormat(DXGI_FORMAT f);
 bool IsDepthFormat(DXGI_FORMAT f);
 bool IsDepthAndStencilFormat(DXGI_FORMAT f);
+
+DXGI_FORMAT GetYUVViewPlane0Format(DXGI_FORMAT f);
+DXGI_FORMAT GetYUVViewPlane1Format(DXGI_FORMAT f);
+void GetYUVShaderParameters(DXGI_FORMAT f, Vec4u &YUVDownsampleRate, Vec4u &YUVAChannels);
 
 bool IsUIntFormat(DXGI_FORMAT f);
 bool IsTypelessFormat(DXGI_FORMAT f);

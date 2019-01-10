@@ -76,6 +76,7 @@ private slots:
   void shaderView_clicked();
 
   void shaderSave_clicked();
+  void predicateBufferView_clicked();
   void resource_itemActivated(RDTreeWidgetItem *item, int column);
   void ubo_itemActivated(RDTreeWidgetItem *item, int column);
   void vertex_leave(QEvent *e);
@@ -122,6 +123,7 @@ private:
   void exportHTML(QXmlStreamWriter &xml, const VKPipe::ColorBlendState &cb);
   void exportHTML(QXmlStreamWriter &xml, const VKPipe::DepthStencil &ds);
   void exportHTML(QXmlStreamWriter &xml, const VKPipe::CurrentPass &pass);
+  void exportHTML(QXmlStreamWriter &xml, const VKPipe::ConditionalRendering &cr);
 
   // keep track of the VB nodes (we want to be able to highlight them easily on hover)
   QList<RDTreeWidgetItem *> m_VBNodes;

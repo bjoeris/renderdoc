@@ -2236,6 +2236,14 @@ bool D3D12Replay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, 
   cdata.HistogramChannels = 0xf;
   cdata.HistogramFlags = 0;
 
+  Vec4u YUVDownsampleRate = {};
+  Vec4u YUVAChannels = {};
+
+  GetYUVShaderParameters(resourceDesc.Format, YUVDownsampleRate, YUVAChannels);
+
+  cdata.HistogramYUVDownsampleRate = YUVDownsampleRate;
+  cdata.HistogramYUVAChannels = YUVAChannels;
+
   int intIdx = 0;
 
   DXGI_FORMAT fmt = GetTypedFormat(resourceDesc.Format, typeHint);
@@ -2405,6 +2413,14 @@ bool D3D12Replay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t mi
     cdata.HistogramSample = -int(resourceDesc.SampleDesc.Count);
   cdata.HistogramMin = minval;
   cdata.HistogramFlags = 0;
+
+  Vec4u YUVDownsampleRate = {};
+  Vec4u YUVAChannels = {};
+
+  GetYUVShaderParameters(resourceDesc.Format, YUVDownsampleRate, YUVAChannels);
+
+  cdata.HistogramYUVDownsampleRate = YUVDownsampleRate;
+  cdata.HistogramYUVAChannels = YUVAChannels;
 
   // The calculation in the shader normalises each value between min and max, then multiplies by the
   // number of buckets.
@@ -3648,9 +3664,16 @@ ReplayStatus D3D12_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
 
   bool EnableDebugLayer = false;
 
+  RDCLOG("Creating D3D12 replay device, minimum feature level %s",
+         ToStr(initParams.MinimumFeatureLevel).c_str());
+
 #if ENABLED(RDOC_DEVEL)
   // in development builds, always enable debug layer during replay
   EnableDebugLayer = EnableD3D12DebugLayer();
+
+  RDCLOG(
+      "Development RenderDoc builds require D3D debug layers available, "
+      "ensure you have the windows SDK or windows feature needed.");
 #endif
 
   ID3D12Device *dev = NULL;
@@ -3659,7 +3682,7 @@ ReplayStatus D3D12_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
 
   if(FAILED(hr))
   {
-    RDCERR("Couldn't create a d3d12 device :(.");
+    RDCERR("Couldn't create a d3d12 device.");
 
     SAFE_DELETE(rgp);
 

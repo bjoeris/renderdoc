@@ -345,7 +345,8 @@ void WrappedVulkan::FlushQ()
   // see comment in SubmitQ()
   if(m_Queue != VK_NULL_HANDLE)
   {
-    ObjDisp(m_Queue)->QueueWaitIdle(Unwrap(m_Queue));
+    VkResult vkr = ObjDisp(m_Queue)->QueueWaitIdle(Unwrap(m_Queue));
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
   }
 
 #if ENABLED(SINGLE_FLUSH_VALIDATE)
@@ -633,6 +634,9 @@ static const VkExtensionProperties supportedExtensions[] = {
 #endif
     {
         VK_EXT_ASTC_DECODE_MODE_EXTENSION_NAME, VK_EXT_ASTC_DECODE_MODE_SPEC_VERSION,
+    },
+    {
+        VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME, VK_EXT_CONDITIONAL_RENDERING_SPEC_VERSION,
     },
     {
         VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME,
@@ -1176,8 +1180,8 @@ bool WrappedVulkan::Serialise_BeginCaptureFrame(SerialiserType &ser)
               barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
               barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
               barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-              barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-              barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+              barrier.srcQueueFamilyIndex = m_QueueFamilyIdx;
+              barrier.dstQueueFamilyIndex = m_QueueFamilyIdx;
               barrier.image = Unwrap(img);
               barrier.subresourceRange = stit->subresourceRange;
 
@@ -1576,7 +1580,7 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
     fp.pitch = rowPitch;
     fp.stride = fmt.compByteWidth * fmt.compCount;
     fp.bpc = fmt.compByteWidth;
-    fp.bgra = fmt.bgraOrder();
+    fp.bgra = fmt.BGRAOrder();
     fp.max_width = maxSize;
     fp.pitch_requirement = 8;
     switch(fmt.type)
@@ -1693,6 +1697,57 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
   SAFE_DELETE(m_HeaderChunk);
 
   m_State = CaptureState::BackgroundCapturing;
+
+  // delete cmd buffers now - had to keep them alive until after serialiser flush.
+  for(size_t i = 0; i < m_CmdBufferRecords.size(); i++)
+    m_CmdBufferRecords[i]->Delete(GetResourceManager());
+
+  m_CmdBufferRecords.clear();
+
+  GetResourceManager()->MarkUnwrittenResources();
+
+  GetResourceManager()->ClearReferencedResources();
+
+  GetResourceManager()->FreeInitialContents();
+
+  GetResourceManager()->FlushPendingDirty();
+
+  FreeAllMemory(MemoryScope::InitialContents);
+
+  return true;
+}
+
+bool WrappedVulkan::DiscardFrameCapture(void *dev, void *wnd)
+{
+  if(!IsActiveCapturing(m_State))
+    return true;
+
+  RenderDoc::Inst().FinishCaptureWriting(NULL, m_CapturedFrames.back().frameNumber);
+
+  m_CapturedFrames.pop_back();
+
+  // transition back to IDLE atomically
+  {
+    SCOPED_LOCK(m_CapTransitionLock);
+
+    m_State = CaptureState::BackgroundCapturing;
+
+    // m_SuccessfulCapture = false;
+
+    ObjDisp(GetDev())->DeviceWaitIdle(Unwrap(GetDev()));
+
+    {
+      SCOPED_LOCK(m_CoherentMapsLock);
+      for(auto it = m_CoherentMaps.begin(); it != m_CoherentMaps.end(); ++it)
+      {
+        FreeAlignedBuffer((*it)->memMapState->refData);
+        (*it)->memMapState->refData = NULL;
+        (*it)->memMapState->needRefData = false;
+      }
+    }
+  }
+
+  SAFE_DELETE(m_HeaderChunk);
 
   // delete cmd buffers now - had to keep them alive until after serialiser flush.
   for(size_t i = 0; i < m_CmdBufferRecords.size(); i++)
@@ -2634,6 +2689,10 @@ bool WrappedVulkan::ProcessChunk(ReadSerialiser &ser, VulkanChunk chunk)
       return Serialise_vkCmdInsertDebugUtilsLabelEXT(ser, VK_NULL_HANDLE, NULL);
       break;
 
+    case VulkanChunk::vkCreateSamplerYcbcrConversion:
+      return Serialise_vkCreateSamplerYcbcrConversion(ser, VK_NULL_HANDLE, NULL, NULL, NULL);
+      break;
+
     case VulkanChunk::vkCmdSetDeviceMask:
       return Serialise_vkCmdSetDeviceMask(ser, VK_NULL_HANDLE, 0);
       break;
@@ -2677,7 +2736,10 @@ bool WrappedVulkan::ProcessChunk(ReadSerialiser &ser, VulkanChunk chunk)
     case VulkanChunk::vkCmdDrawIndirectByteCountEXT:
       return Serialise_vkCmdDrawIndirectByteCountEXT(ser, VK_NULL_HANDLE, 0, 0, VK_NULL_HANDLE, 0,
                                                      0, 0);
-
+    case VulkanChunk::vkCmdBeginConditionalRenderingEXT:
+      return Serialise_vkCmdBeginConditionalRenderingEXT(ser, VK_NULL_HANDLE, NULL);
+    case VulkanChunk::vkCmdEndConditionalRenderingEXT:
+      return Serialise_vkCmdEndConditionalRenderingEXT(ser, VK_NULL_HANDLE);
     default:
     {
       SystemChunk system = (SystemChunk)chunk;
@@ -2890,6 +2952,10 @@ void WrappedVulkan::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
       if(!m_RenderState.xfbcounters.empty())
         m_RenderState.EndTransformFeedback(cmd);
 
+      // end any active conditional rendering
+      if(m_RenderState.IsConditionalRenderingEnabled())
+        m_RenderState.EndConditionalRendering(cmd);
+
       // check if the render pass is active - it could have become active
       // even if it wasn't before (if the above event was a CmdBeginRenderPass).
       // If we began our own custom single-draw loadrp, and it was ended by a CmdEndRenderPass,
@@ -2931,6 +2997,76 @@ void WrappedVulkan::Serialise_DebugMessages(SerialiserType &ser)
     ScopedDebugMessageSink *sink = GetDebugMessageSink();
     if(sink)
       DebugMessages.swap(sink->msgs);
+
+    // if we have the unique objects layer we can assume all objects have a unique ID, and replace
+    // any text that looks like an object reference (0xHEX).
+    if(m_LayersEnabled[VkCheckLayer_unique_objects])
+    {
+      for(DebugMessage &msg : DebugMessages)
+      {
+        if(strstr(msg.description.c_str(), "0x"))
+        {
+          std::string desc = msg.description;
+
+          size_t offs = desc.find("0x");
+          while(offs != std::string::npos)
+          {
+            // if we're on a word boundary
+            if(offs == 0 || !isalnum(desc[offs - 1]))
+            {
+              size_t end = offs + 2;
+
+              uint64_t val = 0;
+
+              // consume all hex chars
+              while(end < desc.length())
+              {
+                if(desc[end] >= '0' && desc[end] <= '9')
+                {
+                  val <<= 4;
+                  val += (desc[end] - '0');
+                  end++;
+                }
+                else if(desc[end] >= 'A' && desc[end] <= 'F')
+                {
+                  val <<= 4;
+                  val += (desc[end] - 'A') + 0xA;
+                  end++;
+                }
+                else if(desc[end] >= 'a' && desc[end] <= 'f')
+                {
+                  val <<= 4;
+                  val += (desc[end] - 'a') + 0xA;
+                  end++;
+                }
+                else
+                {
+                  break;
+                }
+              }
+
+              // unique objects layer implies this is a unique search so we don't have to worry
+              // about type aliases
+              ResourceId id = GetResourceManager()->GetFirstIDForHandle(val);
+
+              if(id != ResourceId())
+              {
+                std::string idstr = StringFormat::Fmt(" (%s)", ToStr(id).c_str());
+
+                desc.insert(end, idstr.c_str());
+
+                offs = desc.find("0x", end + idstr.length());
+                continue;
+              }
+            }
+
+            offs = desc.find("0x", offs + 1);
+          }
+
+          msg.description = desc;
+        }
+      }
+    }
   }
 
   SERIALISE_ELEMENT(DebugMessages);
@@ -3253,10 +3389,15 @@ void WrappedVulkan::AddDrawcall(const DrawcallDescription &d, bool hasEvents)
     }
   }
 
-  if(m_LastCmdBufferID != ResourceId())
-    m_BakedCmdBufferInfo[m_LastCmdBufferID].drawCount++;
-  else
-    m_RootDrawcallID++;
+  // markers don't increment drawcall ID
+  DrawFlags MarkerMask = DrawFlags::SetMarker | DrawFlags::PushMarker | DrawFlags::PassBoundary;
+  if(!(draw.flags & MarkerMask))
+  {
+    if(m_LastCmdBufferID != ResourceId())
+      m_BakedCmdBufferInfo[m_LastCmdBufferID].drawCount++;
+    else
+      m_RootDrawcallID++;
+  }
 
   if(hasEvents)
   {

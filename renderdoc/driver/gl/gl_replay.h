@@ -244,6 +244,9 @@ private:
                             const rdcarray<ShaderConstant> &variables,
                             std::vector<ShaderVariable> &outvars, const bytebuf &data);
 
+  bool GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, uint32_t sample,
+                 CompType typeHint, bool stencil, float *minval, float *maxval);
+
   void CreateCustomShaderTex(uint32_t w, uint32_t h);
   void CreateOverlayProgram(GLuint Program, GLuint Pipeline, GLuint fragShader);
 
@@ -337,8 +340,9 @@ private:
 
     GLuint fixedcolFragShader;
 
-    GLuint meshProg;
-    GLuint meshgsProg;
+    // 0 = both floats, 1 = position doubles, 2 = secondary doubles, 3 = both doubles
+    GLuint meshProg[4];
+    GLuint meshgsProg[4];
     GLuint trisizeProg;
 
     GLuint meshVAO;

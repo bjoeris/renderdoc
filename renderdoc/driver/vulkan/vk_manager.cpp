@@ -279,6 +279,8 @@ void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
         t.srcQueueFamilyIndex = ImageState.queueFamilyIndex;
         t.dstQueueFamilyIndex = ImageState.queueFamilyIndex;
         m_Core->RemapQueueFamilyIndices(t.srcQueueFamilyIndex, t.dstQueueFamilyIndex);
+        if(t.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+          t.dstQueueFamilyIndex = t.srcQueueFamilyIndex = m_Core->GetQueueFamilyIndex();
         state.dstQueueFamilyIndex = t.dstQueueFamilyIndex;
         t.image = Unwrap(GetCurrentHandle<VkImage>(liveid));
         t.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -574,6 +576,32 @@ void VulkanResourceManager::ApplyBarriers(uint32_t queueFamilyIndex,
     if(!done)
       RDCERR("Couldn't find subresource range to apply barrier to - invalid!");
   }
+}
+
+ResourceId VulkanResourceManager::GetFirstIDForHandle(uint64_t handle)
+{
+  for(auto it = m_ResourceRecords.begin(); it != m_ResourceRecords.end(); ++it)
+  {
+    WrappedVkRes *res = it->second->Resource;
+
+    if(!res)
+      continue;
+
+    if(IsDispatchableRes(res))
+    {
+      WrappedVkDispRes *disp = (WrappedVkDispRes *)res;
+      if(disp->real.handle == handle)
+        return disp->id;
+    }
+    else
+    {
+      WrappedVkNonDispRes *nondisp = (WrappedVkNonDispRes *)res;
+      if(nondisp->real.handle == handle)
+        return nondisp->id;
+    }
+  }
+
+  return ResourceId();
 }
 
 bool VulkanResourceManager::Force_InitialState(WrappedVkRes *res, bool prepare)

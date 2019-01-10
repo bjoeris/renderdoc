@@ -53,6 +53,10 @@ void GLReplay::CreateOverlayProgram(GLuint Program, GLuint Pipeline, GLuint frag
   GLuint shaders[4] = {0};
   GLuint programs[4] = {0};
 
+  // temporary programs created as needed if the original program was created with
+  // glCreateShaderProgramv and we don't have a shader to attach
+  GLuint tmpShaders[4] = {0};
+
   // the reflection for the vertex shader, used to copy vertex bindings
   ShaderReflection *vsRefl = NULL;
 
@@ -65,7 +69,7 @@ void GLReplay::CreateOverlayProgram(GLuint Program, GLuint Pipeline, GLuint frag
     else
     {
       ResourceId id = m_pDriver->GetResourceManager()->GetID(ProgramPipeRes(ctx, Pipeline));
-      auto &pipeDetails = m_pDriver->m_Pipelines[id];
+      const WrappedOpenGL::PipelineData &pipeDetails = m_pDriver->m_Pipelines[id];
 
       // fetch the corresponding shaders and programs for each stage
       for(size_t i = 0; i < 4; i++)
@@ -77,6 +81,38 @@ void GLReplay::CreateOverlayProgram(GLuint Program, GLuint Pipeline, GLuint frag
           shaders[i] =
               m_pDriver->GetResourceManager()->GetCurrentResource(pipeDetails.stageShaders[i]).name;
 
+          if(pipeDetails.stagePrograms[i] == pipeDetails.stageShaders[i])
+          {
+            const WrappedOpenGL::ProgramData &progDetails =
+                m_pDriver->m_Programs[pipeDetails.stagePrograms[i]];
+
+            if(progDetails.shaderProgramUnlinkable)
+            {
+              const WrappedOpenGL::ShaderData &shadDetails =
+                  m_pDriver->m_Shaders[pipeDetails.stageShaders[i]];
+
+              std::vector<const char *> sources;
+              sources.reserve(shadDetails.sources.size());
+
+              for(const std::string &s : shadDetails.sources)
+                sources.push_back(s.c_str());
+
+              shaders[i] = tmpShaders[i] = drv.glCreateShader(ShaderEnum(i));
+              drv.glShaderSource(tmpShaders[i], (GLsizei)sources.size(), sources.data(), NULL);
+              drv.glCompileShader(tmpShaders[i]);
+
+              GLint status = 0;
+              drv.glGetShaderiv(tmpShaders[i], eGL_COMPILE_STATUS, &status);
+
+              if(status == 0)
+              {
+                char buffer[1024] = {};
+                drv.glGetShaderInfoLog(tmpShaders[i], 1024, NULL, buffer);
+                RDCERR("Trying to recreate overlay program, couldn't compile shader:\n%s", buffer);
+              }
+            }
+          }
+
           if(i == 0)
             vsRefl = GetShader(pipeDetails.stageShaders[i], ShaderEntryPoint());
         }
@@ -85,7 +121,7 @@ void GLReplay::CreateOverlayProgram(GLuint Program, GLuint Pipeline, GLuint frag
   }
   else
   {
-    auto &progDetails =
+    const WrappedOpenGL::ProgramData &progDetails =
         m_pDriver->m_Programs[m_pDriver->GetResourceManager()->GetID(ProgramRes(ctx, Program))];
 
     // fetch any and all non-fragment shader shaders
@@ -123,6 +159,11 @@ void GLReplay::CreateOverlayProgram(GLuint Program, GLuint Pipeline, GLuint frag
       drv.glDetachShader(DebugData.overlayProg, shaders[i]);
 
   drv.glDetachShader(DebugData.overlayProg, fragShader);
+
+  // delete any temporaries
+  for(size_t i = 0; i < 4; i++)
+    if(tmpShaders[i])
+      drv.glDeleteShader(tmpShaders[i]);
 
   // check that the link succeeded
   char buffer[1024] = {};
@@ -946,7 +987,7 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
           depthObj = stencilObj;
         }
 
-        if(depthObj)
+        if(depthObj && type != eGL_RENDERBUFFER)
         {
           drv.glGetNamedFramebufferAttachmentParameterivEXT(
               drawFBO, att, eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL, &level);
@@ -960,19 +1001,16 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
             drv.glGetNamedFramebufferAttachmentParameterivEXT(
                 drawFBO, att, eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER, &layer);
 
-          if(type != eGL_RENDERBUFFER)
+          ResourceId id = m_pDriver->GetResourceManager()->GetID(TextureRes(ctx, depthObj));
+          WrappedOpenGL::TextureData &details = m_pDriver->m_Textures[id];
+
+          if(details.curType == eGL_TEXTURE_CUBE_MAP)
           {
-            ResourceId id = m_pDriver->GetResourceManager()->GetID(TextureRes(ctx, depthObj));
-            WrappedOpenGL::TextureData &details = m_pDriver->m_Textures[id];
+            GLenum face;
+            drv.glGetNamedFramebufferAttachmentParameterivEXT(
+                drawFBO, att, eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE, (GLint *)&face);
 
-            if(details.curType == eGL_TEXTURE_CUBE_MAP)
-            {
-              GLenum face;
-              drv.glGetNamedFramebufferAttachmentParameterivEXT(
-                  drawFBO, att, eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE, (GLint *)&face);
-
-              layer = CubeTargetIndex(face);
-            }
+            layer = CubeTargetIndex(face);
           }
         }
 
@@ -1287,13 +1325,13 @@ ResourceId GLReplay::RenderOverlay(ResourceId texid, CompType typeHint, DebugOve
         drv.glGetNamedFramebufferAttachmentParameterivEXT(rs.DrawFBO.name, eGL_DEPTH_ATTACHMENT,
                                                           eGL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE,
                                                           (GLint *)&depthType);
-        drv.glGetNamedFramebufferAttachmentParameterivEXT(
-            rs.DrawFBO.name, eGL_DEPTH_ATTACHMENT, eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL, &mip);
 
         GLenum fmt = eGL_DEPTH32F_STENCIL8;
 
         if(depthType == eGL_TEXTURE)
         {
+          drv.glGetNamedFramebufferAttachmentParameterivEXT(
+              rs.DrawFBO.name, eGL_DEPTH_ATTACHMENT, eGL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL, &mip);
           drv.glGetTextureLevelParameterivEXT(curDepth, texBindingEnum, mip,
                                               eGL_TEXTURE_INTERNAL_FORMAT, (GLint *)&fmt);
         }

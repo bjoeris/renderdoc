@@ -893,7 +893,7 @@ void GLPipelineStateViewer::setShaderState(const GLPipe::Shader &stage, RDLabel 
     {
       for(const ConstantBlock &bind : shaderDetails->constantBlocks)
       {
-        if(mapping.constantBlocks[bind.bindPoint].bind == i)
+        if(bind.bufferBacked && mapping.constantBlocks[bind.bindPoint].bind == i)
         {
           shaderCBuf = &bind;
           map = &mapping.constantBlocks[bind.bindPoint];
@@ -1790,7 +1790,7 @@ void GLPipelineStateViewer::setState()
           format = tex->format.Name();
           typeName = ToQStr(tex->type);
 
-          if(tex->format.srgbCorrected() && !state.framebuffer.framebufferSRGB)
+          if(tex->format.SRGBCorrected() && !state.framebuffer.framebufferSRGB)
             format += lit(" (GL_FRAMEBUFFER_SRGB = 0)");
         }
 

@@ -1800,7 +1800,17 @@ void DoSerialise(SerialiserType &ser, VKPipe::BindingElement &el)
   SERIALISE_MEMBER(borderColor);
   SERIALISE_MEMBER(unnormalized);
 
-  SIZE_CHECK(152);
+  SERIALISE_MEMBER(ycbcrSampler);
+
+  SERIALISE_MEMBER(ycbcrModel);
+  SERIALISE_MEMBER(ycbcrRange);
+  SERIALISE_MEMBER(ycbcrSwizzle);
+  SERIALISE_MEMBER(xChromaOffset);
+  SERIALISE_MEMBER(yChromaOffset);
+  SERIALISE_MEMBER(chromaFilter);
+  SERIALISE_MEMBER(forceExplicitReconstruction);
+
+  SIZE_CHECK(200);
 };
 
 template <typename SerialiserType>
@@ -2119,6 +2129,17 @@ void DoSerialise(SerialiserType &ser, VKPipe::ImageData &el)
 }
 
 template <typename SerialiserType>
+void DoSerialise(SerialiserType &ser, VKPipe::ConditionalRendering &el)
+{
+  SERIALISE_MEMBER(bufferId);
+  SERIALISE_MEMBER(byteOffset);
+  SERIALISE_MEMBER(isInverted);
+  SERIALISE_MEMBER(isPassing);
+
+  SIZE_CHECK(24);
+}
+
+template <typename SerialiserType>
 void DoSerialise(SerialiserType &ser, VKPipe::State &el)
 {
   SERIALISE_MEMBER(compute);
@@ -2147,7 +2168,9 @@ void DoSerialise(SerialiserType &ser, VKPipe::State &el)
 
   SERIALISE_MEMBER(images);
 
-  SIZE_CHECK(1360);
+  SERIALISE_MEMBER(conditionalRendering);
+
+  SIZE_CHECK(1384);
 }
 
 #pragma endregion Vulkan pipeline state
@@ -2254,4 +2277,5 @@ INSTANTIATE_SERIALISE_TYPE(VKPipe::DepthStencil)
 INSTANTIATE_SERIALISE_TYPE(VKPipe::CurrentPass)
 INSTANTIATE_SERIALISE_TYPE(VKPipe::ImageLayout)
 INSTANTIATE_SERIALISE_TYPE(VKPipe::ImageData)
+INSTANTIATE_SERIALISE_TYPE(VKPipe::ConditionalRendering)
 INSTANTIATE_SERIALISE_TYPE(VKPipe::State)

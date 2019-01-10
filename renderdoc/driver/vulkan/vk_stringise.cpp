@@ -28,7 +28,7 @@
 template <>
 std::string DoStringise(const VulkanChunk &el)
 {
-  RDCCOMPILE_ASSERT((uint32_t)VulkanChunk::Max == 1128, "Chunks changed without updating names");
+  RDCCOMPILE_ASSERT((uint32_t)VulkanChunk::Max == 1130, "Chunks changed without updating names");
 
   BEGIN_ENUM_STRINGISE(VulkanChunk)
   {
@@ -160,6 +160,8 @@ std::string DoStringise(const VulkanChunk &el)
     STRINGISE_ENUM_CLASS(vkCmdBeginQueryIndexedEXT)
     STRINGISE_ENUM_CLASS(vkCmdEndQueryIndexedEXT)
     STRINGISE_ENUM_CLASS(vkCmdDrawIndirectByteCountEXT)
+    STRINGISE_ENUM_CLASS(vkCmdBeginConditionalRenderingEXT)
+    STRINGISE_ENUM_CLASS(vkCmdEndConditionalRenderingEXT)
     STRINGISE_ENUM_CLASS_NAMED(Max, "Max Chunk");
   }
   END_ENUM_STRINGISE()
@@ -739,6 +741,16 @@ std::string DoStringise(const VkDebugUtilsMessageSeverityFlagBitsEXT &el)
 }
 
 template <>
+std::string DoStringise(const VkConditionalRenderingFlagBitsEXT &el)
+{
+  BEGIN_BITFIELD_STRINGISE(VkConditionalRenderingFlagBitsEXT);
+  {
+    STRINGISE_BITFIELD_BIT(VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT);
+  }
+  END_BITFIELD_STRINGISE();
+}
+
+template <>
 std::string DoStringise(const VkDebugUtilsMessageTypeFlagBitsEXT &el)
 {
   BEGIN_BITFIELD_STRINGISE(VkDebugUtilsMessageTypeFlagBitsEXT);
@@ -785,6 +797,19 @@ std::string DoStringise(const VkCullModeFlagBits &el)
     STRINGISE_ENUM(VK_CULL_MODE_FRONT_AND_BACK)
   }
   END_ENUM_STRINGISE();
+}
+
+template <>
+std::string DoStringise(const VkColorComponentFlagBits &el)
+{
+  BEGIN_BITFIELD_STRINGISE(VkColorComponentFlagBits);
+  {
+    STRINGISE_BITFIELD_BIT(VK_COLOR_COMPONENT_R_BIT)
+    STRINGISE_BITFIELD_BIT(VK_COLOR_COMPONENT_G_BIT)
+    STRINGISE_BITFIELD_BIT(VK_COLOR_COMPONENT_B_BIT)
+    STRINGISE_BITFIELD_BIT(VK_COLOR_COMPONENT_A_BIT)
+  }
+  END_BITFIELD_STRINGISE();
 }
 
 template <>

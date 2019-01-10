@@ -994,6 +994,11 @@ HRESULT STDMETHODCALLTYPE WrappedID3D12GraphicsCommandList2::QueryInterface(REFI
     AddRef();
     return S_OK;
   }
+  else if(riid == __uuidof(ID3D12GraphicsCommandList3))
+  {
+    RDCERR("ID3D12GraphicsCommandList3 not supported");
+    return E_NOINTERFACE;
+  }
   else if(riid == __uuidof(ID3D12CommandList))
   {
     *ppvObject = (ID3D12CommandList *)this;
@@ -1524,10 +1529,15 @@ void D3D12CommandData::AddDrawcall(const DrawcallDescription &d, bool hasEvents,
         m_BakedCmdListInfo[m_LastCmdListID].state.GetDSVID());
   }
 
-  if(m_LastCmdListID != ResourceId())
-    m_BakedCmdListInfo[m_LastCmdListID].drawCount++;
-  else
-    m_RootDrawcallID++;
+  // markers don't increment drawcall ID
+  DrawFlags MarkerMask = DrawFlags::SetMarker | DrawFlags::PushMarker | DrawFlags::PassBoundary;
+  if(!(draw.flags & MarkerMask))
+  {
+    if(m_LastCmdListID != ResourceId())
+      m_BakedCmdListInfo[m_LastCmdListID].drawCount++;
+    else
+      m_RootDrawcallID++;
+  }
 
   if(hasEvents)
   {

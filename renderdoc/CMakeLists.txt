@@ -15,6 +15,7 @@ if(ANDROID)
         PRIVATE -landroid)
 elseif(APPLE)
     list(APPEND RDOC_LIBRARIES
+        PRIVATE -liconv
         PRIVATE -lm
         PRIVATE -ldl)
 
@@ -373,6 +374,7 @@ if(UNIX)
 
         add_custom_command(OUTPUT ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/include-bin
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
             COMMAND ${HOST_NATIVE_CPP_COMPILER} 3rdparty/include-bin/main.cpp -o ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/include-bin
             DEPENDS 3rdparty/include-bin/main.cpp)
     else()
@@ -486,6 +488,7 @@ if(APPLE)
     set_target_properties(renderdoc PROPERTIES INSTALL_RPATH "@executable_path/../lib")
     set_target_properties(renderdoc PROPERTIES INSTALL_NAME_DIR "@executable_path/../lib")
     set_target_properties(renderdoc PROPERTIES BUILD_WITH_INSTALL_RPATH 1)
+    set_target_properties(renderdoc PROPERTIES BUILD_WITH_INSTALL_NAME_DIR 1)
 endif()
 
 if(ANDROID)

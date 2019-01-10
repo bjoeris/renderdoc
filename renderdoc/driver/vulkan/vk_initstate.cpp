@@ -105,10 +105,6 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
       return Prepare_SparseInitialState((WrappedVkImage *)res);
     }
 
-    VkDevice d = GetDev();
-    // INITSTATEBATCH
-    VkCommandBuffer cmd = GetNextCmd();
-
     VkCommandBuffer extQCmd = VK_NULL_HANDLE;
 
     ImageLayouts *layout = NULL;
@@ -116,6 +112,18 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
       SCOPED_LOCK(m_ImageLayoutsLock);
       layout = &m_ImageLayouts[im->id];
     }
+
+    if(layout->queueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL ||
+       layout->queueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
+    {
+      RDCWARN("Image %s in external/foreign queue family, initial contents impossible to fetch.",
+              ToStr(im->id).c_str());
+      return true;
+    }
+
+    VkDevice d = GetDev();
+    // INITSTATEBATCH
+    VkCommandBuffer cmd = GetNextCmd();
 
     if(layout->queueFamilyIndex != m_QueueFamilyIdx)
     {
@@ -176,6 +184,44 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
       // backing the array image only.
     }
 
+    uint32_t planeCount = GetYUVPlaneCount(layout->format);
+    uint32_t horizontalPlaneShift = 0;
+    uint32_t verticalPlaneShift = 0;
+
+    if(planeCount > 1)
+    {
+      switch(layout->format)
+      {
+        case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+        case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
+        case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
+          horizontalPlaneShift = verticalPlaneShift = 1;
+          break;
+        case VK_FORMAT_G8B8G8R8_422_UNORM:
+        case VK_FORMAT_B8G8R8G8_422_UNORM:
+        case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
+        case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
+        case VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16:
+        case VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16:
+        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16:
+        case VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16:
+        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G16B16G16R16_422_UNORM:
+        case VK_FORMAT_B16G16R16G16_422_UNORM:
+        case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
+        case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM: horizontalPlaneShift = 1; break;
+        default: break;
+      }
+    }
+
     VkFormat sizeFormat = GetDepthOnlyFormat(layout->format);
 
     for(int a = 0; a < numLayers; a++)
@@ -184,16 +230,27 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
       {
         bufInfo.size = AlignUp(bufInfo.size, bufAlignment);
 
-        bufInfo.size += GetByteSize(layout->extent.width, layout->extent.height,
-                                    layout->extent.depth, sizeFormat, m);
-
-        if(sizeFormat != layout->format)
+        if(planeCount > 1)
         {
-          // if there's stencil and depth, allocate space for stencil
-          bufInfo.size = AlignUp(bufInfo.size, bufAlignment);
-
+          // need to consider each plane aspect separately. We simplify the calculation by just
+          // aligning up the width to a multiple of 4, that ensures each plane will start at a
+          // multiple of 4 because the rowpitch must be a multiple of 4
+          bufInfo.size += GetByteSize(AlignUp4(layout->extent.width), layout->extent.height,
+                                      layout->extent.depth, sizeFormat, m);
+        }
+        else
+        {
           bufInfo.size += GetByteSize(layout->extent.width, layout->extent.height,
-                                      layout->extent.depth, VK_FORMAT_S8_UINT, m);
+                                      layout->extent.depth, sizeFormat, m);
+
+          if(sizeFormat != layout->format)
+          {
+            // if there's stencil and depth, allocate space for stencil
+            bufInfo.size = AlignUp(bufInfo.size, bufAlignment);
+
+            bufInfo.size += GetByteSize(layout->extent.width, layout->extent.height,
+                                        layout->extent.depth, VK_FORMAT_S8_UINT, m);
+          }
         }
       }
     }
@@ -228,9 +285,21 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
 
     VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
     if(IsStencilOnlyFormat(layout->format))
+    {
       aspectFlags = VK_IMAGE_ASPECT_STENCIL_BIT;
+    }
     else if(IsDepthOrStencilFormat(layout->format))
+    {
       aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
+    }
+    else if(planeCount > 1)
+    {
+      aspectFlags = VK_IMAGE_ASPECT_PLANE_0_BIT;
+      if(planeCount >= 2)
+        aspectFlags |= VK_IMAGE_ASPECT_PLANE_1_BIT;
+      if(planeCount >= 3)
+        aspectFlags |= VK_IMAGE_ASPECT_PLANE_2_BIT;
+    }
 
     VkImageMemoryBarrier srcimBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -336,29 +405,58 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
             extent,
         };
 
-        bufOffset = AlignUp(bufOffset, bufAlignment);
-
-        region.bufferOffset = bufOffset;
-
-        bufOffset += GetByteSize(layout->extent.width, layout->extent.height, layout->extent.depth,
-                                 sizeFormat, m);
-
-        ObjDisp(d)->CmdCopyImageToBuffer(Unwrap(cmd), realim, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                         Unwrap(dstBuf), 1, &region);
-
-        if(sizeFormat != layout->format)
+        if(planeCount > 1)
         {
-          // if we removed stencil from the format, copy that separately now.
+          // need to consider each plane aspect separately
+          for(uint32_t i = 0; i < planeCount; i++)
+          {
+            bufOffset = AlignUp(bufOffset, bufAlignment);
+
+            region.imageExtent = extent;
+            region.bufferOffset = bufOffset;
+            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT << i;
+
+            if(i > 0)
+            {
+              region.imageExtent.width >>= horizontalPlaneShift;
+              region.imageExtent.height >>= verticalPlaneShift;
+            }
+
+            bufOffset += GetPlaneByteSize(layout->extent.width, layout->extent.height,
+                                          layout->extent.depth, sizeFormat, m, i);
+
+            ObjDisp(d)->CmdCopyImageToBuffer(Unwrap(cmd), realim,
+                                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Unwrap(dstBuf),
+                                             1, &region);
+          }
+        }
+        else
+        {
           bufOffset = AlignUp(bufOffset, bufAlignment);
 
           region.bufferOffset = bufOffset;
-          region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
 
           bufOffset += GetByteSize(layout->extent.width, layout->extent.height,
-                                   layout->extent.depth, VK_FORMAT_S8_UINT, m);
+                                   layout->extent.depth, sizeFormat, m);
 
           ObjDisp(d)->CmdCopyImageToBuffer(
               Unwrap(cmd), realim, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Unwrap(dstBuf), 1, &region);
+
+          if(sizeFormat != layout->format)
+          {
+            // if we removed stencil from the format, copy that separately now.
+            bufOffset = AlignUp(bufOffset, bufAlignment);
+
+            region.bufferOffset = bufOffset;
+            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+
+            bufOffset += GetByteSize(layout->extent.width, layout->extent.height,
+                                     layout->extent.depth, VK_FORMAT_S8_UINT, m);
+
+            ObjDisp(d)->CmdCopyImageToBuffer(Unwrap(cmd), realim,
+                                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, Unwrap(dstBuf),
+                                             1, &region);
+          }
         }
 
         // update the extent for the next mip
@@ -740,8 +838,9 @@ bool WrappedVulkan::Serialise_InitialState(SerialiserType &ser, ResourceId id, W
         // skipping any invalid descriptors.
 
         // quick check for slots that were completely uninitialised and so don't have valid data
-        if(src->texelBufferView == VK_NULL_HANDLE && src->imageInfo.sampler == VK_NULL_HANDLE &&
-           src->imageInfo.imageView == VK_NULL_HANDLE && src->bufferInfo.buffer == VK_NULL_HANDLE)
+        if(descriptorCount == 1 && src->texelBufferView == VK_NULL_HANDLE &&
+           src->imageInfo.sampler == VK_NULL_HANDLE && src->imageInfo.imageView == VK_NULL_HANDLE &&
+           src->bufferInfo.buffer == VK_NULL_HANDLE)
         {
           // do nothing - don't increment bind so that the same write descriptor is used next time.
           continue;
@@ -910,22 +1009,25 @@ bool WrappedVulkan::Serialise_InitialState(SerialiserType &ser, ResourceId id, W
     // during writing, we already have the memory copied off - we just need to map it.
     if(ser.IsWriting())
     {
-      mappedMem = initContents.mem;
-      vkr = ObjDisp(d)->MapMemory(Unwrap(d), Unwrap(mappedMem.mem), initContents.mem.offs,
-                                  initContents.mem.size, 0, (void **)&Contents);
-      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+      if(initContents.mem.mem != VK_NULL_HANDLE)
+      {
+        mappedMem = initContents.mem;
+        vkr = ObjDisp(d)->MapMemory(Unwrap(d), Unwrap(mappedMem.mem), initContents.mem.offs,
+                                    initContents.mem.size, 0, (void **)&Contents);
+        RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
-      // invalidate the cpu cache for this memory range to avoid reading stale data
-      VkMappedMemoryRange range = {
-          VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-          NULL,
-          Unwrap(mappedMem.mem),
-          mappedMem.offs,
-          mappedMem.size,
-      };
+        // invalidate the cpu cache for this memory range to avoid reading stale data
+        VkMappedMemoryRange range = {
+            VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            NULL,
+            Unwrap(mappedMem.mem),
+            mappedMem.offs,
+            mappedMem.size,
+        };
 
-      vkr = ObjDisp(d)->InvalidateMappedMemoryRanges(Unwrap(d), 1, &range);
-      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+        vkr = ObjDisp(d)->InvalidateMappedMemoryRanges(Unwrap(d), 1, &range);
+        RDCASSERTEQUAL(vkr, VK_SUCCESS);
+      }
     }
     else if(IsReplayingAndReading() && !ser.IsErrored())
     {
@@ -982,7 +1084,7 @@ bool WrappedVulkan::Serialise_InitialState(SerialiserType &ser, ResourceId id, W
 
     // if we're handling a device memory object, we're done - we note the memory object to delete at
     // the end of the program, and store the buffer to copy off in Apply
-    if(IsReplayingAndReading())
+    if(IsReplayingAndReading() && ContentsSize > 0)
     {
       ResourceId liveid = GetResourceManager()->GetLiveID(id);
 
@@ -1051,8 +1153,8 @@ bool WrappedVulkan::Serialise_InitialState(SerialiserType &ser, ResourceId id, W
           VkExtent3D extent = c.extent;
 
           VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
-
           VkFormat fmt = c.format;
+
           if(IsStencilOnlyFormat(fmt))
             aspectFlags = VK_IMAGE_ASPECT_STENCIL_BIT;
           else if(IsDepthOrStencilFormat(fmt))
@@ -1273,18 +1375,18 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, VkInitialContents ini
         if(writes[i].descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER ||
            writes[i].descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)
         {
-          bind[idx].texelBufferView = writes[i].pTexelBufferView[idx];
+          bind[idx].texelBufferView = writes[i].pTexelBufferView[d];
         }
         else if(writes[i].descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
                 writes[i].descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC ||
                 writes[i].descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER ||
                 writes[i].descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
         {
-          bind[idx].bufferInfo = writes[i].pBufferInfo[idx];
+          bind[idx].bufferInfo = writes[i].pBufferInfo[d];
         }
         else
         {
-          bind[idx].imageInfo = writes[i].pImageInfo[idx];
+          bind[idx].imageInfo = writes[i].pImageInfo[d];
         }
       }
     }
@@ -1311,12 +1413,14 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, VkInitialContents ini
     {
       if(initial.tag == VkInitialContents::ClearColorImage)
       {
-        if(IsBlockFormat(m_ImageLayouts[id].format))
+        VkFormat format = m_ImageLayouts[id].format;
+
+        if(IsBlockFormat(format) || IsYUVFormat(format))
         {
           RDCWARN(
-              "Trying to clear a compressed image %llu - should have initial states or be "
-              "stripped.",
-              id);
+              "Trying to clear a compressed/YUV image %llu with format %s - should have initial "
+              "states or be stripped.",
+              id, ToStr(format).c_str());
           return;
         }
 
@@ -1671,10 +1775,59 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, VkInitialContents ini
     VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
 
     VkFormat fmt = m_CreationInfo.m_Image[id].format;
+    uint32_t planeCount = GetYUVPlaneCount(fmt);
+    uint32_t horizontalPlaneShift = 0;
+    uint32_t verticalPlaneShift = 0;
     if(IsStencilOnlyFormat(fmt))
+    {
       aspectFlags = VK_IMAGE_ASPECT_STENCIL_BIT;
+    }
     else if(IsDepthOrStencilFormat(fmt))
+    {
       aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
+    }
+    else if(planeCount > 1)
+    {
+      aspectFlags = VK_IMAGE_ASPECT_PLANE_0_BIT;
+      if(planeCount >= 2)
+        aspectFlags |= VK_IMAGE_ASPECT_PLANE_1_BIT;
+      if(planeCount >= 3)
+        aspectFlags |= VK_IMAGE_ASPECT_PLANE_2_BIT;
+    }
+
+    if(planeCount > 1)
+    {
+      switch(fmt)
+      {
+        case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+        case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
+        case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
+        case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
+          horizontalPlaneShift = verticalPlaneShift = 1;
+          break;
+        case VK_FORMAT_G8B8G8R8_422_UNORM:
+        case VK_FORMAT_B8G8R8G8_422_UNORM:
+        case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
+        case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
+        case VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16:
+        case VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16:
+        case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16:
+        case VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16:
+        case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
+        case VK_FORMAT_G16B16G16R16_422_UNORM:
+        case VK_FORMAT_B16G16R16G16_422_UNORM:
+        case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
+        case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM: horizontalPlaneShift = 1; break;
+        default: break;
+      }
+    }
 
     VkImageMemoryBarrier dstimBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -1751,30 +1904,56 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, VkInitialContents ini
             extent,
         };
 
-        bufOffset = AlignUp(bufOffset, bufAlignment);
-
-        region.bufferOffset = bufOffset;
-
-        VkFormat sizeFormat = GetDepthOnlyFormat(fmt);
-
-        // pass 0 for mip since we've already pre-downscaled extent
-        bufOffset += GetByteSize(extent.width, extent.height, extent.depth, sizeFormat, 0);
-
-        ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
-                                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-        if(sizeFormat != fmt)
+        if(planeCount > 1)
         {
-          // if we removed stencil from the format, copy that separately now.
+          // need to consider each plane aspect separately
+          for(uint32_t i = 0; i < planeCount; i++)
+          {
+            bufOffset = AlignUp(bufOffset, bufAlignment);
+
+            region.imageExtent = extent;
+            region.bufferOffset = bufOffset;
+            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_PLANE_0_BIT << i;
+
+            if(i > 0)
+            {
+              region.imageExtent.width >>= horizontalPlaneShift;
+              region.imageExtent.height >>= verticalPlaneShift;
+            }
+
+            bufOffset += GetPlaneByteSize(extent.width, extent.height, extent.depth, fmt, 0, i);
+
+            ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
+                                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+          }
+        }
+        else
+        {
           bufOffset = AlignUp(bufOffset, bufAlignment);
 
           region.bufferOffset = bufOffset;
-          region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
 
-          bufOffset += GetByteSize(extent.width, extent.height, extent.depth, VK_FORMAT_S8_UINT, 0);
+          VkFormat sizeFormat = GetDepthOnlyFormat(fmt);
+
+          // pass 0 for mip since we've already pre-downscaled extent
+          bufOffset += GetByteSize(extent.width, extent.height, extent.depth, sizeFormat, 0);
 
           ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
                                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+          if(sizeFormat != fmt)
+          {
+            // if we removed stencil from the format, copy that separately now.
+            bufOffset = AlignUp(bufOffset, bufAlignment);
+
+            region.bufferOffset = bufOffset;
+            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+
+            bufOffset += GetByteSize(extent.width, extent.height, extent.depth, VK_FORMAT_S8_UINT, 0);
+
+            ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
+                                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+          }
         }
 
         // update the extent for the next mip

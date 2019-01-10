@@ -524,6 +524,9 @@ void ClearGLErrors();
 GLuint GetBoundVertexBuffer(GLuint idx);
 GLint GetNumVertexBuffers();
 
+void EvaluateSPIRVBindpointMapping(GLuint curProg, int shadIdx, ShaderReflection *refl,
+                                   ShaderBindpointMapping &mapping);
+
 void GetBindpointMapping(GLuint curProg, int shadIdx, ShaderReflection *refl,
                          ShaderBindpointMapping &mapping);
 
@@ -637,6 +640,7 @@ extern bool IsGLES;
   EXT_TO_CHECK(40, 32, ARB_gpu_shader5)                          \
   EXT_TO_CHECK(40, 32, ARB_sample_shading)                       \
   EXT_TO_CHECK(40, 99, ARB_shader_subroutine)                    \
+  EXT_TO_CHECK(40, 99, ARB_gpu_shader_fp64)                      \
   EXT_TO_CHECK(40, 32, ARB_tessellation_shader)                  \
   EXT_TO_CHECK(40, 32, ARB_texture_cube_map_array)               \
   EXT_TO_CHECK(40, 30, ARB_transform_feedback2)                  \
@@ -644,6 +648,7 @@ extern bool IsGLES;
   EXT_TO_CHECK(41, 31, ARB_separate_shader_objects)              \
   EXT_TO_CHECK(41, 99, ARB_viewport_array)                       \
   EXT_TO_CHECK(41, 99, ARB_ES2_compatibility)                    \
+  EXT_TO_CHECK(41, 99, ARB_vertex_attrib_64bit)                  \
   EXT_TO_CHECK(42, 99, ARB_base_instance)                        \
   EXT_TO_CHECK(42, 31, ARB_shader_atomic_counters)               \
   EXT_TO_CHECK(42, 31, ARB_shader_image_load_store)              \
@@ -2066,6 +2071,8 @@ enum class GLChunk : uint32_t
   ContextConfiguration,
 
   glTextureFoveationParametersQCOM,
+
+  glBufferStorageEXT,
 
   Max,
 };

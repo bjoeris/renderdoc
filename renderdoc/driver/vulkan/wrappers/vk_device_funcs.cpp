@@ -165,8 +165,6 @@ ReplayStatus WrappedVulkan::Initialise(VkInitParams &params, uint64_t sectionVer
     }
   }
 
-  RDCEraseEl(m_ExtensionsEnabled);
-
   std::set<string> supportedExtensions;
 
   for(size_t i = 0; i <= params.Layers.size(); i++)
@@ -504,6 +502,18 @@ VkResult WrappedVulkan::vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo
 
     modifiedCreateInfo.pApplicationInfo = &renderdocAppInfo;
   }
+
+  for(uint32_t i = 0; i < modifiedCreateInfo.enabledLayerCount; i++)
+  {
+    if(!strcmp(modifiedCreateInfo.ppEnabledLayerNames[i], "VK_LAYER_LUNARG_standard_validation") ||
+       !strcmp(modifiedCreateInfo.ppEnabledLayerNames[i], "VK_LAYER_GOOGLE_unique_objects"))
+    {
+      m_LayersEnabled[VkCheckLayer_unique_objects] = true;
+    }
+  }
+
+  // if we forced on API validation, it's also available
+  m_LayersEnabled[VkCheckLayer_unique_objects] |= RenderDoc::Inst().GetCaptureOptions().apiValidation;
 
   VkResult ret = createFunc(&modifiedCreateInfo, pAllocator, pInstance);
 
@@ -1689,6 +1699,14 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
         CHECK_PHYS_EXT_FEATURE(vulkanMemoryModelDeviceScope);
       }
       END_PHYS_EXT_CHECK();
+
+      BEGIN_PHYS_EXT_CHECK(VkPhysicalDeviceConditionalRenderingFeaturesEXT,
+                           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT);
+      {
+        CHECK_PHYS_EXT_FEATURE(conditionalRendering);
+        CHECK_PHYS_EXT_FEATURE(inheritedConditionalRendering);
+      }
+      END_PHYS_EXT_CHECK();
     }
 
     if(availFeatures.depthClamp)
@@ -1865,6 +1883,8 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
     ObjDisp(physicalDevice)
         ->GetPhysicalDeviceFeatures(Unwrap(physicalDevice), &m_PhysicalDeviceData.features);
 
+    m_PhysicalDeviceData.driverInfo = VkDriverInfo(m_PhysicalDeviceData.props);
+
     m_Replay.SetDriverInformation(m_PhysicalDeviceData.props);
 
     // MoltenVK reports 0x3fffffff for this limit so just ignore that value if it comes up
@@ -1897,7 +1917,7 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
       }
     }
 
-    APIProps.vendor = GetDriverVersion().Vendor();
+    APIProps.vendor = GetDriverInfo().Vendor();
 
     m_ShaderCache = new VulkanShaderCache(this);
 
@@ -2241,6 +2261,8 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
 
     ObjDisp(physicalDevice)
         ->GetPhysicalDeviceFeatures(Unwrap(physicalDevice), &m_PhysicalDeviceData.features);
+
+    m_PhysicalDeviceData.driverInfo = VkDriverInfo(m_PhysicalDeviceData.props);
 
     for(int i = VK_FORMAT_BEGIN_RANGE + 1; i < VK_FORMAT_END_RANGE; i++)
       ObjDisp(physicalDevice)
