@@ -45,6 +45,8 @@ inline const char *Type(SDObject *ptr)
   // Vulkan doesn't use std::string, so need to cast it to const char *
   if(ptr->IsString() || ptr->type.name == "string")
     return "const char* ";
+  else if (ptr->type.name == "VkPipelineStageFlagBits")
+    return "VkPipelineStageFlags";
 
   return ptr->type.name.c_str();
 }
