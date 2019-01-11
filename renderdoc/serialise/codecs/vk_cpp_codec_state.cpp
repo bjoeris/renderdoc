@@ -22,14 +22,15 @@
 * THE SOFTWARE.
 ******************************************************************************/
 #include "vk_cpp_codec_state.h"
-#include "ext_object.h"
+#include "vk_cpp_codec_common.h"
+#include "core/intervals.h"
 
 namespace vk_cpp_codec
 {
-MemRange MemRange::MakeRange(ExtObject *offset, ExtObject *reqs)
+MemRange MemRange::MakeRange(SDObject *offset, SDObject *reqs)
 {
-  start = offset->U64();
-  end = start + reqs->At(0)->U64();
+  start = offset->AsUInt64();
+  end = start + reqs->GetChild(0)->AsUInt64();
   return *this;
 }
 
@@ -193,7 +194,7 @@ void MemoryAllocationWithBoundResources::Access(uint64_t cmdQueueFamily, VkShari
   {
     MemoryState state = it.value();
     bool modified = false;
-    uint64_t memID = allocateSDObj->At("Memory")->U64();
+    uint64_t memID = allocateSDObj->FindChild("Memory")->AsUInt64();
     uint64_t iStart = std::max(offset, it.start());
     uint64_t iEnd = std::min(end, it.end());
     if(state.queueFamily != cmdQueueFamily && cmdQueueFamily != VK_QUEUE_FAMILY_IGNORED &&
@@ -240,7 +241,7 @@ void MemoryAllocationWithBoundResources::TransitionQueueFamily(uint64_t cmdQueue
   {
     return;
   }
-  uint64_t memID = allocateSDObj->At("Memory")->U64();
+  uint64_t memID = allocateSDObj->FindChild("Memory")->AsUInt64();
   uint64_t end = offset + size;
   for(IntervalsIter<MemoryState> it = memoryState.find(offset);
       it != memoryState.end() && it.start() < end; it++)
@@ -346,11 +347,11 @@ void MemoryAllocationWithBoundResources::TransitionQueueFamily(uint64_t cmdQueue
   }
 }
 
-uint32_t FrameGraph::FindCmdBufferIndex(ExtObject *o)
+uint32_t FrameGraph::FindCmdBufferIndex(SDObject *o)
 {
   for(uint32_t i = 0; i < records.size(); i++)
   {
-    if(records[i].cb->U64() == o->U64())
+    if(records[i].cb->AsUInt64() == o->AsUInt64())
       return i;
   }
   RDCASSERT(0);
@@ -386,7 +387,7 @@ uint64_t DescriptorBinding::Size()
   return 0;
 }
 
-void DescriptorBinding::SetBindingObj(uint64_t index, ExtObject *o, bool initialization)
+void DescriptorBinding::SetBindingObj(uint64_t index, SDObject *o, bool initialization)
 {
   RDCASSERT(index < updated.size());
   if(!initialization)
@@ -400,12 +401,12 @@ void DescriptorBinding::SetBindingObj(uint64_t index, ExtObject *o, bool initial
     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
     case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
       RDCASSERT(index < imageBindings.size());
-      if(o->Size() == 0)
+      if(o->NumChildren() == 0)
         return;    // invalidated binding
-      RDCASSERT(o->Size() == 3);
-      imageBindings[index] = BoundImage(o->At(0)->U64(),                    // sampler
-                                        o->At(1)->U64(),                    // imageIvew
-                                        (VkImageLayout)o->At(2)->U64());    // imageLayout
+      RDCASSERT(o->NumChildren() == 3);
+      imageBindings[index] = BoundImage(o->GetChild(0)->AsUInt64(),                    // sampler
+                                        o->GetChild(1)->AsUInt64(),                    // imageIvew
+                                        (VkImageLayout)o->GetChild(2)->AsUInt64());    // imageLayout
       break;
 
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
@@ -413,19 +414,19 @@ void DescriptorBinding::SetBindingObj(uint64_t index, ExtObject *o, bool initial
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
       RDCASSERT(index < bufferBindings.size());
-      if(o->Size() == 0)
+      if(o->NumChildren() == 0)
         return;    // invalidated binding
-      RDCASSERT(o->Size() == 3);
-      bufferBindings[index] = BoundBuffer(o->At(0)->U64(),    // buffer
-                                          o->At(1)->U64(),    // offset
-                                          o->At(2)->U64(),    // size
+      RDCASSERT(o->NumChildren() == 3);
+      bufferBindings[index] = BoundBuffer(o->GetChild(0)->AsUInt64(),    // buffer
+                                          o->GetChild(1)->AsUInt64(),    // offset
+                                          o->GetChild(2)->AsUInt64(),    // size
                                           0);                 // dynamicOffset
       break;
 
     case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
     case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
       RDCASSERT(index < texelViewBindings.size());
-      texelViewBindings[index] = BoundTexelView(o->U64());    // buffer
+      texelViewBindings[index] = BoundTexelView(o->AsUInt64());    // buffer
       break;
 
     default: RDCASSERT(0); break;
@@ -518,52 +519,52 @@ void BindingState::attachmentUse(uint64_t subpassId, uint64_t attachmentId)
   attachmentLastUse[attachmentId] = subpassId;
 }
 
-void BindingState::BeginRenderPass(ExtObject *aRenderPass, ExtObject *aFramebuffer,
-                                   ExtObject *aRenderArea)
+void BindingState::BeginRenderPass(SDObject *aRenderPass, SDObject *aFramebuffer,
+                                   SDObject *aRenderArea)
 {
   subpassIndex = 0;
   renderPass = aRenderPass;
   framebuffer = aFramebuffer;
-  uint64_t width = aFramebuffer->At(6)->U64();
-  uint64_t height = aFramebuffer->At(7)->U64();
+  uint64_t width = aFramebuffer->GetChild(6)->AsUInt64();
+  uint64_t height = aFramebuffer->GetChild(7)->AsUInt64();
   isFullRenderArea =
-      (aRenderArea->At(0)->At(0)->U64() == 0) && (aRenderArea->At(0)->At(1)->U64() == 0) &&
-      (aRenderArea->At(1)->At(0)->U64() == width) && (aRenderArea->At(1)->At(1)->U64() == height);
+      (aRenderArea->GetChild(0)->GetChild(0)->AsUInt64() == 0) && (aRenderArea->GetChild(0)->GetChild(1)->AsUInt64() == 0) &&
+      (aRenderArea->GetChild(1)->GetChild(0)->AsUInt64() == width) && (aRenderArea->GetChild(1)->GetChild(1)->AsUInt64() == height);
 
-  uint64_t numAttachments = aRenderPass->At(4)->Size();
+  uint64_t numAttachments = aRenderPass->GetChild(4)->NumChildren();
   attachmentFirstUse.clear();
   attachmentFirstUse.resize(numAttachments, UINT64_MAX);
 
   attachmentLastUse.clear();
   attachmentLastUse.resize(numAttachments, UINT64_MAX);
 
-  ExtObject *subpasses = aRenderPass->At(6);
+  SDObject *subpasses = aRenderPass->GetChild(6);
 
-  for(uint64_t s = 0; s < subpasses->Size(); s++)
+  for(uint64_t s = 0; s < subpasses->NumChildren(); s++)
   {
-    ExtObject *subpass = subpasses->At(s);
-    ExtObject *inputAttachments = subpass->At(3);
-    ExtObject *colorAttachments = subpass->At(5);
-    ExtObject *resolveAttachments = subpass->At(6);
-    ExtObject *depthStencilAttachment = subpass->At(7);
+    SDObject *subpass = subpasses->GetChild(s);
+    SDObject *inputAttachments = subpass->GetChild(3);
+    SDObject *colorAttachments = subpass->GetChild(5);
+    SDObject *resolveAttachments = subpass->GetChild(6);
+    SDObject *depthStencilAttachment = subpass->GetChild(7);
 
-    for(uint64_t j = 0; j < inputAttachments->Size(); j++)
+    for(uint64_t j = 0; j < inputAttachments->NumChildren(); j++)
     {
-      attachmentUse(s, inputAttachments->At(j)->At(0)->U64());
+      attachmentUse(s, inputAttachments->GetChild(j)->GetChild(0)->AsUInt64());
     }
 
-    for(uint64_t j = 0; j < colorAttachments->Size(); j++)
+    for(uint64_t j = 0; j < colorAttachments->NumChildren(); j++)
     {
-      attachmentUse(s, colorAttachments->At(j)->At(0)->U64());
+      attachmentUse(s, colorAttachments->GetChild(j)->GetChild(0)->AsUInt64());
     }
 
-    for(uint64_t j = 0; j < resolveAttachments->Size(); j++)
+    for(uint64_t j = 0; j < resolveAttachments->NumChildren(); j++)
     {
-      attachmentUse(s, resolveAttachments->At(j)->At(0)->U64());
+      attachmentUse(s, resolveAttachments->GetChild(j)->GetChild(0)->AsUInt64());
     }
     if(!depthStencilAttachment->IsNULL())
     {
-      attachmentUse(s, depthStencilAttachment->At(0)->U64());
+      attachmentUse(s, depthStencilAttachment->GetChild(0)->AsUInt64());
     }
   }
 
@@ -572,9 +573,9 @@ void BindingState::BeginRenderPass(ExtObject *aRenderPass, ExtObject *aFramebuff
 
   for(uint64_t a = 0; a < numAttachments; a++)
   {
-    ExtObject *renderpassAttachments = renderPass->At("pAttachments");
-    ExtObject *attachmentDesc = renderpassAttachments->At(a);
-    attachmentLayout[a] = (VkImageLayout)attachmentDesc->At("initialLayout")->U64();
+    SDObject *renderpassAttachments = renderPass->FindChild("pAttachments");
+    SDObject *attachmentDesc = renderpassAttachments->GetChild(a);
+    attachmentLayout[a] = (VkImageLayout)attachmentDesc->FindChild("initialLayout")->AsUInt64();
   }
 }
 
@@ -769,30 +770,30 @@ ImageSubresourceRange ImageState::FullRange()
   return range;
 }
 
-ImageState::ImageState(uint64_t aImage, ExtObject *ci) : image(aImage)
+ImageState::ImageState(uint64_t aImage, SDObject *ci) : image(aImage)
 {
-  std::string ci_type(ci->Type());
+  std::string ci_type(Type(ci));
   if(ci_type == "VkImageCreateInfo")
   {
-    type = (VkImageType)ci->At("imageType")->U64();
-    format = (VkFormat)ci->At("format")->U64();
-    mipLevels = ci->At("mipLevels")->U64();
-    arrayLayers = ci->At("arrayLayers")->U64();
-    ExtObject *extent = ci->At("extent");
-    width = extent->At("width")->U64();
-    height = extent->At("width")->U64();
-    depth = extent->At("depth")->U64();
-    initialLayout = (VkImageLayout)ci->At("initialLayout")->U64();
+    type = (VkImageType)ci->FindChild("imageType")->AsUInt64();
+    format = (VkFormat)ci->FindChild("format")->AsUInt64();
+    mipLevels = ci->FindChild("mipLevels")->AsUInt64();
+    arrayLayers = ci->FindChild("arrayLayers")->AsUInt64();
+    SDObject *extent = ci->FindChild("extent");
+    width = extent->FindChild("width")->AsUInt64();
+    height = extent->FindChild("width")->AsUInt64();
+    depth = extent->FindChild("depth")->AsUInt64();
+    initialLayout = (VkImageLayout)ci->FindChild("initialLayout")->AsUInt64();
   }
   else if(ci_type == "VkSwapchainCreateInfoKHR")
   {
     type = VK_IMAGE_TYPE_2D;
-    format = (VkFormat)ci->At("imageFormat")->U64();
+    format = (VkFormat)ci->FindChild("imageFormat")->AsUInt64();
     mipLevels = 1;
-    arrayLayers = ci->At("imageArrayLayers")->U64();
-    ExtObject *extent = ci->At("imageExtent");
-    width = extent->At("width")->U64();
-    height = extent->At("height")->U64();
+    arrayLayers = ci->FindChild("imageArrayLayers")->AsUInt64();
+    SDObject *extent = ci->FindChild("imageExtent");
+    width = extent->FindChild("width")->AsUInt64();
+    height = extent->FindChild("height")->AsUInt64();
     depth = 1;
     initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
   }

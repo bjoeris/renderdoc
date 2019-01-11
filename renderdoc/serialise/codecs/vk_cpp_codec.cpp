@@ -35,7 +35,7 @@
 #include "common/common.h"
 #include "core/core.h"
 #include "serialise/rdcfile.h"
-#include "ext_object.h"
+#include "vk_cpp_codec_common.h"
 #include "vk_cpp_codec_tracker.h"
 #include "vk_cpp_codec_writer.h"
 
@@ -69,13 +69,13 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
     code.MultiPartSplit();
     tracker.CopiesClear();
 
-    ExtObject *ext = as_ext(chunks[c]);
-    if(ext->ChunkID() >= (uint32_t)VulkanChunk::vkEnumeratePhysicalDevices)
+    SDObject *ext = chunks[c];
+    if(chunks[c]->metadata.chunkID >= (uint32_t)VulkanChunk::vkEnumeratePhysicalDevices)
     {
       ext->name = code.shimPrefix + string(ext->name);
     }
 
-    switch(ext->ChunkID())
+    switch(chunks[c]->metadata.chunkID)
     {
       case(uint32_t)SystemChunk::DriverInit: code.CreateInstance(ext, pass); break;
       case(uint32_t)SystemChunk::InitialContents:
@@ -86,7 +86,7 @@ static ReplayStatus Structured2Code(CodeWriter &code, TraceTracker &tracker, con
       case(uint32_t)SystemChunk::CaptureScope: break;
       case(uint32_t)SystemChunk::CaptureBegin:
         CODE_ACQUIRE_NEXT_IMAGE(ext, pass);
-        code.InitialLayouts(ext, pass);
+        code.InitialLayouts(chunks[c], pass);
         pass = CodeWriter::ID_RENDER;
         break;
       case(uint32_t)SystemChunk::CaptureEnd:

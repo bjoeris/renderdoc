@@ -183,6 +183,7 @@
     <ClInclude Include="common\wrapped_pool.h" />
     <ClInclude Include="core\core.h" />
     <ClInclude Include="core\crash_handler.h" />
+    <ClInclude Include="core\intervals.h" />
     <ClInclude Include="core\plugins.h" />
     <ClInclude Include="core\precompiled.h" />
     <ClInclude Include="core\replay_proxy.h" />
@@ -221,7 +222,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
-    <ClInclude Include="serialise\codecs\ext_object.h" />
     <ClInclude Include="serialise\codecs\gold_reference_shim\shim_vulkan.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
@@ -238,7 +238,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
-    <ClInclude Include="serialise\codecs\intervals.h" />
     <ClInclude Include="serialise\codecs\rdoc_auto_capture_shim\renderdoc_app.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
@@ -267,6 +266,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Development|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
+    <ClInclude Include="serialise\codecs\vk_cpp_codec_common.h" />
     <ClInclude Include="serialise\codecs\vk_cpp_codec_file.h" />
     <ClInclude Include="serialise\codecs\vk_cpp_codec_state.h" />
     <ClInclude Include="serialise\codecs\vk_cpp_codec_tracker.h" />
@@ -652,6 +652,7 @@
     <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_cmd.cpp" />
     <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_filter.cpp" />
     <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_internal.cpp" />
+    <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_scan.cpp" />
     <ClCompile Include="serialise\codecs\vk_cpp_codec_tracker_state.cpp" />
     <ClCompile Include="serialise\codecs\vk_cpp_codec_writer.cpp" />
     <ClCompile Include="serialise\codecs\vk_cpp_codec_writer_generic.cpp" />

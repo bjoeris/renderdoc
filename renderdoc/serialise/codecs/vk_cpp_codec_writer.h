@@ -52,7 +52,7 @@
 #undef VK_USE_PLATFORM_XLIB_KHR
 #endif
 #include "serialise/rdcfile.h"
-#include "ext_object.h"
+#include "vk_cpp_codec_common.h"
 #include "vk_cpp_codec_file.h"
 #include "vk_cpp_codec_state.h"
 #include "vk_cpp_codec_tracker.h"
@@ -124,36 +124,36 @@ protected:
 
   // This vulkan functions are not allowed to be called directly by
   // codec.cpp.
-  void CreateImage(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateBuffer(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void AllocateMemory(ExtObject *o, uint32_t pass);
-  void BindResourceMemory(ExtObject *o, uint32_t pass);
+  void CreateImage(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateBuffer(SDObject *o, uint32_t pass, bool global_ci = false);
+  void AllocateMemory(SDObject *o, uint32_t pass);
+  void BindResourceMemory(SDObject *o, uint32_t pass);
 
-  void GenericCreatePipelines(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void GenericEvent(ExtObject *o, uint32_t pass);
-  void GenericVkCreate(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void GenericWaitIdle(ExtObject *o, uint32_t pass);
-  void GenericCmdSetRectTest(ExtObject *o, uint32_t pass);
-  void GenericCmdSetStencilParam(ExtObject *o, uint32_t pass);
-  void GenericCmdEvent(ExtObject *o, uint32_t pass);
-  void GenericCmdDrawIndirect(ExtObject *o, uint32_t pass);
+  void GenericCreatePipelines(SDObject *o, uint32_t pass, bool global_ci = false);
+  void GenericEvent(SDObject *o, uint32_t pass);
+  void GenericVkCreate(SDObject *o, uint32_t pass, bool global_ci = false);
+  void GenericWaitIdle(SDObject *o, uint32_t pass);
+  void GenericCmdSetRectTest(SDObject *o, uint32_t pass);
+  void GenericCmdSetStencilParam(SDObject *o, uint32_t pass);
+  void GenericCmdEvent(SDObject *o, uint32_t pass);
+  void GenericCmdDrawIndirect(SDObject *o, uint32_t pass);
 
-  void CreateAuxResources(ExtObject *o, uint32_t pass, bool global_ci = false);
+  void CreateAuxResources(SDObject *o, uint32_t pass, bool global_ci = false);
   void HandleMemoryAllocationAndResourceCreation(uint32_t pass);
-  void BufferOrImageMemoryReqs(ExtObject *o, const char *get_mem_req_func, uint32_t pass);
+  void BufferOrImageMemoryReqs(SDObject *o, const char *get_mem_req_func, uint32_t pass);
 
-  void InlineVariable(ExtObject *o, uint32_t pass);
-  void AssignUnion(std::string path, ExtObject *o, bool comment, uint32_t pass);
-  void LocalVariable(ExtObject *o, std::string suffix, uint32_t pass);
+  void InlineVariable(SDObject *o, uint32_t pass);
+  void AssignUnion(std::string path, SDObject *o, bool comment, uint32_t pass);
+  void LocalVariable(SDObject *o, std::string suffix, uint32_t pass);
 
-  void InitSrcBuffer(ExtObject *o, uint32_t pass);
-  void InitDstBuffer(ExtObject *o, uint32_t pass);
-  void InitDescSet(ExtObject *o);
-  void ImagePreDiff(ExtObject *o, uint32_t pass);
-  void ImageDiff(ExtObject *o, uint32_t pass);
-  void CopyResetImage(ExtObject *o, uint32_t pass);
-  void CopyResetBuffer(ExtObject *o, uint32_t pass);
-  void ImageLayoutTransition(uint64_t image_id, ExtObject *subres, const char *old_layout,
+  void InitSrcBuffer(SDObject *o, uint32_t pass);
+  void InitDstBuffer(SDObject *o, uint32_t pass);
+  void InitDescSet(SDObject *o);
+  void ImagePreDiff(SDObject *o, uint32_t pass);
+  void ImageDiff(SDObject *o, uint32_t pass);
+  void CopyResetImage(SDObject *o, uint32_t pass);
+  void CopyResetBuffer(SDObject *o, uint32_t pass);
+  void ImageLayoutTransition(uint64_t image_id, SDObject *subres, const char *old_layout,
                              uint32_t pass);
   void ClearBufferData();
 
@@ -231,102 +231,102 @@ public:
   // --------------------------------------------------------------------------
   void Resolution(uint32_t pass);
 
-  void EnumeratePhysicalDevices(ExtObject *o, uint32_t pass);
-  void GetDeviceQueue(ExtObject *o, uint32_t pass);
-  void GetSwapchainImagesKHR(ExtObject *o, uint32_t pass);
+  void EnumeratePhysicalDevices(SDObject *o, uint32_t pass);
+  void GetDeviceQueue(SDObject *o, uint32_t pass);
+  void GetSwapchainImagesKHR(SDObject *o, uint32_t pass);
 
-  void CreateInstance(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreatePresentFramebuffer(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreatePresentImageView(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateDescriptorPool(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateCommandPool(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateFramebuffer(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateRenderPass(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateSemaphore(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateFence(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateEvent(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateQueryPool(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateDescriptorSetLayout(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateDescriptorUpdateTemplate(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateImageView(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateSampler(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateShaderModule(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreatePipelineLayout(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreatePipelineCache(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateBufferView(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateSwapchainKHR(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateGraphicsPipelines(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateComputePipelines(ExtObject *o, uint32_t pass, bool global_ci = false);
-  void CreateDevice(ExtObject *o, uint32_t pass, bool global_ci = false);
+  void CreateInstance(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreatePresentFramebuffer(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreatePresentImageView(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateDescriptorPool(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateCommandPool(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateFramebuffer(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateRenderPass(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateSemaphore(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateFence(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateEvent(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateQueryPool(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateDescriptorSetLayout(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateDescriptorUpdateTemplate(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateImageView(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateSampler(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateShaderModule(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreatePipelineLayout(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreatePipelineCache(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateBufferView(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateSwapchainKHR(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateGraphicsPipelines(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateComputePipelines(SDObject *o, uint32_t pass, bool global_ci = false);
+  void CreateDevice(SDObject *o, uint32_t pass, bool global_ci = false);
 
-  void AllocateCommandBuffers(ExtObject *o, uint32_t pass);
-  void AllocateDescriptorSets(ExtObject *o, uint32_t pass);
+  void AllocateCommandBuffers(SDObject *o, uint32_t pass);
+  void AllocateDescriptorSets(SDObject *o, uint32_t pass);
 
-  void FlushMappedMemoryRanges(ExtObject *o, uint32_t pass);
-  void UnmapMemory(ExtObject *o, uint32_t pass);
-  void AcquireNextImage(ExtObject *o, uint32_t pass);
-  void BeginCommandBuffer(ExtObject *o, uint32_t pass);
-  void EndCommandBuffer(ExtObject *o, uint32_t pass);
-  void WaitForFences(ExtObject *o, uint32_t pass);
-  void GetFenceStatus(ExtObject *o, uint32_t pass);
-  void ResetFences(ExtObject *o, uint32_t pass);
-  void GetEventStatus(ExtObject *o, uint32_t pass);
-  void SetEvent(ExtObject *o, uint32_t pass);
-  void ResetEvent(ExtObject *o, uint32_t pass);
-  void QueueSubmit(ExtObject *o, uint32_t pass);
-  void QueueWaitIdle(ExtObject *o, uint32_t pass);
-  void DeviceWaitIdle(ExtObject *o, uint32_t pass);
-  void UpdateDescriptorSets(ExtObject *o, uint32_t pass);
-  void UpdateDescriptorSetWithTemplate(ExtObject *o, uint32_t pass);
+  void FlushMappedMemoryRanges(SDObject *o, uint32_t pass);
+  void UnmapMemory(SDObject *o, uint32_t pass);
+  void AcquireNextImage(SDObject *o, uint32_t pass);
+  void BeginCommandBuffer(SDObject *o, uint32_t pass);
+  void EndCommandBuffer(SDObject *o, uint32_t pass);
+  void WaitForFences(SDObject *o, uint32_t pass);
+  void GetFenceStatus(SDObject *o, uint32_t pass);
+  void ResetFences(SDObject *o, uint32_t pass);
+  void GetEventStatus(SDObject *o, uint32_t pass);
+  void SetEvent(SDObject *o, uint32_t pass);
+  void ResetEvent(SDObject *o, uint32_t pass);
+  void QueueSubmit(SDObject *o, uint32_t pass);
+  void QueueWaitIdle(SDObject *o, uint32_t pass);
+  void DeviceWaitIdle(SDObject *o, uint32_t pass);
+  void UpdateDescriptorSets(SDObject *o, uint32_t pass);
+  void UpdateDescriptorSetWithTemplate(SDObject *o, uint32_t pass);
 
   // Command recording API calls
-  void CmdBeginRenderPass(ExtObject *o, uint32_t pass);
-  void CmdNextSubpass(ExtObject *o, uint32_t pass);
-  void CmdExecuteCommands(ExtObject *o, uint32_t pass);
-  void CmdEndRenderPass(ExtObject *o, uint32_t pass);
-  void CmdSetViewport(ExtObject *o, uint32_t pass);
-  void CmdSetScissor(ExtObject *o, uint32_t pass);
-  void CmdBindDescriptorSets(ExtObject *o, uint32_t pass);
-  void CmdBindPipeline(ExtObject *o, uint32_t pass);
-  void CmdBindVertexBuffers(ExtObject *o, uint32_t pass);
-  void CmdBindIndexBuffer(ExtObject *o, uint32_t pass);
-  void CmdDraw(ExtObject *o, uint32_t pass);
-  void CmdDrawIndirect(ExtObject *o, uint32_t pass);
-  void CmdDrawIndexed(ExtObject *o, uint32_t pass);
-  void CmdDrawIndexedIndirect(ExtObject *o, uint32_t pass);
-  void CmdDispatch(ExtObject *o, uint32_t pass);
-  void CmdDispatchIndirect(ExtObject *o, uint32_t pass);
-  void CmdSetEvent(ExtObject *o, uint32_t pass);
-  void CmdResetEvent(ExtObject *o, uint32_t pass);
-  void CmdWaitEvents(ExtObject *o, uint32_t pass);
-  void CmdPipelineBarrier(ExtObject *o, uint32_t pass);
-  void CmdPushConstants(ExtObject *o, uint32_t pass);
-  void CmdSetDepthBias(ExtObject *o, uint32_t pass);
-  void CmdSetDepthBounds(ExtObject *o, uint32_t pass);
-  void CmdSetStencilCompareMask(ExtObject *o, uint32_t pass);
-  void CmdSetStencilWriteMask(ExtObject *o, uint32_t pass);
-  void CmdSetStencilReference(ExtObject *o, uint32_t pass);
-  void CmdSetLineWidth(ExtObject *o, uint32_t pass);
-  void CmdCopyBuffer(ExtObject *o, uint32_t pass);
-  void CmdUpdateBuffer(ExtObject *o, uint32_t pass);
-  void CmdFillBuffer(ExtObject *o, uint32_t pass);
-  void CmdCopyImage(ExtObject *o, uint32_t pass);
-  void CmdBlitImage(ExtObject *o, uint32_t pass);
-  void CmdResolveImage(ExtObject *o, uint32_t pass);
-  void CmdSetBlendConstants(ExtObject *o, uint32_t pass);
-  void CmdCopyBufferToImage(ExtObject *o, uint32_t pass);
-  void CmdCopyImageToBuffer(ExtObject *o, uint32_t pass);
-  void CmdClearAttachments(ExtObject *o, uint32_t pass);
-  void CmdClearDepthStencilImage(ExtObject *o, uint32_t pass);
-  void CmdClearColorImage(ExtObject *o, uint32_t pass);
-  void CmdDebugMarkerBeginEXT(ExtObject *o, uint32_t pass);
-  void CmdDebugMarkerInsertEXT(ExtObject *o, uint32_t pass);
-  void CmdDebugMarkerEndEXT(ExtObject *o, uint32_t pass);
-  void DebugMarkerSetObjectNameEXT(ExtObject *o, uint32_t pass);
-  void EndFramePresent(ExtObject *o, uint32_t pass);
-  void EndFrameWaitIdle(ExtObject *o, uint32_t pass);
-  void InitialContents(ExtObject *o);
-  void InitialLayouts(ExtObject *o, uint32_t pass);
+  void CmdBeginRenderPass(SDObject *o, uint32_t pass);
+  void CmdNextSubpass(SDObject *o, uint32_t pass);
+  void CmdExecuteCommands(SDObject *o, uint32_t pass);
+  void CmdEndRenderPass(SDObject *o, uint32_t pass);
+  void CmdSetViewport(SDObject *o, uint32_t pass);
+  void CmdSetScissor(SDObject *o, uint32_t pass);
+  void CmdBindDescriptorSets(SDObject *o, uint32_t pass);
+  void CmdBindPipeline(SDObject *o, uint32_t pass);
+  void CmdBindVertexBuffers(SDObject *o, uint32_t pass);
+  void CmdBindIndexBuffer(SDObject *o, uint32_t pass);
+  void CmdDraw(SDObject *o, uint32_t pass);
+  void CmdDrawIndirect(SDObject *o, uint32_t pass);
+  void CmdDrawIndexed(SDObject *o, uint32_t pass);
+  void CmdDrawIndexedIndirect(SDObject *o, uint32_t pass);
+  void CmdDispatch(SDObject *o, uint32_t pass);
+  void CmdDispatchIndirect(SDObject *o, uint32_t pass);
+  void CmdSetEvent(SDObject *o, uint32_t pass);
+  void CmdResetEvent(SDObject *o, uint32_t pass);
+  void CmdWaitEvents(SDObject *o, uint32_t pass);
+  void CmdPipelineBarrier(SDObject *o, uint32_t pass);
+  void CmdPushConstants(SDObject *o, uint32_t pass);
+  void CmdSetDepthBias(SDObject *o, uint32_t pass);
+  void CmdSetDepthBounds(SDObject *o, uint32_t pass);
+  void CmdSetStencilCompareMask(SDObject *o, uint32_t pass);
+  void CmdSetStencilWriteMask(SDObject *o, uint32_t pass);
+  void CmdSetStencilReference(SDObject *o, uint32_t pass);
+  void CmdSetLineWidth(SDObject *o, uint32_t pass);
+  void CmdCopyBuffer(SDObject *o, uint32_t pass);
+  void CmdUpdateBuffer(SDObject *o, uint32_t pass);
+  void CmdFillBuffer(SDObject *o, uint32_t pass);
+  void CmdCopyImage(SDObject *o, uint32_t pass);
+  void CmdBlitImage(SDObject *o, uint32_t pass);
+  void CmdResolveImage(SDObject *o, uint32_t pass);
+  void CmdSetBlendConstants(SDObject *o, uint32_t pass);
+  void CmdCopyBufferToImage(SDObject *o, uint32_t pass);
+  void CmdCopyImageToBuffer(SDObject *o, uint32_t pass);
+  void CmdClearAttachments(SDObject *o, uint32_t pass);
+  void CmdClearDepthStencilImage(SDObject *o, uint32_t pass);
+  void CmdClearColorImage(SDObject *o, uint32_t pass);
+  void CmdDebugMarkerBeginEXT(SDObject *o, uint32_t pass);
+  void CmdDebugMarkerInsertEXT(SDObject *o, uint32_t pass);
+  void CmdDebugMarkerEndEXT(SDObject *o, uint32_t pass);
+  void DebugMarkerSetObjectNameEXT(SDObject *o, uint32_t pass);
+  void EndFramePresent(SDObject *o, uint32_t pass);
+  void EndFrameWaitIdle(SDObject *o, uint32_t pass);
+  void InitialContents(SDObject *o);
+  void InitialLayouts(SDChunk *o, uint32_t pass);
 
   void PrintReadBuffers(StructuredBufferList &buffers);
   void ReleaseResources();

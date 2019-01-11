@@ -98,6 +98,7 @@ set(sources
     common/threading_tests.cpp
     core/core.cpp
     core/image_viewer.cpp
+    core/intervals.h
     core/core.h
     core/crash_handler.h
     core/target_control.cpp
@@ -170,12 +171,12 @@ set(sources
     serialise/codecs/vk_cpp_codec_tracker_filter.cpp
     serialise/codecs/vk_cpp_codec_tracker_internal.cpp
     serialise/codecs/vk_cpp_codec_tracker_state.cpp
+	serialise/codecs/vk_cpp_codec_tracker_scan.cpp
     serialise/codecs/vk_cpp_codec_writer.cpp
     serialise/codecs/vk_cpp_codec_writer_generic.cpp
     serialise/codecs/vk_cpp_codec_writer_template_files.cpp
     serialise/codecs/vk_cpp_codec_writer.h
-    serialise/codecs/intervals.h
-    serialise/codecs/ext_object.h
+    serialise/codecs/vk_cpp_codec_common.h
     serialise/codecs/chrome_json_codec.cpp
     serialise/comp_io_tests.cpp
     serialise/serialiser_tests.cpp

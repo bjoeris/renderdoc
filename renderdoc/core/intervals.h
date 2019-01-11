@@ -1,7 +1,7 @@
 /******************************************************************************
 * The MIT License (MIT)
 *
-* Copyright (c) 2018 Google LLC
+* Copyright (c) 2018 Baldur Karlsson
 *
 * Permission is hereby granted, free of charge, to any person obtaining a copy
 * of this software and associated documentation files (the "Software"), to deal
@@ -26,8 +26,8 @@
 #include <algorithm>
 #include <map>
 
-namespace vk_cpp_codec
-{
+#include "common/common.h"
+
 template <typename T>
 struct Intervals;
 
@@ -171,5 +171,3 @@ public:
     return Wrap(it);
   }
 };
-
-}    // namespace vk_cpp_codec

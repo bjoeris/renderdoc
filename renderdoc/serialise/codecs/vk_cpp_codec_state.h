@@ -23,7 +23,8 @@
 ******************************************************************************/
 #pragma once
 
-#include "ext_object.h"
+#include "core/intervals.h"
+#include "vk_cpp_codec_common.h"
 #if defined(WIN32)
 #define VK_USE_PLATFORM_WIN32_KHR 1
 #elif defined(__yeti__)
@@ -43,22 +44,6 @@
 
 namespace vk_cpp_codec
 {
-struct InitResourceDesc
-{
-  ExtObject *sdobj;
-
-  inline InitResourceDesc() : sdobj(NULL) {}
-  inline InitResourceDesc(ExtObject *ext, bool reset) : sdobj(ext) {}
-};
-
-typedef std::map<uint64_t, InitResourceDesc> InitResourceIDMap;
-typedef InitResourceIDMap::iterator InitResourceIDMapIter;
-typedef std::pair<uint64_t, InitResourceDesc> InitResourceIDMapPair;
-
-typedef std::map<uint64_t, ExtObjectVec> ExtObjectVecIDMap;
-typedef ExtObjectVecIDMap::iterator ExtObjectVecIDMapIter;
-typedef std::pair<uint64_t, ExtObjectVec> ExtObjectVecIDMapPair;
-
 // Enum representing the reset requirement.
 enum ResetRequirement
 {
@@ -71,11 +56,11 @@ enum ResetRequirement
 // This structure describes a resource binding information.
 struct BoundResource
 {
-  ExtObject *createSDObj;    // create call for the bound resource
-  ExtObject *bindSDObj;      // binding call
-  ExtObject *resource;       // resource ID
-  ExtObject *requirement;    // serialized memory requirements
-  ExtObject *offset;         // binding offset
+  SDObject *createSDObj;    // create call for the bound resource
+  SDChunk *bindSDObj;      // binding call
+  SDObject *resource;       // resource ID
+  SDObject *requirement;    // serialized memory requirements
+  SDObject *offset;         // binding offset
   ResetRequirement reset;
 };
 
@@ -87,7 +72,7 @@ struct MemRange
 {
   uint64_t start = 0;
   uint64_t end = 0;
-  MemRange MakeRange(ExtObject *offset, ExtObject *reqs);
+  MemRange MakeRange(SDObject *offset, SDObject *reqs);
   bool Intersect(MemRange &r);
 };
 
@@ -208,13 +193,13 @@ struct MemoryAllocationWithBoundResources
     HasAliasedResourcesTrue,
     HasAliasedResourcesUnknown
   };
-  ExtObject *allocateSDObj = NULL;
+  SDObject *allocateSDObj = NULL;
   BoundResources boundResources;
   std::vector<MemRange> ranges;
   Intervals<MemoryState> memoryState;
   uint64_t hasAliasedResources = HasAliasedResourcesUnknown;
 
-  inline MemoryAllocationWithBoundResources(ExtObject *allocateExt = NULL)
+  inline MemoryAllocationWithBoundResources(SDObject *allocateExt = NULL)
       : allocateSDObj(allocateExt)
   {
   }
@@ -247,8 +232,8 @@ typedef std::pair<uint64_t, MemoryAllocationWithBoundResources> MemAllocWithReso
 // needs an expensive memory reset before each frame render.
 struct ResourceWithViews
 {
-  ExtObject *sdobj;
-  ExtObjectIDMap views;
+  SDChunk *sdobj;
+  SDObjectIDMap views;
 };
 
 typedef std::map<uint64_t, ResourceWithViews> ResourceWithViewsMap;
@@ -261,21 +246,21 @@ typedef std::pair<uint64_t, uint64_t> U64MapPair;
 
 struct MemStateUpdates
 {
-  ExtObjectVec descset;
-  ExtObjectVec memory;
+  SDChunkVec descset;
+  SDChunkVec memory;
 };
 
 struct CmdBufferRecord
 {
-  ExtObject *sdobject;    // command buffer begin sdobject
-  ExtObject *cb;
-  ExtObjectVec cmds;    // commands
+  SDChunk *sdobject;    // command buffer begin sdobject
+  SDObject *cb;
+  SDChunkVec cmds;    // commands
 };
 
 struct QueueSubmit
 {
-  ExtObject *sdobject;         // queue submit sdobject
-  ExtObject *q;                // queue
+  SDObject *sdobject;         // queue submit sdobject
+  SDObject *q;                // queue
   uint64_t memory_updates;     // # of completed updates
   uint64_t descset_updates;    // # of completed updates
 };
@@ -290,7 +275,7 @@ struct FrameGraph
   std::vector<CmdBufferRecord> records;
 
   inline void AddUnorderedSubmit(QueueSubmit qs) { submits.push_back(qs); }
-  uint32_t FindCmdBufferIndex(ExtObject *o);
+  uint32_t FindCmdBufferIndex(SDObject *o);
 };
 
 struct BoundBuffer
@@ -345,7 +330,7 @@ struct DescriptorBinding
   inline DescriptorBinding(uint64_t type, uint64_t elementCount) { Resize(type, elementCount); }
   uint64_t Size();
 
-  void SetBindingObj(uint64_t index, ExtObject *o, bool initialization);
+  void SetBindingObj(uint64_t index, SDObject *o, bool initialization);
   void CopyBinding(uint64_t index, const DescriptorBinding &other, uint64_t otherIndex);
   void Resize(uint64_t aType, uint64_t elementCount);
   bool NeedsReset(uint64_t element);
@@ -385,8 +370,8 @@ struct BindingState
   std::map<uint64_t, BoundBuffer> vertexBuffers;    // key = binding number
   BoundBuffer indexBuffer;
   uint64_t indexBufferType = 0;
-  ExtObject *renderPass = NULL;
-  ExtObject *framebuffer = NULL;
+  SDObject *renderPass = NULL;
+  SDObject *framebuffer = NULL;
   bool isFullRenderArea = false;
   std::vector<VkImageLayout> attachmentLayout;
   std::vector<uint64_t> attachmentFirstUse;
@@ -398,7 +383,7 @@ private:
   void attachmentUse(uint64_t subpassId, uint64_t attachmentId);
 
 public:
-  void BeginRenderPass(ExtObject *aRenderPass, ExtObject *aFramebuffer, ExtObject *aRenderArea);
+  void BeginRenderPass(SDObject *aRenderPass, SDObject *aFramebuffer, SDObject *aRenderArea);
 };
 
 struct ImageSubresource
@@ -587,7 +572,7 @@ public:
   ImageSubresourceRange FullRange();
 
   inline ImageState() { RDCASSERT(0); }
-  ImageState(uint64_t aImage, ExtObject *ci);
+  ImageState(uint64_t aImage, SDObject *ci);
 
   VkImageAspectFlags NormalizeAspectMask(VkImageAspectFlags aspectMask) const;
 

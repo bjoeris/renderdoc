@@ -34,7 +34,7 @@
 #include "common/common.h"
 #include "core/core.h"
 #include "serialise/rdcfile.h"
-#include "ext_object.h"
+#include "vk_cpp_codec_common.h"
 #include "vk_cpp_codec_state.h"
 #include "vk_cpp_codec_tracker.h"
 #include "vk_cpp_codec_writer.h"
@@ -46,36 +46,36 @@
 
 namespace vk_cpp_codec
 {
-void CodeWriter::InlineVariable(ExtObject *o, uint32_t pass)
+void CodeWriter::InlineVariable(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{ /* %s = */", o->Name());
-  for(uint64_t i = 0; i < o->Size(); i++)
+  for(uint64_t i = 0; i < o->NumChildren(); i++)
   {
     std::string add_suffix;
-    ExtObject *node = tracker->CopiesAdd(o, i, add_suffix);
+    SDObject *node = tracker->CopiesAdd(o, i, add_suffix);
     if(!node->IsSimpleType())
     {
       InlineVariable(node, pass);
     }
     else if(node->IsResource())
     {
-      files[pass]->PrintLn("/* %s = */ %s,", node->Name(), tracker->GetResourceVar(node->U64()));
+      files[pass]->PrintLn("/* %s = */ %s,", node->Name(), tracker->GetResourceVar(node->AsUInt64()));
     }
     else
     {
-      files[pass]->PrintLn("/* %s = */ %s,", node->Name(), node->ValueStr().c_str());
+      files[pass]->PrintLn("/* %s = */ %s,", node->Name(), ValueStr(node).c_str());
     }
   }
   files[pass]->PrintLn("},");
 }
 
-void CodeWriter::AssignUnion(std::string path, ExtObject *o, bool comment, uint32_t pass)
+void CodeWriter::AssignUnion(std::string path, SDObject *o, bool comment, uint32_t pass)
 {
   if(o->IsStruct() || o->IsArray() || o->IsUnion())
   {
-    for(uint64_t i = 0; i < o->Size(); i++)
+    for(uint64_t i = 0; i < o->NumChildren(); i++)
     {
-      ExtObject *child = o->At(i);
+      SDObject *child = o->GetChild(i);
       std::string childPath(path);
       bool childComment = false;
       if(o->IsArray())
@@ -95,7 +95,7 @@ void CodeWriter::AssignUnion(std::string path, ExtObject *o, bool comment, uint3
         childPath += std::string(child->Name());
         if(o->IsUnion())
         {
-          if(i != o->CanonicalUnionBranch())
+          if(i != CanonicalUnionBranch(o))
           {
             childComment = true;
           }
@@ -121,16 +121,16 @@ void CodeWriter::AssignUnion(std::string path, ExtObject *o, bool comment, uint3
 
   if(o->IsResource())
   {
-    value = tracker->GetResourceVar(o->U64());
+    value = tracker->GetResourceVar(o->AsUInt64());
   }
   else
   {
-    value = o->ValueStr().c_str();
+    value = ValueStr(o).c_str();
   }
   files[pass]->PrintLn("%s%s = %s;", commentStr.c_str(), path.c_str(), value.c_str());
 }
 
-void CodeWriter::LocalVariable(ExtObject *o, std::string suffix, uint32_t pass)
+void CodeWriter::LocalVariable(SDObject *o, std::string suffix, uint32_t pass)
 {
   // Unions have multiple elements in them, which is why they need to be
   // handled first, ahead of structs and arrays.
@@ -138,23 +138,23 @@ void CodeWriter::LocalVariable(ExtObject *o, std::string suffix, uint32_t pass)
   {
     std::string name(o->Name());
     name += suffix;
-    files[pass]->PrintLn("%s %s;", o->Type(), name.c_str());
+    files[pass]->PrintLn("%s %s;", Type(o), name.c_str());
     AssignUnion(name, o, false, pass);
     return;
   }
   else
   {
-    uint64_t size = o->Size();
+    uint64_t size = o->NumChildren();
     // Go through all the children and look for complex structures or variable-
     // size arrays. For each of those, declare and initialize them separately.
     for(uint64_t i = 0; i < size; i++)
     {
       // Handle cases when the member is a complex data type, such as a complex
       // structure or a variable sized array.
-      if(!o->At(i)->IsInlineable())
+      if(!o->GetChild(i)->IsInlineable())
       {
         std::string add_suffix;
-        ExtObject *node = tracker->CopiesAdd(o, i, add_suffix);
+        SDObject *node = tracker->CopiesAdd(o, i, add_suffix);
         LocalVariable(node, suffix + add_suffix, pass);
       }
     }
@@ -162,25 +162,25 @@ void CodeWriter::LocalVariable(ExtObject *o, std::string suffix, uint32_t pass)
     // Complex structures or variable arrays get referenced by name.
     if(o->IsNULL())
     {
-      files[pass]->PrintLn("%s* %s%s = NULL;", o->Type(), o->Name(), suffix.c_str());
+      files[pass]->PrintLn("%s* %s%s = NULL;", Type(o), o->Name(), suffix.c_str());
     }
     else if(o->IsStruct() && !o->IsPointer())
     {
-      files[pass]->PrintLn("%s %s%s = {", o->Type(), o->Name(), suffix.c_str());
+      files[pass]->PrintLn("%s %s%s = {", Type(o), o->Name(), suffix.c_str());
     }
     else if(o->IsStruct() && o->IsPointer())
     {
-      files[pass]->PrintLn("%s %s%s[1] = {", o->Type(), o->Name(), suffix.c_str());
+      files[pass]->PrintLn("%s %s%s[1] = {", Type(o), o->Name(), suffix.c_str());
     }
     else if(o->IsArray())
     {
-      files[pass]->PrintLn("%s %s%s[%llu] = {", o->Type(), o->Name(), suffix.c_str(), size);
+      files[pass]->PrintLn("%s %s%s[%llu] = {", Type(o), o->Name(), suffix.c_str(), size);
     }
 
     for(uint64_t i = 0; i < size; i++)
     {
       std::string add_suffix;
-      ExtObject *node = tracker->CopiesAdd(o, i, add_suffix);
+      SDObject *node = tracker->CopiesAdd(o, i, add_suffix);
       if(!node->IsInlineable())
       {
         files[pass]->PrintLn("/* %s = */ %s%s,", node->Name(), node->Name(),
@@ -192,11 +192,11 @@ void CodeWriter::LocalVariable(ExtObject *o, std::string suffix, uint32_t pass)
       }
       else if(node->IsResource())
       {
-        files[pass]->PrintLn("/* %s = */ %s,", node->Name(), tracker->GetResourceVar(node->U64()));
+        files[pass]->PrintLn("/* %s = */ %s,", node->Name(), tracker->GetResourceVar(node->AsUInt64()));
       }
       else
       {
-        files[pass]->PrintLn("/* %s = */ %s,", node->Name(), node->ValueStr().c_str());
+        files[pass]->PrintLn("/* %s = */ %s,", node->Name(), ValueStr(node).c_str());
       }
     }
 
@@ -205,21 +205,21 @@ void CodeWriter::LocalVariable(ExtObject *o, std::string suffix, uint32_t pass)
   }
 }
 
-void CodeWriter::GenericVkCreate(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::GenericVkCreate(SDObject *o, uint32_t pass, bool global_ci)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *ci = o->At(1);
-  ExtObject *vk_res = o->At(3);
+  SDObject *device = o->GetChild(0);
+  SDObject *ci = o->GetChild(1);
+  SDObject *vk_res = o->GetChild(3);
 
-  const char *device_name = tracker->GetResourceVar(device->U64());
-  const char *res_name = tracker->GetResourceVar(vk_res->Type(), vk_res->U64());
+  const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+  const char *res_name = tracker->GetResourceVar(Type(vk_res), vk_res->AsUInt64());
 
   files[pass]->PrintLn("{");
   LocalVariable(ci, "", pass);
 
   if(global_ci)
   {
-    std::string ci_name = AddVar(ci->Type(), vk_res->U64());
+    std::string ci_name = AddVar(Type(ci), vk_res->AsUInt64());
     files[pass]->PrintLn("%s = %s;", ci_name.c_str(), ci->Name());
   }
   std::string resource_name_str;
@@ -232,23 +232,23 @@ void CodeWriter::GenericVkCreate(ExtObject *o, uint32_t pass, bool global_ci)
       .PrintLn("}");
 }
 
-void CodeWriter::GenericCreatePipelines(ExtObject *o, uint32_t pass, bool global_ci)
+void CodeWriter::GenericCreatePipelines(SDObject *o, uint32_t pass, bool global_ci)
 {
-  ExtObject *device = o->At(0);
-  ExtObject *cache = o->At(1);
-  ExtObject *ci_count = o->At(2);
-  ExtObject *ci = o->At(3);
-  ExtObject *pipe = o->At(5);
+  SDObject *device = o->GetChild(0);
+  SDObject *cache = o->GetChild(1);
+  SDObject *ci_count = o->GetChild(2);
+  SDObject *ci = o->GetChild(3);
+  SDObject *pipe = o->GetChild(5);
 
   // CreateInfoCount must always be equal to '1'.
   // Create[Graphics|Compute]Pipelines can create multiple pipelines at the
   // same time, but RenderDoc splits these calls into multiple calls, one per
   // each pipeline object that is still alive at the time of capture.
-  RDCASSERT(ci_count->U64() == 1);
+  RDCASSERT(ci_count->AsUInt64() == 1);
 
-  const char *device_name = tracker->GetResourceVar(device->U64());
-  const char *cache_name = tracker->GetResourceVar(cache->U64());
-  const char *pipe_name = tracker->GetResourceVar(pipe->Type(), pipe->U64());
+  const char *device_name = tracker->GetResourceVar(device->AsUInt64());
+  const char *cache_name = tracker->GetResourceVar(cache->AsUInt64());
+  const char *pipe_name = tracker->GetResourceVar(Type(pipe), pipe->AsUInt64());
 
   files[pass]->PrintLn("{");
   LocalVariable(ci, "", pass);
@@ -262,48 +262,48 @@ void CodeWriter::GenericCreatePipelines(ExtObject *o, uint32_t pass, bool global
       .PrintLn("}");
 }
 
-void CodeWriter::GenericEvent(ExtObject *o, uint32_t pass)
+void CodeWriter::GenericEvent(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
   files[pass]
-      ->PrintLn("%s(%s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                tracker->GetResourceVar(o->At(1)->U64()))
+      ->PrintLn("%s(%s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                tracker->GetResourceVar(o->GetChild(1)->AsUInt64()))
       .PrintLn("}");
 }
 
-void CodeWriter::GenericWaitIdle(ExtObject *o, uint32_t pass)
+void CodeWriter::GenericWaitIdle(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()));
+  files[pass]->PrintLn("%s(%s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()));
 }
 
-void CodeWriter::GenericCmdSetRectTest(ExtObject *o, uint32_t pass)
+void CodeWriter::GenericCmdSetRectTest(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
-  LocalVariable(o->At(3), "", pass);
+  LocalVariable(o->GetChild(3), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %llu, %llu, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                o->At(1)->U64(), o->At(2)->U64(), o->At(3)->Name())
+      ->PrintLn("%s(%s, %llu, %llu, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                o->GetChild(1)->AsUInt64(), o->GetChild(2)->AsUInt64(), o->GetChild(3)->Name())
       .PrintLn("}");
 }
-void CodeWriter::GenericCmdSetStencilParam(ExtObject *o, uint32_t pass)
+void CodeWriter::GenericCmdSetStencilParam(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %s, %llu);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                       o->At(1)->Str(), o->At(2)->U64());
+  files[pass]->PrintLn("%s(%s, %s, %llu);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+    ValueStr(o->GetChild(1)).c_str(), o->GetChild(2)->AsUInt64());
 }
 
-void CodeWriter::GenericCmdEvent(ExtObject *o, uint32_t pass)
+void CodeWriter::GenericCmdEvent(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{");
   files[pass]
-      ->PrintLn("%s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-                tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->Str())
+      ->PrintLn("%s(%s, %s, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), ValueStr(o->GetChild(2)).c_str())
       .PrintLn("}");
 }
-void CodeWriter::GenericCmdDrawIndirect(ExtObject *o, uint32_t pass)
+void CodeWriter::GenericCmdDrawIndirect(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn(
-      "%s(%s, %s, %llu, %llu, %llu);", o->Name(), tracker->GetResourceVar(o->At(0)->U64()),
-      tracker->GetResourceVar(o->At(1)->U64()), o->At(2)->U64(), o->At(3)->U64(), o->At(4)->U64());
+      "%s(%s, %s, %llu, %llu, %llu);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+      tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), o->GetChild(2)->AsUInt64(), o->GetChild(3)->AsUInt64(), o->GetChild(4)->AsUInt64());
 }
 }
 

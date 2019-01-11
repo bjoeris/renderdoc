@@ -24,6 +24,7 @@
 #pragma once
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -53,14 +54,14 @@
 #undef VK_USE_PLATFORM_XLIB_KHR
 #endif
 #include "serialise/rdcfile.h"
-#include "ext_object.h"
+#include "vk_cpp_codec_common.h"
 #include "vk_cpp_codec_state.h"
 #if defined _MSC_VER
 #include <direct.h>
 #endif
 #define VARIABLE_OFFSET 0x000FFFFFF
 // There is only one acquire semaphore variable
-#define ACQUIRE_SEMAPHORE_VAR_ID (VARIABLE_OFFSET)
+#define ACQUIRE_SEMAPHORE_VAR_ID acquireSemaphore->AsUInt64()
 #define ACQUIRE_SEMAPHORE_VAR_MAX_COUNT (1)
 // There is only one PresentImage variable
 #define PRESENT_IMAGE_OFFSET (ACQUIRE_SEMAPHORE_VAR_ID + ACQUIRE_SEMAPHORE_VAR_MAX_COUNT)
@@ -177,10 +178,10 @@ private:
   // structure of memory requirements associated with it.
   VariableIDMap memRequirements;
 
-  // Occasionally tracker needs to create copies of an ExtObject instance.
-  // This is done via ExtObject::Duplicate() call and the caller is responsible
+  // Occasionally tracker needs to create copies of an SDObject instance.
+  // This is done via SDObject::Duplicate() call and the caller is responsible
   // for clean up. Such duplicates are stored in this vector and cleaned up.
-  ExtObjectVec copies;
+  SDObjectVec copies;
 
   // This map will store everything related to presenting the frame, which includes:
   // 1. The IDs of all the Images that were retrieved from a surface.
@@ -188,9 +189,9 @@ private:
   // 3. The IDs of all RenderPasses that have a VK_IMAGE_LAYOUT_PRESENT_SRC_KHR attachment.
   // 4. The IDs of all Framebuffers that have a presenting renderpass attachment.
   // 5. The IDs of command buffers that use the presenting image.
-  ExtObjectIDMap presentResources;
+  SDObjectIDMap presentResources;
   // This map correlates image ID to an the image index in the swapchain.
-  ExtObjectVec presentImageIndex;
+  SDObjectVec presentImageIndex;
 
   std::string swapchainCountStr;
   std::string presentImagesStr;
@@ -200,18 +201,18 @@ private:
   // When descriptor sets are updated, much of the descriptor set layout info
   // is needed. The descSetLayouts is a list of created descriptor set layouts
   // which corresponds to a
-  ExtObjectIDMap descSetLayouts;    // a list of all CreateDescriptorSetLayout calls
+  SDObjectIDMap descSetLayouts;    // a list of all CreateDescriptorSetLayout calls
 
   // map of memory allocations combined with the list of resources bound to memory allocation
   MemAllocWithResourcesMap memoryAllocations;
   // list of resources that need to be reset with initial data
-  InitResourceIDMap initResources;
+  SDChunkIDMap initResources;
   // map of all created resources combined with their list of resource views
   ResourceWithViewsMap createdResources;
   // map from VkDescriptorSet to the layout and binding info for that descriptor set.
   DescriptorSetInfoMap descriptorSetInfos;
   // map from pipelineID to the VkGraphicsPipelineCreateInfo or VkComputePipelineCreateInfo
-  ExtObjectIDMap createdPipelines;
+  SDChunkIDMap createdPipelines;
 
   // This map collects the IDs of the queues that were submitted during the frame.
   U64Map submittedQueues;
@@ -233,9 +234,12 @@ private:
   uint64_t presentQueueID = 0;
   uint64_t swapchainWidth = 0;
   uint64_t swapchainHeight = 0;
-  ExtObject *swapchainCreateInfo = NULL;
+  SDObject *swapchainCreateInfo = NULL;
   U64UMap physDeviceQueueFamilies;
   U64UMap indexedPhysicalDeviceID;
+
+  // ResourceID for the AcquiredSemaphore.
+  SDObject * acquireSemaphore = NULL;
 
   // queueUsed[physical device resource ID][family][index] is true if the queue in the
   // specified physical device resource, in the specified queue family at 'index' is
@@ -252,16 +256,15 @@ private:
   // For each vkCmdBeginRenderpass this map stores the ID of the command buffer
   // to the corresponding vkCmdBeginRenderpass chunk to allow matching it on
   // vkCmdEndRenderpass.
-  ExtObjectIDMap beginRenderPassCmdBuffer;
+  SDObjectIDMap beginRenderPassCmdBuffer;
 
   // deviceQueues is a map from queue IDs to the vkGetDeviceQueue chunk which created them.
-  ExtObjectIDMap deviceQueues;
+  SDObjectIDMap deviceQueues;
 
   // cmdQueue is the queue on which analyzed commands are to be executed.
   // This will be set durring any call to AnalyzeCmd and the Cmd*Analyze methods.
   uint64_t cmdQueue;
   uint64_t cmdQueueFamily;
-  uint64_t CurrentQueueFamily();
 
   CodeWriter *code = NULL;
 
@@ -277,101 +280,99 @@ private:
   void TrackVarInMap(VariableIDMap &m, const char *type, const char *name, uint64_t id);
 
   // Private 'Internal' functions that are used throughout the 'Scan'ing process.
-  void EnumeratePhysicalDevicesInternal(ExtObject *o);
-  void CreateDeviceInternal(ExtObject *o);
-  void GetDeviceQueueInternal(ExtObject *o);
-  void AllocateMemoryInternal(ExtObject *o);
-  void CreateResourceInternal(ExtObject *o);
-  void CreateResourceViewInternal(ExtObject *o);
-  void BindBufferMemoryInternal(ExtObject *o);
-  void BindImageMemoryInternal(ExtObject *o);
-  void CreateFramebufferInternal(ExtObject *o);
-  void CreateRenderPassInternal(ExtObject *o);
-  void CreateDescriptorPoolInternal(ExtObject *o);
-  void CreateDescriptorUpdateTemplateInternal(ExtObject *o);
-  void CreateDescriptorSetLayoutInternal(ExtObject *o);
-  void AllocateDescriptorSetsInternal(ExtObject *o);
-  void CreateCommandPoolInternal(ExtObject *o);
-  void AllocateCommandBuffersInternal(ExtObject *o);
-  void CreatePipelineLayoutInternal(ExtObject *o);
-  void CreateGraphicsPipelinesInternal(ExtObject *o);
-  void CreateComputePipelinesInternal(ExtObject *o);
-  void CreateSamplerInternal(ExtObject *ext);
-  void CreateShaderModuleInternal(ExtObject *o);
-  void CreateEventInternal(ExtObject *o);
-  void CreateSwapchainKHRInternal(ExtObject *o);
-  void GetSwapchainImagesKHRInternal(ExtObject *o);
-  void CreatePipelineCacheInternal(ExtObject *o);
-  void InitialContentsInternal(ExtObject *o);
-  void FlushMappedMemoryRangesInternal(ExtObject *o);
-  void UpdateDescriptorSetWithTemplateInternal(ExtObject *o);
-  void UpdateDescriptorSetsInternal(ExtObject *o);
-  void BeginCommandBufferInternal(ExtObject *o);
-  void EndCommandBufferInternal(ExtObject *o);
-  void QueueSubmitInternal(ExtObject *o);
-  void WaitForFencesInternal(ExtObject *o);
-  void InitDescriptorSetInternal(ExtObject *o);
-  void WriteDescriptorSetInternal(ExtObject *o);
-  void CopyDescriptorSetInternal(ExtObject *o);
+  void EnumeratePhysicalDevicesInternal(SDChunk *chunk);
+  void CreateDeviceInternal(SDChunk *chunk);
+  void GetDeviceQueueInternal(SDChunk *chunk);
+  void AllocateMemoryInternal(SDChunk *chunk);
+  void CreateResourceInternal(SDChunk *chunk);
+  void CreateResourceViewInternal(SDChunk *chunk);
+  void BindBufferMemoryInternal(SDChunk *chunk);
+  void BindImageMemoryInternal(SDChunk *chunk);
+  void CreateFramebufferInternal(SDChunk *chunk);
+  void CreateRenderPassInternal(SDChunk *chunk);
+  void CreateDescriptorPoolInternal(SDChunk *chunk);
+  void CreateDescriptorUpdateTemplateInternal(SDChunk *chunk);
+  void CreateDescriptorSetLayoutInternal(SDChunk *chunk);
+  void AllocateDescriptorSetsInternal(SDChunk *chunk);
+  void CreateCommandPoolInternal(SDChunk *chunk);
+  void AllocateCommandBuffersInternal(SDChunk *chunk);
+  void CreatePipelineLayoutInternal(SDChunk *chunk);
+  void CreateGraphicsPipelinesInternal(SDChunk *chunk);
+  void CreateComputePipelinesInternal(SDChunk *chunk);
+  void CreateSamplerInternal(SDChunk *chunk);
+  void CreateShaderModuleInternal(SDChunk *chunk);
+  void CreateEventInternal(SDChunk *chunk);
+  void CreateSwapchainKHRInternal(SDChunk *chunk);
+  void GetSwapchainImagesKHRInternal(SDChunk *chunk);
+  void CreatePipelineCacheInternal(SDChunk *chunk);
+  void InitialContentsInternal(SDChunk *chunk);
+  void FlushMappedMemoryRangesInternal(SDChunk *chunk);
+  void UpdateDescriptorSetWithTemplateInternal(SDChunk *chunk);
+  void UpdateDescriptorSetsInternal(SDChunk *chunk);
+  void BeginCommandBufferInternal(SDChunk *chunk);
+  void QueueSubmitInternal(SDChunk *chunk);
+  void InitDescriptorSetInternal(SDChunk *chunk);
+  void WriteDescriptorSetInternal(SDObject *object);
+  void CopyDescriptorSetInternal(SDObject *object);
+  ResourceWithViewsMapIter GenericCreateResourceInternal(SDChunk *chunk);
 
-  void AddCommandBufferToFrameGraph(ExtObject *o);
-  ResourceWithViewsMapIter GenericCreateResourceInternal(ExtObject *o);
+  void AddCommandBufferToFrameGraph(SDChunk *o);
 
-  // Functions called by AnalyzeCmds for analysis of vkCmd* calls
-  void CmdBeginRenderPassAnalyze(ExtObject *o);
-  void CmdNextSubpassAnalyze(ExtObject *o);
-  void CmdEndRenderPassAnalyze(ExtObject *o);
-  void CmdExecuteCommandsAnalyze(ExtObject *o);
-  void CmdBindPipelineAnalyze(ExtObject *o);
-  void CmdBindDescriptorSetsAnalyze(ExtObject *o);
-  void CmdBindIndexBufferAnalyze(ExtObject *o);
-  void CmdBindVertexBuffersAnalyze(ExtObject *o);
-  void CmdCopyBufferToImageAnalyze(ExtObject *o);
-  void CmdCopyImageToBufferAnalyze(ExtObject *o);
-  void CmdCopyImageAnalyze(ExtObject *o);
-  void CmdBlitImageAnalyze(ExtObject *o);
-  void CmdResolveImageAnalyze(ExtObject *o);
-  void CmdCopyBufferAnalyze(ExtObject *o);
-  void CmdUpdateBufferAnalyze(ExtObject *o);
-  void CmdFillBufferAnalyze(ExtObject *o);
-  void CmdClearColorImageAnalyze(ExtObject *o);
-  void CmdClearDepthStencilImageAnalyze(ExtObject *o);
-  void CmdClearAttachmentsAnalyze(ExtObject *o);
-  void CmdPipelineBarrierAnalyze(ExtObject *o);
-  void CmdWaitEventsAnalyze(ExtObject *o);
-  void CmdDispatchAnalyze(ExtObject *o);
-  void CmdDispatchIndirectAnalyze(ExtObject *o);
-  void CmdDrawIndirectAnalyze(ExtObject *o);
-  void CmdDrawIndexedIndirectAnalyze(ExtObject *o);
-  void CmdDrawAnalyze(ExtObject *o);
-  void CmdDrawIndexedAnalyze(ExtObject *o);
+  // Functions called by AnalyzeCmds for analysis of vkCmd* calls that are used throughout 'Scan'ing process
+  void CmdBeginRenderPassAnalyze(SDChunk *chunk);
+  void CmdNextSubpassAnalyze(SDChunk *chunk);
+  void CmdEndRenderPassAnalyze(SDChunk *chunk);
+  void CmdExecuteCommandsAnalyze(SDChunk *chunk);
+  void CmdBindPipelineAnalyze(SDChunk *chunk);
+  void CmdBindDescriptorSetsAnalyze(SDChunk *chunk);
+  void CmdBindIndexBufferAnalyze(SDChunk *chunk);
+  void CmdBindVertexBuffersAnalyze(SDChunk *chunk);
+  void CmdCopyBufferToImageAnalyze(SDChunk *chunk);
+  void CmdCopyImageToBufferAnalyze(SDChunk *chunk);
+  void CmdCopyImageAnalyze(SDChunk *chunk);
+  void CmdBlitImageAnalyze(SDChunk *chunk);
+  void CmdResolveImageAnalyze(SDChunk *chunk);
+  void CmdCopyBufferAnalyze(SDChunk *chunk);
+  void CmdUpdateBufferAnalyze(SDChunk *chunk);
+  void CmdFillBufferAnalyze(SDChunk *chunk);
+  void CmdClearColorImageAnalyze(SDChunk *chunk);
+  void CmdClearDepthStencilImageAnalyze(SDChunk *chunk);
+  void CmdClearAttachmentsAnalyze(SDChunk *chunk);
+  void CmdPipelineBarrierAnalyze(SDChunk *chunk);
+  void CmdWaitEventsAnalyze(SDChunk *chunk);
+  void CmdDispatchAnalyze(SDChunk *chunk);
+  void CmdDispatchIndirectAnalyze(SDChunk *chunk);
+  void CmdDrawIndirectAnalyze(SDChunk *chunk);
+  void CmdDrawIndexedIndirectAnalyze(SDChunk *chunk);
+  void CmdDrawAnalyze(SDChunk *chunk);
+  void CmdDrawIndexedAnalyze(SDChunk *chunk);
 
   // Private filtering functions that are used throughout 'Scan'ing process
-  bool FilterUpdateDescriptorSets(ExtObject *o);
-  bool FilterWriteDescriptorSet(ExtObject *o);    // handles one writedescset.
-  bool FilterImageInfoDescSet(uint64_t type, uint64_t image_id, uint64_t sampler_id,
-                              uint64_t immut_sampler_id, ExtObject *layout, ExtObject *descImageInfo);
-  bool FilterBufferInfoDescSet(uint64_t buffer_id, uint64_t offset, ExtObject *range);
-  bool FilterTexelBufferViewDescSet(uint64_t texelview_id);
-  bool FilterInitDescSet(ExtObject *o);
-  bool FilterUpdateDescriptorSetWithTemplate(ExtObject *o);
-  bool FilterCreateImage(ExtObject *o);
-  bool FilterCreateResourceView(ExtObject *o);
-  bool FilterCreateGraphicsPipelines(ExtObject *o);
-  bool FilterCreateComputePipelines(ExtObject *o);
-  void FilterCmdCopyImageToBuffer(ExtObject *o);
-  void FilterCmdCopyImage(ExtObject *o);
-  void FilterCmdBlitImage(ExtObject *o);
-  void FilterCmdResolveImage(ExtObject *o);
-  void FilterCreateDevice(ExtObject *o);
-  bool FilterCmdPipelineBarrier(ExtObject *o);
+  bool UpdateDescriptorSetsFilter(SDChunk *chunk);
+  bool WriteDescriptorSetFilter(SDObject *o);    // handles one writedescset.
+  bool ImageInfoDescSetFilter(uint64_t type, uint64_t image_id, uint64_t sampler_id,
+                              uint64_t immut_sampler_id, SDObject *layout, SDObject *descImageInfo);
+  bool BufferInfoDescSetFilter(uint64_t buffer_id, uint64_t offset, SDObject *range);
+  bool TexelBufferViewDescSetFilter(uint64_t texelview_id);
+  bool InitDescSetFilter(SDChunk *chunk);
+  bool UpdateDescriptorSetWithTemplateFilter(SDChunk *chunk);
+  bool CreateImageFilter(SDChunk *chunk);
+  bool CreateResourceViewFilter(SDChunk *chunk);
+  bool CreateGraphicsPipelinesFilter(SDChunk *chunk);
+  bool CreateComputePipelinesFilter(SDChunk *chunk);
+  void CmdCopyImageToBufferFilter(SDChunk *chunk);
+  void CmdCopyImageFilter(SDChunk *chunk);
+  void CmdBlitImageFilter(SDChunk *chunk);
+  void CmdResolveImageFilter(SDChunk *chunk);
+  void CreateDeviceFilter(SDChunk *chunk);
+  bool CmdPipelineBarrierFilter(SDChunk *chunk);
   // A single FilterEventFunc is used for filtering of:
   //   VulkanChunk::vkCmdSetEvent:
   //   VulkanChunk::vkSetEvent: 
   //   VulkanChunk::vkCmdResetEvent:
   //   VulkanChunk::vkResetEvent: 
   //   VulkanChunk::vkGetEventStatus:
-  bool FilterEventFunc(ExtObject *o);
+  bool EventFuncFilter(SDChunk *chunk);
   // --------------------------------------------------------------------------
   // Trace tracker 'Scans' the trace entirely several times to understand
   // what was happening in it to resources.
@@ -382,18 +383,16 @@ private:
   void ScanChunks(StructuredChunkList &chunks);
   void ScanInitialContents(StructuredChunkList &chunks);
   void ScanQueueSubmits(StructuredChunkList &chunks);
+
   // TODO(akharlamov, bjoeris): This function seems poorly named. It actually analyzes the entire
   // frame graph and tries to understand initial resource data. Proposal to rename it?
   void AnalyzeInitResources();
   void AnalyzeMemoryAllocations();
   void AnalyzeMemoryResetRequirements();
-  void AnalyzeImageAndLayout(uint64_t id, uint64_t layout);
-  void AnalyzeCmd(ExtObject *ext);
-
-  bool IsEntireResource(ExtObject *image, ExtObject *subres);
+  void AnalyzeCmd(SDChunk *chunk);
 
   // Helper functions called by the Internal tracking functions.
-  void BindResourceMemoryHelper(ExtObject *ext);
+  void BindResourceMemoryHelper(SDChunk *chunk);
 
   // Helper functions for the Cmd*Analyze() methods
   void AccessBufferMemory(uint64_t buf_id, uint64_t offset, uint64_t size, AccessAction action);
@@ -406,8 +405,8 @@ private:
   void AccessImage(uint64_t image, VkImageAspectFlags aspectMask, uint64_t baseMipLevel,
                    uint64_t levelCount, uint64_t baseArrayLayer, uint64_t layerCount, bool is2DView,
                    VkImageLayout layout, AccessAction action);
-  void AccessImage(uint64_t image, ExtObject *subresource, VkImageLayout layout, AccessAction action);
-  void AccessImage(uint64_t image, ExtObject *subresource, ExtObject *offset, ExtObject *extent,
+  void AccessImage(uint64_t image, SDObject *subresource, VkImageLayout layout, AccessAction action);
+  void AccessImage(uint64_t image, SDObject *subresource, SDObject *offset, SDObject *extent,
                    VkImageLayout layout, AccessAction action);
   void AccessImageView(uint64_t view, VkImageLayout layout, AccessAction action,
                        VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM,
@@ -416,24 +415,24 @@ private:
                         VkImageAspectFlags aspectMask = VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM,
                         uint64_t baseArrayLayer = 0, uint64_t layerCount = VK_REMAINING_ARRAY_LAYERS);
   void AccessSubpassAttachments();
-  void TransitionImageLayout(uint64_t image, ExtObject *subresource, VkImageLayout oldlayout,
+  void TransitionImageLayout(uint64_t image, SDObject *subresource, VkImageLayout oldlayout,
                              VkImageLayout newLayout, uint64_t srcQueueFamily,
                              uint64_t dstQueueFamily);
   void TransitionImageViewLayout(uint64_t view, VkImageLayout oldLayout, VkImageLayout newLayout,
                                  uint64_t srcQueueFamily, uint64_t dstQueueFamily);
   void TransitionAttachmentLayout(uint64_t attachment, VkImageLayout layout);
-  void LoadSubpassAttachment(ExtObject *attachmentRef);
+  void LoadSubpassAttachment(SDObject *attachmentRef);
   void BeginSubpass();
   void EndSubpass();
-  ExtObject *FindBufferMemBinding(uint64_t buf_id);
-  void BufferImageCopyHelper(uint64_t buf_id, uint64_t img_id, ExtObject *regions,
+  SDObject *FindBufferMemBinding(uint64_t buf_id);
+  void BufferImageCopyHelper(uint64_t buf_id, uint64_t img_id, SDObject *regions,
                              VkImageLayout imageLayout, AccessAction buffeAction,
                              AccessAction imageAction);
 
-  void ApplyMemoryUpdate(ExtObject *ext);
-  void ApplyDescSetUpdate(ExtObject *ext);
-  void SaveInitialLayout(ExtObject *image, ExtObject *layouts);
-  void InitialLayoutsInternal(ExtObject *o);
+  void ApplyMemoryUpdate(SDChunk *chunk);
+  void ApplyDescSetUpdate(SDChunk *chunk);
+  void SaveInitialLayout(SDObject *image, SDObject *layouts);
+  void InitialLayoutsInternal(SDChunk *chunk);
 
 public:
   TraceTracker(std::string path) : file_dir{path} {}
@@ -521,31 +520,31 @@ public:
   const char *GetMemReqsVar(uint64_t id);
 
   // Get the descriptor set layout that was used for a descriptor set.
-  ExtObject *DescSetInfosFindLayout(uint64_t id);
+  SDObject *DescSetInfosFindLayout(uint64_t id);
   DescriptorSetInfoMapIter DescSetInfosFind(uint64_t id) { return descriptorSetInfos.find(id); }
   // SDObject of an array type will have elements that all have the same name "$el".
   // This is not informative for the code generation and also C/C++ doesn't allow
   // names to start with $. To fix this, I create a duplicate and replace the name,
   // with the parent's name + array index and I serialize the duplicate instead.
   // The duplicates are stored in a 'copies' array and have to be manually cleaned up.
-  ExtObject *CopiesAdd(ExtObject *o, uint64_t i, std::string &suffix);
+  SDObject *CopiesAdd(SDObject *o, uint64_t i, std::string &suffix);
   void CopiesClear();
 
   VariableIDMapIter DataBlobBegin() { return dataBlobs.begin(); }
   VariableIDMapIter DataBlobEnd() { return dataBlobs.end(); }
   int64_t DecDataBlobCount(uint64_t id) { return --dataBlobCount[id]; }
-  InitResourceIDMapIter InitResourceAdd(uint64_t id, ExtObject *o, bool u)
+  // Accessor functions for initResources
+  SDChunkIDMapIter InitResourceAdd(uint64_t id, SDChunk *o)
   {
-    return initResources.insert(InitResourceIDMapPair(id, InitResourceDesc(o, u))).first;
+    return initResources.emplace(id, o).first;
   }
-  InitResourceIDMapIter InitResourceFind(uint64_t id) { return initResources.find(id); }
-  InitResourceIDMapIter InitResourceBegin() { return initResources.begin(); }
-  InitResourceIDMapIter InitResourceEnd() { return initResources.end(); }
-  // Tracker holds the lists of memory allocations that need to be created out of order.
-  // Below is the API to access those allocations from the CodeWriter class.
+  SDChunkIDMapIter InitResourceFind(uint64_t id) { return initResources.find(id); }
+  SDChunkIDMapIter InitResourceBegin() { return initResources.begin(); }
+  SDChunkIDMapIter InitResourceEnd() { return initResources.end(); }
+  // Accessor functions for memoryAllocations
   int64_t MemAllocTypeIndex(uint64_t id)
   {
-    return memoryAllocations.find(id)->second.allocateSDObj->At(1)->At(3)->U64();
+    return memoryAllocations.find(id)->second.allocateSDObj->GetChild(1)->GetChild(3)->AsUInt64();
   }
   void MemAllocAdd(uint64_t id, MemoryAllocationWithBoundResources &mawbr)
   {
@@ -556,13 +555,13 @@ public:
   MemAllocWithResourcesMapIter MemAllocEnd() { return memoryAllocations.end(); }
   // Tracker holds the lists of resource that need to be created out of order.
   // Below is the API to access those resource from the CodeWriter class.
-  ResourceWithViewsMapIter ResourceCreateAdd(uint64_t id, ExtObject *o)
+  ResourceWithViewsMapIter ResourceCreateAdd(uint64_t id, SDChunk *chunk)
   {
-    ResourceWithViews rwv = {o};
+    ResourceWithViews rwv = {chunk};
     ResourceWithViewsMapIter it = createdResources.insert(ResourceWithViewsMapPair(id, rwv)).first;
     return it;
   }
-  void ResourceCreateAddAssociation(uint64_t resourceId, uint64_t associationID, ExtObject *o)
+  void ResourceCreateAddAssociation(uint64_t resourceId, uint64_t associationID, SDObject *o)
   {
     RDCASSERT(createdResources.find(resourceId) != createdResources.end());
     RDCASSERT(createdResources[resourceId].views.find(associationID) ==
@@ -571,9 +570,9 @@ public:
     return;
   }
   ResourceWithViewsMapIter ResourceCreateFind(uint64_t id) { return createdResources.find(id); }
-  ExtObject *ResourceCreateFindMemReqs(uint64_t id)
+  SDObject *ResourceCreateFindMemReqs(uint64_t id)
   {
-    return createdResources.find(id)->second.sdobj->At(4);
+    return createdResources.find(id)->second.sdobj->GetChild(4);
   }
   ResourceWithViewsMapIter ResourceCreateBegin() { return createdResources.begin(); }
   ResourceWithViewsMapIter ResourceCreateEnd() { return createdResources.end(); }
@@ -583,10 +582,10 @@ public:
   U64MapIter SubmittedQueuesEnd() { return submittedQueues.end(); }
   U64MapIter SignalSemaphoreBegin() { return signalSemaphoreIDs.begin(); }
   U64MapIter SignalSemaphoreEnd() { return signalSemaphoreIDs.end(); }
-  ExtObjectVecIter PresentImageBegin() { return presentImageIndex.begin(); }
-  ExtObjectVecIter PresentImageEnd() { return presentImageIndex.end(); }
-  // Return pointer to an ExtObject in the pAttachment array that is presentable.
-  ExtObject *FramebufferPresentView(ExtObject *o);
+  SDObjectVecIter PresentImageBegin() { return presentImageIndex.begin(); }
+  SDObjectVecIter PresentImageEnd() { return presentImageIndex.end(); }
+  // Return pointer to an SDObject in the pAttachment array that is presentable.
+  SDObject *FramebufferPresentView(SDObject *o);
   // Check if a resource has been properly created and that it's not NULL
   bool IsValidNonNullResouce(uint64_t id);
   // Check if a resource is involved in presenting the final image
@@ -599,25 +598,25 @@ public:
   // --------------------------------------------------------------------------
   // Use initResource to check if a resource has initial data
   // and if it does add a TRANSFER_DST flag to createInfo.usage.
-  void CreateResource(ExtObject *o);
+  void CreateResource(SDObject *o);
   // Use presentResources to check if framebuffer deals with
   // presentation, if it does add it to presentResources. This also
   // creates special 'acquired_frame' names to use in render functions.
-  bool CreateFramebuffer(ExtObject *o);
+  bool CreateFramebuffer(SDObject *o);
   // Use presentResources to check if an imageview is created for a
   // swapchain image, if it is add it to presentResources. This also
   // creates special 'acquired_frame' names to use in render functions.
-  bool CreateImageView(ExtObject *o);
+  bool CreateImageView(SDObject *o);
   // Check of command buffer inherits presentation framebuffer or
   // renderpass and save command buffer in presentResources.
-  void BeginCommandBuffer(ExtObject *o);
+  void BeginCommandBuffer(SDObject *o);
   // Check if the objects in the event wait are valid and not NULL. If they
   // aren't, remove them. Also check if there are presentation resources in the
   // barrier, and if there are, add the command buffer to presentResources.
-  bool CmdWaitEvents(ExtObject *o);
+  bool CmdWaitEvents(SDObject *o);
   // Check if the framebuffer is presenting, and if it is, use special
   // 'acquired_frame' name and add command buffer to presentResource.
-  void CmdBeginRenderPass(ExtObject *o);
+  void CmdBeginRenderPass(SDObject *o);
 
   // The purpose of this function is to track what's happening on queue submit.
   // We are interested in a few things here:
@@ -628,7 +627,7 @@ public:
   // make sure Present() waits on all signalled semaphores later.
   // 3. Any Queue that submits anything needs to do a WaitIdle at the end of the
   // frame in order to avoid synchronization problems. This can be optimized later.
-  void QueueSubmit(ExtObject *o);
+  void QueueSubmit(SDObject *o);
 
   // Scan() looks at all of the trace and tries to build the
   // necessary data structures to facilitate the subsequent code generation.
