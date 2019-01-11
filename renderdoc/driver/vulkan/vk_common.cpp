@@ -378,6 +378,7 @@ int StageIndex(VkShaderStageFlagBits stageFlag)
 
 void DoPipelineBarrier(VkCommandBuffer cmd, uint32_t count, VkImageMemoryBarrier *barriers)
 {
+  RDCASSERT(cmd != VK_NULL_HANDLE);
   ObjDisp(cmd)->CmdPipelineBarrier(Unwrap(cmd), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
                                    NULL,                // global memory barriers
@@ -387,6 +388,7 @@ void DoPipelineBarrier(VkCommandBuffer cmd, uint32_t count, VkImageMemoryBarrier
 
 void DoPipelineBarrier(VkCommandBuffer cmd, uint32_t count, VkBufferMemoryBarrier *barriers)
 {
+  RDCASSERT(cmd != VK_NULL_HANDLE);
   ObjDisp(cmd)->CmdPipelineBarrier(Unwrap(cmd), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0,
                                    NULL,               // global memory barriers
@@ -396,6 +398,7 @@ void DoPipelineBarrier(VkCommandBuffer cmd, uint32_t count, VkBufferMemoryBarrie
 
 void DoPipelineBarrier(VkCommandBuffer cmd, uint32_t count, VkMemoryBarrier *barriers)
 {
+  RDCASSERT(cmd != VK_NULL_HANDLE);
   ObjDisp(cmd)->CmdPipelineBarrier(Unwrap(cmd), VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                                    VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, count,
                                    barriers,    // global memory barriers
@@ -535,7 +538,7 @@ CompareFunction MakeCompareFunc(VkCompareOp func)
   return CompareFunction::AlwaysTrue;
 }
 
-static FilterMode MakeFilterMode(VkFilter f)
+FilterMode MakeFilterMode(VkFilter f)
 {
   switch(f)
   {
@@ -748,6 +751,10 @@ VkDriverInfo::VkDriverInfo(const VkPhysicalDeviceProperties &physProps)
 
     if(Major() < 1)
       texelFetchBrokenDriver = true;
+
+    // driver 18.5.2 which is vulkan version >= 2.0.33 contains the fix
+    if(physProps.driverVersion < VK_MAKE_VERSION(2, 0, 33))
+      unreliableImgMemReqs = true;
   }
 #endif
 
@@ -760,8 +767,9 @@ VkDriverInfo::VkDriverInfo(const VkPhysicalDeviceProperties &physProps)
 #if ENABLED(RDOC_WIN32)
   if(m_Vendor == GPUVendor::AMD)
   {
-    // not fixed yet
-    amdStorageMSAABrokenDriver = true;
+    // driver 18.5.2 which is vulkan version >= 2.0.33 contains the fix
+    if(physProps.driverVersion < VK_MAKE_VERSION(2, 0, 33))
+      amdStorageMSAABrokenDriver = true;
   }
 #endif
 

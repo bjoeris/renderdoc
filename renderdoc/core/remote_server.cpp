@@ -1392,6 +1392,8 @@ public:
       return ret;
     }
 
+    RDCLOG("Opening capture remotely");
+
     // if the proxy id is ~0U, then we just don't care so let RenderDoc pick the most
     // appropriate supported proxy for the current platform.
     RDCDriver proxydrivertype = proxyid == ~0U ? RDCDriver::Unknown : m_Proxies[proxyid].first;
@@ -1419,12 +1421,13 @@ public:
 
       if(progress)
         progress(progressValue);
-
-      RDCLOG("% 3.0f%%...", progressValue * 100.0f);
     }
+
+    RDCLOG("Capture open complete");
 
     if(reader.IsErrored() || type != eRemoteServer_LogOpened)
     {
+      RDCERR("Error opening capture");
       ret.first = ReplayStatus::NetworkIOFailed;
       return ret;
     }
@@ -1441,17 +1444,19 @@ public:
 
     if(status != ReplayStatus::Succeeded)
     {
+      RDCERR("Capture open failed: %s", ToStr(status).c_str());
       ret.first = status;
       return ret;
     }
 
-    RDCLOG("Log ready on replay host");
+    RDCLOG("Capture ready on replay host");
 
     IReplayDriver *proxyDriver = NULL;
     status = RenderDoc::Inst().CreateProxyReplayDriver(proxydrivertype, &proxyDriver);
 
     if(status != ReplayStatus::Succeeded || !proxyDriver)
     {
+      RDCERR("Creating proxy driver failed: %s", ToStr(status).c_str());
       if(proxyDriver)
         proxyDriver->Shutdown();
       ret.first = status;
@@ -1472,6 +1477,8 @@ public:
 
     // ReplayController takes ownership of the ProxySerialiser (as IReplayDriver)
     // and it cleans itself up in Shutdown.
+
+    RDCLOG("Remote capture open complete & proxy ready");
 
     ret.first = ReplayStatus::Succeeded;
     ret.second = rend;

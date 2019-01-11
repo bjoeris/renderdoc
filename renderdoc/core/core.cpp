@@ -527,6 +527,18 @@ bool RenderDoc::EndFrameCapture(void *dev, void *wnd)
   return false;
 }
 
+bool RenderDoc::DiscardFrameCapture(void *dev, void *wnd)
+{
+  IFrameCapturer *frameCap = MatchFrameCapturer(dev, wnd);
+  if(frameCap)
+  {
+    bool ret = frameCap->DiscardFrameCapture(dev, wnd);
+    m_CapturesActive--;
+    return ret;
+  }
+  return false;
+}
+
 bool RenderDoc::IsTargetControlConnected()
 {
   SCOPED_LOCK(RenderDoc::Inst().m_SingleClientLock);
@@ -1296,11 +1308,14 @@ void RenderDoc::FinishCaptureWriting(RDCFile *rdc, uint32_t frameNumber)
       props.version = 1;
       StreamWriter *w = rdc->WriteSection(props);
 
+      // if this file format ever changes, be sure to update the XML export which has a special
+      // handling for this case.
+
       ExtThumbnailHeader header;
       header.width = thumb.width;
       header.height = thumb.height;
       header.len = thumb.len;
-      header.format = (uint32_t)thumb.format;
+      header.format = thumb.format;
       w->Write(header);
       w->Write(thumb.pixels, thumb.len);
 
@@ -1318,6 +1333,10 @@ void RenderDoc::FinishCaptureWriting(RDCFile *rdc, uint32_t frameNumber)
     }
 
     delete rdc;
+  }
+  else
+  {
+    RDCLOG("Discarded capture, Frame %u", frameNumber);
   }
 
   RenderDoc::Inst().SetProgress(CaptureProgress::FileWriting, 1.0f);

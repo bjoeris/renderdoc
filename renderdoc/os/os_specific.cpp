@@ -199,6 +199,12 @@ string OSUtility::MakeMachineIdentString(uint64_t ident)
 
 TEST_CASE("Test OS-specific functions", "[osspecific]")
 {
+  SECTION("GetLibraryFilename")
+  {
+    std::string libPath;
+    FileIO::GetLibraryFilename(libPath);
+    CHECK_FALSE(libPath.empty());
+  }
   SECTION("Environment Variables")
   {
     const char *var = Process::GetEnvVariable("TMP");
@@ -295,7 +301,7 @@ TEST_CASE("Test OS-specific functions", "[osspecific]")
       CHECK(milliseconds1 < 1.0);
 
       CHECK(milliseconds2 > 1480.0);
-      CHECK(milliseconds2 < 1520.0);
+      CHECK(milliseconds2 < 1580.0);
     }
 
     // timestamp as of the creation of this test

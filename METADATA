@@ -11,7 +11,7 @@ third_party {
     type: GIT
     value: "https://github.com/baldurk/renderdoc.git"
   }
-  version: "a0d84d0daaebb1623d4af8d3bd03714d8e36b0c5"
-  last_upgrade_date { year: 2017 month: 3 day: 16 }
+  version: "5e33353e793fe048894241473f82f0698cd39619"
+  last_upgrade_date { year: 2019 month: 1 day: 11 }
   local_modifications: "see MODIFICATIONS file"
 }

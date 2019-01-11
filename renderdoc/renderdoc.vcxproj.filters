@@ -160,6 +160,12 @@
     <Filter Include="Common\Serialise\Codecs\CPP\profiling_shim">
       <UniqueIdentifier>{81c400ce-4e33-4164-9fe6-d8edbd8f0cbd}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Common\Serialise\Codecs\cpp_codec">
+      <UniqueIdentifier>{27f41754-8fa8-4a78-afb8-f63a32473540}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Codecs\cpp_codec\vulkan">
+      <UniqueIdentifier>{ee6a7f7e-becf-43f0-8c7f-e0109a364ebb}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="maths\camera.h">
@@ -544,7 +550,7 @@
       <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="serialise\codecs\vk_cpp_codec_common.h">
-      <Filter>Common\Serialise\Codecs\VK_CPP_Codec</Filter>
+      <Filter>Common\Serialise\Codecs\cpp_codec\vulkan</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

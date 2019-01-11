@@ -18,9 +18,9 @@ readonly BUILD_TARGETS=(
   "//graphics/packaging:sysroot_pkg"
 )
 readonly RENDERDOC_ARTIFACTS=(
-  "renderdoccmd"
-  "librenderdoc.so"
-  "renderdoc_capture.json"
+  "bin/renderdoccmd"
+  "lib/librenderdoc.so"
+  "lib/renderdoc_capture.json"
 )
 readonly RENDERDOC_ROOT="${KOKORO_ARTIFACTS_DIR}/git/renderdoc"
 readonly YETI_ROOT="${KOKORO_ARTIFACTS_DIR}/git/yeti"
@@ -115,7 +115,7 @@ function build_renderdoc() {
   mkdir -p "${ARTIFACTS_DIR}/renderdoc/${RELEASE_TYPE}"
   for renderdoc_artifact in "${RENDERDOC_ARTIFACTS[@]}"
   do
-    cp "${RENDERDOC_BUILD_DIR}/bin/${renderdoc_artifact}" \
+    cp "${RENDERDOC_BUILD_DIR}/${renderdoc_artifact}" \
       "${ARTIFACTS_DIR}/renderdoc/${RELEASE_TYPE}/"
   done
 

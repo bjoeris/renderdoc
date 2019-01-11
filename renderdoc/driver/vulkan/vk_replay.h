@@ -349,6 +349,9 @@ private:
 
   bool RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginInfo rpbegin, int flags);
 
+  bool GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, uint32_t sample,
+                 CompType typeHint, bool stencil, float *minval, float *maxval);
+
   void CreateTexImageView(VkImageAspectFlags aspectFlags, VkImage liveIm,
                           VulkanCreationInfo::Image &iminfo);
 
@@ -465,10 +468,10 @@ private:
 
     // descriptors must be valid even if they're skipped dynamically in the shader, so we create
     // tiny (but valid) dummy images to fill in the rest of the descriptors
-    VkImage DummyImages[12] = {VK_NULL_HANDLE};
-    VkImageView DummyImageViews[12] = {VK_NULL_HANDLE};
-    VkWriteDescriptorSet DummyWrites[12] = {};
-    VkDescriptorImageInfo DummyInfos[12] = {};
+    VkImage DummyImages[14] = {VK_NULL_HANDLE};
+    VkImageView DummyImageViews[14] = {VK_NULL_HANDLE};
+    VkWriteDescriptorSet DummyWrites[14] = {};
+    VkDescriptorImageInfo DummyInfos[14] = {};
     VkDeviceMemory DummyMemory = VK_NULL_HANDLE;
     VkSampler DummySampler = VK_NULL_HANDLE;
 

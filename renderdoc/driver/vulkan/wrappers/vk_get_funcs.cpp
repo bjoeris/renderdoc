@@ -70,6 +70,10 @@ void WrappedVulkan::vkGetPhysicalDeviceFormatProperties(VkPhysicalDevice physica
     pFormatProperties->linearTilingFeatures = 0;
   if((pFormatProperties->optimalTilingFeatures & minRequiredMask) != minRequiredMask)
     pFormatProperties->optimalTilingFeatures = 0;
+
+  // don't report support for DISJOINT_BIT_KHR binding
+  pFormatProperties->linearTilingFeatures &= ~VK_FORMAT_FEATURE_DISJOINT_BIT;
+  pFormatProperties->optimalTilingFeatures &= ~VK_FORMAT_FEATURE_DISJOINT_BIT;
 }
 
 void WrappedVulkan::vkGetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
@@ -97,6 +101,10 @@ void WrappedVulkan::vkGetPhysicalDeviceFormatProperties2(VkPhysicalDevice physic
     pFormatProperties->formatProperties.linearTilingFeatures = 0;
   if((pFormatProperties->formatProperties.optimalTilingFeatures & minRequiredMask) != minRequiredMask)
     pFormatProperties->formatProperties.optimalTilingFeatures = 0;
+
+  // don't report support for DISJOINT_BIT_KHR binding
+  pFormatProperties->formatProperties.linearTilingFeatures &= ~VK_FORMAT_FEATURE_DISJOINT_BIT;
+  pFormatProperties->formatProperties.optimalTilingFeatures &= ~VK_FORMAT_FEATURE_DISJOINT_BIT;
 }
 
 VkResult WrappedVulkan::vkGetPhysicalDeviceImageFormatProperties(
@@ -276,7 +284,7 @@ void WrappedVulkan::vkGetImageMemoryRequirements(VkDevice device, VkImage image,
   // allow for this. The variability isn't quite clear, but for now we assume aligning size to
   // alignment * 4 should be sufficient (adding on a fixed padding won't help the problem as it
   // won't remove the variability, nor will adding then aligning for the same reason).
-  if(GetDriverVersion().Vendor() == GPUVendor::AMD && pMemoryRequirements->size > 0)
+  if(GetDriverInfo().UnreliableImageMemoryRequirements() && pMemoryRequirements->size > 0)
   {
     VkMemoryRequirements &memreq = *pMemoryRequirements;
 
@@ -368,7 +376,8 @@ void WrappedVulkan::vkGetImageMemoryRequirements2(VkDevice device,
   // allow for this. The variability isn't quite clear, but for now we assume aligning size to
   // alignment * 4 should be sufficient (adding on a fixed padding won't help the problem as it
   // won't remove the variability, nor will adding then aligning for the same reason).
-  if(GetDriverVersion().Vendor() == GPUVendor::AMD && pMemoryRequirements->memoryRequirements.size > 0)
+  if(GetDriverInfo().UnreliableImageMemoryRequirements() &&
+     pMemoryRequirements->memoryRequirements.size > 0)
   {
     VkMemoryRequirements &memreq = pMemoryRequirements->memoryRequirements;
 
@@ -550,17 +559,6 @@ void WrappedVulkan::vkGetPhysicalDeviceFeatures2(VkPhysicalDevice physicalDevice
                                                  VkPhysicalDeviceFeatures2 *pFeatures)
 {
   ObjDisp(physicalDevice)->GetPhysicalDeviceFeatures2(Unwrap(physicalDevice), pFeatures);
-
-  // if the user is requesting ycbcr features, make sure it's reported as NOT supported
-  VkPhysicalDeviceSamplerYcbcrConversionFeatures *ycbcr =
-      (VkPhysicalDeviceSamplerYcbcrConversionFeatures *)FindNextStruct(
-          pFeatures, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES);
-
-  if(ycbcr)
-  {
-    RDCWARN("Forcibly disabling support for YCbCr Conversion");
-    ycbcr->samplerYcbcrConversion = VK_FALSE;
-  }
 
   // if the user is requesting protected memory, make sure it's reported as NOT supported
   VkPhysicalDeviceProtectedMemoryFeatures *protectedMem =

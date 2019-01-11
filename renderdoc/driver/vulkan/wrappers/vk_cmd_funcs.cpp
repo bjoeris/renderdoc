@@ -633,6 +633,15 @@ bool WrappedVulkan::Serialise_vkBeginCommandBuffer(SerialiserType &ser, VkComman
       unwrappedInheritInfo.renderPass = Unwrap(unwrappedInheritInfo.renderPass);
 
       unwrappedBeginInfo.pInheritanceInfo = &unwrappedInheritInfo;
+
+      VkCommandBufferInheritanceConditionalRenderingInfoEXT *inheritanceConditionalRenderingInfo =
+          (VkCommandBufferInheritanceConditionalRenderingInfoEXT *)FindNextStruct(
+              BeginInfo.pInheritanceInfo,
+              VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT);
+
+      if(inheritanceConditionalRenderingInfo)
+        m_BakedCmdBufferInfo[BakedCommandBuffer].inheritConditionalRendering =
+            inheritanceConditionalRenderingInfo->conditionalRenderingEnable == VK_TRUE;
     }
 
     byte *tempMem = GetTempMemory(GetNextPatchSize(unwrappedBeginInfo.pNext));
@@ -667,6 +676,7 @@ bool WrappedVulkan::Serialise_vkBeginCommandBuffer(SerialiserType &ser, VkComman
             m_Partial[p].baseEvent = it->baseEvent;
             m_Partial[p].renderPassActive = false;
             m_RenderState.xfbcounters.clear();
+            m_RenderState.conditionalRendering.buffer = ResourceId();
 
             rerecord = true;
             partial = true;
@@ -913,6 +923,12 @@ bool WrappedVulkan::Serialise_vkEndCommandBuffer(SerialiserType &ser, VkCommandB
            !m_RenderState.xfbcounters.empty())
         {
           m_RenderState.EndTransformFeedback(commandBuffer);
+        }
+
+        if(m_Partial[Primary].partialParent == BakedCommandBuffer &&
+           m_RenderState.IsConditionalRenderingEnabled())
+        {
+          m_RenderState.EndConditionalRendering(commandBuffer);
         }
 
         // finish any render pass that was still active in the primary partial parent
@@ -2395,7 +2411,7 @@ bool WrappedVulkan::Serialise_vkCmdPushConstants(SerialiserType &ser, VkCommandB
 {
   SERIALISE_ELEMENT(commandBuffer);
   SERIALISE_ELEMENT(layout);
-  SERIALISE_ELEMENT_TYPED(VkShaderStageFlagBits, stageFlags);
+  SERIALISE_ELEMENT_TYPED(VkShaderStageFlagBits, stageFlags).TypedAs("VkShaderStageFlags");
   SERIALISE_ELEMENT(start);
   SERIALISE_ELEMENT(length);
   SERIALISE_ELEMENT_ARRAY(values, length);
@@ -2471,9 +2487,9 @@ bool WrappedVulkan::Serialise_vkCmdPipelineBarrier(
     uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *pImageMemoryBarriers)
 {
   SERIALISE_ELEMENT(commandBuffer);
-  SERIALISE_ELEMENT_TYPED(VkPipelineStageFlagBits, srcStageMask);
-  SERIALISE_ELEMENT_TYPED(VkPipelineStageFlagBits, destStageMask);
-  SERIALISE_ELEMENT_TYPED(VkDependencyFlagBits, dependencyFlags);
+  SERIALISE_ELEMENT_TYPED(VkPipelineStageFlagBits, srcStageMask).TypedAs("VkPipelineStageFlags");
+  SERIALISE_ELEMENT_TYPED(VkPipelineStageFlagBits, destStageMask).TypedAs("VkPipelineStageFlags");
+  SERIALISE_ELEMENT_TYPED(VkDependencyFlagBits, dependencyFlags).TypedAs("VkDependencyFlags");
   SERIALISE_ELEMENT(memoryBarrierCount);
   SERIALISE_ELEMENT_ARRAY(pMemoryBarriers, memoryBarrierCount);
   SERIALISE_ELEMENT(bufferMemoryBarrierCount);
@@ -2694,7 +2710,7 @@ bool WrappedVulkan::Serialise_vkCmdCopyQueryPoolResults(
   SERIALISE_ELEMENT(destBuffer);
   SERIALISE_ELEMENT(destOffset);
   SERIALISE_ELEMENT(destStride);
-  SERIALISE_ELEMENT_TYPED(VkQueryResultFlagBits, flags);
+  SERIALISE_ELEMENT_TYPED(VkQueryResultFlagBits, flags).TypedAs("VkQueryResultFlags");
 
   Serialise_DebugMessages(ser);
 
@@ -2768,7 +2784,7 @@ bool WrappedVulkan::Serialise_vkCmdBeginQuery(SerialiserType &ser, VkCommandBuff
   SERIALISE_ELEMENT(commandBuffer);
   SERIALISE_ELEMENT(queryPool);
   SERIALISE_ELEMENT(query);
-  SERIALISE_ELEMENT_TYPED(VkQueryControlFlagBits, flags);
+  SERIALISE_ELEMENT_TYPED(VkQueryControlFlagBits, flags).TypedAs("VkQueryControlFlags");
 
   Serialise_DebugMessages(ser);
 
@@ -3082,6 +3098,19 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
           m_BakedCmdBufferInfo[cmd].state.renderPass = parentCmdBufInfo.state.renderPass;
           m_BakedCmdBufferInfo[cmd].state.subpass = parentCmdBufInfo.state.subpass;
           m_BakedCmdBufferInfo[cmd].state.framebuffer = parentCmdBufInfo.state.framebuffer;
+
+          // propagate conditional rendering
+          if(m_BakedCmdBufferInfo[cmd].inheritConditionalRendering &&
+             parentCmdBufInfo.state.conditionalRendering.buffer != ResourceId() &&
+             (startEID + m_BakedCmdBufferInfo[cmd].eventCount >= m_LastEventID))
+          {
+            m_RenderState.conditionalRendering.buffer =
+                parentCmdBufInfo.state.conditionalRendering.buffer;
+            m_RenderState.conditionalRendering.offset =
+                parentCmdBufInfo.state.conditionalRendering.offset;
+            m_RenderState.conditionalRendering.flags =
+                parentCmdBufInfo.state.conditionalRendering.flags;
+          }
 
           // 2 extra for the virtual labels around the command buffer
           parentCmdBufInfo.curEventID += 2 + m_BakedCmdBufferInfo[cmd].eventCount;
@@ -4630,7 +4659,7 @@ bool WrappedVulkan::Serialise_vkCmdBeginQueryIndexedEXT(SerialiserType &ser,
   SERIALISE_ELEMENT(commandBuffer);
   SERIALISE_ELEMENT(queryPool);
   SERIALISE_ELEMENT(query);
-  SERIALISE_ELEMENT_TYPED(VkQueryControlFlagBits, flags);
+  SERIALISE_ELEMENT_TYPED(VkQueryControlFlagBits, flags).TypedAs("VkQueryControlFlags");
   SERIALISE_ELEMENT(index);
 
   Serialise_DebugMessages(ser);
@@ -4736,6 +4765,146 @@ void WrappedVulkan::vkCmdEndQueryIndexedEXT(VkCommandBuffer commandBuffer, VkQue
 
     record->AddChunk(scope.Get());
     record->MarkResourceFrameReferenced(GetResID(queryPool), eFrameRef_Read);
+  }
+}
+
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkCmdBeginConditionalRenderingEXT(
+    SerialiserType &ser, VkCommandBuffer commandBuffer,
+    const VkConditionalRenderingBeginInfoEXT *pConditionalRenderingBegin)
+{
+  SERIALISE_ELEMENT(commandBuffer);
+  SERIALISE_ELEMENT_LOCAL(BeginInfo, *pConditionalRenderingBegin);
+
+  Serialise_DebugMessages(ser);
+
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+  {
+    m_LastCmdBufferID = GetResourceManager()->GetOriginalID(GetResID(commandBuffer));
+
+    if(IsActiveReplaying(m_State))
+    {
+      if(InRerecordRange(m_LastCmdBufferID))
+      {
+        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
+
+        if(ShouldUpdateRenderState(m_LastCmdBufferID))
+        {
+          m_RenderState.conditionalRendering.buffer = GetResID(BeginInfo.buffer);
+          m_RenderState.conditionalRendering.offset = BeginInfo.offset;
+          m_RenderState.conditionalRendering.flags = BeginInfo.flags;
+        }
+
+        m_BakedCmdBufferInfo[m_LastCmdBufferID].state.conditionalRendering.buffer =
+            GetResID(BeginInfo.buffer);
+        m_BakedCmdBufferInfo[m_LastCmdBufferID].state.conditionalRendering.offset = BeginInfo.offset;
+        m_BakedCmdBufferInfo[m_LastCmdBufferID].state.conditionalRendering.flags = BeginInfo.flags;
+
+        BeginInfo.buffer = Unwrap(BeginInfo.buffer);
+        ObjDisp(commandBuffer)->CmdBeginConditionalRenderingEXT(Unwrap(commandBuffer), &BeginInfo);
+      }
+    }
+    else
+    {
+      m_BakedCmdBufferInfo[m_LastCmdBufferID].state.conditionalRendering.buffer =
+          GetResID(BeginInfo.buffer);
+      m_BakedCmdBufferInfo[m_LastCmdBufferID].state.conditionalRendering.offset = BeginInfo.offset;
+      m_BakedCmdBufferInfo[m_LastCmdBufferID].state.conditionalRendering.flags = BeginInfo.flags;
+
+      BeginInfo.buffer = Unwrap(BeginInfo.buffer);
+      ObjDisp(commandBuffer)->CmdBeginConditionalRenderingEXT(Unwrap(commandBuffer), &BeginInfo);
+    }
+  }
+
+  return true;
+}
+
+void WrappedVulkan::vkCmdBeginConditionalRenderingEXT(
+    VkCommandBuffer commandBuffer,
+    const VkConditionalRenderingBeginInfoEXT *pConditionalRenderingBegin)
+{
+  SCOPED_DBG_SINK();
+
+  VkConditionalRenderingBeginInfoEXT unwrappedConditionalRenderingBegin = *pConditionalRenderingBegin;
+  unwrappedConditionalRenderingBegin.buffer = Unwrap(unwrappedConditionalRenderingBegin.buffer);
+
+  SERIALISE_TIME_CALL(ObjDisp(commandBuffer)
+                          ->CmdBeginConditionalRenderingEXT(Unwrap(commandBuffer),
+                                                            &unwrappedConditionalRenderingBegin));
+
+  if(IsCaptureMode(m_State))
+  {
+    VkResourceRecord *record = GetRecord(commandBuffer);
+
+    CACHE_THREAD_SERIALISER();
+
+    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdBeginConditionalRenderingEXT);
+    Serialise_vkCmdBeginConditionalRenderingEXT(ser, commandBuffer, pConditionalRenderingBegin);
+
+    record->AddChunk(scope.Get());
+
+    VkResourceRecord *buf = GetRecord(pConditionalRenderingBegin->buffer);
+
+    record->MarkResourceFrameReferenced(buf->GetResourceID(), eFrameRef_Read);
+    record->MarkResourceFrameReferenced(buf->baseResource, eFrameRef_Read);
+  }
+}
+
+template <typename SerialiserType>
+bool WrappedVulkan::Serialise_vkCmdEndConditionalRenderingEXT(SerialiserType &ser,
+                                                              VkCommandBuffer commandBuffer)
+{
+  SERIALISE_ELEMENT(commandBuffer);
+
+  Serialise_DebugMessages(ser);
+
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+  {
+    m_LastCmdBufferID = GetResourceManager()->GetOriginalID(GetResID(commandBuffer));
+
+    if(IsActiveReplaying(m_State))
+    {
+      if(InRerecordRange(m_LastCmdBufferID))
+      {
+        commandBuffer = RerecordCmdBuf(m_LastCmdBufferID);
+
+        if(ShouldUpdateRenderState(m_LastCmdBufferID))
+          m_RenderState.conditionalRendering.buffer = ResourceId();
+
+        m_BakedCmdBufferInfo[m_LastCmdBufferID].state.conditionalRendering.buffer = ResourceId();
+        ObjDisp(commandBuffer)->CmdEndConditionalRenderingEXT(Unwrap(commandBuffer));
+      }
+    }
+    else
+    {
+      m_BakedCmdBufferInfo[m_LastCmdBufferID].state.conditionalRendering.buffer = ResourceId();
+      ObjDisp(commandBuffer)->CmdEndConditionalRenderingEXT(Unwrap(commandBuffer));
+    }
+  }
+
+  return true;
+}
+
+void WrappedVulkan::vkCmdEndConditionalRenderingEXT(VkCommandBuffer commandBuffer)
+{
+  SCOPED_DBG_SINK();
+
+  SERIALISE_TIME_CALL(ObjDisp(commandBuffer)->CmdEndConditionalRenderingEXT(Unwrap(commandBuffer)));
+
+  if(IsCaptureMode(m_State))
+  {
+    VkResourceRecord *record = GetRecord(commandBuffer);
+
+    CACHE_THREAD_SERIALISER();
+
+    SCOPED_SERIALISE_CHUNK(VulkanChunk::vkCmdEndConditionalRenderingEXT);
+    Serialise_vkCmdEndConditionalRenderingEXT(ser, commandBuffer);
+
+    record->AddChunk(scope.Get());
   }
 }
 
@@ -4878,3 +5047,8 @@ INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdBeginQueryIndexedEXT, VkCommandBuffer
                                 uint32_t index);
 INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdEndQueryIndexedEXT, VkCommandBuffer commandBuffer,
                                 VkQueryPool queryPool, uint32_t query, uint32_t index);
+
+INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdBeginConditionalRenderingEXT,
+                                VkCommandBuffer commandBuffer,
+                                const VkConditionalRenderingBeginInfoEXT *pConditionalRenderingBegin);
+INSTANTIATE_FUNCTION_SERIALISED(void, vkCmdEndConditionalRenderingEXT, VkCommandBuffer commandBuffer);

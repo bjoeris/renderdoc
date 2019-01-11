@@ -120,6 +120,10 @@ VulkanPipelineStateViewer::VulkanPipelineStateViewer(ICaptureContext &ctx,
       ui->gsShaderSaveButton, ui->fsShaderSaveButton,  ui->csShaderSaveButton,
   };
 
+  QToolButton *viewPredicateBufferButtons[] = {
+      ui->predicateBufferViewButton, ui->csPredicateBufferViewButton,
+  };
+
   RDTreeWidget *resources[] = {
       ui->vsResources, ui->tcsResources, ui->tesResources,
       ui->gsResources, ui->fsResources,  ui->csResources,
@@ -145,6 +149,10 @@ VulkanPipelineStateViewer::VulkanPipelineStateViewer(ICaptureContext &ctx,
 
   for(QToolButton *b : saveButtons)
     QObject::connect(b, &QToolButton::clicked, this, &VulkanPipelineStateViewer::shaderSave_clicked);
+
+  for(QToolButton *b : viewPredicateBufferButtons)
+    QObject::connect(b, &QToolButton::clicked, this,
+                     &VulkanPipelineStateViewer::predicateBufferView_clicked);
 
   QObject::connect(ui->viAttrs, &RDTreeWidget::leave, this, &VulkanPipelineStateViewer::vertex_leave);
   QObject::connect(ui->viBuffers, &RDTreeWidget::leave, this,
@@ -276,7 +284,7 @@ VulkanPipelineStateViewer::VulkanPipelineStateViewer(ICaptureContext &ctx,
     ui->scissors->setInstantTooltips(true);
   }
 
-  for(RDLabel *rp : {ui->renderpass, ui->framebuffer})
+  for(RDLabel *rp : {ui->renderpass, ui->framebuffer, ui->predicateBuffer, ui->csPredicateBuffer})
   {
     rp->setAutoFillBackground(true);
     rp->setBackgroundRole(QPalette::ToolTipBase);
@@ -652,6 +660,9 @@ void VulkanPipelineStateViewer::clearState()
   ui->depthBounds->setText(lit("0.0-1.0"));
 
   ui->stencils->clear();
+
+  ui->conditionalRenderingGroup->setVisible(false);
+  ui->csConditionalRenderingGroup->setVisible(false);
 }
 
 QVariantList VulkanPipelineStateViewer::makeSampler(const QString &bindset, const QString &slotname,
@@ -711,17 +722,57 @@ QVariantList VulkanPipelineStateViewer::makeSampler(const QString &bindset, cons
           .arg((descriptor.minLOD == -FLT_MAX ? lit("0") : QString::number(descriptor.minLOD)))
           .arg((descriptor.maxLOD == FLT_MAX ? lit("FLT_MAX") : QString::number(descriptor.maxLOD)));
 
+  // omit lod clamp if this is an immutable sampler and the attached resource is entirely within the
+  // range
+  if(descriptor.immutableSampler)
+  {
+    TextureDescription *tex = m_Ctx.GetTexture(descriptor.resourceResourceId);
+    if(tex && descriptor.minLOD <= 0.0f && descriptor.maxLOD >= (float)(tex->mips - 1))
+    {
+      lod = QString();
+    }
+  }
+
   if(descriptor.mipBias != 0.0f)
     lod += lit(" Bias %1").arg(descriptor.mipBias);
 
-  return {QString(),
-          bindset,
-          slotname,
-          descriptor.immutableSampler ? tr("Immutable Sampler") : tr("Sampler"),
-          descriptor.samplerResourceId,
-          addressing,
-          filter + lit(", ") + lod,
-          QString()};
+  if(!lod.isEmpty())
+    lod = lit(", ") + lod;
+
+  QString obj = ToQStr(descriptor.samplerResourceId);
+
+  if(descriptor.ycbcrSampler != ResourceId())
+  {
+    obj += lit(" ") + ToQStr(descriptor.ycbcrSampler);
+
+    if(descriptor.ycbcrSwizzle[0] != TextureSwizzle::Red ||
+       descriptor.ycbcrSwizzle[1] != TextureSwizzle::Green ||
+       descriptor.ycbcrSwizzle[2] != TextureSwizzle::Blue ||
+       descriptor.ycbcrSwizzle[3] != TextureSwizzle::Alpha)
+    {
+      obj += tr(" swizzle[%1%2%3%4]")
+                 .arg(ToQStr(descriptor.swizzle[0]))
+                 .arg(ToQStr(descriptor.swizzle[1]))
+                 .arg(ToQStr(descriptor.swizzle[2]))
+                 .arg(ToQStr(descriptor.swizzle[3]));
+    }
+
+    filter +=
+        QFormatStr(", %1 %2").arg(ToQStr(descriptor.ycbcrModel)).arg(ToQStr(descriptor.ycbcrRange));
+
+    addressing += tr(", Chroma %1 [%2,%3]")
+                      .arg(ToQStr(descriptor.chromaFilter))
+                      .arg(ToQStr(descriptor.xChromaOffset))
+                      .arg(ToQStr(descriptor.yChromaOffset));
+
+    if(descriptor.forceExplicitReconstruction)
+      addressing += tr(" Explicit");
+  }
+
+  return {QString(),    bindset,
+          slotname,     descriptor.immutableSampler ? tr("Immutable Sampler") : tr("Sampler"),
+          obj,          addressing,
+          filter + lod, QString()};
 }
 
 void VulkanPipelineStateViewer::addResourceRow(ShaderReflection *shaderDetails,
@@ -1122,42 +1173,43 @@ void VulkanPipelineStateViewer::addResourceRow(ShaderReflection *shaderDetails,
 
           if(!usedSlot)
             setInactiveRow(node);
-        }
 
-        if(bindType == BindType::ImageSampler)
-        {
-          if(descriptorBind == NULL || descriptorBind->samplerResourceId == ResourceId())
+          if(bindType == BindType::ImageSampler)
           {
-            samplerNode = new RDTreeWidgetItem({
-                QString(), setname, slotname, ToQStr(bindType), ResourceId(), lit("-"), QString(),
-                QString(),
-            });
-
-            setEmptyRow(node);
-          }
-          else
-          {
-            if(!samplers.contains(descriptorBind->samplerResourceId))
+            if(descriptorBind == NULL || descriptorBind->samplerResourceId == ResourceId())
             {
-              samplerNode = new RDTreeWidgetItem(makeSampler(QString(), QString(), *descriptorBind));
+              samplerNode = new RDTreeWidgetItem({
+                  QString(), setname, slotname, ToQStr(bindType), ResourceId(), lit("-"), QString(),
+                  QString(),
+              });
 
-              if(!filledSlot)
-                setEmptyRow(samplerNode);
-
-              if(!usedSlot)
-                setInactiveRow(samplerNode);
-
-              SamplerData sampData;
-              sampData.node = samplerNode;
-              samplerNode->setTag(QVariant::fromValue(sampData));
-
-              samplers.insert(descriptorBind->samplerResourceId, sampData);
+              setEmptyRow(samplerNode);
             }
-
-            if(node != NULL)
+            else
             {
-              m_CombinedImageSamplers[node] = samplers[descriptorBind->samplerResourceId].node;
-              samplers[descriptorBind->samplerResourceId].images.push_back(node);
+              if(!samplers.contains(descriptorBind->samplerResourceId))
+              {
+                samplerNode =
+                    new RDTreeWidgetItem(makeSampler(QString(), QString(), *descriptorBind));
+
+                if(!filledSlot)
+                  setEmptyRow(samplerNode);
+
+                if(!usedSlot)
+                  setInactiveRow(samplerNode);
+
+                SamplerData sampData;
+                sampData.node = samplerNode;
+                samplerNode->setTag(QVariant::fromValue(sampData));
+
+                samplers.insert(descriptorBind->samplerResourceId, sampData);
+              }
+
+              if(node != NULL)
+              {
+                m_CombinedImageSamplers[node] = samplers[descriptorBind->samplerResourceId].node;
+                samplers[descriptorBind->samplerResourceId].images.push_back(node);
+              }
             }
           }
         }
@@ -1991,6 +2043,31 @@ void VulkanPipelineStateViewer::setState()
   ui->alphaToCoverage->setPixmap(state.colorBlend.alphaToCoverageEnable ? tick : cross);
 
   ////////////////////////////////////////////////
+  // Conditional Rendering
+
+  if(state.conditionalRendering.bufferId == ResourceId())
+  {
+    ui->conditionalRenderingGroup->setVisible(false);
+    ui->csConditionalRenderingGroup->setVisible(false);
+  }
+  else
+  {
+    ui->conditionalRenderingGroup->setVisible(true);
+    ui->predicateBuffer->setText(QFormatStr("%1 (Byte Offset %2)")
+                                     .arg(ToQStr(state.conditionalRendering.bufferId))
+                                     .arg(state.conditionalRendering.byteOffset));
+    ui->predicatePassing->setPixmap(state.conditionalRendering.isPassing ? tick : cross);
+    ui->predicateInverted->setPixmap(state.conditionalRendering.isInverted ? tick : cross);
+
+    ui->csConditionalRenderingGroup->setVisible(true);
+    ui->csPredicateBuffer->setText(QFormatStr("%1 (Byte Offset %2)")
+                                       .arg(ToQStr(state.conditionalRendering.bufferId))
+                                       .arg(state.conditionalRendering.byteOffset));
+    ui->csPredicatePassing->setPixmap(state.conditionalRendering.isPassing ? tick : cross);
+    ui->csPredicateInverted->setPixmap(state.conditionalRendering.isInverted ? tick : cross);
+  }
+
+  ////////////////////////////////////////////////
   // Output Merger
 
   bool targets[32] = {};
@@ -2581,6 +2658,15 @@ void VulkanPipelineStateViewer::shaderSave_clicked()
     return;
 
   m_Common.SaveShaderFile(shaderDetails);
+}
+
+void VulkanPipelineStateViewer::predicateBufferView_clicked()
+{
+  const VKPipe::ConditionalRendering &cr = m_Ctx.CurVulkanPipelineState()->conditionalRendering;
+
+  IBufferViewer *viewer = m_Ctx.ViewBuffer(cr.byteOffset, sizeof(uint32_t), cr.bufferId, "uint");
+
+  m_Ctx.AddDockWindow(viewer->Widget(), DockReference::AddTo, this);
 }
 
 void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::VertexInput &vi)
@@ -3352,6 +3438,26 @@ void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml, const VKPipe::
   }
 }
 
+void VulkanPipelineStateViewer::exportHTML(QXmlStreamWriter &xml,
+                                           const VKPipe::ConditionalRendering &cr)
+{
+  if(cr.bufferId == ResourceId())
+    return;
+
+  xml.writeStartElement(lit("h3"));
+  xml.writeCharacters(tr("Conditional Rendering"));
+  xml.writeEndElement();
+
+  QString bufferName = m_Ctx.GetResourceName(cr.bufferId);
+
+  m_Common.exportHTMLTable(
+      xml, {tr("Predicate Passing"), tr("Is Inverted"), tr("Buffer"), tr("Byte Offset")},
+      {
+          cr.isPassing ? tr("Yes") : tr("No"), cr.isInverted ? tr("Yes") : tr("No"), bufferName,
+          (qulonglong)cr.byteOffset,
+      });
+}
+
 void VulkanPipelineStateViewer::on_exportHTML_clicked()
 {
   QXmlStreamWriter *xmlptr = m_Common.beginHTMLExport();
@@ -3400,7 +3506,10 @@ void VulkanPipelineStateViewer::on_exportHTML_clicked()
           exportHTML(xml, m_Ctx.CurVulkanPipelineState()->geometryShader);
           exportHTML(xml, m_Ctx.CurVulkanPipelineState()->transformFeedback);
           break;
-        case 5: exportHTML(xml, m_Ctx.CurVulkanPipelineState()->rasterizer); break;
+        case 5:
+          exportHTML(xml, m_Ctx.CurVulkanPipelineState()->rasterizer);
+          exportHTML(xml, m_Ctx.CurVulkanPipelineState()->conditionalRendering);
+          break;
         case 6: exportHTML(xml, m_Ctx.CurVulkanPipelineState()->fragmentShader); break;
         case 7:
           // FB
@@ -3419,7 +3528,10 @@ void VulkanPipelineStateViewer::on_exportHTML_clicked()
           xml.writeEndElement();
           exportHTML(xml, m_Ctx.CurVulkanPipelineState()->currentPass);
           break;
-        case 8: exportHTML(xml, m_Ctx.CurVulkanPipelineState()->computeShader); break;
+        case 8:
+          exportHTML(xml, m_Ctx.CurVulkanPipelineState()->computeShader);
+          exportHTML(xml, m_Ctx.CurVulkanPipelineState()->conditionalRendering);
+          break;
       }
 
       xml.writeEndElement();

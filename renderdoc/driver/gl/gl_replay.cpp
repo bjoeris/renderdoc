@@ -696,7 +696,7 @@ string GLReplay::DisassembleShader(ResourceId pipeline, const ShaderReflection *
   auto &shaderDetails =
       m_pDriver->m_Shaders[m_pDriver->GetResourceManager()->GetLiveID(refl->resourceId)];
 
-  if(shaderDetails.sources.empty())
+  if(shaderDetails.sources.empty() && shaderDetails.spirvWords.empty())
     return "; Invalid Shader Specified";
 
   if(target == SPIRVDisassemblyTarget || target.empty())
@@ -858,7 +858,7 @@ void GLReplay::SavePipelineState()
     {
       fmt.compByteWidth = 1;
       fmt.compCount = 4;
-      fmt.setBgraOrder(true);
+      fmt.SetBGRAOrder(true);
       fmt.compType = CompType::UNorm;
 
       if(type == eGL_UNSIGNED_INT_2_10_10_10_REV || type == eGL_INT_2_10_10_10_REV)
@@ -960,6 +960,8 @@ void GLReplay::SavePipelineState()
           {
             stages[i]->bindpointMapping = shaderDetails.mapping;
             spirv[i] = true;
+
+            EvaluateSPIRVBindpointMapping(curProg, (int)i, refls[i], stages[i]->bindpointMapping);
           }
           else
           {
@@ -1000,6 +1002,8 @@ void GLReplay::SavePipelineState()
         {
           stages[i]->bindpointMapping = shaderDetails.mapping;
           spirv[i] = true;
+
+          EvaluateSPIRVBindpointMapping(curProg, (int)i, refls[i], stages[i]->bindpointMapping);
         }
         else
         {
@@ -2121,6 +2125,10 @@ void GLReplay::FillCBufferVariables(ResourceId shader, string entryPoint, uint32
 
       FillSpecConstantVariables(cblock.variables, outvars, specconsts);
     }
+    else if(!cblock.bufferBacked)
+    {
+      FillCBufferVariables(curProg, false, "", cblock.variables, outvars, data);
+    }
     else
     {
       SPIRVFillCBufferVariables(cblock.variables, outvars, data, 0);
@@ -2997,7 +3005,7 @@ ResourceId GLReplay::CreateProxyTexture(const TextureDescription &templateTex)
   }
 
   // Swizzle R/B channels only for non BGRA textures
-  if(templateTex.format.bgraOrder() && target != eGL_NONE && baseFormat != eGL_BGRA)
+  if(templateTex.format.BGRAOrder() && target != eGL_NONE && baseFormat != eGL_BGRA)
   {
     if(HasExt[ARB_texture_swizzle] || HasExt[EXT_texture_swizzle])
     {
@@ -3196,7 +3204,7 @@ bool GLReplay::IsTextureSupported(const ResourceFormat &format)
 
   // BGRA is not accepted as an internal format in case of GL
   // EXT_texture_format_BGRA8888 is required for creating BGRA proxy textures in case of GLES
-  if(format.bgraOrder())
+  if(format.BGRAOrder())
     return IsGLES && HasExt[EXT_texture_format_BGRA8888];
 
   return true;

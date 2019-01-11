@@ -335,7 +335,8 @@ bool VulkanGraphicsTest::Init(int argc, char **argv)
 
   CHECK_VKR(vkCreateDevice(phys,
                            vkh::DeviceCreateInfo({vkh::DeviceQueueCreateInfo(queueFamilyIndex, 1)},
-                                                 layers, devExts, features),
+                                                 layers, devExts, features)
+                               .next(devInfoNext),
                            NULL, &device));
 
   volkLoadDevice(device);
@@ -578,7 +579,8 @@ VkPipelineShaderStageCreateInfo VulkanGraphicsTest::CompileShaderModule(
 {
   VkShaderModule ret = VK_NULL_HANDLE;
 
-  std::vector<uint32_t> spirv = ::CompileShaderToSpv(source_text, lang, stage, entry_point);
+  std::vector<uint32_t> spirv =
+      ::CompileShaderToSpv(source_text, SPIRVTarget::vulkan, lang, stage, entry_point);
 
   if(spirv.empty())
     return {};

@@ -166,6 +166,28 @@ struct BindingElement
   DOCUMENT("For samplers - ``True`` if unnormalized co-ordinates are used in this sampler.");
   bool unnormalized = false;
 
+  DOCUMENT(R"(For samplers - the :class:`ResourceId` of the ycbcr conversion object associated with
+this sampler.
+)");
+  ResourceId ycbcrSampler;
+
+  DOCUMENT("For ycbcr samplers - the :class:`YcbcrConversion` used for conversion.");
+  YcbcrConversion ycbcrModel;
+  DOCUMENT("For ycbcr samplers - the :class:`YcbcrRange` used for conversion.");
+  YcbcrRange ycbcrRange;
+  DOCUMENT(R"(For ycbcr samplers - Four :class:`TextureSwizzle` elements indicating the swizzle
+applied before conversion.
+)");
+  TextureSwizzle ycbcrSwizzle[4];
+  DOCUMENT("For ycbcr samplers - the :class:`ChromaSampleLocation` X-axis chroma offset.");
+  ChromaSampleLocation xChromaOffset;
+  DOCUMENT("For ycbcr samplers - the :class:`ChromaSampleLocation` Y-axis chroma offset.");
+  ChromaSampleLocation yChromaOffset;
+  DOCUMENT("For ycbcr samplers - the :class:`FilterMode` describing the chroma filtering mode.");
+  FilterMode chromaFilter;
+  DOCUMENT("For ycbcr samplers - ``True`` if explicit reconstruction is force enabled.");
+  bool forceExplicitReconstruction;
+
   DOCUMENT(R"(For samplers - check if the border color is used in this Vulkan sampler.
 
 :return: ``True`` if the border color is used, ``False`` otherwise.
@@ -887,6 +909,27 @@ struct ImageData
   rdcarray<ImageLayout> layouts;
 };
 
+DOCUMENT("Contains the current conditional rendering state.");
+struct ConditionalRendering
+{
+  DOCUMENT("");
+  ConditionalRendering() = default;
+  ConditionalRendering(const ConditionalRendering &) = default;
+
+  DOCUMENT(
+      "The :class:`ResourceId` of the buffer containing the predicate for conditional rendering.");
+  ResourceId bufferId;
+
+  DOCUMENT("The byte offset into buffer where the predicate is located.");
+  uint64_t byteOffset = 0;
+
+  DOCUMENT("``True`` if predicate result is inverted.");
+  bool isInverted = false;
+
+  DOCUMENT("``True`` if the current predicate would render.");
+  bool isPassing = false;
+};
+
 DOCUMENT("The full current Vulkan pipeline state.");
 struct State
 {
@@ -945,6 +988,9 @@ struct State
 
   DOCUMENT("A list of :class:`VKImageData` entries, one for each image.");
   rdcarray<ImageData> images;
+
+  DOCUMENT("A :class:`ConditionalRendering` describing the current conditional rendering state.");
+  ConditionalRendering conditionalRendering;
 };
 
 };    // namespace VKPipe
@@ -977,4 +1023,5 @@ DECLARE_REFLECTION_STRUCT(VKPipe::RenderArea);
 DECLARE_REFLECTION_STRUCT(VKPipe::CurrentPass);
 DECLARE_REFLECTION_STRUCT(VKPipe::ImageLayout);
 DECLARE_REFLECTION_STRUCT(VKPipe::ImageData);
+DECLARE_REFLECTION_STRUCT(VKPipe::ConditionalRendering);
 DECLARE_REFLECTION_STRUCT(VKPipe::State);

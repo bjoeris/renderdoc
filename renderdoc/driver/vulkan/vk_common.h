@@ -91,6 +91,7 @@ VkPrimitiveTopology MakeVkPrimitiveTopology(Topology Topo);
 AddressMode MakeAddressMode(VkSamplerAddressMode addr);
 void MakeBorderColor(VkBorderColor border, FloatVector *BorderColor);
 CompareFunction MakeCompareFunc(VkCompareOp func);
+FilterMode MakeFilterMode(VkFilter f);
 TextureFilter MakeFilter(VkFilter minFilter, VkFilter magFilter, VkSamplerMipmapMode mipmapMode,
                          bool anisoEnable, bool compareEnable, VkSamplerReductionModeEXT reduction);
 LogicOperation MakeLogicOp(VkLogicOp op);
@@ -195,6 +196,11 @@ public:
   // A workaround for a couple of bugs, removing texelFetch use from shaders.
   // It means broken functionality but at least no instant crashes
   bool TexelFetchBrokenDriver() { return texelFetchBrokenDriver; }
+  // Older AMD driver versions could sometimes cause image memory requirements to vary randomly
+  // between identical images. This means the memory required at capture could be less than at
+  // replay. To counteract this, on drivers with this issue we pad out the memory requirements
+  // enough to account for the change
+  bool UnreliableImageMemoryRequirements() { return unreliableImgMemReqs; }
   // another workaround, on some AMD driver versions creating an MSAA image with STORAGE_BIT
   // causes graphical corruption trying to sample from it. We workaround it by preventing the
   // MSAA <-> Array pipelines from creating, which removes the STORAGE_BIT and skips the copies.
@@ -210,6 +216,7 @@ private:
   uint32_t m_Major, m_Minor, m_Patch;
 
   bool texelFetchBrokenDriver = false;
+  bool unreliableImgMemReqs = false;
   bool amdStorageMSAABrokenDriver = false;
   bool qualcommLeakingUBOOffsets = false;
 };
@@ -220,6 +227,12 @@ enum
   VkCheckExt_EXT_conserv_rast,
   VkCheckExt_EXT_vertex_divisor,
   VkCheckExt_Max,
+};
+
+enum
+{
+  VkCheckLayer_unique_objects,
+  VkCheckLayer_Max,
 };
 
 DECLARE_REFLECTION_STRUCT(VkBaseInStructure);
@@ -508,6 +521,8 @@ enum class VulkanChunk : uint32_t
   vkCmdBeginQueryIndexedEXT,
   vkCmdEndQueryIndexedEXT,
   vkCmdDrawIndirectByteCountEXT,
+  vkCmdBeginConditionalRenderingEXT,
+  vkCmdEndConditionalRenderingEXT,
   Max,
 };
 
@@ -572,9 +587,11 @@ DECLARE_REFLECTION_STRUCT(VkBufferMemoryRequirementsInfo2);
 DECLARE_REFLECTION_STRUCT(VkBufferViewCreateInfo);
 DECLARE_REFLECTION_STRUCT(VkCommandBufferAllocateInfo);
 DECLARE_REFLECTION_STRUCT(VkCommandBufferBeginInfo);
+DECLARE_REFLECTION_STRUCT(VkCommandBufferInheritanceConditionalRenderingInfoEXT);
 DECLARE_REFLECTION_STRUCT(VkCommandBufferInheritanceInfo);
 DECLARE_REFLECTION_STRUCT(VkCommandPoolCreateInfo);
 DECLARE_REFLECTION_STRUCT(VkComputePipelineCreateInfo);
+DECLARE_REFLECTION_STRUCT(VkConditionalRenderingBeginInfoEXT);
 DECLARE_REFLECTION_STRUCT(VkCopyDescriptorSet);
 DECLARE_REFLECTION_STRUCT(VkDebugMarkerMarkerInfoEXT);
 DECLARE_REFLECTION_STRUCT(VkDebugMarkerObjectNameInfoEXT);
@@ -660,6 +677,7 @@ DECLARE_REFLECTION_STRUCT(VkMemoryRequirements2);
 DECLARE_REFLECTION_STRUCT(VkPhysicalDevice16BitStorageFeatures);
 DECLARE_REFLECTION_STRUCT(VkPhysicalDevice8BitStorageFeaturesKHR);
 DECLARE_REFLECTION_STRUCT(VkPhysicalDeviceASTCDecodeFeaturesEXT);
+DECLARE_REFLECTION_STRUCT(VkPhysicalDeviceConditionalRenderingFeaturesEXT);
 DECLARE_REFLECTION_STRUCT(VkPhysicalDeviceConservativeRasterizationPropertiesEXT);
 DECLARE_REFLECTION_STRUCT(VkPhysicalDeviceDriverPropertiesKHR);
 DECLARE_REFLECTION_STRUCT(VkPhysicalDeviceExternalBufferInfo);
@@ -765,9 +783,11 @@ DECLARE_DESERIALISE_TYPE(VkBufferMemoryRequirementsInfo2);
 DECLARE_DESERIALISE_TYPE(VkBufferViewCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkCommandBufferAllocateInfo);
 DECLARE_DESERIALISE_TYPE(VkCommandBufferBeginInfo);
+DECLARE_DESERIALISE_TYPE(VkCommandBufferInheritanceConditionalRenderingInfoEXT);
 DECLARE_DESERIALISE_TYPE(VkCommandBufferInheritanceInfo);
 DECLARE_DESERIALISE_TYPE(VkCommandPoolCreateInfo);
 DECLARE_DESERIALISE_TYPE(VkComputePipelineCreateInfo);
+DECLARE_DESERIALISE_TYPE(VkConditionalRenderingBeginInfoEXT);
 DECLARE_DESERIALISE_TYPE(VkCopyDescriptorSet);
 DECLARE_DESERIALISE_TYPE(VkDebugMarkerMarkerInfoEXT);
 DECLARE_DESERIALISE_TYPE(VkDebugMarkerObjectNameInfoEXT);
@@ -853,6 +873,7 @@ DECLARE_DESERIALISE_TYPE(VkMemoryRequirements2);
 DECLARE_DESERIALISE_TYPE(VkPhysicalDevice16BitStorageFeatures);
 DECLARE_DESERIALISE_TYPE(VkPhysicalDevice8BitStorageFeaturesKHR);
 DECLARE_DESERIALISE_TYPE(VkPhysicalDeviceASTCDecodeFeaturesEXT);
+DECLARE_DESERIALISE_TYPE(VkPhysicalDeviceConditionalRenderingFeaturesEXT);
 DECLARE_DESERIALISE_TYPE(VkPhysicalDeviceConservativeRasterizationPropertiesEXT);
 DECLARE_DESERIALISE_TYPE(VkPhysicalDeviceDriverPropertiesKHR);
 DECLARE_DESERIALISE_TYPE(VkPhysicalDeviceExternalBufferInfo);
@@ -1070,6 +1091,7 @@ DECLARE_REFLECTION_ENUM(VkBorderColor);
 DECLARE_REFLECTION_ENUM(VkBufferCreateFlagBits);
 DECLARE_REFLECTION_ENUM(VkBufferUsageFlagBits);
 DECLARE_REFLECTION_ENUM(VkChromaLocation);
+DECLARE_REFLECTION_ENUM(VkColorComponentFlagBits);
 DECLARE_REFLECTION_ENUM(VkColorSpaceKHR);
 DECLARE_REFLECTION_ENUM(VkCommandBufferLevel);
 DECLARE_REFLECTION_ENUM(VkCommandBufferUsageFlagBits);
@@ -1078,6 +1100,7 @@ DECLARE_REFLECTION_ENUM(VkCommandPoolResetFlagBits);
 DECLARE_REFLECTION_ENUM(VkCompareOp);
 DECLARE_REFLECTION_ENUM(VkComponentSwizzle);
 DECLARE_REFLECTION_ENUM(VkCompositeAlphaFlagBitsKHR);
+DECLARE_REFLECTION_ENUM(VkConditionalRenderingFlagBitsEXT);
 DECLARE_REFLECTION_ENUM(VkConservativeRasterizationModeEXT);
 DECLARE_REFLECTION_ENUM(VkCullModeFlagBits);
 DECLARE_REFLECTION_ENUM(VkDebugReportFlagBitsEXT);

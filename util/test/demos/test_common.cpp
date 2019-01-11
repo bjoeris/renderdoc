@@ -213,8 +213,8 @@ bool SpvCompilationSupported()
   return WEXITSTATUS(code) == 0;
 }
 
-std::vector<uint32_t> CompileShaderToSpv(const std::string &source_text, ShaderLang lang,
-                                         ShaderStage stage, const char *entry_point)
+std::vector<uint32_t> CompileShaderToSpv(const std::string &source_text, SPIRVTarget target,
+                                         ShaderLang lang, ShaderStage stage, const char *entry_point)
 {
   std::vector<uint32_t> ret;
 
@@ -242,6 +242,9 @@ std::vector<uint32_t> CompileShaderToSpv(const std::string &source_text, ShaderL
       case ShaderStage::geom: shader_kind = shaderc_geometry_shader; break;
       case ShaderStage::comp: shader_kind = shaderc_compute_shader; break;
     }
+
+    if(target == SPIRVTarget::opengl)
+      shaderc_compile_options_set_target_env(opts, shaderc_target_env_opengl, 0);
 
     shaderc_compilation_result_t res = shaderc_compile_into_spv(
         shaderc, source_text.c_str(), source_text.size(), shader_kind, "inshader", entry_point, opts);
@@ -385,10 +388,15 @@ bool GraphicsTest::Init(int argc, char **argv)
   {
     pRENDERDOC_GetAPI RENDERDOC_GetAPI = (pRENDERDOC_GetAPI)GetProcAddress(mod, "RENDERDOC_GetAPI");
 
-    int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_0_0, (void **)&rdoc);
+    int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_4_0, (void **)&rdoc);
 
     if(ret != 1)
       rdoc = NULL;
+
+    ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_0_0, (void **)&rdoc100);
+
+    if(ret != 1)
+      rdoc100 = NULL;
   }
 
 #else

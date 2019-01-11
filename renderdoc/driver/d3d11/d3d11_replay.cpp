@@ -1187,7 +1187,8 @@ void D3D11Replay::SavePipelineState()
         view.elementByteSize =
             desc.Format == DXGI_FORMAT_UNKNOWN ? 1 : GetByteSize(1, 1, 1, desc.Format, 0);
 
-        if(desc.Buffer.Flags & (D3D11_BUFFER_UAV_FLAG_APPEND | D3D11_BUFFER_UAV_FLAG_COUNTER))
+        if(desc.ViewDimension == D3D11_UAV_DIMENSION_BUFFER &&
+           (desc.Buffer.Flags & (D3D11_BUFFER_UAV_FLAG_APPEND | D3D11_BUFFER_UAV_FLAG_COUNTER)))
         {
           view.bufferStructCount = GetDebugManager()->GetStructCount(rs->OM.UAVs[s]);
         }
@@ -1566,6 +1567,14 @@ bool D3D11Replay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t mi
     cdata.HistogramChannels |= 0x8;
   cdata.HistogramFlags = 0;
 
+  Vec4u YUVDownsampleRate = {};
+  Vec4u YUVAChannels = {};
+
+  GetYUVShaderParameters(details.texFmt, YUVDownsampleRate, YUVAChannels);
+
+  cdata.HistogramYUVDownsampleRate = YUVDownsampleRate;
+  cdata.HistogramYUVAChannels = YUVAChannels;
+
   int srvOffset = 0;
   int intIdx = 0;
 
@@ -1660,6 +1669,14 @@ bool D3D11Replay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, 
   cdata.HistogramMax = 1.0f;
   cdata.HistogramChannels = 0xf;
   cdata.HistogramFlags = 0;
+
+  Vec4u YUVDownsampleRate = {};
+  Vec4u YUVAChannels = {};
+
+  GetYUVShaderParameters(details.texFmt, YUVDownsampleRate, YUVAChannels);
+
+  cdata.HistogramYUVDownsampleRate = YUVDownsampleRate;
+  cdata.HistogramYUVAChannels = YUVAChannels;
 
   int srvOffset = 0;
   int intIdx = 0;
@@ -3734,6 +3751,11 @@ ReplayStatus D3D11_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
     flags &= ~D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
+    RDCLOG(
+        "Creating D3D11 replay device, driver type %s, flags %x, %d feature levels (first %s)",
+        ToStr(driverType).c_str(), flags, numFeatureLevels,
+        (numFeatureLevels > 0 && featureLevelArray) ? ToStr(featureLevelArray[0]).c_str() : "NULL");
+
     hr = CreateDeviceAndSwapChain(
         /*pAdapter=*/NULL, driverType, /*Software=*/NULL, flags,
         /*pFeatureLevels=*/featureLevelArray, /*nFeatureLevels=*/numFeatureLevels, D3D11_SDK_VERSION,
@@ -3763,6 +3785,8 @@ ReplayStatus D3D11_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
       return ReplayStatus::Succeeded;
     }
 
+    RDCLOG("Device creation failed, %s", ToStr(hr).c_str());
+
     if(i == -1)
     {
       RDCWARN("Couldn't create device with similar settings to capture.");
@@ -3776,7 +3800,7 @@ ReplayStatus D3D11_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
       break;
 
     if(i >= 0)
-      initParams.DriverType = driverTypes[i / 2];
+      driverType = driverTypes[i / 2];
 
     if(i % 2 == 0)
     {
@@ -3790,7 +3814,12 @@ ReplayStatus D3D11_CreateReplayDevice(RDCFile *rdc, IReplayDriver **driver)
     }
   }
 
-  RDCERR("Couldn't create any compatible d3d11 device :(.");
+  RDCERR("Couldn't create any compatible d3d11 device.");
+
+  if(flags & D3D11_CREATE_DEVICE_DEBUG)
+    RDCLOG(
+        "Development RenderDoc builds require D3D debug layers available, "
+        "ensure you have the windows SDK or windows feature needed.");
 
   return ReplayStatus::APIHardwareUnsupported;
 }

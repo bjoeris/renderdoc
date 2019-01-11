@@ -305,6 +305,7 @@ public:
     return true;
   }
 
+  void moveObjectToThread(QObject *o) { o->moveToThread(m_Thread); }
   bool isCurrentThread() { return QThread::currentThread() == m_Thread; }
 };
 
@@ -467,6 +468,28 @@ private:
   QAbstractItemDelegate *m_delegate = NULL;
 };
 
+// delegate that will handle painting, hovering and clicking on rich text items.
+// owning view needs to call linkHover, and adjust its cursor and repaint as necessary.
+class RichTextViewDelegate : public ForwardingDelegate
+{
+  Q_OBJECT
+public:
+  explicit RichTextViewDelegate(QAbstractItemView *parent);
+  ~RichTextViewDelegate();
+
+  void paint(QPainter *painter, const QStyleOptionViewItem &option,
+             const QModelIndex &index) const override;
+  QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
+
+  bool editorEvent(QEvent *event, QAbstractItemModel *model, const QStyleOptionViewItem &option,
+                   const QModelIndex &index) override;
+
+  bool linkHover(QMouseEvent *e, const QModelIndex &index);
+
+private:
+  QAbstractItemView *m_widget;
+};
+
 class QMenu;
 
 // helper for doing a manual blocking invoke of a dialog
@@ -563,7 +586,7 @@ typedef std::function<bool()> ProgressFinishedMethod;
 QStringList ParseArgsList(const QString &args);
 bool IsRunningAsAdmin();
 bool RunProcessAsAdmin(const QString &fullExecutablePath, const QStringList &params,
-                       QWidget *parent = NULL,
+                       QWidget *parent = NULL, bool hidden = false,
                        std::function<void()> finishedCallback = std::function<void()>());
 
 void RevealFilenameInExternalFileBrowser(const QString &filePath);

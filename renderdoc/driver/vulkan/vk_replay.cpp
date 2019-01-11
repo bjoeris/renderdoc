@@ -627,7 +627,7 @@ void VulkanReplay::RenderCheckerboard()
 
     vt->CmdDraw(Unwrap(cmd), 4, 1, 0, 0);
 
-    if(m_pDriver->GetDriverVersion().QualcommLeakingUBOOffsets())
+    if(m_pDriver->GetDriverInfo().QualcommLeakingUBOOffsets())
     {
       uboOffs = 0;
       vt->CmdBindDescriptorSets(Unwrap(cmd), VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1414,6 +1414,20 @@ void VulkanReplay::SavePipelineState()
                 el.maxLOD = sampl.maxLod;
                 MakeBorderColor(sampl.borderColor, (FloatVector *)el.borderColor);
                 el.unnormalized = sampl.unnormalizedCoordinates;
+
+                if(sampl.ycbcr != ResourceId())
+                {
+                  const VulkanCreationInfo::YCbCrSampler &ycbcr = c.m_YCbCrSampler[sampl.ycbcr];
+                  el.ycbcrSampler = rm->GetOriginalID(sampl.ycbcr);
+
+                  el.ycbcrModel = ycbcr.ycbcrModel;
+                  el.ycbcrRange = ycbcr.ycbcrRange;
+                  memcpy(el.ycbcrSwizzle, ycbcr.swizzle, sizeof(TextureSwizzle) * 4);
+                  el.xChromaOffset = ycbcr.xChromaOffset;
+                  el.yChromaOffset = ycbcr.yChromaOffset;
+                  el.chromaFilter = ycbcr.chromaFilter;
+                  el.forceExplicitReconstruction = ycbcr.forceExplicitReconstruction;
+                }
               }
             }
 
@@ -1559,6 +1573,28 @@ void VulkanReplay::SavePipelineState()
       i++;
     }
   }
+
+  if(state.conditionalRendering.buffer != ResourceId())
+  {
+    m_VulkanPipelineState.conditionalRendering.bufferId =
+        rm->GetOriginalID(state.conditionalRendering.buffer);
+    m_VulkanPipelineState.conditionalRendering.byteOffset = state.conditionalRendering.offset;
+    m_VulkanPipelineState.conditionalRendering.isInverted =
+        state.conditionalRendering.flags == VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT;
+
+    bytebuf data;
+    GetBufferData(state.conditionalRendering.buffer, state.conditionalRendering.offset,
+                  sizeof(uint32_t), data);
+
+    uint32_t value;
+    memcpy(&value, data.data(), sizeof(uint32_t));
+
+    m_VulkanPipelineState.conditionalRendering.isPassing = value != 0;
+
+    if(m_VulkanPipelineState.conditionalRendering.isInverted)
+      m_VulkanPipelineState.conditionalRendering.isPassing =
+          !m_VulkanPipelineState.conditionalRendering.isPassing;
+  }
 }
 
 void VulkanReplay::FillCBufferVariables(ResourceId shader, string entryPoint, uint32_t cbufSlot,
@@ -1626,6 +1662,45 @@ void VulkanReplay::FillCBufferVariables(ResourceId shader, string entryPoint, ui
 bool VulkanReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, uint32_t sample,
                              CompType typeHint, float *minval, float *maxval)
 {
+  ImageLayouts &layouts = m_pDriver->m_ImageLayouts[texid];
+
+  if(IsDepthAndStencilFormat(layouts.format))
+  {
+    // for depth/stencil we need to run the code twice - once to fetch depth and once to fetch
+    // stencil - since we can't process float depth and int stencil at the same time
+    Vec4f depth[2] = {
+        {0.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f},
+    };
+    Vec4u stencil[2] = {{0, 0, 0, 0}, {1, 1, 1, 1}};
+
+    bool success =
+        GetMinMax(texid, sliceFace, mip, sample, typeHint, false, &depth[0].x, &depth[1].x);
+
+    if(!success)
+      return false;
+
+    success = GetMinMax(texid, sliceFace, mip, sample, typeHint, true, (float *)&stencil[0].x,
+                        (float *)&stencil[1].x);
+
+    if(!success)
+      return false;
+
+    // copy across into green channel, casting up to float, dividing by the range for this texture
+    depth[0].y = float(stencil[0].x) / 255.0f;
+    depth[1].y = float(stencil[1].x) / 255.0f;
+
+    memcpy(minval, &depth[0].x, sizeof(depth[0]));
+    memcpy(maxval, &depth[1].x, sizeof(depth[1]));
+
+    return true;
+  }
+
+  return GetMinMax(texid, sliceFace, mip, sample, typeHint, false, minval, maxval);
+}
+
+bool VulkanReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, uint32_t sample,
+                             CompType typeHint, bool stencil, float *minval, float *maxval)
+{
   VkDevice dev = m_pDriver->GetDev();
   VkCommandBuffer cmd = m_pDriver->GetNextCmd();
   const VkLayerDispatchTable *vt = ObjDisp(dev);
@@ -1636,13 +1711,22 @@ bool VulkanReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip,
 
   VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
   if(IsStencilOnlyFormat(layouts.format))
+  {
     aspectFlags = VK_IMAGE_ASPECT_STENCIL_BIT;
+  }
   else if(IsDepthOrStencilFormat(layouts.format))
+  {
     aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+    // do a stencil min/max if stencil is selected
+    if(stencil)
+      aspectFlags = VK_IMAGE_ASPECT_STENCIL_BIT;
+  }
 
   CreateTexImageView(aspectFlags, liveIm, iminfo);
 
-  VkImageView liveImView = iminfo.view;
+  VkImageView liveImView =
+      (aspectFlags == VK_IMAGE_ASPECT_STENCIL_BIT ? iminfo.altViews[0] : iminfo.view);
 
   RDCASSERT(liveImView != VK_NULL_HANDLE);
 
@@ -1682,20 +1766,31 @@ bool VulkanReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip,
       textype = RESTYPE_TEX2DMS;
   }
 
+  if(aspectFlags == VK_IMAGE_ASPECT_STENCIL_BIT)
+  {
+    descSetBinding = 10;
+    intTypeIndex = 1;
+  }
+
   descSetBinding += textype;
 
   if(m_Histogram.m_MinMaxTilePipe[textype][intTypeIndex] == VK_NULL_HANDLE)
-  {
-    *minval = 0.0f;
-    *maxval = 1.0f;
     return false;
-  }
 
   VkDescriptorBufferInfo bufdescs[3];
   RDCEraseEl(bufdescs);
   m_Histogram.m_MinMaxTileResult.FillDescriptor(bufdescs[0]);
   m_Histogram.m_MinMaxResult.FillDescriptor(bufdescs[1]);
   m_Histogram.m_HistogramUBO.FillDescriptor(bufdescs[2]);
+
+  VkDescriptorImageInfo altimdesc[2] = {};
+  for(uint32_t i = 0; i < GetYUVPlaneCount(iminfo.format) - 1; i++)
+  {
+    RDCASSERT(iminfo.altViews[i] != VK_NULL_HANDLE);
+    altimdesc[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    altimdesc[i].imageView = Unwrap(iminfo.altViews[i]);
+    altimdesc[i].sampler = Unwrap(m_General.PointSampler);
+  }
 
   VkWriteDescriptorSet writeSet[] = {
 
@@ -1712,8 +1807,14 @@ bool VulkanReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip,
       },
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, Unwrap(m_Histogram.m_HistogramDescSet[0]), 2,
        0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &bufdescs[2], NULL},
+
+      // sampled view
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, Unwrap(m_Histogram.m_HistogramDescSet[0]),
        descSetBinding, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imdesc, NULL, NULL},
+      // YUV secondary planes (if needed)
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, Unwrap(m_Histogram.m_HistogramDescSet[0]), 10,
+       0, GetYUVPlaneCount(iminfo.format) - 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, altimdesc,
+       NULL, NULL},
 
       // second pass from tiles to result
       {
@@ -1730,7 +1831,35 @@ bool VulkanReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip,
        0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &bufdescs[2], NULL},
   };
 
-  vt->UpdateDescriptorSets(Unwrap(dev), ARRAY_COUNT(writeSet), writeSet, 0, NULL);
+  vector<VkWriteDescriptorSet> writeSets;
+  for(size_t i = 0; i < ARRAY_COUNT(writeSet); i++)
+  {
+    if(writeSet[i].descriptorCount > 0)
+      writeSets.push_back(writeSet[i]);
+  }
+
+  for(size_t i = 0; i < ARRAY_COUNT(m_TexRender.DummyWrites); i++)
+  {
+    VkWriteDescriptorSet &write = m_TexRender.DummyWrites[i];
+
+    // don't write dummy data in the actual slot
+    if(write.dstBinding == descSetBinding)
+      continue;
+
+    // don't overwrite YUV texture slots if it's a YUV planar format
+    if(write.dstBinding == 10)
+    {
+      if(write.dstArrayElement == 0 && GetYUVPlaneCount(iminfo.format) >= 2)
+        continue;
+      if(write.dstArrayElement == 1 && GetYUVPlaneCount(iminfo.format) >= 3)
+        continue;
+    }
+
+    write.dstSet = Unwrap(m_Histogram.m_HistogramDescSet[0]);
+    writeSets.push_back(write);
+  }
+
+  vt->UpdateDescriptorSets(Unwrap(dev), (uint32_t)writeSets.size(), &writeSets[0], 0, NULL);
 
   HistogramUBOData *data = (HistogramUBOData *)m_Histogram.m_HistogramUBO.Map(NULL);
 
@@ -1749,6 +1878,14 @@ bool VulkanReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip,
   data->HistogramMin = 0.0f;
   data->HistogramMax = 1.0f;
   data->HistogramChannels = 0xf;
+
+  Vec4u YUVDownsampleRate = {};
+  Vec4u YUVAChannels = {};
+
+  GetYUVShaderParameters(iminfo.format, YUVDownsampleRate, YUVAChannels);
+
+  data->HistogramYUVDownsampleRate = YUVDownsampleRate;
+  data->HistogramYUVAChannels = YUVAChannels;
 
   m_Histogram.m_HistogramUBO.Unmap();
 
@@ -1894,9 +2031,17 @@ bool VulkanReplay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t m
 
   VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
   if(IsStencilOnlyFormat(layouts.format))
+  {
     aspectFlags = VK_IMAGE_ASPECT_STENCIL_BIT;
+  }
   else if(IsDepthOrStencilFormat(layouts.format))
+  {
     aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+    // detect if stencil is selected
+    if(!channels[0] && channels[1] && !channels[2] && !channels[3])
+      aspectFlags = VK_IMAGE_ASPECT_STENCIL_BIT;
+  }
 
   CreateTexImageView(aspectFlags, liveIm, iminfo);
 
@@ -1931,6 +2076,19 @@ bool VulkanReplay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t m
       textype = RESTYPE_TEX2DMS;
   }
 
+  if(aspectFlags == VK_IMAGE_ASPECT_STENCIL_BIT)
+  {
+    descSetBinding = 10;
+    intTypeIndex = 1;
+
+    // rescale the range so that stencil seems to fit to 0-1
+    minval *= 255.0f;
+    maxval *= 255.0f;
+
+    // shuffle the channel selection, since stencil comes back in red
+    std::swap(channels[0], channels[1]);
+  }
+
   descSetBinding += textype;
 
   if(m_Histogram.m_HistogramPipe[textype][intTypeIndex] == VK_NULL_HANDLE)
@@ -1942,7 +2100,7 @@ bool VulkanReplay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t m
   }
 
   VkImageView liveImView =
-      (aspectFlags == VK_IMAGE_ASPECT_STENCIL_BIT ? iminfo.stencilView : iminfo.view);
+      (aspectFlags == VK_IMAGE_ASPECT_STENCIL_BIT ? iminfo.altViews[0] : iminfo.view);
 
   RDCASSERT(liveImView != VK_NULL_HANDLE);
 
@@ -1955,6 +2113,15 @@ bool VulkanReplay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t m
   RDCEraseEl(bufdescs);
   m_Histogram.m_HistogramBuf.FillDescriptor(bufdescs[0]);
   m_Histogram.m_HistogramUBO.FillDescriptor(bufdescs[1]);
+
+  VkDescriptorImageInfo altimdesc[2] = {};
+  for(uint32_t i = 0; i < GetYUVPlaneCount(iminfo.format) - 1; i++)
+  {
+    RDCASSERT(iminfo.altViews[i] != VK_NULL_HANDLE);
+    altimdesc[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    altimdesc[i].imageView = Unwrap(iminfo.altViews[i]);
+    altimdesc[i].sampler = Unwrap(m_General.PointSampler);
+  }
 
   VkWriteDescriptorSet writeSet[] = {
 
@@ -1971,11 +2138,44 @@ bool VulkanReplay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t m
       },
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, Unwrap(m_Histogram.m_HistogramDescSet[0]), 2,
        0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, NULL, &bufdescs[1], NULL},
+      // sampled view
       {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, Unwrap(m_Histogram.m_HistogramDescSet[0]),
        descSetBinding, 0, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, &imdesc, NULL, NULL},
+      // YUV secondary planes (if needed)
+      {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, NULL, Unwrap(m_Histogram.m_HistogramDescSet[0]), 10,
+       0, GetYUVPlaneCount(iminfo.format) - 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, altimdesc,
+       NULL, NULL},
   };
 
-  vt->UpdateDescriptorSets(Unwrap(dev), ARRAY_COUNT(writeSet), writeSet, 0, NULL);
+  vector<VkWriteDescriptorSet> writeSets;
+  for(size_t i = 0; i < ARRAY_COUNT(writeSet); i++)
+  {
+    if(writeSet[i].descriptorCount > 0)
+      writeSets.push_back(writeSet[i]);
+  }
+
+  for(size_t i = 0; i < ARRAY_COUNT(m_TexRender.DummyWrites); i++)
+  {
+    VkWriteDescriptorSet &write = m_TexRender.DummyWrites[i];
+
+    // don't write dummy data in the actual slot
+    if(write.dstBinding == descSetBinding)
+      continue;
+
+    // don't overwrite YUV texture slots if it's a YUV planar format
+    if(write.dstBinding == 10)
+    {
+      if(write.dstArrayElement == 0 && GetYUVPlaneCount(iminfo.format) >= 2)
+        continue;
+      if(write.dstArrayElement == 1 && GetYUVPlaneCount(iminfo.format) >= 3)
+        continue;
+    }
+
+    write.dstSet = Unwrap(m_Histogram.m_HistogramDescSet[0]);
+    writeSets.push_back(write);
+  }
+
+  vt->UpdateDescriptorSets(Unwrap(dev), (uint32_t)writeSets.size(), &writeSets[0], 0, NULL);
 
   HistogramUBOData *data = (HistogramUBOData *)m_Histogram.m_HistogramUBO.Map(NULL);
 
@@ -2010,6 +2210,14 @@ bool VulkanReplay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t m
 
   data->HistogramChannels = chans;
   data->HistogramFlags = 0;
+
+  Vec4u YUVDownsampleRate = {};
+  Vec4u YUVAChannels = {};
+
+  GetYUVShaderParameters(iminfo.format, YUVDownsampleRate, YUVAChannels);
+
+  data->HistogramYUVDownsampleRate = YUVDownsampleRate;
+  data->HistogramYUVAChannels = YUVAChannels;
 
   m_Histogram.m_HistogramUBO.Unmap();
 

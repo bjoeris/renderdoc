@@ -382,6 +382,7 @@ void WrappedOpenGL::BuildGLESExtensions()
   m_GLESExtensions.push_back("GL_ARM_rgba8");
   m_GLESExtensions.push_back("GL_EXT_base_instance");
   m_GLESExtensions.push_back("GL_EXT_blend_minmax");
+  m_GLESExtensions.push_back("GL_EXT_buffer_storage");
   m_GLESExtensions.push_back("GL_EXT_clip_cull_distance");
   m_GLESExtensions.push_back("GL_EXT_color_buffer_float");
   m_GLESExtensions.push_back("GL_EXT_color_buffer_half_float");
@@ -989,6 +990,24 @@ void WrappedOpenGL::CreateContext(GLWindowingData winData, void *shareContext,
     flags &= ~WriteSerialiser::ChunkCallstack;
 
   m_ScratchSerialiser.SetChunkMetadataRecording(flags);
+}
+
+bool WrappedOpenGL::ForceSharedObjects(void *oldContext, void *newContext)
+{
+  ContextData &olddata = m_ContextData[oldContext];
+  ContextData &newdata = m_ContextData[newContext];
+
+  RDCLOG("Forcibly sharing %p with %p", newContext, oldContext);
+
+  if(newdata.built)
+  {
+    RDCERR("wglShareLists called after wglMakeCurrent - this is not supported and will break.");
+    return false;
+  }
+
+  newdata.shareGroup = olddata.shareGroup;
+
+  return true;
 }
 
 void WrappedOpenGL::RegisterReplayContext(GLWindowingData winData, void *shareContext, bool core,
@@ -1656,9 +1675,12 @@ void WrappedOpenGL::SwapBuffers(void *windowHandle)
     ctxdata.AssociateWindow(this, windowHandle);
   }
 
-  // do this as late as possible to avoid creating objects on contexts
-  // that might be shared later (wglShareLists requires contexts to be
-  // pristine, so can't create this from wglMakeCurrent)
+  // we used to do this here so it was as late as possible to avoid creating objects on contexts
+  // that might be shared later. wglShareLists requires contexts to have no objects and can be
+  // called after wglMakeCurrent. However we also need other objects like client-memory buffers and
+  // vendor checks inside makecurrent that it is not feasible to defer until later, since there's no
+  // other sync point after wglMakeCurrent before we'll need the information. So we don't support
+  // calling wglShareLists after wglMakeCurrent.
   if(!ctxdata.ready)
     ctxdata.CreateDebugData();
 
@@ -1735,7 +1757,10 @@ void WrappedOpenGL::SwapBuffers(void *windowHandle)
   }
 
   if(IsActiveCapturing(m_State) && m_AppControlledCapture)
+  {
+    delete m_BackbufferImages[windowHandle];
     m_BackbufferImages[windowHandle] = SaveBackbufferImage();
+  }
 
   RenderDoc::Inst().AddActiveDriver(GetDriverType(), true);
 
@@ -2054,6 +2079,8 @@ bool WrappedOpenGL::EndFrameCapture(void *dev, void *wnd)
 
     GetResourceManager()->ClearReferencedResources();
 
+    GetResourceManager()->FreeInitialContents();
+
     // if it's a capture triggered from application code, immediately
     // give up as it's not reasonable to expect applications to detect and retry.
     // otherwise we can retry in case the next frame works.
@@ -2079,6 +2106,14 @@ bool WrappedOpenGL::EndFrameCapture(void *dev, void *wnd)
 
       AttemptCapture();
       BeginCaptureFrame();
+
+      // serialise out the context configuration for this current context first
+      {
+        USE_SCRATCH_SERIALISER();
+        SCOPED_SERIALISE_CHUNK(GLChunk::ContextConfiguration);
+        Serialise_ContextConfiguration(ser, GetCtx().ctx);
+        GetContextRecord()->AddChunk(scope.Get());
+      }
     }
 
     if(switchctx.ctx != prevctx.ctx)
@@ -2089,6 +2124,38 @@ bool WrappedOpenGL::EndFrameCapture(void *dev, void *wnd)
 
     return false;
   }
+}
+
+bool WrappedOpenGL::DiscardFrameCapture(void *dev, void *wnd)
+{
+  if(!IsActiveCapturing(m_State))
+    return true;
+
+  SCOPED_LOCK(glLock);
+
+  RenderDoc::Inst().FinishCaptureWriting(NULL, m_CapturedFrames.back().frameNumber);
+
+  CleanupCapture();
+
+  GetResourceManager()->ClearReferencedResources();
+
+  GetResourceManager()->FreeInitialContents();
+
+  FinishCapture();
+
+  m_CapturedFrames.pop_back();
+
+  FreeCaptureData();
+
+  m_State = CaptureState::BackgroundCapturing;
+
+  GetResourceManager()->MarkUnwrittenResources();
+
+  for(auto it = m_BackbufferImages.begin(); it != m_BackbufferImages.end(); ++it)
+    delete it->second;
+  m_BackbufferImages.clear();
+
+  return true;
 }
 
 void WrappedOpenGL::FirstFrame(void *ctx, void *wndHandle)
@@ -2836,6 +2903,7 @@ bool WrappedOpenGL::ProcessChunk(ReadSerialiser &ser, GLChunk chunk)
     case GLChunk::glCreateBuffers: return Serialise_glCreateBuffers(ser, 0, 0);
 
     case GLChunk::glBufferStorage:
+    case GLChunk::glBufferStorageEXT:
     case GLChunk::glNamedBufferStorage:
     case GLChunk::glNamedBufferStorageEXT:
       return Serialise_glNamedBufferStorageEXT(ser, 0, 0, 0, 0);

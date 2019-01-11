@@ -1406,6 +1406,139 @@ DXGI_FORMAT GetTypelessFormat(DXGI_FORMAT f)
   }
 }
 
+DXGI_FORMAT GetYUVViewPlane0Format(DXGI_FORMAT f)
+{
+  switch(f)
+  {
+    case DXGI_FORMAT_AYUV: return DXGI_FORMAT_R8G8B8A8_UNORM;
+    case DXGI_FORMAT_Y410: return DXGI_FORMAT_R10G10B10A2_UNORM;
+    case DXGI_FORMAT_Y416: return DXGI_FORMAT_R16G16B16A16_UNORM;
+    case DXGI_FORMAT_NV11:
+    case DXGI_FORMAT_NV12:
+    case DXGI_FORMAT_P208: return DXGI_FORMAT_R8_UNORM;
+    case DXGI_FORMAT_P010:
+    case DXGI_FORMAT_P016: return DXGI_FORMAT_R16_UNORM;
+    case DXGI_FORMAT_YUY2: return DXGI_FORMAT_R8G8B8A8_UNORM;
+    case DXGI_FORMAT_Y210:
+    case DXGI_FORMAT_Y216: return DXGI_FORMAT_R16G16B16A16_UNORM;
+    case DXGI_FORMAT_AI44:
+    case DXGI_FORMAT_IA44: return DXGI_FORMAT_R8G8_UNORM;
+    case DXGI_FORMAT_P8: return DXGI_FORMAT_R8_UNORM;
+    case DXGI_FORMAT_A8P8: return DXGI_FORMAT_R8G8_UNORM;
+    case DXGI_FORMAT_V208:
+    case DXGI_FORMAT_V408: return DXGI_FORMAT_R8G8B8A8_UNORM;
+    case DXGI_FORMAT_420_OPAQUE: return DXGI_FORMAT_UNKNOWN;
+    default: break;
+  }
+
+  return f;
+}
+
+DXGI_FORMAT GetYUVViewPlane1Format(DXGI_FORMAT f)
+{
+  switch(f)
+  {
+    case DXGI_FORMAT_NV11:
+    case DXGI_FORMAT_NV12:
+    case DXGI_FORMAT_P208: return DXGI_FORMAT_R8G8_UNORM;
+    case DXGI_FORMAT_P010:
+    case DXGI_FORMAT_P016: return DXGI_FORMAT_R16G16_UNORM;
+    case DXGI_FORMAT_AYUV:
+    case DXGI_FORMAT_Y410:
+    case DXGI_FORMAT_Y416:
+    case DXGI_FORMAT_YUY2:
+    case DXGI_FORMAT_Y210:
+    case DXGI_FORMAT_Y216:
+    case DXGI_FORMAT_420_OPAQUE:
+    case DXGI_FORMAT_AI44:
+    case DXGI_FORMAT_IA44:
+    case DXGI_FORMAT_P8:
+    case DXGI_FORMAT_A8P8:
+    case DXGI_FORMAT_V208:
+    case DXGI_FORMAT_V408: return DXGI_FORMAT_UNKNOWN;
+    default: break;
+  }
+
+  return f;
+}
+
+void GetYUVShaderParameters(DXGI_FORMAT f, Vec4u &YUVDownsampleRate, Vec4u &YUVAChannels)
+{
+  YUVDownsampleRate = {};
+  YUVAChannels = {};
+
+// YUVDownsampleRate = { horizontal downsampling, vertical downsampling, # planes, # bits }
+#define PACKED_444(bits) \
+  {                      \
+    1, 1, 1, bits        \
+  }
+#define PACKED_422(bits) \
+  {                      \
+    2, 1, 1, bits        \
+  }
+#define PACKED_420(bits) \
+  {                      \
+    2, 2, 1, bits        \
+  }
+#define PLANAR_422(bits) \
+  {                      \
+    2, 1, 2, bits        \
+  }
+#define PLANAR_420(bits) \
+  {                      \
+    2, 2, 2, bits        \
+  }
+
+  // YUVAChannels = { Y index, U index, V index, A index }
+  // where index is 0,1,2,3 for rgba in first texture, 0,1,2,3 for rgba in second texture
+  // 0xff for alpha means not available
+
+  switch(f)
+  {
+    case DXGI_FORMAT_AYUV:
+      YUVDownsampleRate = PACKED_444(8);
+      YUVAChannels = {2, 1, 0, 3};
+      break;
+    case DXGI_FORMAT_Y410:
+      YUVDownsampleRate = PACKED_444(10);
+      YUVAChannels = {1, 0, 2, 3};
+      break;
+    case DXGI_FORMAT_Y416:
+      YUVDownsampleRate = PACKED_444(16);
+      YUVAChannels = {1, 0, 2, 3};
+      break;
+    case DXGI_FORMAT_NV12:
+      YUVDownsampleRate = PLANAR_420(8);
+      YUVAChannels = {0, 4, 5, 0xff};
+      break;
+    case DXGI_FORMAT_P010:
+      YUVDownsampleRate = PLANAR_420(10);
+      YUVAChannels = {0, 4, 5, 0xff};
+      break;
+    case DXGI_FORMAT_P016:
+      YUVDownsampleRate = PLANAR_420(16);
+      YUVAChannels = {0, 4, 5, 0xff};
+      break;
+    case DXGI_FORMAT_YUY2:
+      YUVDownsampleRate = PACKED_422(8);
+      YUVAChannels = {0, 1, 3, 0xff};
+      break;
+    case DXGI_FORMAT_Y210:
+      YUVDownsampleRate = PACKED_422(10);
+      YUVAChannels = {0, 1, 3, 0xff};
+      break;
+    case DXGI_FORMAT_Y216:
+      YUVDownsampleRate = PACKED_422(16);
+      YUVAChannels = {0, 1, 3, 0xff};
+      break;
+    case DXGI_FORMAT_P208:
+      YUVDownsampleRate = PLANAR_422(8);
+      YUVAChannels = {0, 4, 5, 0xff};
+      break;
+    default: break;
+  }
+}
+
 D3D_PRIMITIVE_TOPOLOGY MakeD3DPrimitiveTopology(Topology Topo)
 {
   switch(Topo)
@@ -1684,20 +1817,20 @@ DXGI_FORMAT MakeDXGIFormat(ResourceFormat fmt)
       case ResourceFormatType::R11G11B10: ret = DXGI_FORMAT_R11G11B10_FLOAT; break;
       case ResourceFormatType::R5G6B5:
         // only support bgra order
-        if(!fmt.bgraOrder())
+        if(!fmt.BGRAOrder())
           return DXGI_FORMAT_UNKNOWN;
         ret = DXGI_FORMAT_B5G6R5_UNORM;
         break;
       case ResourceFormatType::R5G5B5A1:
         // only support bgra order
-        if(!fmt.bgraOrder())
+        if(!fmt.BGRAOrder())
           return DXGI_FORMAT_UNKNOWN;
         ret = DXGI_FORMAT_B5G5R5A1_UNORM;
         break;
       case ResourceFormatType::R9G9B9E5: ret = DXGI_FORMAT_R9G9B9E5_SHAREDEXP; break;
       case ResourceFormatType::R4G4B4A4:
         // only support bgra order
-        if(!fmt.bgraOrder())
+        if(!fmt.BGRAOrder())
           return DXGI_FORMAT_UNKNOWN;
         ret = DXGI_FORMAT_B4G4R4A4_UNORM;
         break;
@@ -1705,8 +1838,8 @@ DXGI_FORMAT MakeDXGIFormat(ResourceFormat fmt)
       case ResourceFormatType::D32S8: ret = DXGI_FORMAT_R32G8X24_TYPELESS; break;
       case ResourceFormatType::YUV8:
       {
-        int subsampling = fmt.yuvSubsampling();
-        int planeCount = fmt.yuvPlaneCount();
+        int subsampling = fmt.YUVSubsampling();
+        int planeCount = fmt.YUVPlaneCount();
         if(subsampling == 444)
         {
           // only support AYUV - 4 components
@@ -1744,8 +1877,8 @@ DXGI_FORMAT MakeDXGIFormat(ResourceFormat fmt)
       }
       case ResourceFormatType::YUV10:
       {
-        int subsampling = fmt.yuvSubsampling();
-        int planeCount = fmt.yuvPlaneCount();
+        int subsampling = fmt.YUVSubsampling();
+        int planeCount = fmt.YUVPlaneCount();
         if(subsampling == 444)
         {
           // only support Y410 - 4 components
@@ -1782,8 +1915,8 @@ DXGI_FORMAT MakeDXGIFormat(ResourceFormat fmt)
       }
       case ResourceFormatType::YUV16:
       {
-        int subsampling = fmt.yuvSubsampling();
-        int planeCount = fmt.yuvPlaneCount();
+        int subsampling = fmt.YUVSubsampling();
+        int planeCount = fmt.YUVPlaneCount();
         if(subsampling == 444)
         {
           // only support Y416 - 4 components
@@ -1829,7 +1962,7 @@ DXGI_FORMAT MakeDXGIFormat(ResourceFormat fmt)
     else
       return DXGI_FORMAT_UNKNOWN;
 
-    if(fmt.bgraOrder())
+    if(fmt.BGRAOrder())
       ret = DXGI_FORMAT_B8G8R8A8_UNORM;
   }
   else if(fmt.compCount == 3)
@@ -1883,7 +2016,7 @@ DXGI_FORMAT MakeDXGIFormat(ResourceFormat fmt)
   else
     return DXGI_FORMAT_UNKNOWN;
 
-  if(fmt.srgbCorrected())
+  if(fmt.SRGBCorrected())
     ret = GetSRGBFormat(ret);
 
   return ret;
@@ -1896,7 +2029,7 @@ ResourceFormat MakeResourceFormat(DXGI_FORMAT fmt)
   ret.compCount = ret.compByteWidth = 0;
   ret.compType = CompType::Float;
 
-  ret.setSrgbCorrected(IsSRGBFormat(fmt));
+  ret.SetSRGBCorrected(IsSRGBFormat(fmt));
 
   switch(fmt)
   {
@@ -2238,7 +2371,7 @@ ResourceFormat MakeResourceFormat(DXGI_FORMAT fmt)
     case DXGI_FORMAT_B8G8R8A8_TYPELESS:
     case DXGI_FORMAT_B8G8R8X8_TYPELESS:
     case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-    case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB: ret.setBgraOrder(true); break;
+    case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB: ret.SetBGRAOrder(true); break;
     default: break;
   }
 
@@ -2283,11 +2416,11 @@ ResourceFormat MakeResourceFormat(DXGI_FORMAT fmt)
     case DXGI_FORMAT_R11G11B10_FLOAT: ret.type = ResourceFormatType::R11G11B10; break;
     case DXGI_FORMAT_B5G6R5_UNORM:
       ret.type = ResourceFormatType::R5G6B5;
-      ret.setBgraOrder(true);
+      ret.SetBGRAOrder(true);
       break;
     case DXGI_FORMAT_B5G5R5A1_UNORM:
       ret.type = ResourceFormatType::R5G5B5A1;
-      ret.setBgraOrder(true);
+      ret.SetBGRAOrder(true);
       break;
     case DXGI_FORMAT_R9G9B9E5_SHAREDEXP: ret.type = ResourceFormatType::R9G9B9E5; break;
 
@@ -2324,7 +2457,7 @@ ResourceFormat MakeResourceFormat(DXGI_FORMAT fmt)
       {
         case DXGI_FORMAT_AYUV:
         case DXGI_FORMAT_Y410:
-        case DXGI_FORMAT_Y416: ret.setYUVSubsampling(444);
+        case DXGI_FORMAT_Y416: ret.SetYUVSubsampling(444);
         default: break;
       }
 
@@ -2333,7 +2466,7 @@ ResourceFormat MakeResourceFormat(DXGI_FORMAT fmt)
         case DXGI_FORMAT_YUY2:
         case DXGI_FORMAT_Y210:
         case DXGI_FORMAT_Y216:
-        case DXGI_FORMAT_P208: ret.setYUVSubsampling(422);
+        case DXGI_FORMAT_P208: ret.SetYUVSubsampling(422);
         default: break;
       }
 
@@ -2341,7 +2474,7 @@ ResourceFormat MakeResourceFormat(DXGI_FORMAT fmt)
       {
         case DXGI_FORMAT_NV12:
         case DXGI_FORMAT_P010:
-        case DXGI_FORMAT_P016: ret.setYUVSubsampling(420);
+        case DXGI_FORMAT_P016: ret.SetYUVSubsampling(420);
         default: break;
       }
 
@@ -2350,7 +2483,7 @@ ResourceFormat MakeResourceFormat(DXGI_FORMAT fmt)
         case DXGI_FORMAT_NV12:
         case DXGI_FORMAT_P010:
         case DXGI_FORMAT_P016:
-        case DXGI_FORMAT_P208: ret.setYUVPlaneCount(2);
+        case DXGI_FORMAT_P208: ret.SetYUVPlaneCount(2);
       }
 
       break;
@@ -2369,7 +2502,7 @@ ResourceFormat MakeResourceFormat(DXGI_FORMAT fmt)
 
     case DXGI_FORMAT_B4G4R4A4_UNORM:
       ret.type = ResourceFormatType::R4G4B4A4;
-      ret.setBgraOrder(true);
+      ret.SetBGRAOrder(true);
       break;
 
     case DXGI_FORMAT_UNKNOWN: ret.type = ResourceFormatType::Undefined; break;
@@ -2532,7 +2665,7 @@ TEST_CASE("DXGI formats", "[format][d3d]")
 
       if(IsSRGBFormat(f))
       {
-        CHECK(fmt.srgbCorrected());
+        CHECK(fmt.SRGBCorrected());
       }
     }
   };
@@ -2555,7 +2688,7 @@ TEST_CASE("DXGI formats", "[format][d3d]")
 
         ResourceFormat convfmt = MakeResourceFormat(conv);
 
-        CHECK(!convfmt.srgbCorrected());
+        CHECK(!convfmt.SRGBCorrected());
       }
 
       if(fmt.type == ResourceFormatType::BC1 || fmt.type == ResourceFormatType::BC2 ||
@@ -2570,7 +2703,7 @@ TEST_CASE("DXGI formats", "[format][d3d]")
 
         ResourceFormat convfmt = MakeResourceFormat(conv);
 
-        CHECK(convfmt.srgbCorrected());
+        CHECK(convfmt.SRGBCorrected());
       }
 
       if(f == DXGI_FORMAT_R10G10B10_XR_BIAS_A2_UNORM)
@@ -2594,7 +2727,7 @@ TEST_CASE("DXGI formats", "[format][d3d]")
         DXGI_FORMAT typeless = GetTypelessFormat(f);
         DXGI_FORMAT typed = GetTypedFormat(typeless, typeHint);
 
-        if(fmt.srgbCorrected())
+        if(fmt.SRGBCorrected())
           typed = GetSRGBFormat(typed);
 
         CHECK(f == typed);

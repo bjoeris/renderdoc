@@ -508,6 +508,16 @@ void MainWindow::OnCaptureTrigger(const QString &exe, const QString &workingDir,
     return;
 
   LambdaThread *th = new LambdaThread([this, exe, workingDir, cmdLine, env, opts, callback]() {
+
+    if(isCapturableAppRunningOnAndroid())
+    {
+      RDDialog::warning(this, tr("RenderDoc is already capturing an app on this device"),
+                        tr("A running app on this device is already being captured with RenderDoc. "
+                           "First please close the app then try to launch again."),
+                        QMessageBox::Ok);
+      return;
+    }
+
     QString capturefile = m_Ctx.TempCaptureFilename(QFileInfo(exe).baseName());
 
     ExecuteResult ret =
@@ -1009,6 +1019,9 @@ void MainWindow::SetTitle(const QString &filename)
                 .arg(lit(FULL_VERSION_STRING))
                 .arg(QString::fromLatin1(GitVersionHash));
 
+  if(IsRunningAsAdmin())
+    text += tr(" (Administrator)");
+
   if(QString::fromLatin1(RENDERDOC_GetVersionString()) != lit(MAJOR_MINOR_VERSION_STRING))
     text += tr(" - !! VERSION MISMATCH DETECTED !!");
 
@@ -1325,7 +1338,10 @@ void MainWindow::ShowLiveCapture(LiveCapture *live)
 {
   m_LiveCaptures.push_back(live);
 
-  m_Ctx.AddDockWindow(live, DockReference::MainToolArea, this);
+  if(m_Ctx.HasCaptureDialog())
+    m_Ctx.AddDockWindow(live, DockReference::AddTo, m_Ctx.GetCaptureDialog()->Widget());
+  else
+    m_Ctx.AddDockWindow(live, DockReference::MainToolArea, this);
 }
 
 void MainWindow::LiveCaptureClosed(LiveCapture *live)
@@ -1632,18 +1648,28 @@ void MainWindow::messageCheck()
     }
 
     m_Ctx.Replay().AsyncInvoke([this](IReplayController *r) {
-      rdcarray<DebugMessage> msgs = r->GetDebugMessages();
+      rdcarray<DebugMessage> msgs;
 
       bool disconnected = false;
 
       if(m_Ctx.Replay().CurrentRemote())
       {
-        bool prev = m_Ctx.Replay().CurrentRemote()->serverRunning;
+        bool wasRunning = m_Ctx.Replay().CurrentRemote()->serverRunning;
 
         m_Ctx.Replay().PingRemote();
 
-        if(prev != m_Ctx.Replay().CurrentRemote()->serverRunning)
+        if(wasRunning != m_Ctx.Replay().CurrentRemote()->serverRunning)
+        {
+          qCritical() << "Remote server disconnected";
           disconnected = true;
+        }
+
+        if(!disconnected && wasRunning)
+          msgs = r->GetDebugMessages();
+      }
+      else
+      {
+        msgs = r->GetDebugMessages();
       }
 
       GUIInvoke::call(this, [this, disconnected, msgs] {
@@ -2834,4 +2860,14 @@ void MainWindow::showLaunchError(ReplayStatus status)
       break;
   }
   GUIInvoke::call(this, [this, title, message]() { RDDialog::warning(this, title, message); });
+}
+
+bool MainWindow::isCapturableAppRunningOnAndroid()
+{
+  if(!m_Ctx.Replay().CurrentRemote() || !m_Ctx.Replay().CurrentRemote()->IsADB())
+    return false;
+
+  rdcstr host = m_Ctx.Replay().CurrentRemote()->hostname;
+  uint32_t ident = RENDERDOC_EnumerateRemoteTargets(host.c_str(), 0);
+  return ident != 0;
 }

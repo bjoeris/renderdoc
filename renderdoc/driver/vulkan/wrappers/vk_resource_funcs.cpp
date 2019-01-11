@@ -794,7 +794,7 @@ VkResult WrappedVulkan::vkFlushMappedMemoryRanges(VkDevice device, uint32_t memR
 
       if(state->mappedPtr == NULL)
       {
-        RDCERR("Flushing memory that isn't currently mapped");
+        RDCERR("Flushing memory %s that isn't currently mapped", ToStr(memid).c_str());
         continue;
       }
 
@@ -1324,6 +1324,10 @@ bool WrappedVulkan::Serialise_vkCreateImage(SerialiserType &ser, VkDevice device
         queueFamiles[q] = m_QueueRemapping[queueFamiles[q]][0].family;
     }
 
+    // need to be able to mutate the format for YUV textures
+    if(IsYUVFormat(CreateInfo.format))
+      CreateInfo.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+
     // ensure we can cast multisampled images, for copying to arrays
     if((int)CreateInfo.samples > 1)
     {
@@ -1453,6 +1457,10 @@ VkResult WrappedVulkan::vkCreateImage(VkDevice device, const VkImageCreateInfo *
     createInfo_adjusted.usage &= ~VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
   }
 
+  // need to be able to mutate the format for YUV textures
+  if(IsYUVFormat(createInfo_adjusted.format))
+    createInfo_adjusted.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+
   if(createInfo_adjusted.samples != VK_SAMPLE_COUNT_1_BIT)
   {
     createInfo_adjusted.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -1463,7 +1471,9 @@ VkResult WrappedVulkan::vkCreateImage(VkDevice device, const VkImageCreateInfo *
     {
       if(!IsDepthOrStencilFormat(createInfo_adjusted.format))
       {
-        if(GetDebugManager()->IsMS2ArraySupported())
+        // need to check the debug manager here since we might be creating this internal image from
+        // its constructor
+        if(GetDebugManager() && GetDebugManager()->IsMS2ArraySupported())
           createInfo_adjusted.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
       }
       else

@@ -460,6 +460,165 @@ VulkanDebugManager::VulkanDebugManager(WrappedVulkan *driver)
   //////////////////////////////////////////////////////////////////
   // Depth MS to Array copy (via graphics)
 
+  // need a dummy UINT texture to fill the binding when we don't have a stencil aspect to copy.
+  // unfortunately there's no single guaranteed UINT format that can be sampled as MSAA, so we try a
+  // few since hopefully we'll find one that will work.
+  VkFormat attemptFormats[] = {VK_FORMAT_R8G8B8A8_UINT,     VK_FORMAT_R8_UINT,
+                               VK_FORMAT_S8_UINT,           VK_FORMAT_D32_SFLOAT_S8_UINT,
+                               VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D16_UNORM_S8_UINT};
+
+  for(VkFormat f : attemptFormats)
+  {
+    VkImageAspectFlags viewAspectMask =
+        IsStencilFormat(f) ? VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+    VkImageAspectFlags barrierAspectMask = viewAspectMask;
+
+    if(IsDepthAndStencilFormat(f) && (barrierAspectMask & VK_IMAGE_ASPECT_STENCIL_BIT))
+      barrierAspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+
+    VkFormatProperties props = {};
+    driver->vkGetPhysicalDeviceFormatProperties(driver->GetPhysDev(), f, &props);
+
+    if(!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT))
+      continue;
+
+    VkImageCreateInfo imInfo = {
+        VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        NULL,
+        0,
+        VK_IMAGE_TYPE_2D,
+        f,
+        {1, 1, 1},
+        1,
+        1,
+        VK_SAMPLE_COUNT_1_BIT,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_SHARING_MODE_EXCLUSIVE,
+        0,
+        NULL,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+
+    VkImageFormatProperties imgprops = {};
+    vkr = driver->vkGetPhysicalDeviceImageFormatProperties(driver->GetPhysDev(), f,
+                                                           imInfo.imageType, imInfo.tiling,
+                                                           imInfo.usage, imInfo.flags, &imgprops);
+
+    if(vkr == VK_ERROR_FORMAT_NOT_SUPPORTED)
+      continue;
+
+    // if it doesn't support MSAA, bail out
+    if(imgprops.sampleCounts == VK_SAMPLE_COUNT_1_BIT)
+      continue;
+
+    vkr = driver->vkCreateImage(driver->GetDev(), &imInfo, NULL, &m_DummyStencilImage[0]);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    rm->SetInternalResource(GetResID(m_DummyStencilImage[0]));
+
+    imInfo.samples = VK_SAMPLE_COUNT_2_BIT;
+
+    RDCASSERT(imgprops.sampleCounts & imInfo.samples, imgprops.sampleCounts, imInfo.samples);
+
+    vkr = driver->vkCreateImage(driver->GetDev(), &imInfo, NULL, &m_DummyStencilImage[1]);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    rm->SetInternalResource(GetResID(m_DummyStencilImage[1]));
+
+    VkMemoryRequirements mrq[2] = {};
+    driver->vkGetImageMemoryRequirements(driver->GetDev(), m_DummyStencilImage[0], &mrq[0]);
+    driver->vkGetImageMemoryRequirements(driver->GetDev(), m_DummyStencilImage[1], &mrq[1]);
+
+    uint32_t memoryTypeBits = (mrq[0].memoryTypeBits & mrq[1].memoryTypeBits);
+
+    // assume we have some memory type available in common
+    RDCASSERT(memoryTypeBits, mrq[0].memoryTypeBits, mrq[1].memoryTypeBits);
+
+    // allocate memory
+    VkMemoryAllocateInfo allocInfo = {
+        VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, NULL,
+        AlignUp(mrq[0].size, mrq[1].alignment) + mrq[1].size,
+        driver->GetGPULocalMemoryIndex(memoryTypeBits),
+    };
+
+    vkr = driver->vkAllocateMemory(driver->GetDev(), &allocInfo, NULL, &m_DummyStencilMemory);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    rm->SetInternalResource(GetResID(m_DummyStencilMemory));
+
+    vkr =
+        driver->vkBindImageMemory(driver->GetDev(), m_DummyStencilImage[0], m_DummyStencilMemory, 0);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    vkr = driver->vkBindImageMemory(driver->GetDev(), m_DummyStencilImage[1], m_DummyStencilMemory,
+                                    AlignUp(mrq[0].size, mrq[1].alignment));
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    VkImageViewCreateInfo viewInfo = {
+        VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        NULL,
+        0,
+        m_DummyStencilImage[0],
+        VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+        f,
+        {VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY,
+         VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY},
+        {
+            viewAspectMask, 0, 1, 0, 1,
+        },
+    };
+
+    vkr = driver->vkCreateImageView(driver->GetDev(), &viewInfo, NULL, &m_DummyStencilView[0]);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    rm->SetInternalResource(GetResID(m_DummyStencilView[0]));
+
+    viewInfo.image = m_DummyStencilImage[1];
+
+    vkr = driver->vkCreateImageView(driver->GetDev(), &viewInfo, NULL, &m_DummyStencilView[1]);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    rm->SetInternalResource(GetResID(m_DummyStencilView[1]));
+
+    VkCommandBuffer cmd = driver->GetNextCmd();
+
+    VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
+                                          VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+
+    vkr = ObjDisp(cmd)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    // need to update image layout into valid state
+    VkImageMemoryBarrier barrier = {
+        VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        NULL,
+        0,
+        VK_ACCESS_SHADER_READ_BIT,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_QUEUE_FAMILY_IGNORED,
+        Unwrap(m_DummyStencilImage[0]),
+        {barrierAspectMask, 0, 1, 0, 1},
+    };
+
+    DoPipelineBarrier(cmd, 1, &barrier);
+
+    barrier.image = Unwrap(m_DummyStencilImage[1]);
+
+    DoPipelineBarrier(cmd, 1, &barrier);
+
+    ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
+
+    break;
+  }
+
+  if(m_DummyStencilImage[0] == VK_NULL_HANDLE)
+  {
+    RDCERR("Couldn't find any integer format we could generate a dummy multisampled image with");
+  }
+
   CREATE_OBJECT(m_ArrayMSDescSet, m_ArrayMSDescriptorPool, m_ArrayMSDescSetLayout);
 
   rm->SetInternalResource(GetResID(m_ArrayMSDescSet));
@@ -569,6 +728,12 @@ VulkanDebugManager::~VulkanDebugManager()
 
   m_pDriver->vkDestroyDescriptorPool(dev, m_ArrayMSDescriptorPool, NULL);
   m_pDriver->vkDestroySampler(dev, m_ArrayMSSampler, NULL);
+
+  m_pDriver->vkDestroyImageView(dev, m_DummyStencilView[0], NULL);
+  m_pDriver->vkDestroyImageView(dev, m_DummyStencilView[1], NULL);
+  m_pDriver->vkDestroyImage(dev, m_DummyStencilImage[0], NULL);
+  m_pDriver->vkDestroyImage(dev, m_DummyStencilImage[1], NULL);
+  m_pDriver->vkFreeMemory(dev, m_DummyStencilMemory, NULL);
 
   m_pDriver->vkDestroyDescriptorSetLayout(dev, m_ArrayMSDescSetLayout, NULL);
   m_pDriver->vkDestroyPipelineLayout(dev, m_ArrayMSPipeLayout, NULL);
@@ -1432,7 +1597,7 @@ void VulkanReplay::CreateResources()
 
   AMDCounters *counters = NULL;
 
-  GPUVendor vendor = m_pDriver->GetDriverVersion().Vendor();
+  GPUVendor vendor = m_pDriver->GetDriverInfo().Vendor();
 
   if(vendor == GPUVendor::AMD)
   {
@@ -1525,7 +1690,7 @@ void VulkanReplay::TextureRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
                     {7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
                     {8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
                     {9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
-                    {10, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
+                    {10, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, VK_SHADER_STAGE_ALL, NULL},
                     {11, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
                     {12, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
                     {13, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
@@ -1695,8 +1860,7 @@ void VulkanReplay::TextureRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
         curOffset += mrq.size;
 
         // fill out the descriptor set write to the write binding - set will be filled out
-        // on demand when we're actulaly using these writes.
-        DummyWrites[index].descriptorCount = 1;
+        // on demand when we're actually using these writes.
         DummyWrites[index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         DummyWrites[index].pNext = NULL;
         DummyWrites[index].dstSet = VK_NULL_HANDLE;
@@ -1716,6 +1880,27 @@ void VulkanReplay::TextureRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
       }
     }
 
+    // add the last one for the odd-one-out YUV texture
+
+    DummyWrites[index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    DummyWrites[index].pNext = NULL;
+    DummyWrites[index].dstSet = VK_NULL_HANDLE;
+    DummyWrites[index].dstBinding = 10;    // texYUV
+    DummyWrites[index].dstArrayElement = 0;
+    DummyWrites[index].descriptorCount = 1;
+    DummyWrites[index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    DummyWrites[index].pImageInfo = &DummyInfos[index];
+    DummyWrites[index].pBufferInfo = NULL;
+    DummyWrites[index].pTexelBufferView = NULL;
+
+    DummyWrites[index + 1] = DummyWrites[index];
+    DummyWrites[index + 1].dstArrayElement = 1;
+
+    DummyInfos[index].sampler = Unwrap(DummySampler);
+    DummyInfos[index].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    DummyInfos[index + 1].sampler = Unwrap(DummySampler);
+    DummyInfos[index + 1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
     // align up a bit just to be safe
     allocInfo.allocationSize = AlignUp(curOffset, (VkDeviceSize)1024ULL);
 
@@ -1726,6 +1911,10 @@ void VulkanReplay::TextureRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
     // bind all the image memory
     for(index = 0; index < (int)ARRAY_COUNT(DummyImages); index++)
     {
+      // there are a couple of empty images at the end for YUV textures which re-use the 2D image
+      if(DummyImages[index] == VK_NULL_HANDLE)
+        continue;
+
       vkr = driver->vkBindImageMemory(driver->GetDev(), DummyImages[index], DummyMemory,
                                       offsets[index]);
       RDCASSERTEQUAL(vkr, VK_SUCCESS);
@@ -1777,6 +1966,10 @@ void VulkanReplay::TextureRendering::Init(WrappedVulkan *driver, VkDescriptorPoo
         index++;
       }
     }
+
+    // duplicate 2D dummy image into YUV
+    DummyInfos[index].imageView = DummyInfos[1].imageView;
+    DummyInfos[index + 1].imageView = DummyInfos[1].imageView;
 
     ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
   }
@@ -2291,6 +2484,7 @@ void VulkanReplay::HistogramMinMax::Init(WrappedVulkan *driver, VkDescriptorPool
                     {7, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
                     {8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
                     {9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
+                    {10, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, VK_SHADER_STAGE_ALL, NULL},
                     {11, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
                     {12, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
                     {13, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_ALL, NULL},
@@ -2325,7 +2519,7 @@ void VulkanReplay::HistogramMinMax::Init(WrappedVulkan *driver, VkDescriptorPool
 
       std::string defines = "";
 
-      if(driver->GetDriverVersion().TexelFetchBrokenDriver())
+      if(driver->GetDriverInfo().TexelFetchBrokenDriver())
         defines += "#define NO_TEXEL_FETCH\n";
       defines += string("#define SHADER_RESTYPE ") + ToStr(t) + "\n";
       defines += string("#define UINT_TEX ") + (f == 1 ? "1" : "0") + "\n";

@@ -338,21 +338,60 @@ void GLReplay::InitDebugData()
     GenerateGLSLShader(fs, shaderType, "", GetEmbeddedResource(glsl_mesh_frag), glslBaseVer);
     GenerateGLSLShader(gs, shaderType, "", GetEmbeddedResource(glsl_mesh_geom), glslBaseVer);
 
-    DebugData.meshProg = CreateShaderProgram(vs, fs);
-    DebugData.meshgsProg = CreateShaderProgram(vs, fs, gs);
+    DebugData.meshProg[0] = CreateShaderProgram(vs, fs);
+    DebugData.meshgsProg[0] = CreateShaderProgram(vs, fs, gs);
 
     GenerateGLSLShader(fs, shaderType, "", GetEmbeddedResource(glsl_trisize_frag), glslBaseVer);
     GenerateGLSLShader(gs, shaderType, "", GetEmbeddedResource(glsl_trisize_geom), glslBaseVer);
 
     DebugData.trisizeProg = CreateShaderProgram(vs, fs, gs);
+
+    if(HasExt[ARB_gpu_shader_fp64] && HasExt[ARB_vertex_attrib_64bit])
+    {
+      GenerateGLSLShader(fs, shaderType, "", GetEmbeddedResource(glsl_mesh_frag), glslBaseVer);
+
+      std::string extensions =
+          "#extension GL_ARB_gpu_shader_fp64 : require\n"
+          "#extension GL_ARB_vertex_attrib_64bit : require\n";
+
+      // position only dvec4
+      GenerateGLSLShader(vs, shaderType, extensions + "#define POSITION_TYPE dvec4",
+                         GetEmbeddedResource(glsl_mesh_vert), glslBaseVer);
+
+      DebugData.meshProg[1] = CreateShaderProgram(vs, fs);
+      DebugData.meshgsProg[1] = CreateShaderProgram(vs, fs, gs);
+
+      // secondary only dvec4
+      GenerateGLSLShader(vs, shaderType, extensions + "#define SECONDARY_TYPE dvec4",
+                         GetEmbeddedResource(glsl_mesh_vert), glslBaseVer);
+
+      DebugData.meshProg[2] = CreateShaderProgram(vs, fs);
+      DebugData.meshgsProg[2] = CreateShaderProgram(vs, fs, gs);
+
+      // both dvec4
+      GenerateGLSLShader(vs, shaderType, extensions +
+                                             "#define POSITION_TYPE dvec4\n"
+                                             "#define SECONDARY_TYPE dvec4",
+                         GetEmbeddedResource(glsl_mesh_vert), glslBaseVer);
+
+      DebugData.meshProg[3] = CreateShaderProgram(vs, fs);
+      DebugData.meshgsProg[3] = CreateShaderProgram(vs, fs, gs);
+    }
+    else
+    {
+      // we don't warn about the lack of double support, assuming that if the driver doesn't support
+      // it then it's highly unlikely that the capture uses it.
+      DebugData.meshProg[1] = DebugData.meshProg[2] = DebugData.meshProg[3] = 0;
+      DebugData.meshgsProg[1] = DebugData.meshgsProg[2] = DebugData.meshgsProg[3] = 0;
+    }
   }
   else
   {
     GenerateGLSLShader(vs, shaderType, "", GetEmbeddedResource(glsl_mesh_vert), glslBaseVer);
     GenerateGLSLShader(fs, shaderType, "", GetEmbeddedResource(glsl_mesh_frag), glslBaseVer);
 
-    DebugData.meshProg = CreateShaderProgram(vs, fs);
-    DebugData.meshgsProg = 0;
+    DebugData.meshProg[0] = CreateShaderProgram(vs, fs);
+    RDCEraseEl(DebugData.meshgsProg);
     DebugData.trisizeProg = 0;
 
     const char *warning_msg =
@@ -361,6 +400,39 @@ void GLReplay::InitDebugData()
     RDCWARN(warning_msg);
     m_pDriver->AddDebugMessage(MessageCategory::Portability, MessageSeverity::Medium,
                                MessageSource::RuntimeWarning, warning_msg);
+
+    if(HasExt[ARB_gpu_shader_fp64] && HasExt[ARB_vertex_attrib_64bit])
+    {
+      std::string extensions =
+          "#extension GL_ARB_gpu_shader_fp64 : require\n"
+          "#extension GL_ARB_vertex_attrib_64bit : require\n";
+
+      // position only dvec4
+      GenerateGLSLShader(vs, shaderType, extensions + "#define POSITION_TYPE dvec4",
+                         GetEmbeddedResource(glsl_mesh_vert), glslBaseVer);
+
+      DebugData.meshProg[1] = CreateShaderProgram(vs, fs);
+
+      // secondary only dvec4
+      GenerateGLSLShader(vs, shaderType, extensions + "#define SECONDARY_TYPE dvec4",
+                         GetEmbeddedResource(glsl_mesh_vert), glslBaseVer);
+
+      DebugData.meshProg[2] = CreateShaderProgram(vs, fs);
+
+      // both dvec4
+      GenerateGLSLShader(vs, shaderType, extensions +
+                                             "#define POSITION_TYPE dvec4\n"
+                                             "#define SECONDARY_TYPE dvec4",
+                         GetEmbeddedResource(glsl_mesh_vert), glslBaseVer);
+
+      DebugData.meshProg[3] = CreateShaderProgram(vs, fs);
+    }
+    else
+    {
+      // we don't warn about the lack of double support, assuming that if the driver doesn't support
+      // it then it's highly unlikely that the capture uses it.
+      DebugData.meshProg[1] = DebugData.meshProg[2] = DebugData.meshProg[3] = 0;
+    }
   }
 
   RenderDoc::Inst().SetProgress(LoadProgress::DebugManagerInit, 0.4f);
@@ -793,6 +865,8 @@ void GLReplay::InitDebugData()
 
   if(!HasExt[ARB_shader_image_load_store] || !HasExt[ARB_compute_shader])
   {
+    RDCWARN(
+        "Don't have shader image load/store or compute shaders, functionality will be degraded.");
     m_Degraded = true;
   }
 }
@@ -827,8 +901,12 @@ void GLReplay::DeleteDebugData()
   drv.glDeleteProgram(DebugData.checkerProg);
   if(DebugData.fixedcolFragShader)
     drv.glDeleteShader(DebugData.fixedcolFragShader);
-  drv.glDeleteProgram(DebugData.meshProg);
-  drv.glDeleteProgram(DebugData.meshgsProg);
+
+  for(size_t i = 0; i < ARRAY_COUNT(DebugData.meshProg); i++)
+  {
+    drv.glDeleteProgram(DebugData.meshProg[i]);
+    drv.glDeleteProgram(DebugData.meshgsProg[i]);
+  }
   drv.glDeleteProgram(DebugData.trisizeProg);
 
   drv.glDeleteSamplers(1, &DebugData.linearSampler);
@@ -892,6 +970,60 @@ void GLReplay::DeleteDebugData()
 
 bool GLReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, uint32_t sample,
                          CompType typeHint, float *minval, float *maxval)
+{
+  auto &texDetails = m_pDriver->m_Textures[texid];
+
+  if(GetBaseFormat(texDetails.internalFormat) == eGL_DEPTH_STENCIL)
+  {
+    // for depth/stencil we need to run the code twice - once to fetch depth and once to fetch
+    // stencil - since we can't process float depth and int stencil at the same time
+    Vec4f depth[2] = {
+        {0.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f},
+    };
+    Vec4u stencil[2] = {{0, 0, 0, 0}, {1, 1, 1, 1}};
+
+    bool success =
+        GetMinMax(texid, sliceFace, mip, sample, typeHint, false, &depth[0].x, &depth[1].x);
+
+    if(!success)
+      return false;
+
+    success = GetMinMax(texid, sliceFace, mip, sample, typeHint, true, (float *)&stencil[0].x,
+                        (float *)&stencil[1].x);
+
+    if(!success)
+      return false;
+
+    // copy across into green channel, casting up to float, dividing by the range for this texture
+    float rangeScale = 1.0f;
+    switch(texDetails.internalFormat)
+    {
+      case eGL_STENCIL_INDEX1: rangeScale = 1.0f; break;
+      case eGL_STENCIL_INDEX4: rangeScale = 16.0f; break;
+      default:
+        RDCWARN("Unexpected raw format for stencil visualization");
+      // fall through
+      case eGL_DEPTH24_STENCIL8:
+      case eGL_DEPTH32F_STENCIL8:
+      case eGL_DEPTH_STENCIL:
+      case eGL_STENCIL_INDEX8: rangeScale = 255.0f; break;
+      case eGL_STENCIL_INDEX16: rangeScale = 65535.0f; break;
+    }
+
+    depth[0].y = float(stencil[0].x) / rangeScale;
+    depth[1].y = float(stencil[1].x) / rangeScale;
+
+    memcpy(minval, &depth[0].x, sizeof(depth[0]));
+    memcpy(maxval, &depth[1].x, sizeof(depth[1]));
+
+    return true;
+  }
+
+  return GetMinMax(texid, sliceFace, mip, sample, typeHint, false, minval, maxval);
+}
+
+bool GLReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, uint32_t sample,
+                         CompType typeHint, bool stencil, float *minval, float *maxval)
 {
   if(texid == ResourceId() || m_pDriver->m_Textures.find(texid) == m_pDriver->m_Textures.end())
     return false;
@@ -959,6 +1091,27 @@ bool GLReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, uin
 
   MakeCurrentReplayContext(m_DebugCtx);
 
+  RDCGLenum dsTexMode = eGL_NONE;
+  if(IsDepthStencilFormat(texDetails.internalFormat))
+  {
+    if(stencil)
+    {
+      dsTexMode = eGL_STENCIL_INDEX;
+      intIdx = 1;
+    }
+    else
+    {
+      dsTexMode = eGL_DEPTH_COMPONENT;
+    }
+  }
+  else
+  {
+    if(details.format.compType == CompType::UInt)
+      intIdx = 1;
+    if(details.format.compType == CompType::SInt)
+      intIdx = 2;
+  }
+
   GL.glBindBufferBase(eGL_UNIFORM_BUFFER, 2, DebugData.UBOs[0]);
   HistogramUBOData *cdata =
       (HistogramUBOData *)GL.glMapBufferRange(eGL_UNIFORM_BUFFER, 0, sizeof(HistogramUBOData),
@@ -980,18 +1133,15 @@ bool GLReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, uin
   cdata->HistogramMax = 1.0f;
   cdata->HistogramChannels = 0xf;
 
+  cdata->HistogramYUVDownsampleRate = {};
+  cdata->HistogramYUVAChannels = {};
+
   int progIdx = texSlot;
 
-  if(details.format.compType == CompType::UInt)
-  {
+  if(intIdx == 1)
     progIdx |= TEXDISPLAY_UINT_TEX;
-    intIdx = 1;
-  }
-  if(details.format.compType == CompType::SInt)
-  {
+  if(intIdx == 2)
     progIdx |= TEXDISPLAY_SINT_TEX;
-    intIdx = 2;
-  }
 
   int blocksX = (int)ceil(cdata->HistogramTextureResolution.x /
                           float(HGRAM_PIXELS_PER_TILE * HGRAM_TILES_PER_BLOCK));
@@ -1006,6 +1156,13 @@ bool GLReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, uin
     GL.glBindSampler(texSlot, DebugData.pointNoMipSampler);
   else
     GL.glBindSampler(texSlot, DebugData.pointSampler);
+
+  GLint origDSTexMode = eGL_DEPTH_COMPONENT;
+  if(dsTexMode != eGL_NONE && HasExt[ARB_stencil_texturing])
+  {
+    GL.glGetTexParameteriv(target, eGL_DEPTH_STENCIL_TEXTURE_MODE, &origDSTexMode);
+    GL.glTexParameteri(target, eGL_DEPTH_STENCIL_TEXTURE_MODE, dsTexMode);
+  }
 
   int maxlevel = -1;
 
@@ -1054,6 +1211,9 @@ bool GLReplay::GetMinMax(ResourceId texid, uint32_t sliceFace, uint32_t mip, uin
   maxval[1] = minmax[1].y;
   maxval[2] = minmax[1].z;
   maxval[3] = minmax[1].w;
+
+  if(dsTexMode != eGL_NONE && HasExt[ARB_stencil_texturing])
+    GL.glTexParameteri(target, eGL_DEPTH_STENCIL_TEXTURE_MODE, origDSTexMode);
 
   return true;
 }
@@ -1131,6 +1291,63 @@ bool GLReplay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t mip, 
 
   MakeCurrentReplayContext(m_DebugCtx);
 
+  RDCGLenum dsTexMode = eGL_NONE;
+  if(IsDepthStencilFormat(texDetails.internalFormat))
+  {
+    // stencil-only, make sure we display it as such
+    if(texDetails.internalFormat == eGL_STENCIL_INDEX8)
+    {
+      channels[0] = false;
+      channels[1] = true;
+      channels[2] = false;
+      channels[3] = false;
+    }
+
+    // depth-only, make sure we display it as such
+    if(GetBaseFormat(texDetails.internalFormat) == eGL_DEPTH_COMPONENT)
+    {
+      channels[0] = true;
+      channels[1] = false;
+      channels[2] = false;
+      channels[3] = false;
+    }
+
+    if(!channels[0] && channels[1])
+    {
+      dsTexMode = eGL_STENCIL_INDEX;
+
+      // Stencil texture sampling is not normalized in OpenGL
+      intIdx = 1;
+      float rangeScale = 1.0f;
+      switch(texDetails.internalFormat)
+      {
+        case eGL_STENCIL_INDEX1: rangeScale = 1.0f; break;
+        case eGL_STENCIL_INDEX4: rangeScale = 16.0f; break;
+        default:
+          RDCWARN("Unexpected raw format for stencil visualization");
+        // fall through
+        case eGL_DEPTH24_STENCIL8:
+        case eGL_DEPTH32F_STENCIL8:
+        case eGL_DEPTH_STENCIL:
+        case eGL_STENCIL_INDEX8: rangeScale = 255.0f; break;
+        case eGL_STENCIL_INDEX16: rangeScale = 65535.0f; break;
+      }
+      minval *= rangeScale;
+      maxval *= rangeScale;
+    }
+    else
+    {
+      dsTexMode = eGL_DEPTH_COMPONENT;
+    }
+  }
+  else
+  {
+    if(details.format.compType == CompType::UInt)
+      intIdx = 1;
+    if(details.format.compType == CompType::SInt)
+      intIdx = 2;
+  }
+
   GL.glBindBufferBase(eGL_UNIFORM_BUFFER, 2, DebugData.UBOs[0]);
   HistogramUBOData *cdata =
       (HistogramUBOData *)GL.glMapBufferRange(eGL_UNIFORM_BUFFER, 0, sizeof(HistogramUBOData),
@@ -1150,34 +1367,39 @@ bool GLReplay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t mip, 
     cdata->HistogramSample = -int(details.msSamp);
   cdata->HistogramMin = minval;
 
+  cdata->HistogramYUVDownsampleRate = {};
+  cdata->HistogramYUVAChannels = {};
+
   // The calculation in the shader normalises each value between min and max, then multiplies by the
   // number of buckets.
   // But any value equal to HistogramMax must go into NUM_BUCKETS-1, so add a small delta.
   cdata->HistogramMax = maxval + maxval * 1e-6f;
 
   cdata->HistogramChannels = 0;
-  if(channels[0])
+  if(dsTexMode == eGL_NONE)
+  {
+    if(channels[0])
+      cdata->HistogramChannels |= 0x1;
+    if(channels[1])
+      cdata->HistogramChannels |= 0x2;
+    if(channels[2])
+      cdata->HistogramChannels |= 0x4;
+    if(channels[3])
+      cdata->HistogramChannels |= 0x8;
+  }
+  else
+  {
+    // Both depth and stencil texture mode use the red channel
     cdata->HistogramChannels |= 0x1;
-  if(channels[1])
-    cdata->HistogramChannels |= 0x2;
-  if(channels[2])
-    cdata->HistogramChannels |= 0x4;
-  if(channels[3])
-    cdata->HistogramChannels |= 0x8;
+  }
   cdata->HistogramFlags = 0;
 
   int progIdx = texSlot;
 
-  if(details.format.compType == CompType::UInt)
-  {
+  if(intIdx == 1)
     progIdx |= TEXDISPLAY_UINT_TEX;
-    intIdx = 1;
-  }
-  if(details.format.compType == CompType::SInt)
-  {
+  if(intIdx == 2)
     progIdx |= TEXDISPLAY_SINT_TEX;
-    intIdx = 2;
-  }
 
   int blocksX = (int)ceil(cdata->HistogramTextureResolution.x /
                           float(HGRAM_PIXELS_PER_TILE * HGRAM_TILES_PER_BLOCK));
@@ -1192,6 +1414,13 @@ bool GLReplay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t mip, 
     GL.glBindSampler(texSlot, DebugData.pointNoMipSampler);
   else
     GL.glBindSampler(texSlot, DebugData.pointSampler);
+
+  GLint origDSTexMode = eGL_DEPTH_COMPONENT;
+  if(dsTexMode != eGL_NONE && HasExt[ARB_stencil_texturing])
+  {
+    GL.glGetTexParameteriv(target, eGL_DEPTH_STENCIL_TEXTURE_MODE, &origDSTexMode);
+    GL.glTexParameteri(target, eGL_DEPTH_STENCIL_TEXTURE_MODE, dsTexMode);
+  }
 
   int maxlevel = -1;
 
@@ -1228,6 +1457,9 @@ bool GLReplay::GetHistogram(ResourceId texid, uint32_t sliceFace, uint32_t mip, 
 
   if(maxlevel >= 0)
     GL.glTextureParameterivEXT(texname, target, eGL_TEXTURE_MAX_LEVEL, (GLint *)&maxlevel);
+
+  if(dsTexMode != eGL_NONE && HasExt[ARB_stencil_texturing])
+    GL.glTexParameteri(target, eGL_DEPTH_STENCIL_TEXTURE_MODE, origDSTexMode);
 
   return true;
 }

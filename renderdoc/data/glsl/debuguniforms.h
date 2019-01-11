@@ -42,11 +42,6 @@
 #define BINDING(b)
 #define INST_NAME(name)
 
-struct Vec4u
-{
-  uint32_t x, y, z, w;
-};
-
 #define uvec4 Vec4u
 
 #if !defined(VULKAN) && !defined(OPENGL)
@@ -75,6 +70,7 @@ struct Vec4u
 #define OPENGL 1
 
 #define HISTOGRAM_UBOS
+#define HEATMAP_UBO
 
 #ifdef GL_ES
 #define OPENGL_ES 1
@@ -143,27 +139,13 @@ BINDING(0) uniform TexDisplayUBOData
 
   int SampleIdx;
   float MipShift;
-  vec2 Padding;
+  int DecodeYUV;
+  float Padding;
+
+  uvec4 YUVDownsampleRate;
+  uvec4 YUVAChannels;
 }
 INST_NAME(texdisplay);
-
-#define HEATMAP_DISABLED 0
-#define HEATMAP_LINEAR 1
-#define HEATMAP_TRISIZE 2
-
-#define HEATMAP_RAMPSIZE 22
-
-BINDING(1) uniform HeatmapData
-{
-  int HeatmapMode;
-  int DummyA;
-  int DummyB;
-  int DummyC;
-
-  // must match size of colorRamp on C++ side
-  vec4 ColorRamp[22];
-}
-INST_NAME(heatmap);
 
 BINDING(0) uniform FontUBOData
 {
@@ -225,6 +207,28 @@ INST_NAME(str);
 
 #endif
 
+#define HEATMAP_DISABLED 0
+#define HEATMAP_LINEAR 1
+#define HEATMAP_TRISIZE 2
+
+#define HEATMAP_RAMPSIZE 22
+
+#if defined(HEATMAP_UBO) || defined(__cplusplus)
+
+BINDING(1) uniform HeatmapData
+{
+  int HeatmapMode;
+  int DummyA;
+  int DummyB;
+  int DummyC;
+
+  // must match size of colorRamp on C++ side
+  vec4 ColorRamp[22];
+}
+INST_NAME(heatmap);
+
+#endif
+
 #if defined(HISTOGRAM_UBOS) || defined(__cplusplus)
 
 BINDING(2) uniform HistogramUBOData
@@ -241,6 +245,9 @@ BINDING(2) uniform HistogramUBOData
 
   vec3 HistogramTextureResolution;
   float Padding3;
+
+  uvec4 HistogramYUVDownsampleRate;
+  uvec4 HistogramYUVAChannels;
 }
 INST_NAME(histogram_minmax);
 

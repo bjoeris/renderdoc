@@ -148,6 +148,7 @@ struct LookupModule
 {
   uint64_t base;
   uint64_t end;
+  uint64_t offset;
   char path[2048];
 };
 
@@ -180,9 +181,8 @@ private:
     {
       if(addr >= m_Modules[i].base && addr < m_Modules[i].end)
       {
-        uint64_t relative = addr - m_Modules[i].base;
-        string cmd =
-            StringFormat::Fmt("addr2line -j.text -fCe \"%s\" 0x%llx", m_Modules[i].path, relative);
+        uint64_t relative = addr - m_Modules[i].base + m_Modules[i].offset;
+        string cmd = StringFormat::Fmt("addr2line -fCe \"%s\" 0x%llx", m_Modules[i].path, relative);
 
         FILE *f = ::popen(cmd.c_str(), "r");
 
@@ -259,21 +259,23 @@ StackResolver *MakeResolver(byte *moduleDB, size_t DBSize, RENDERDOC_ProgressCal
 
     // find .text segments
     {
-      long unsigned int base = 0, end = 0;
+      long unsigned int base = 0, end = 0, offset = 0;
 
       int inode = 0;
       int offs = 0;
       //                        base-end   perms offset devid   inode offs
-      int num = sscanf(search, "%lx-%lx  r-xp  %*x    %*x:%*x %d    %n", &base, &end, &inode, &offs);
+      int num = sscanf(search, "%lx-%lx  r-xp  %lx    %*x:%*x %d    %n", &base, &end, &offset,
+                       &inode, &offs);
 
       // we don't care about inode actually, we ust use it to verify that
-      // we read all 3 params (and so perms == r-xp)
-      if(num == 3 && offs > 0)
+      // we read all 4 params (and so perms == r-xp)
+      if(num == 4 && offs > 0)
       {
         LookupModule mod = {0};
 
         mod.base = (uint64_t)base;
         mod.end = (uint64_t)end;
+        mod.offset = (uint64_t)offset;
 
         search += offs;
         while(search < dbend && (*search == ' ' || *search == '\t'))
@@ -298,37 +300,7 @@ StackResolver *MakeResolver(byte *moduleDB, size_t DBSize, RENDERDOC_ProgressCal
             mod.path[i] = search[i];
           }
 
-          // addr2line wants offsets relative to text section, have to find offset of .text section
-          // in this
-          // mmapped section
-
-          int textoffs = 0;
-          string cmd = StringFormat::Fmt("readelf -WS \"%s\"", mod.path);
-
-          FILE *f = ::popen(cmd.c_str(), "r");
-
-          char result[4096] = {0};
-          fread(result, 1, 4095, f);
-
-          fclose(f);
-
-          // find .text line
-          char *find = strstr(result, ".text");
-
-          if(find)
-          {
-            find += 5;
-
-            while(isalpha(*find) || isspace(*find))
-              find++;
-
-            // virtual address is listed first, we want the offset
-            sscanf(find, "%*x %x", &textoffs);
-
-            mod.base += textoffs;
-
-            modules.push_back(mod);
-          }
+          modules.push_back(mod);
         }
       }
     }

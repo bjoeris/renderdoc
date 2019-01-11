@@ -331,12 +331,12 @@ private:
 
   struct PhysicalDeviceData
   {
-    PhysicalDeviceData() : readbackMemIndex(0), uploadMemIndex(0), GPULocalMemIndex(0)
+    PhysicalDeviceData()
+        : readbackMemIndex(0), uploadMemIndex(0), GPULocalMemIndex(0), props(), driverInfo(props)
     {
       fakeMemProps = NULL;
       memIdxMap = NULL;
       RDCEraseEl(features);
-      RDCEraseEl(props);
       RDCEraseEl(memProps);
       RDCEraseEl(fmtprops);
       RDCEraseEl(queueProps);
@@ -356,6 +356,7 @@ private:
     VkPhysicalDeviceMemoryProperties *fakeMemProps;
     uint32_t *memIdxMap;
 
+    VkDriverInfo driverInfo;
     VkPhysicalDeviceFeatures features;
     VkPhysicalDeviceProperties props;
     VkPhysicalDeviceMemoryProperties memProps;
@@ -528,6 +529,8 @@ private:
     VkCommandBufferLevel level;
     VkCommandBufferUsageFlags beginFlags;
 
+    bool inheritConditionalRendering = false;
+
     int markerCount;
 
     std::vector<std::pair<ResourceId, EventUsage>> resourceUsage;
@@ -553,6 +556,13 @@ private:
       ResourceId renderPass;
       ResourceId framebuffer;
       uint32_t subpass = 0;
+
+      struct ConditionalRendering
+      {
+        ResourceId buffer;
+        VkDeviceSize offset;
+        VkConditionalRenderingFlagsEXT flags;
+      } conditionalRendering;
     } state;
 
     std::vector<std::pair<ResourceId, ImageRegionState>> imgbarriers;
@@ -769,6 +779,7 @@ private:
 
   void StartFrameCapture(void *dev, void *wnd);
   bool EndFrameCapture(void *dev, void *wnd);
+  bool DiscardFrameCapture(void *dev, void *wnd);
 
   void AdvanceFrame();
   void Present(void *dev, void *wnd);
@@ -806,7 +817,8 @@ private:
 
   VulkanDrawcallTreeNode m_ParentDrawcall;
 
-  bool m_ExtensionsEnabled[VkCheckExt_Max];
+  bool m_ExtensionsEnabled[VkCheckExt_Max] = {};
+  bool m_LayersEnabled[VkCheckLayer_Max] = {};
 
   // in vk_<platform>.cpp
   void AddRequiredExtensions(bool instance, vector<string> &extensionList,
@@ -958,7 +970,7 @@ public:
 
   const VkPhysicalDeviceFeatures &GetDeviceFeatures() { return m_PhysicalDeviceData.features; }
   const VkPhysicalDeviceProperties &GetDeviceProps() { return m_PhysicalDeviceData.props; }
-  VkDriverInfo GetDriverVersion() { return VkDriverInfo(m_PhysicalDeviceData.props); }
+  VkDriverInfo GetDriverInfo() { return m_PhysicalDeviceData.driverInfo; }
   // Device initialization
 
   IMPLEMENT_FUNCTION_SERIALISED(VkResult, vkCreateInstance, const VkInstanceCreateInfo *pCreateInfo,
@@ -1989,4 +2001,10 @@ public:
                                 uint32_t instanceCount, uint32_t firstInstance,
                                 VkBuffer counterBuffer, VkDeviceSize counterBufferOffset,
                                 uint32_t counterOffset, uint32_t vertexStride);
+
+  // VK_EXT_conditional_rendering
+  IMPLEMENT_FUNCTION_SERIALISED(void, vkCmdBeginConditionalRenderingEXT,
+                                VkCommandBuffer commandBuffer,
+                                const VkConditionalRenderingBeginInfoEXT *pConditionalRenderingBegin);
+  IMPLEMENT_FUNCTION_SERIALISED(void, vkCmdEndConditionalRenderingEXT, VkCommandBuffer commandBuffer);
 };
