@@ -327,7 +327,7 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
       fprintf(stdout, "%s", cbTime.c_str());
 #endif
     }
-#if defined(__yeti__)
+#if defined(__yeti__) || defined(__ggp__)
     const char csvFileName[] = "/var/game/profiling_output.csv";
 #else
     const char csvFileName[] = "profiling_output.csv";

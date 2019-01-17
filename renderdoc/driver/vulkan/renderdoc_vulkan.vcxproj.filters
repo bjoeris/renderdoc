@@ -219,6 +219,9 @@
     <ClInclude Include="official\vulkan_fuchsia.h">
       <Filter>official</Filter>
     </ClInclude>
+    <ClInclude Include="official\vulkan_ggp.h">
+      <Filter>official</Filter>
+    </ClInclude>
     <ClInclude Include="official\vulkan_yeti.h">
       <Filter>official</Filter>
     </ClInclude>

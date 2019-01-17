@@ -10,10 +10,11 @@ readonly BAZEL_BUILD_OPTS=(
   --linkopt="-Wl,--build-id=md5"
   --strip="never"
 )
+
 readonly BUILD_TARGETS=(
-  "//cloud/libs:libyeti.so"
-  "//cloud/yeti:yeti_internal_sdk_headers"
-  "//cloud/yeti_c:yeti_c_internal_sdk_headers"
+  "//cloud/libs:libggp.so"
+  "//cloud/public/ggp:ggp_internal_sdk_headers"
+  "//cloud/public/ggp_c:ggp_c_internal_sdk_headers"
   "//common/libs/version:version_internal_sdk_headers"
   "//graphics/packaging:sysroot_pkg"
 )
@@ -55,7 +56,7 @@ function setup_base_sdk() {
 #   LD_LIBRARY_PATH: Path to the sysroot lib directory.  Set by setup_base_sdk.
 #   YETI_ROOT: Path to the top level of the local copy of the yeti/yeti
 #              repository.
-function build_yeti_components() {
+function build_ggp_components() {
   pushd "${YETI_ROOT}" &> /dev/null
 
   ${BAZEL} "${BAZEL_FLAGS[@]}" build "${BAZEL_BUILD_OPTS[@]}" \
@@ -66,11 +67,11 @@ function build_yeti_components() {
   bazel_genfiles=$(
     ${BAZEL} "${BAZEL_FLAGS[@]}" info "${BAZEL_BUILD_OPTS[@]}" bazel-genfiles)
 
-  cp -a "${bazel_bin}/cloud/libs/libyeti.so" "${LD_LIBRARY_PATH}/"
-  cp -a "${bazel_genfiles}/cloud/yeti_c/internal_sdk/yeti_c" \
+  cp -a "${bazel_bin}/cloud/libs/libggp.so" "${LD_LIBRARY_PATH}/"
+  cp -a "${bazel_genfiles}/cloud/public/ggp_c/internal_sdk/ggp_c" \
     "${BASE_SDK_HEADERS}/"
-  cp -a "${bazel_genfiles}/common/libs/version/internal_sdk/yeti_c/version.h" \
-    "${BASE_SDK_HEADERS}/yeti_c/"
+  cp -a "${bazel_genfiles}/common/libs/version/internal_sdk/ggp_c/version.h" \
+    "${BASE_SDK_HEADERS}/ggp_c/"
   tar -C "${BASE_SDK_HEADERS}/" -zxvf \
     "${bazel_bin}/graphics/packaging/sysroot_pkg.tar.gz" \
     ./usr/include/vulkan --strip-components=3
@@ -98,11 +99,11 @@ function build_renderdoc() {
 
   # Generate the build files and then build RenderDoc.
   cmake \
-    -DCMAKE_TOOLCHAIN_FILE="${RENDERDOC_ROOT}/tools/YetiSDK-latest/cmake/yeti.cmake" \
+    -DCMAKE_TOOLCHAIN_FILE="${RENDERDOC_ROOT}/tools/YetiSDK-latest/cmake/ggp.cmake" \
     -DCMAKE_BUILD_TYPE="${RELEASE_TYPE}" \
     -DCMAKE_INSTALL_PREFIX=/usr/local/cloudcast \
     -DCMAKE_INSTALL_RPATH=/usr/local/cloudcast/lib \
-    -DENABLE_YETI=ON \
+    -DENABLE_GGP=ON \
     -DENABLE_GL=OFF \
     -DENABLE_QRENDERDOC=OFF \
     -DENABLE_XCB=OFF \
@@ -142,7 +143,7 @@ function main() {
   gcloud auth activate-service-account \
     --key-file "${KOKORO_KEYSTORE_DIR}/71274_kokoro_service_key_json"
   setup_base_sdk
-  build_yeti_components
+  build_ggp_components
   build_renderdoc Release
   build_renderdoc Debug
 }

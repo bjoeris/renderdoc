@@ -849,9 +849,9 @@ void Process::StopGlobalHook()
 
 void *Process::LoadModule(const char *module)
 {
-  // YETI: Specify RTLD_GLOBAL so that libvulkan.so exported functions are
+  // GGP: Specify RTLD_GLOBAL so that libvulkan.so exported functions are
   // visible to our yeti layer.
-  // TODO(b/34059691): Yeti vulkan layer should not call
+  // TODO(b/34059691): GGP vulkan layer should not call
   // vkEnumerateInstanceExtensionProperties
   return dlopen(module, RTLD_NOW | RTLD_GLOBAL);
 }

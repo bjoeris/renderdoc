@@ -51,7 +51,7 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
 
 #if(defined(VK_USE_PLATFORM_ANDROID_KHR) || defined(VK_USE_PLATFORM_XCB_KHR) || \
     defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_MACOS_MVK) || \
-    defined(VK_USE_PLATFORM_YETI_GOOGLE))
+    defined(VK_USE_PLATFORM_GGP))
 
 #undef EXPECT_WSI
 #define EXPECT_WSI 1
@@ -125,19 +125,19 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
     }
 #endif
 
-#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
+#if defined(VK_USE_PLATFORM_GGP)
     // must be supported
-    RDCASSERT(supportedExtensions.find(VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME) !=
+    RDCASSERT(supportedExtensions.find(VK_GGP_STREAM_DESCRIPTOR_SURFACE_EXTENSION_NAME) !=
       supportedExtensions.end());
 
-    m_SupportedWindowSystems.push_back(WindowingSystem::Yeti);
+    m_SupportedWindowSystems.push_back(WindowingSystem::GGP);
 
     // don't add duplicates
     if(std::find(extensionList.begin(), extensionList.end(),
-               VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME) == extensionList.end())
-     {
-       extensionList.push_back(VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME);
-     }
+      VK_GGP_STREAM_DESCRIPTOR_SURFACE_EXTENSION_NAME) == extensionList.end())
+    {
+      extensionList.push_back(VK_GGP_STREAM_DESCRIPTOR_SURFACE_EXTENSION_NAME);
+    }
 #endif
 
 #if EXPECT_WSI
@@ -152,7 +152,7 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
 
 #if EXPECT_WSI
 
-#elif defined(VK_USE_PLATFORM_XCB_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_YETI_GOOGLE)
+#elif defined(VK_USE_PLATFORM_XCB_KHR) || defined(VK_USE_PLATFORM_XLIB_KHR) || defined(VK_USE_PLATFORM_GGP)
     // if we expected WSI support, warn about it but continue. The UI will have no supported
     // window systems to work with so will be forced to be headless.
     if(m_SupportedWindowSystems.empty())
@@ -179,9 +179,9 @@ void WrappedVulkan::AddRequiredExtensions(bool instance, vector<string> &extensi
               VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
 #endif
 
-#if defined(VK_USE_PLATFORM_YETI_GOOGLE)
-      RDCWARN("Yeti Output requires the '%s' extension to be present",
-        VK_GOOGLE_YETI_SURFACE_EXTENSION_NAME);
+#if defined(VK_USE_PLATFORM_GGP)
+      RDCWARN("GGP Output requires the '%s' extension to be present",
+        VK_GGP_STREAM_DESCRIPTOR_SURFACE_EXTENSION_NAME);
 #endif
     }
 

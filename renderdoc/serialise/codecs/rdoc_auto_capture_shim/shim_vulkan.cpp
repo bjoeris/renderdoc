@@ -141,7 +141,7 @@ void IsRenderDocLoaded()
   capture.api->_110.SetCaptureOptionU32(eRENDERDOC_Option_CaptureCallstacks, 1);
   capture.api->_110.SetCaptureOptionU32(eRENDERDOC_Option_HookIntoChildren, 1);
 
-#if defined(__yeti__)
+#if defined(__yeti__) || defined(__ggp__)
   capture.api->_110.SetLogFilePathTemplate("/var/game/");
 #elif defined(__linux__)
   capture.api->_110.SetLogFilePathTemplate(".");

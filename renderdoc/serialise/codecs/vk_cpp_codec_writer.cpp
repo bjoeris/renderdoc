@@ -510,7 +510,7 @@ void CodeWriter::Resolution(uint32_t pass)
       .PrintLnH("#if _WIN32")
       .PrintLnH("extern HINSTANCE appInstance;")
       .PrintLnH("extern HWND appHwnd;")
-      .PrintLnH("#elif defined(__linux__) && !defined(__yeti__)")
+      .PrintLnH("#elif defined(__linux__) && !defined(__yeti__) && !defined(__ggp__)")
       .PrintLnH("extern Display *appDisplay;")
       .PrintLnH("extern Window appWindow;")
       .PrintLnH("#endif");
@@ -650,6 +650,7 @@ void CodeWriter::CreateInstance(SDObject *o, uint32_t pass, bool global_ci)
   for(uint64_t i = 0; i < extensions->NumChildren(); i++)
   {
     if(extensions->GetChild(i)->data.str == "VK_GOOGLE_yeti_surface" ||
+       extensions->GetChild(i)->data.str == "VK_GGP_stream_descriptor_surface" ||
        extensions->GetChild(i)->data.str == "VK_KHR_win32_surface" ||
        extensions->GetChild(i)->data.str == "VK_KHR_xlib_surface" ||
        extensions->GetChild(i)->data.str == "VK_KHR_xcb_surface")
@@ -679,6 +680,8 @@ void CodeWriter::CreateInstance(SDObject *o, uint32_t pass, bool global_ci)
         .PrintLn("%s[%" PRId64 "] = \"VK_KHR_win32_surface\";", extensions->Name(), enables_surface)
         .PrintLn("#elif defined(__yeti__)")
         .PrintLn("%s[%" PRId64 "] = \"VK_GOOGLE_yeti_surface\";", extensions->Name(), enables_surface)
+        .PrintLn("#elif defined(__ggp__)")
+        .PrintLn("%s[%" PRId64 "] = \"VK_GGP_stream_descriptor_surface\";", extensions->Name(), enables_surface)
         .PrintLn("#elif defined(__linux__)")
         .PrintLn("%s[%" PRId64 "] = \"VK_KHR_xlib_surface\";", extensions->Name(), enables_surface)
         .PrintLn("#endif");
@@ -969,6 +972,19 @@ void CodeWriter::CreateSwapchainKHR(SDObject *o, uint32_t pass, bool global_ci)
           "VkResult result = vkCreateWin32SurfaceKHR("
           "%s, &VkWin32SurfaceCreateInfoKHR_%" PRIu64 ", NULL, &%s);",
           instance_name, swapchain->AsUInt64(), surface.c_str())
+      .PrintLn("assert(result == VK_SUCCESS);")
+      .PrintLn("#elif defined(__ggp__)")
+      .PrintLn("VkStreamDescriptorSurfaceCreateInfoGGP VkStreamDescriptorSurfaceCreateInfoGGP_%" PRIu64 " = {",
+        swapchain->AsUInt64())
+      .PrintLn("  /* sType = */ VK_STRUCTURE_TYPE_STREAM_DESCRIPTOR_SURFACE_CREATE_INFO_GGP,")
+      .PrintLn("  /* pNext = */ NULL,")
+      .PrintLn("  /* flags = */ 0,")
+      .PrintLn("  /* streamDescriptor = */ 1")
+      .PrintLn("};")
+      .PrintLn(
+        "VkResult result = vkCreateStreamDescriptorSurfaceGGP("
+        "%s, &VkStreamDescriptorSurfaceCreateInfoGGP_%" PRIu64 ", NULL, &%s);",
+        instance_name, swapchain->AsUInt64(), surface.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("#elif defined(__yeti__)")
       .PrintLn("VkYetiSurfaceCreateInfoGOOGLE VkYetiSurfaceCreateInfoGOOGLE_%" PRIu64 " = {",

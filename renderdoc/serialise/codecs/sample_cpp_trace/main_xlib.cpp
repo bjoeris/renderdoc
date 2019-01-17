@@ -29,7 +29,7 @@
 //-----------------------------------------------------------------------------
 // Defines the entry point that initializes and runs the serialized frame
 // capture on Linux
-#if defined(__linux__) && !defined(__yeti__)
+#if defined(__linux__) && !defined(__yeti__) && !defined(__ggp__)
 
 #include <stdio.h>
 #include <string.h>

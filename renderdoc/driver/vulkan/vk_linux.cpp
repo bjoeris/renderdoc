@@ -152,7 +152,8 @@ VkResult WrappedVulkan::vkCreateYetiSurfaceGOOGLE(VkInstance instance,
   VkResult ret =
     ObjDisp(instance)->CreateYetiSurfaceGOOGLE(Unwrap(instance), pCreateInfo, pAllocator, pSurface);
 
-  if (ret == VK_SUCCESS) {
+  if(ret == VK_SUCCESS)
+  {
     GetResourceManager()->WrapResource(Unwrap(instance), *pSurface);
 
     WrappedVkSurfaceKHR *wrapped = GetWrapped(*pSurface);
@@ -164,6 +165,33 @@ VkResult WrappedVulkan::vkCreateYetiSurfaceGOOGLE(VkInstance instance,
   return ret;
 }
 #endif // defined(VK_USE_PLATFORM_YETI_GOOGLE)
+
+#if defined(VK_USE_PLATFORM_GGP)
+
+VkResult WrappedVulkan::vkCreateStreamDescriptorSurfaceGGP(
+  const VkInstance                                  instance,
+  const VkStreamDescriptorSurfaceCreateInfoGGP* pCreateInfo,
+  const VkAllocationCallbacks*                pAllocator,
+  VkSurfaceKHR*                               pSurface) {
+  // should not come in here at all on replay
+  RDCASSERT(IsCaptureMode(m_State));
+
+  VkResult ret =
+    ObjDisp(instance)->CreateStreamDescriptorSurfaceGGP(Unwrap(instance), pCreateInfo, pAllocator, pSurface);
+
+  if(ret == VK_SUCCESS)
+  {
+    GetResourceManager()->WrapResource(Unwrap(instance), *pSurface);
+
+    WrappedVkSurfaceKHR *wrapped = GetWrapped(*pSurface);
+
+    // GGP: Copy the XCB hack and fudge our streamIndex into the record.  Add
+    // one so that null checks still work for the streamIndex = 0 case.
+    wrapped->record = (VkResourceRecord *) (uintptr_t) pCreateInfo->streamDescriptor;
+  }
+  return ret;
+}
+#endif // defined(VK_USE_PLATFORM_GGP)
 
 void VulkanReplay::OutputWindow::SetWindowHandle(WindowingData window)
 {
@@ -185,8 +213,8 @@ void VulkanReplay::OutputWindow::SetWindowHandle(WindowingData window)
   }
 #endif
 
-#if ENABLED(RDOC_YETI)
-  RDCWARN("Window system is Yeti, no OS handles for app window are needed");
+#if ENABLED(RDOC_GGP)
+  RDCWARN("Window system is GGP, no OS handles for app window are needed");
   return; // there are no OS specific handles to save.
 #endif
 
@@ -231,18 +259,18 @@ void VulkanReplay::OutputWindow::CreateSurface(VkInstance inst)
   }
 #endif
 
-#if ENABLED(RDOC_YETI)
-  VkYetiSurfaceCreateInfoGOOGLE createInfo;
+#if ENABLED(RDOC_GGP)
+  VkStreamDescriptorSurfaceCreateInfoGGP createInfo;
 
-  createInfo.sType = VK_STRUCTURE_TYPE_YETI_SURFACE_CREATE_INFO_GOOGLE;
+  createInfo.sType = VK_STRUCTURE_TYPE_STREAM_DESCRIPTOR_SURFACE_CREATE_INFO_GGP;
   createInfo.pNext = NULL;
-  createInfo.streamIndex = 0;
+  createInfo.streamDescriptor = 1;
 
-  VkResult vkr = ObjDisp(inst)->CreateYetiSurfaceGOOGLE(Unwrap(inst), &createInfo, NULL, &surface);
+  VkResult vkr = ObjDisp(inst)->CreateStreamDescriptorSurfaceGGP(Unwrap(inst), &createInfo, NULL, &surface);
   RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
   return;
-#endif
+#endif // ENABLED(RDOC_GGP)
 
   RDCERR("Unrecognised/unsupported window system %d", m_WindowSystem);
 }
@@ -283,9 +311,10 @@ void VulkanReplay::GetOutputWindowDimensions(uint64_t id, int32_t &w, int32_t &h
   }
 #endif
 
-#if ENABLED(RDOC_YETI)
-  if (outw.m_WindowSystem == WindowingSystem::Yeti) {
-    RDCWARN("Window system is Yeti (%d), size is %d, %d", outw.m_WindowSystem, outw.width, outw.height);
+#if ENABLED(RDOC_GGP)
+  if(outw.m_WindowSystem == WindowingSystem::GGP)
+  {
+    RDCWARN("Window system is GGP (%d), size is %d, %d", outw.m_WindowSystem, outw.width, outw.height);
     // TODO(akharlamov) Can there be a better default resolution selection?
     // Because we don't have a window, outw dimensions can actually be (0,0) until the surface is created.
     // This will fail surface creation, so default to 1080p.

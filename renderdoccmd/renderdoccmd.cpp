@@ -196,7 +196,7 @@ struct GitVersionCommand : public Command
   GitVersionCommand(const GlobalEnvironment &env) : Command(env) {}
   virtual void AddOptions(cmdline::parser &parser)
   {
-#if defined(__yeti__)
+#if defined(__yeti__) || defined (__ggp__)
     parser.add<string>("out", 'o', "The output filename to save the file to", false,
                        "/var/game/rdoc_version.txt");
 #else

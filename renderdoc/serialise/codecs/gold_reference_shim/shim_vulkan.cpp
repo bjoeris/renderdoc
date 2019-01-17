@@ -216,7 +216,7 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
           char handleStr[32];
           snprintf(handleStr, sizeof(handleStr), "%p", info.srcImage);
           std::string filename;
-#if defined(__yeti__)
+#if defined(__yeti__) || defined(__ggp__)
           filename = "/var/game/";
 #endif
           filename += std::to_string(renderPassCount) + "_attachment_" +
@@ -249,7 +249,7 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
       VkImage srcImage =
           swapchainImageMap[(*pPresentInfo).pSwapchains[i]][(*pPresentInfo).pImageIndices[i]];
       std::string filename;
-#if defined(__yeti__)
+#if defined(__yeti__) || defined(__ggp__)
       filename = "/var/game/";
 #endif
       filename +=

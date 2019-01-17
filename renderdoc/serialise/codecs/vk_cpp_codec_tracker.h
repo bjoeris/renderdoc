@@ -39,6 +39,8 @@
 #include "core/core.h"
 #if defined(WIN32)
 #define VK_USE_PLATFORM_WIN32_KHR 1
+#elif defined(__ggp__)
+#define VK_USE_PLATFORM_GGP 1
 #elif defined(__yeti__)
 #define VK_USE_PLATFORM_YETI_GOOGLE 1
 #else
@@ -48,6 +50,8 @@
 #include "driver/vulkan/vk_resources.h"
 #if defined(WIN32)
 #undef VK_USE_PLATFORM_WIN32_KHR
+#elif defined(__ggp__)
+#undef VK_USE_PLATFORM_GGP
 #elif defined(__yeti__)
 #undef VK_USE_PLATFORM_YETI_GOOGLE
 #else

@@ -316,9 +316,9 @@ void RDCFile::Init(StreamReader &reader)
 
   m_SerVer = header.version;
 
-  // Fix the deprecated file version produced by RenderDoc shipped with v1.19 Yeti SDK.
+  // Fix the deprecated file version produced by RenderDoc shipped with v1.19 GGP SDK.
   // We have since changed the way we handle non-JPEG thumbnails.
-  if (m_SerVer == V1_1_VERSION_YETI)
+  if (m_SerVer == V1_1_VERSION_GGP)
     m_SerVer = V1_0_VERSION;
 
   if(m_SerVer != SERIALISE_VERSION)
@@ -338,7 +338,7 @@ void RDCFile::Init(StreamReader &reader)
 
   FileType thumbFormat = FileType::JPG;
   BinaryThumbnail thumb;
-  if (header.version == V1_1_VERSION_YETI)
+  if (header.version == V1_1_VERSION_GGP)
   {
     ExtThumbnailHeader hdr;
     reader.Read(hdr);

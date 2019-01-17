@@ -162,12 +162,27 @@
 
 #endif // defined(VK_USE_PLATFORM_YETI_GOOGLE)
 
+#if defined(VK_USE_PLATFORM_GGP)
+
+#define HookInitInstance_PlatformSpecific_GGP()                      \
+  HookInitExtension(VK_GGP_stream_descriptor_surface, CreateStreamDescriptorSurfaceGGP);
+
+#define HookDefine_PlatformSpecific_GGP()                                                       \
+  HookDefine4(VkResult, vkCreateStreamDescriptorSurfaceGGP, VkInstance, instance,                         \
+              const VkStreamDescriptorSurfaceCreateInfoGGP *, pCreateInfo, const VkAllocationCallbacks *, \
+              pAllocator, VkSurfaceKHR *, pSurface);
+#else // defined(VK_USE_PLATFORM_GGP)
+
+#define HookInitInstance_PlatformSpecific_GGP()
+#define HookDefine_PlatformSpecific_GGP()
+
+#endif // defined(VK_USE_PLATFORM_GGP)
 
 #define HookInitInstance_PlatformSpecific() \
-  HookInitInstance_PlatformSpecific_Xcb() HookInitInstance_PlatformSpecific_Xlib() HookInitInstance_PlatformSpecific_Yeti()
+  HookInitInstance_PlatformSpecific_Xcb() HookInitInstance_PlatformSpecific_Xlib() HookInitInstance_PlatformSpecific_Yeti() HookInitInstance_PlatformSpecific_GGP()
 #define HookInitDevice_PlatformSpecific()
 #define HookDefine_PlatformSpecific() \
-  HookDefine_PlatformSpecific_Xcb() HookDefine_PlatformSpecific_Xlib() HookDefine_PlatformSpecific_Yeti()
+  HookDefine_PlatformSpecific_Xcb() HookDefine_PlatformSpecific_Xlib() HookDefine_PlatformSpecific_Yeti() HookDefine_PlatformSpecific_GGP()
 
 #endif
 
@@ -316,6 +331,7 @@
 #define CheckInstanceExts()                            \
   CheckExt(KHR_xlib_surface, VKXX);                    \
   CheckExt(GOOGLE_yeti_surface, VKXX);                 \
+  CheckExt(GGP_stream_descriptor_surface, VKXX);       \
   CheckExt(KHR_xcb_surface, VKXX);                     \
   CheckExt(KHR_win32_surface, VKXX);                   \
   CheckExt(KHR_android_surface, VKXX);                 \
@@ -339,6 +355,7 @@
 
 #define CheckDeviceExts()                         \
   CheckExt(EXT_debug_marker, VKXX);               \
+  CheckExt(GGP_frame_token, VKXX);                \
   CheckExt(KHR_swapchain, VKXX);                  \
   CheckExt(KHR_display_swapchain, VKXX);          \
   CheckExt(NV_external_memory, VKXX);             \

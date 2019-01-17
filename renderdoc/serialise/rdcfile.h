@@ -67,9 +67,9 @@ public:
   // version numbers
   static const uint32_t V1_0_VERSION = 0x00000100;
 
-  // Yeti-specific: a file version produced by v1.19 SDK version of RenderDoc. This is maintained
+  // GGP-specific: a file version produced by v1.19 SDK version of RenderDoc. This is maintained
   // only for backward compatibility and is no longer supported for file creation going forward.
-  static const uint32_t V1_1_VERSION_YETI = 0x00000101;
+  static const uint32_t V1_1_VERSION_GGP = 0x00000101;
 
   ~RDCFile();
 

@@ -9,7 +9,7 @@ PROJECT(${THIS_PROJECT_NAME})
 FILE(GLOB HEADERS "*.h")
 FILE(GLOB SOURCES "*.cpp")
 SET(SHADERS )
-SET(TEMPLATES main_win.cpp main_yeti.cpp main_xlib.cpp)
+SET(TEMPLATES main_win.cpp main_ggp.cpp main_xlib.cpp)
 
 SOURCE_GROUP ( "Source Files"   FILES ${SOURCES} )
 SOURCE_GROUP ( "Template Files" FILES ${TEMPLATES} )
@@ -52,6 +52,17 @@ ELSEIF (ENABLE_YETI)
                              __yeti__)
   TARGET_LINK_LIBRARIES(${THIS_PROJECT_NAME}
                         libyeti.so
+                        libdl.so
+                        vulkan
+                        helper
+                        ${SHIM_DEPS})
+ELSEIF (ENABLE_GGP)
+  TARGET_COMPILE_DEFINITIONS(${THIS_PROJECT_NAME} PRIVATE
+                             VK_USE_PLATFORM_GGP
+                             __ggp__)
+  FIND_LIBRARY(GGP_LIBRARY ggp)
+  TARGET_LINK_LIBRARIES(${THIS_PROJECT_NAME}
+                        ${GGP_LIBRARY}
                         libdl.so
                         vulkan
                         helper

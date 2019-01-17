@@ -1640,6 +1640,13 @@ public:
                                                             int32_t streamIndex);
 #endif
 
+#if defined(VK_USE_PLATFORM_GGP)
+  VkResult vkCreateStreamDescriptorSurfaceGGP(VkInstance instance,
+    const VkStreamDescriptorSurfaceCreateInfoGGP* pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSurfaceKHR*                               pSurface);
+#endif
+
 #if defined(VK_USE_PLATFORM_XLIB_KHR)
   // VK_KHR_xlib_surface
   VkResult vkCreateXlibSurfaceKHR(VkInstance instance, const VkXlibSurfaceCreateInfoKHR *pCreateInfo,

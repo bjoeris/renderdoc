@@ -1442,7 +1442,7 @@ struct SPVInstruction
         if(!inlineOp)
           ret = StringFormat::Fmt("%s %s = ", op->type->GetName().c_str(), GetIDName().c_str());
 
-        // YETI: Check canonicalNames and friendlyNames for validity before
+        // GGP: Check canonicalNames and friendlyNames for validity before
         // using.
         // TODO(b/34471309): Support for several SPIRV extensions needs to be
         // added.

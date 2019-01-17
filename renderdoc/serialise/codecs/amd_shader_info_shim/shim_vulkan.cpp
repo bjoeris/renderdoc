@@ -194,7 +194,7 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
   static PFN_vkQueuePresentKHR fn =
       (PFN_vkQueuePresentKHR)vkGetDeviceProcAddr(aux.device, "vkQueuePresentKHR");
   VkResult r = fn(queue, pPresentInfo);
-#if defined(__yeti__)
+#if defined(__yeti__) || defined(__ggp__)
   // Create a trigger file to indicate that we have dumped all the shaders already
   FILE *fp = OpenFile("/var/game/shader.trigger", "wb");
   if(fp)

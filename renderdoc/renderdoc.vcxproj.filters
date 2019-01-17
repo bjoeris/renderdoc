@@ -953,13 +953,13 @@
     <ClCompile Include="serialise\codecs\sample_cpp_shim\shim_vulkan.cpp">
       <Filter>Common\Serialise\Codecs\CPP\sample_shim</Filter>
     </ClCompile>
+    <ClCompile Include="serialise\codecs\sample_cpp_trace\main_ggp.cpp">
+      <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
+    </ClCompile>
     <ClCompile Include="serialise\codecs\sample_cpp_trace\main_xlib.cpp">
       <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
     </ClCompile>
     <ClCompile Include="serialise\codecs\sample_cpp_trace\main_win.cpp">
-      <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
-    </ClCompile>
-    <ClCompile Include="serialise\codecs\sample_cpp_trace\main_yeti.cpp">
       <Filter>Common\Serialise\Codecs\CPP\sample</Filter>
     </ClCompile>
     <ClCompile Include="serialise\codecs\helper\format_size_and_aspect.cpp">

@@ -341,7 +341,7 @@ enum class WindowingSystem : uint32_t
   XCB,
   Android,
   MacOS,
-  Yeti,
+  GGP,
 };
 
 DECLARE_REFLECTION_ENUM(WindowingSystem);
@@ -443,15 +443,15 @@ inline const WindowingData CreateWin32WindowingData(HWND window)
   return ret;
 }
 
-DOCUMENT(R"(Create a :class:`WindowingData` for a Yeti application.
+DOCUMENT(R"(Create a :class:`WindowingData` for a GGP application.
 
 :return: A :class:`WindowingData` corresponding to the given system.
 :rtype: WindowingData
 )");
-inline const WindowingData CreateYetiWindowingData() {
+inline const WindowingData CreateGgpWindowingData() {
   WindowingData ret = {};
 
-  ret.system = WindowingSystem::Yeti;
+  ret.system = WindowingSystem::GGP;
 
   return ret;
 }

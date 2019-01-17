@@ -42,6 +42,25 @@
 
 #if defined(__yeti__)
 #include <yeti_c/yeti.h>
+#define GgpEventQueue                    YetiEventQueue
+#define GgpEventQueueCreate              YetiEventQueueCreate
+#define GgpEventQueueProcessEvent        YetiEventQueueProcessEvent
+#define GgpSuspended                     YetiSuspended
+#define GgpStreamStoppedEvent            YetiStreamStoppedEvent
+#define GgpShutDown                      YetiShutDown
+#define GgpRemoveStreamStoppedHandler    YetiRemoveStreamStoppedHandler
+#define GgpRemoveStreamStartedHandler    YetiRemoveStreamStartedHandler
+#define GgpEventQueueDestroy             YetiEventQueueDestroy
+#define GgpReadyToStream                 YetiReadyToStream
+#define GgpHandlersRegistered            YetiHandlersRegistered
+#define GgpAddStreamStoppedHandler       YetiAddStreamStoppedHandler
+#define GgpAddStreamStartedHandler       YetiAddStreamStartedHandler
+#define kGgpStreamStopped_Exited         kYetiStreamStopped_Exited
+#define kGgpStreamStopped_Unexpected     kYetiStreamStopped_Unexpected
+#endif
+
+#if defined(__ggp__)
+#include <ggp_c/ggp.h>
 #endif
 
 #include <replay/renderdoc_replay.h>
@@ -336,15 +355,15 @@ WindowingData DisplayRemoteServerPreview(bool active, const rdcarray<WindowingSy
   return remoteServerPreview;
 }
 
-#if defined(RENDERDOC_WINDOWING_YETI)
+#if defined(RENDERDOC_WINDOWING_GGP)
 const uint64_t kMicrosecondsPerFrame = 16666L;
 const uint32_t kSwapchainImageCount = 2;
 const int32_t  kWidth = 1920;
 const int32_t  kHeight = 1080;
 // struct appData: Global application data
 static struct {
-  // Yeti
-  YetiEventQueue event_queue;
+  // Ggp
+  GgpEventQueue event_queue;
   uint32_t       stream_started_handler_id;
   uint32_t       stream_stopped_handler_id;
   // General
@@ -365,14 +384,14 @@ static void HandleStreamStarted(void* user_data) {
   fprintf(stdout, "client connected\n");
 }
 // HandleStreamStopped(): Client disconnected handler
-static void HandleStreamStopped(const YetiStreamStoppedEvent* event,
+static void HandleStreamStopped(const GgpStreamStoppedEvent* event,
   void*                         user_data) {
   fprintf(stdout, "client disconnected\n");
   // Exit the application if the client disconnects to exit.
-  if (event->stream_stopped_reason == kYetiStreamStopped_Exited) {
+  if (event->stream_stopped_reason == kGgpStreamStopped_Exited) {
     app_data.quit = true;
-  } else if (event->stream_stopped_reason == kYetiStreamStopped_Unexpected) {
-    YetiSuspended();
+  } else if (event->stream_stopped_reason == kGgpStreamStopped_Unexpected) {
+    GgpSuspended();
   }
 }
 // UnregisterCallback(): Handler unregistered
@@ -382,29 +401,29 @@ static void UnregisterCallback(void* user_data) {
 // Initialize(): Initialize application
 static void Initialize() {
   // Initialize event queue
-  app_data.event_queue = YetiEventQueueCreate();
-  fprintf(stdout, "Yeti event queue created\n");
+  app_data.event_queue = GgpEventQueueCreate();
+  fprintf(stdout, "Ggp event queue created\n");
   // Add client connection handlers
-  app_data.stream_started_handler_id = YetiAddStreamStartedHandler(
+  app_data.stream_started_handler_id = GgpAddStreamStartedHandler(
     app_data.event_queue, HandleStreamStarted, NULL, UnregisterCallback);
-  app_data.stream_stopped_handler_id = YetiAddStreamStoppedHandler(
+  app_data.stream_stopped_handler_id = GgpAddStreamStoppedHandler(
     app_data.event_queue, HandleStreamStopped, NULL, UnregisterCallback);
   // Signal that the session is ready to receive events.
-  YetiHandlersRegistered();
+  GgpHandlersRegistered();
 
-  YetiReadyToStream();
-  fprintf(stdout, "Yeti ready to stream\n");
+  GgpReadyToStream();
+  fprintf(stdout, "Ggp ready to stream\n");
 }
 // Finalize(): Clean up application resources
 static void Finalize() {
   // Destroy the event queue
-  YetiEventQueueDestroy(app_data.event_queue);
-  fprintf(stdout, "Yeti event queue destroyed\n");
+  GgpEventQueueDestroy(app_data.event_queue);
+  fprintf(stdout, "Ggp event queue destroyed\n");
   // Remove client connection handlers.
-  YetiRemoveStreamStartedHandler(app_data.stream_started_handler_id);
-  YetiRemoveStreamStoppedHandler(app_data.stream_stopped_handler_id);
-  // Indicate that Yeti should shutdown.
-  YetiShutDown();
+  GgpRemoveStreamStartedHandler(app_data.stream_started_handler_id);
+  GgpRemoveStreamStoppedHandler(app_data.stream_stopped_handler_id);
+  // Indicate that Ggp should shutdown.
+  GgpShutDown();
 }
 
 #endif
@@ -554,17 +573,17 @@ void DisplayRendererPreview(IReplayController *renderer, TextureDisplay &display
     if(numLoops > 0 && loopCount == numLoops)
       break;
   }
-#elif defined(RENDERDOC_WINDOWING_YETI)
+#elif defined(RENDERDOC_WINDOWING_GGP)
   Initialize();
 
-  IReplayOutput *out = renderer->CreateOutput(CreateYetiWindowingData(),
+  IReplayOutput *out = renderer->CreateOutput(CreateGgpWindowingData(),
       ReplayOutputType::Texture);
   out->SetTextureDisplay(displayCfg);
 
   // Wait until user closes the window, then exit
   while (!app_data.quit) {
     uint64_t whenToResume = ClockNowMicroSeconds() + kMicrosecondsPerFrame;
-    while (YetiEventQueueProcessEvent(app_data.event_queue, 0)) {
+    while (GgpEventQueueProcessEvent(app_data.event_queue, 0)) {
     }
     renderer->SetFrameEvent(10000000, true);
     out->Display();
@@ -599,7 +618,7 @@ int main(int argc, char *argv[])
 
   GlobalEnvironment env;
 
-// YETI: Yeti does not run an X server.
+// Ggp does not run an X server.
 #if defined(RENDERDOC_WINDOWING_XLIB) || defined(RENDERDOC_WINDOWING_XCB)
   // call XInitThreads - although we don't use xlib concurrently the driver might need to.
   XInitThreads();

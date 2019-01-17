@@ -75,6 +75,12 @@
 #endif
 
 
+#ifdef VK_USE_PLATFORM_GGP
+#include <ggp_c/vulkan_types.h>
+#include "vulkan_ggp.h"
+#endif
+
+
 #ifdef VK_USE_PLATFORM_YETI_GOOGLE
 #include "vulkan_yeti.h"
 #endif

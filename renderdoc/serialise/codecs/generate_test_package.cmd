@@ -12,7 +12,7 @@ if not "%1"=="--help" goto cont
 echo.
 echo %YELLOW%generate_test_package trace.rdc out_dir [package_name]%RESET%
 echo.
-echo    %BOLD%Creates Yeti RenderDoc codegen project%RESET%
+echo    %BOLD%Creates GGP RenderDoc codegen project%RESET%
 echo    - %GREEN%trace.rdc%RESET%    - Source RenderDoc trace file to process.
 echo    - %GREEN%out_dir%RESET%      - Output directory to write all the package data to. Individual packages go into subsirectories.
 echo    - %GREEN%package_name%RESET% - Name of the output package to generate. If omitted, the file name of .RDC file is used.
@@ -28,7 +28,7 @@ if "%3"=="" set package_name=%~n1
 set rdc_file=%~2\traces\%package_name%.rdc
 
 set src_dir=%~2\_sources\%package_name%
-set yeti_build_dir=%src_dir%\_out\yeti
+set ggp_build_dir=%src_dir%\_out\ggp
 set linux_build_dir=%src_dir%\_out\linux
 set win_build_dir=%src_dir%\_out\win_x64
 
@@ -77,9 +77,9 @@ copy /y "%screenshot_dir%\%screenshot_file%" "%rdoc_auto_capture_dir%" > nul
 mkdir "%thumbnails_dir%" 2>nul
 start /w renderdoccmd.exe thumb "%rdc_file%" -o "%thumbnails_dir%\%package_name%.png"
 
-echo %GREEN%Building for Yeti...%RESET%
+echo %GREEN%Building for GGP...%RESET%
 pushd "%src_dir%" > nul
-bash -c "source ~/.bashrc && ./build_yeti.sh"
+bash -c "source ~/.bashrc && ./build_ggp.sh"
 popd
 if %errorlevel% neq 0 exit /b %errorlevel%
 
@@ -96,8 +96,8 @@ popd
 if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo %GREEN%Gathering package data...%RESET%
-copy /y %yeti_build_dir%\sample_cpp_trace_elf %package_src_dir%\main_yeti > nul
-copy /y %yeti_build_dir%\sample_cpp_shim\libshim_vulkan.so %package_src_dir% > nul
+copy /y %ggp_build_dir%\sample_cpp_trace_elf %package_src_dir%\main_ggp > nul
+copy /y %ggp_build_dir%\sample_cpp_shim\libshim_vulkan.so %package_src_dir% > nul
 copy /y %win_build_dir%\sample_cpp_trace_x64.exe %package_src_dir%\main_win.exe > nul
 copy /y %win_build_dir%\sample_cpp_shim\shim_vulkan.dll %package_src_dir% > nul
 copy /y %linux_build_dir%\sample_cpp_trace_elf %package_src_dir%\main_linux > nul

@@ -458,7 +458,9 @@ static void AppendModifiedChainedStruct(byte *&tempMem, VkStruct *outputStruct,
   case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV:               \
   case VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT:                \
   case VK_STRUCTURE_TYPE_YETI_SURFACE_CREATE_INFO_GOOGLE:                              \
-  case VK_STRUCTURE_TYPE_PRESENT_YETI_FRAME_TOKEN_GOOGLE:
+  case VK_STRUCTURE_TYPE_PRESENT_YETI_FRAME_TOKEN_GOOGLE:                              \
+  case VK_STRUCTURE_TYPE_STREAM_DESCRIPTOR_SURFACE_CREATE_INFO_GGP:                    \
+  case VK_STRUCTURE_TYPE_PRESENT_FRAME_TOKEN_GGP:
 
 size_t GetNextPatchSize(const void *pNext)
 {

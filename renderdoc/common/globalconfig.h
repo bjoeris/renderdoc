@@ -116,17 +116,17 @@
 #define RDOC_XCB OPTION_OFF
 #endif
 
-#if defined(RENDERDOC_WINDOWING_YETI)
-#define RDOC_YETI OPTION_ON
+#if defined(RENDERDOC_WINDOWING_GGP)
+#define RDOC_GGP OPTION_ON
 #else
-#define RDOC_YETI OPTION_OFF
+#define RDOC_GGP OPTION_OFF
 #endif
 
 /////////////////////////////////////////////////
 // Global constants
 enum
 {
-  // YETI: Modify the ports used to fall within our devkit port range.
+  // GGP: Modify the ports used to fall within our devkit port range.
   // Original RenderDoc_FirstTargetControlPort was 38920
   RenderDoc_FirstTargetControlPort = 44710,
   RenderDoc_LastTargetControlPort = RenderDoc_FirstTargetControlPort + 7,

@@ -117,7 +117,7 @@ option(ENABLE_PYRENDERDOC "Enable renderdoc python modules" OFF)
 option(ENABLE_XLIB "Enable xlib windowing support" ON)
 option(ENABLE_XCB "Enable xcb windowing support" ON)
 
-option(ENABLE_YETI "Enable Yeti support" OFF)
+option(ENABLE_GGP "Enable GGP support" OFF)
 
 if(WIN32)
     message(FATAL_ERROR "CMake is not needed on Windows, just open and build renderdoc.sln")
@@ -238,9 +238,9 @@ elseif(UNIX)
         add_definitions(-DRENDERDOC_WINDOWING_XCB)
     endif()
 
-    if(ENABLE_YETI)
-        add_definitions(-DRENDERDOC_PLATFORM_YETI)
-        add_definitions(-DRENDERDOC_WINDOWING_YETI)
+    if(ENABLE_GGP)
+        add_definitions(-DRENDERDOC_PLATFORM_GGP)
+        add_definitions(-DRENDERDOC_WINDOWING_GGP)
     endif()
 endif()
 

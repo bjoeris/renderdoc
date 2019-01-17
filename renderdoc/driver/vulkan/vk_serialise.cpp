@@ -861,7 +861,12 @@ SERIALISE_VK_HANDLES();
                                                                                                       \
   /* VK_GOOGLE_yeti_surface */                                                                        \
   PNEXT_UNSUPPORTED(VK_STRUCTURE_TYPE_YETI_SURFACE_CREATE_INFO_GOOGLE)                                \
-  PNEXT_UNSUPPORTED(VK_STRUCTURE_TYPE_PRESENT_YETI_FRAME_TOKEN_GOOGLE)
+  PNEXT_UNSUPPORTED(VK_STRUCTURE_TYPE_PRESENT_YETI_FRAME_TOKEN_GOOGLE)                                \
+                                                                                                      \
+  /* VK_GGP_stream_descriptor_surface */                                                              \
+  PNEXT_UNSUPPORTED(VK_STRUCTURE_TYPE_STREAM_DESCRIPTOR_SURFACE_CREATE_INFO_GGP)                      \
+  /* VK_GGP_stream_descriptor_surface */                                                              \
+  PNEXT_UNSUPPORTED(VK_STRUCTURE_TYPE_PRESENT_FRAME_TOKEN_GGP)
 
 template <typename SerialiserType>
 static void SerialiseNext(SerialiserType &ser, VkStructureType &sType, const void *&pNext)

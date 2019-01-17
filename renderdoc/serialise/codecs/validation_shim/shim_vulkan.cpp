@@ -35,7 +35,7 @@ VkDebugReportFlagBitsEXT debugReportFlags =
     VkDebugReportFlagBitsEXT(VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT);
 /* Register the callback */
 VkDebugReportCallbackEXT callback;
-#if defined(__yeti__)
+#if defined(__yeti__) || defined(__ggp__)
 std::ofstream file("/var/game/validation_layer_output.txt");
 #else
 std::ofstream file("validation_layer_output.txt");

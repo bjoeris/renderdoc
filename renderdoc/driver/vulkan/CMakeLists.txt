@@ -96,7 +96,8 @@ elseif(UNIX)
         add_definitions(-DVK_USE_PLATFORM_XCB_KHR)
     endif()
 
-    if(ENABLE_YETI)
+    if(ENABLE_GGP)
+        add_definitions(-DVK_USE_PLATFORM_GGP)
         add_definitions(-DVK_USE_PLATFORM_YETI_GOOGLE)
     endif()
 

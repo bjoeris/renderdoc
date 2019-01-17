@@ -23,8 +23,9 @@ elseif(UNIX)
         list(APPEND libraries PRIVATE -lxcb)
     endif()
 
-    if(ENABLE_YETI)
-        list(APPEND libraries PRIVATE -lyeti)
+    if(ENABLE_GGP)
+        find_library(GGP_LIBRARY ggp)
+        list(APPEND libraries PRIVATE ${GGP_LIBRARY})
     endif()
 
     if(ENABLE_XLIB AND ENABLE_XCB)
