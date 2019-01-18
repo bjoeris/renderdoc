@@ -621,18 +621,23 @@ void CodeWriter::CreateInstance(SDObject *o, uint32_t pass, bool global_ci)
 
   SDObject *layers = init_params->GetChild(5);
   bool enables_vl = false;
-  for(uint64_t i = 0; i < layers->NumChildren(); i++)
+  for(uint64_t i = 0; i < layers->NumChildren();) // remove all validation and renderdoc layers
   {
     if(layers->GetChild(i)->data.str == "VK_LAYER_LUNARG_standard_validation")
     {
       enables_vl = true;
-      break;
+      layers->data.children.erase(i, 1);
+      continue;
     }
+    if (layers->GetChild(i)->data.str == "VK_LAYER_RENDERDOC_Capture")
+    {
+      layers->data.children.erase(i, 1);
+      continue;
+    }
+    i++;
   }
-  if(!enables_vl)
-  {
-    layers->data.children.push_back(makeSDObject("Validation Layer", "VK_LAYER_LUNARG_standard_validation"));
-  }
+
+  layers->data.children.push_back(makeSDObject("Validation Layer", "VK_LAYER_LUNARG_standard_validation"));
 
   if(!layers->IsNULL())
     LocalVariable(layers, "", pass);
@@ -690,20 +695,13 @@ void CodeWriter::CreateInstance(SDObject *o, uint32_t pass, bool global_ci)
       .PrintLn("/* sType */ VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,")
       .PrintLn("/* pNext */ NULL,")
       .PrintLn("/* flags */  VkInstanceCreateFlags(0),")
-      .PrintLn("/* pApplicationInfo */ &ApplicationInfo,");
-  if(enables_vl)
-  {    // if VL were not added by RenderDoc code gen, generate as is.
-    files[pass]->PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->NumChildren());
-  }
-  else
-  {    // otherwise include VL in debug builds only.
-    files[pass]
-        ->PrintLn("#if defined(_DEBUG) || defined(DEBUG)")
-        .PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->NumChildren())
-        .PrintLn("#else")
-        .PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->NumChildren() - 1)
-        .PrintLn("#endif");
-  }
+      .PrintLn("/* pApplicationInfo */ &ApplicationInfo,")
+      .PrintLn("#if defined(_DEBUG) || defined(DEBUG)")
+      .PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->NumChildren())
+      .PrintLn("#else")
+      .PrintLn("/* enabledLayerCount */ %" PRIu64 ",", layers->NumChildren() - 1)
+      .PrintLn("#endif");
+
   std::string resource_name_str;
   if(*shimPrefix)
     resource_name_str.append(", \"").append(instance_name).append("\"");
@@ -1061,6 +1059,21 @@ void CodeWriter::CreateDevice(SDObject *o, uint32_t pass, bool global_ci)
   const char *vk_res_name = tracker->GetResourceVar(Type(vk_res), vk_res->AsUInt64());
 
   files[pass]->PrintLn("{");
+
+  SDObject *extensions = ci->FindChild("ppEnabledExtensionNames");
+  bool enables_marker = false;
+  for (uint64_t i = 0; i < extensions->NumChildren();) {
+    if (extensions->GetChild(i)->data.str == "VK_EXT_debug_marker") {
+      enables_marker = true;
+      extensions->data.children.erase(i, 1);
+      continue;
+    }
+    i++;
+  }
+  if (enables_marker) {
+    extensions->data.children.push_back(makeSDObject("VK_EXT_debug_marker", "VK_EXT_debug_marker"));
+  }
+
   LocalVariable(ci, "", pass);
   AddNamedVar("bool", "isDebugMarkerEXTEnabled");
   files[pass]
