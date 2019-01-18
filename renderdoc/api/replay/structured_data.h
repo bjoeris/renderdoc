@@ -459,6 +459,9 @@ struct SDObject
     return (type.flags & SDTypeFlags::Nullable) && (NumChildren() != 0);
   }
   inline bool IsResource() const { return type.basetype == SDBasic::Resource; }
+  inline bool IsHidden() const {
+    return (type.flags & SDTypeFlags::Hidden) != SDTypeFlags::NoFlags;
+  }
   inline bool IsUnion() const
   {
     return (type.basetype == SDBasic::Struct) && (type.flags & SDTypeFlags::Union);

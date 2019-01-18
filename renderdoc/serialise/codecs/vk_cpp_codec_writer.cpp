@@ -1082,9 +1082,27 @@ void CodeWriter::CreateDevice(SDObject *o, uint32_t pass, bool global_ci)
   std::string resource_name_str;
   if(*shimPrefix)
     resource_name_str.append(", \"").append(device_name).append("\"");
+
+  SDObject *pPhysicalDeviceFeatures2 = ci->FindChild("pNext");
+  while (pPhysicalDeviceFeatures2 != NULL) {
+    if (pPhysicalDeviceFeatures2->FindChild("sType") != NULL &&
+      pPhysicalDeviceFeatures2->FindChild("sType")->AsUInt32() == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2)
+      break;
+    else
+      pPhysicalDeviceFeatures2 = pPhysicalDeviceFeatures2->FindChild("pNext");
+  }
+  std::string features_var;
+  if (pPhysicalDeviceFeatures2 != NULL) {
+    RDCASSERT(ci->FindChild("pEnabledFeatures")->IsNULL()); // if physical device features 2 is present, should this be NULL?..
+    // TODO(akharlamov): since all structures have the pNext member, this code won't work correctly when pNext chain length is greater than '1'
+    features_var = std::string("&(") + pPhysicalDeviceFeatures2->Name() + "[0].features)";
+  } else {
+    RDCASSERT(!ci->FindChild("pEnabledFeatures")->IsNULL());
+    features_var = ci->FindChild("pEnabledFeatures")->Name();
+  }
   files[pass]
       ->PrintLn("MakePhysicalDeviceFeaturesMatch(VkPhysicalDeviceFeatures_%" PRIu64 ", %s);",
-                tracker->PhysDevID(), ci->GetChild(9)->Name())
+                tracker->PhysDevID(), features_var.c_str())
       .PrintLn("VkResult result = %s(%s, &%s, NULL, &%s%s);", o->Name(), device_name, ci->Name(),
                vk_res_name, resource_name_str.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")

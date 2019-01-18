@@ -49,10 +49,12 @@ namespace vk_cpp_codec
 void CodeWriter::InlineVariable(SDObject *o, uint32_t pass)
 {
   files[pass]->PrintLn("{ /* %s = */", o->Name());
-  for(uint64_t i = 0; i < o->NumChildren(); i++)
+  for(uint64_t i = 0, j = 0; i < o->NumChildren(); i++)
   {
+    if (o->GetChild(i)->IsHidden())
+      continue;
     std::string add_suffix;
-    SDObject *node = tracker->CopiesAdd(o, i, add_suffix);
+    SDObject *node = tracker->CopiesAdd(o, i, j, add_suffix);
     if(!node->IsSimpleType())
     {
       InlineVariable(node, pass);
@@ -65,6 +67,7 @@ void CodeWriter::InlineVariable(SDObject *o, uint32_t pass)
     {
       files[pass]->PrintLn("/* %s = */ %s,", node->Name(), ValueStr(node).c_str());
     }
+    j++;
   }
   files[pass]->PrintLn("},");
 }
@@ -134,6 +137,9 @@ void CodeWriter::LocalVariable(SDObject *o, std::string suffix, uint32_t pass)
 {
   // Unions have multiple elements in them, which is why they need to be
   // handled first, ahead of structs and arrays.
+  if (o->IsHidden())
+    return;
+
   if(o->IsUnion())
   {
     std::string name(o->Name());
@@ -145,22 +151,29 @@ void CodeWriter::LocalVariable(SDObject *o, std::string suffix, uint32_t pass)
   else
   {
     uint64_t size = o->NumChildren();
+    uint64_t hidden_count = 0;
     // Go through all the children and look for complex structures or variable-
     // size arrays. For each of those, declare and initialize them separately.
-    for(uint64_t i = 0; i < size; i++)
+    for(uint64_t i = 0, j = 0; i < size; i++)
     {
+      if (o->GetChild(i)->IsHidden()) {
+        hidden_count++;
+        continue;
+      }
       // Handle cases when the member is a complex data type, such as a complex
       // structure or a variable sized array.
       if(!o->GetChild(i)->IsInlineable())
       {
         std::string add_suffix;
-        SDObject *node = tracker->CopiesAdd(o, i, add_suffix);
+        SDObject *node = tracker->CopiesAdd(o, i, j, add_suffix);
         LocalVariable(node, suffix + add_suffix, pass);
       }
+      j++;
     }
+
     // Now, declare and initialize the data type. Simple members get inlined.
     // Complex structures or variable arrays get referenced by name.
-    if(o->IsNULL())
+    if(o->IsNULL() || size - hidden_count == 0)
     {
       files[pass]->PrintLn("%s* %s%s = NULL;", Type(o), o->Name(), suffix.c_str());
     }
@@ -174,13 +187,17 @@ void CodeWriter::LocalVariable(SDObject *o, std::string suffix, uint32_t pass)
     }
     else if(o->IsArray())
     {
-      files[pass]->PrintLn("%s %s%s[%llu] = {", Type(o), o->Name(), suffix.c_str(), size);
+      files[pass]->PrintLn("%s %s%s[%llu] = {", Type(o), o->Name(), suffix.c_str(), size - hidden_count);
     }
-
-    for(uint64_t i = 0; i < size; i++)
+    
+    for(uint64_t i = 0, j = 0; i < size; i++)
     {
+      if (o->GetChild(i)->IsHidden()) {
+        continue;
+      }
+
       std::string add_suffix;
-      SDObject *node = tracker->CopiesAdd(o, i, add_suffix);
+      SDObject *node = tracker->CopiesAdd(o, i, j, add_suffix);
       if(!node->IsInlineable())
       {
         files[pass]->PrintLn("/* %s = */ %s%s,", node->Name(), node->Name(),
@@ -198,6 +215,8 @@ void CodeWriter::LocalVariable(SDObject *o, std::string suffix, uint32_t pass)
       {
         files[pass]->PrintLn("/* %s = */ %s,", node->Name(), ValueStr(node).c_str());
       }
+
+      j++;
     }
 
     if(!o->IsNULL())

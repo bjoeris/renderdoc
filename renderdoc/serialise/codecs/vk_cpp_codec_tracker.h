@@ -527,7 +527,7 @@ public:
   // names to start with $. To fix this, I create a duplicate and replace the name,
   // with the parent's name + array index and I serialize the duplicate instead.
   // The duplicates are stored in a 'copies' array and have to be manually cleaned up.
-  SDObject *CopiesAdd(SDObject *o, uint64_t i, std::string &suffix);
+  SDObject *CopiesAdd(SDObject *o, uint64_t i, uint64_t j, std::string &suffix);
   void CopiesClear();
 
   VariableIDMapIter DataBlobBegin() { return dataBlobs.begin(); }

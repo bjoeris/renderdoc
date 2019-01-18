@@ -265,11 +265,11 @@ SDObject *TraceTracker::DescSetInfosFindLayout(uint64_t descSet_id) {
 // names to start with $. To fix this, I create a duplicate and replace the name,
 // with the parent's name + array index and I serialize the duplicate instead.
 // The duplicates are stored in a 'copies' array and have to be manually cleaned up.
-SDObject *TraceTracker::CopiesAdd(SDObject *o, uint64_t i, std::string &suffix) {
+SDObject *TraceTracker::CopiesAdd(SDObject *o, uint64_t i, uint64_t j, std::string &suffix) {
   SDObject *node = o->GetChild(i);
   if (node->name == "$el") {
     node = o->GetChild(i)->Duplicate();
-    suffix = std::string("_") + std::to_string(i);
+    suffix = std::string("_") + std::to_string(j);
     node->name = o->Name();    // +suffix;
     copies.push_back(node);
   }
