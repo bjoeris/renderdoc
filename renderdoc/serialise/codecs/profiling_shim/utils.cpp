@@ -317,7 +317,7 @@ void ShimVkTraceResources::writeCSV(FILE *f, VkCommandBuffer cb, const char *cb_
   float ts = commandTime(cb, cmd_index);
   std::string primary = isSecondary(cb) ? "secondary" : "primary";
   fprintf(f, "%d, %s, %s, %f, %s, %s, %d, %f", cb_index, cb_name, primary.c_str(), cb_time,
-          cbCommandInfo[cb].vec[cmd_index].name.substr(5).c_str(), // strip prefix shim_
+          cbCommandInfo[cb].vec[cmd_index].name.substr(5).c_str(),    // strip prefix shim_
           cbCommandInfo[cb].vec[cmd_index].info.c_str(), cmd_index, ts);
   std::string str;
   if(cbCommandInfo[cb].vec[cmd_index].hasStats)

@@ -32,16 +32,16 @@
 #include <yeti_c/yeti.h>
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 #include <time.h>
 #include <vulkan/vulkan.h>
 
-#include <string>
-#include <sstream>
 #include <iostream>
+#include <sstream>
+#include <string>
 
 #include "gen_main.h"
 
@@ -54,7 +54,8 @@ double avgFPSWithReset = 0;
 double avgFPS = 0;
 uint64_t frames = 0;
 
-void PostStageProgress(const char *stage, uint32_t i, uint32_t N) {
+void PostStageProgress(const char *stage, uint32_t i, uint32_t N)
+{
   fprintf(stdout, "%s\n", StageProgressString(stage, i, N).c_str());
 }
 
@@ -73,7 +74,8 @@ void ReleaseResources()
   main_release();
 }
 
-static inline double GetTimestampMilliseconds() {
+static inline double GetTimestampMilliseconds()
+{
   struct timespec now = {};
   clock_gettime(CLOCK_MONOTONIC_RAW, &now);
   double nanoseconds = (now.tv_sec * 1000000000.0) + now.tv_nsec;
@@ -101,10 +103,11 @@ void Render()
   avgFPSWithReset = 1000.0 / avgTimeWithReset;
   avgFPS = 1000.0 / avgTime;
 
-  if (frames % 100 == 0) {
+  if(frames % 100 == 0)
+  {
     char str[256];
-    sprintf(str, "%s Avg Time [%f / %f] Avg FPS [%f /%f]\n", "RenderDoc Frame Loop", avgTimeWithReset,
-      avgTime, avgFPSWithReset, avgFPS);
+    sprintf(str, "%s Avg Time [%f / %f] Avg FPS [%f /%f]\n", "RenderDoc Frame Loop",
+            avgTimeWithReset, avgTime, avgFPSWithReset, avgFPS);
     fprintf(stdout, "%s", str);
   }
 }

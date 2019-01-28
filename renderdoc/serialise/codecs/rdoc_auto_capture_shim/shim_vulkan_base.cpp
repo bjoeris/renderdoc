@@ -33,9 +33,10 @@ ResourceNamesMap ResourceNames;
 
 void ShimRelease()
 {
-    PFN_vkDestroyDebugReportCallbackEXT fn = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(aux.instance, "vkDestroyDebugReportCallbackEXT");
-    if(fn && aux.callback != VK_NULL_HANDLE)
-      fn(aux.instance, aux.callback, NULL);
+  PFN_vkDestroyDebugReportCallbackEXT fn = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(
+      aux.instance, "vkDestroyDebugReportCallbackEXT");
+  if(fn && aux.callback != VK_NULL_HANDLE)
+    fn(aux.instance, aux.callback, NULL);
 }
 
 void shim_vkDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator)

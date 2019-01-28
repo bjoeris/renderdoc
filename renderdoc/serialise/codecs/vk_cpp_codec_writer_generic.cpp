@@ -51,7 +51,7 @@ void CodeWriter::InlineVariable(SDObject *o, uint32_t pass)
   files[pass]->PrintLn("{ /* %s = */", o->Name());
   for(uint64_t i = 0, j = 0; i < o->NumChildren(); i++)
   {
-    if (o->GetChild(i)->IsHidden())
+    if(o->GetChild(i)->IsHidden())
       continue;
     std::string add_suffix;
     SDObject *node = tracker->CopiesAdd(o, i, j, add_suffix);
@@ -137,7 +137,7 @@ void CodeWriter::LocalVariable(SDObject *o, std::string suffix, uint32_t pass)
 {
   // Unions have multiple elements in them, which is why they need to be
   // handled first, ahead of structs and arrays.
-  if (o->IsHidden())
+  if(o->IsHidden())
     return;
 
   if(o->IsUnion())
@@ -156,7 +156,8 @@ void CodeWriter::LocalVariable(SDObject *o, std::string suffix, uint32_t pass)
     // size arrays. For each of those, declare and initialize them separately.
     for(uint64_t i = 0, j = 0; i < size; i++)
     {
-      if (o->GetChild(i)->IsHidden()) {
+      if(o->GetChild(i)->IsHidden())
+      {
         hidden_count++;
         continue;
       }
@@ -187,12 +188,14 @@ void CodeWriter::LocalVariable(SDObject *o, std::string suffix, uint32_t pass)
     }
     else if(o->IsArray())
     {
-      files[pass]->PrintLn("%s %s%s[%llu] = {", Type(o), o->Name(), suffix.c_str(), size - hidden_count);
+      files[pass]->PrintLn("%s %s%s[%llu] = {", Type(o), o->Name(), suffix.c_str(),
+                           size - hidden_count);
     }
-    
+
     for(uint64_t i = 0, j = 0; i < size; i++)
     {
-      if (o->GetChild(i)->IsHidden()) {
+      if(o->GetChild(i)->IsHidden())
+      {
         continue;
       }
 
@@ -209,7 +212,8 @@ void CodeWriter::LocalVariable(SDObject *o, std::string suffix, uint32_t pass)
       }
       else if(node->IsResource())
       {
-        files[pass]->PrintLn("/* %s = */ %s,", node->Name(), tracker->GetResourceVar(node->AsUInt64()));
+        files[pass]->PrintLn("/* %s = */ %s,", node->Name(),
+                             tracker->GetResourceVar(node->AsUInt64()));
       }
       else
       {
@@ -300,14 +304,16 @@ void CodeWriter::GenericCmdSetRectTest(SDObject *o, uint32_t pass)
   files[pass]->PrintLn("{");
   LocalVariable(o->GetChild(3), "", pass);
   files[pass]
-      ->PrintLn("%s(%s, %llu, %llu, %s);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
-                o->GetChild(1)->AsUInt64(), o->GetChild(2)->AsUInt64(), o->GetChild(3)->Name())
+      ->PrintLn("%s(%s, %llu, %llu, %s);", o->Name(),
+                tracker->GetResourceVar(o->GetChild(0)->AsUInt64()), o->GetChild(1)->AsUInt64(),
+                o->GetChild(2)->AsUInt64(), o->GetChild(3)->Name())
       .PrintLn("}");
 }
 void CodeWriter::GenericCmdSetStencilParam(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn("%s(%s, %s, %llu);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
-    ValueStr(o->GetChild(1)).c_str(), o->GetChild(2)->AsUInt64());
+  files[pass]->PrintLn("%s(%s, %s, %llu);", o->Name(),
+                       tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                       ValueStr(o->GetChild(1)).c_str(), o->GetChild(2)->AsUInt64());
 }
 
 void CodeWriter::GenericCmdEvent(SDObject *o, uint32_t pass)
@@ -320,9 +326,11 @@ void CodeWriter::GenericCmdEvent(SDObject *o, uint32_t pass)
 }
 void CodeWriter::GenericCmdDrawIndirect(SDObject *o, uint32_t pass)
 {
-  files[pass]->PrintLn(
-      "%s(%s, %s, %llu, %llu, %llu);", o->Name(), tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
-      tracker->GetResourceVar(o->GetChild(1)->AsUInt64()), o->GetChild(2)->AsUInt64(), o->GetChild(3)->AsUInt64(), o->GetChild(4)->AsUInt64());
+  files[pass]->PrintLn("%s(%s, %s, %llu, %llu, %llu);", o->Name(),
+                       tracker->GetResourceVar(o->GetChild(0)->AsUInt64()),
+                       tracker->GetResourceVar(o->GetChild(1)->AsUInt64()),
+                       o->GetChild(2)->AsUInt64(), o->GetChild(3)->AsUInt64(),
+                       o->GetChild(4)->AsUInt64());
 }
 }
 

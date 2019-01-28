@@ -31,9 +31,9 @@
 
 #include <array>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
-#include <unordered_map>
 
 #include "common/common.h"
 #include "core/core.h"
@@ -85,8 +85,7 @@ struct Variable
   // this only makes sense for Vulkan resource variables
   // as this maps to VkDebugReportObjectTypeEXT
   std::string debugType;
-  Variable(const char *t, const char *n, std::string dt = "")
-    : type(t), name(n), debugType(dt) {}
+  Variable(const char *t, const char *n, std::string dt = "") : type(t), name(n), debugType(dt) {}
 };
 
 // The 'VariableIDMap' type correlates an SDObject ID with a variable name used
@@ -239,13 +238,13 @@ private:
   U64UMap indexedPhysicalDeviceID;
 
   // ResourceID for the AcquiredSemaphore.
-  SDObject * acquireSemaphore = NULL;
+  SDObject *acquireSemaphore = NULL;
 
   // queueUsed[physical device resource ID][family][index] is true if the queue in the
   // specified physical device resource, in the specified queue family at 'index' is
   // used. Currently, "used" just means that "vkGetDeviceQueue" was called for that
   // queue/family.
-  std::unordered_map<uint64_t, std::vector<std::vector<bool>> > queueUsed;
+  std::unordered_map<uint64_t, std::vector<std::vector<bool>>> queueUsed;
 
   // This map keeps track of semaphore usage in a trace, checking that for
   // every 'wait' semaphore, there was a 'signal' issued before. It also collects
@@ -273,8 +272,9 @@ private:
 
   CodeGenOpts optimizations;
 
-  std::string GetVkDebugObjectFromString(const char * type);
-  const char *GetVarFromMap(VariableIDMap &m, uint64_t id, const char *type, const char *full_name, std::string dt = "");
+  std::string GetVkDebugObjectFromString(const char *type);
+  const char *GetVarFromMap(VariableIDMap &m, uint64_t id, const char *type, const char *full_name,
+                            std::string dt = "");
   const char *GetVarFromMap(VariableIDMap &m, const char *type, const char *name, uint64_t id);
   const char *GetVarFromMap(VariableIDMap &m, uint64_t id, std::string map_name);
   void TrackVarInMap(VariableIDMap &m, const char *type, const char *name, uint64_t id);
@@ -318,7 +318,8 @@ private:
 
   void AddCommandBufferToFrameGraph(SDChunk *o);
 
-  // Functions called by AnalyzeCmds for analysis of vkCmd* calls that are used throughout 'Scan'ing process
+  // Functions called by AnalyzeCmds for analysis of vkCmd* calls that are used throughout 'Scan'ing
+  // process
   void CmdBeginRenderPassAnalyze(SDChunk *chunk);
   void CmdNextSubpassAnalyze(SDChunk *chunk);
   void CmdEndRenderPassAnalyze(SDChunk *chunk);
@@ -368,9 +369,9 @@ private:
   bool CmdPipelineBarrierFilter(SDChunk *chunk);
   // A single FilterEventFunc is used for filtering of:
   //   VulkanChunk::vkCmdSetEvent:
-  //   VulkanChunk::vkSetEvent: 
+  //   VulkanChunk::vkSetEvent:
   //   VulkanChunk::vkCmdResetEvent:
-  //   VulkanChunk::vkResetEvent: 
+  //   VulkanChunk::vkResetEvent:
   //   VulkanChunk::vkGetEventStatus:
   bool EventFuncFilter(SDChunk *chunk);
   // --------------------------------------------------------------------------
@@ -462,8 +463,14 @@ public:
   const char *GetDeviceVar() { return GetResourceVar(deviceID); }
   const char *GetSwapchainVar() { return GetResourceVar(swapchainID); }
   const char *GetPresentQueueVar() { return GetResourceVar(presentQueueID); }
-  const char *GetQueueFamilyPropertiesVar() const { return queueFamilyPropertiesStr.find(PhysDevID())->second.c_str(); }
-  const char *GetQueueFamilyPropertiesVar(uint64_t physDevID) const { return queueFamilyPropertiesStr.find(physDevID)->second.c_str(); }
+  const char *GetQueueFamilyPropertiesVar() const
+  {
+    return queueFamilyPropertiesStr.find(PhysDevID())->second.c_str();
+  }
+  const char *GetQueueFamilyPropertiesVar(uint64_t physDevID) const
+  {
+    return queueFamilyPropertiesStr.find(physDevID)->second.c_str();
+  }
   uint64_t QueueFamilyCount() const { return physDeviceQueueFamilies.find(PhysDevID())->second; }
   bool IsQueueFamilyUsed(uint64_t queueFamilyIndex) const
   {

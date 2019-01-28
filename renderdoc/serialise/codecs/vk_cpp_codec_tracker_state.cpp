@@ -590,15 +590,16 @@ void TraceTracker::TransitionImageViewLayout(uint64_t viewID, VkImageLayout oldL
 {
   ResourceWithViewsMapIter view_it = ResourceCreateFind(viewID);
   RDCASSERT(view_it != ResourceCreateEnd());
-  SDObject *view = view_it->second.sdobj;          // get the vkCreateImageView call
-  SDObject *viewCI = view->FindChild("CreateInfo");       // the VkImageViewCreateInfo
+  SDObject *view = view_it->second.sdobj;                       // get the vkCreateImageView call
+  SDObject *viewCI = view->FindChild("CreateInfo");             // the VkImageViewCreateInfo
   uint64_t imageID = viewCI->FindChild("image")->AsUInt64();    // get the image ID
-                                                    // look for it in the createdResource map
+  // look for it in the createdResource map
 
   SDObject *subresource = viewCI->FindChild("subresourceRange");
   VkImageViewType viewType = (VkImageViewType)viewCI->FindChild("viewType")->AsUInt64();
   bool is2DView = viewType == VK_IMAGE_VIEW_TYPE_2D || viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-  VkImageAspectFlags aspectMask = (VkImageAspectFlags)subresource->FindChild("aspectMask")->AsUInt64();
+  VkImageAspectFlags aspectMask =
+      (VkImageAspectFlags)subresource->FindChild("aspectMask")->AsUInt64();
   uint64_t baseMip = subresource->FindChild("baseMipLevel")->AsUInt64();
   uint64_t levelCount = subresource->FindChild("levelCount")->AsUInt64();
   uint64_t baseLayer = subresource->FindChild("baseArrayLayer")->AsUInt64();
@@ -624,7 +625,8 @@ void TraceTracker::TransitionAttachmentLayout(uint64_t attachment, VkImageLayout
     return;
   }
   RDCASSERT(layout != VK_IMAGE_LAYOUT_UNDEFINED && layout != VK_IMAGE_LAYOUT_PREINITIALIZED);
-  uint64_t viewID = bindingState.framebuffer->FindChild("pAttachments")->GetChild(attachment)->AsUInt64();
+  uint64_t viewID =
+      bindingState.framebuffer->FindChild("pAttachments")->GetChild(attachment)->AsUInt64();
 
   VkImageLayout oldLayout = bindingState.attachmentLayout[attachment];
   RDCASSERT(oldLayout != VK_IMAGE_LAYOUT_MAX_ENUM);
@@ -683,7 +685,8 @@ void TraceTracker::LoadSubpassAttachment(SDObject *attachmentRef)
     {
       // The attachment has a stencil component;
       // load behaviour for stencil component is defined by stencilLoadOp
-      VkAttachmentLoadOp stencilLoadOp = (VkAttachmentLoadOp)att_desc->FindChild("stencilLoadOp")->AsUInt64();
+      VkAttachmentLoadOp stencilLoadOp =
+          (VkAttachmentLoadOp)att_desc->FindChild("stencilLoadOp")->AsUInt64();
       AccessAction stencilAction;
       if(stencilLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR ||
          (stencilLoadOp == VK_ATTACHMENT_LOAD_OP_DONT_CARE &&

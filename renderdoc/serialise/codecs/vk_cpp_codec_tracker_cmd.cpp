@@ -47,7 +47,8 @@ void TraceTracker::CmdBeginRenderPassAnalyze(SDChunk *o)
   beginRenderPassCmdBuffer[cmdBuffer] = o;
 
   // Renderpass attachment list should be the same as framebuffers list
-  RDCASSERT(renderPassCI->FindChild("pAttachments")->NumChildren() == framebufferCI->FindChild("pAttachments")->NumChildren());
+  RDCASSERT(renderPassCI->FindChild("pAttachments")->NumChildren() ==
+            framebufferCI->FindChild("pAttachments")->NumChildren());
 
   bindingState.BeginRenderPass(renderPassCI, framebufferCI, bi->GetChild(4));
   BeginSubpass();
@@ -292,10 +293,14 @@ void TraceTracker::CmdBlitImageAnalyze(SDChunk *o)
       uint64_t src_1 = srcOffsets->GetChild(1)->GetChild(j)->AsUInt64();
       uint64_t dst_0 = dstOffsets->GetChild(0)->GetChild(j)->AsUInt64();
       uint64_t dst_1 = dstOffsets->GetChild(1)->GetChild(j)->AsUInt64();
-      srcOffset.data.children.push_back((SDObject *)makeSDObject(offset_names[j], std::min(src_0, src_1)));
-      dstOffset.data.children.push_back((SDObject *)makeSDObject(offset_names[j], std::min(dst_0, dst_1)));
-      srcExtent.data.children.push_back((SDObject *)makeSDObject(extent_names[j], std::max(src_0, src_1) - std::min(src_0, src_1)));
-      dstExtent.data.children.push_back((SDObject *)makeSDObject(extent_names[j], std::max(dst_0, dst_1) - std::min(dst_0, dst_1)));
+      srcOffset.data.children.push_back(
+          (SDObject *)makeSDObject(offset_names[j], std::min(src_0, src_1)));
+      dstOffset.data.children.push_back(
+          (SDObject *)makeSDObject(offset_names[j], std::min(dst_0, dst_1)));
+      srcExtent.data.children.push_back((SDObject *)makeSDObject(
+          extent_names[j], std::max(src_0, src_1) - std::min(src_0, src_1)));
+      dstExtent.data.children.push_back((SDObject *)makeSDObject(
+          extent_names[j], std::max(dst_0, dst_1) - std::min(dst_0, dst_1)));
     }
 
     AccessImage(src_id, srcSubresource, &srcOffset, &srcExtent, src_layout, ACCESS_ACTION_READ);
@@ -438,7 +443,8 @@ void TraceTracker::CmdClearAttachmentsAnalyze(SDChunk *o)
   for(uint32_t i = 0; i < attachments->NumChildren(); i++)
   {
     SDObject *attachment = attachments->GetChild(i);
-    VkImageAspectFlags aspectMask = static_cast<VkImageAspectFlags>(attachment->GetChild(0)->AsUInt64());
+    VkImageAspectFlags aspectMask =
+        static_cast<VkImageAspectFlags>(attachment->GetChild(0)->AsUInt64());
     uint64_t colorAttachment = attachment->GetChild(1)->AsUInt64();
     for(uint32_t layer = 0; layer < fbLayers; layer++)
     {
@@ -450,13 +456,14 @@ void TraceTracker::CmdClearAttachmentsAnalyze(SDChunk *o)
 
       if(aspectMask & VK_IMAGE_ASPECT_COLOR_BIT)
       {
-        AccessAttachment(colorAttachments->GetChild(colorAttachment)->GetChild(0)->AsUInt64(), action, aspectMask,
-                         layer, 1);
+        AccessAttachment(colorAttachments->GetChild(colorAttachment)->GetChild(0)->AsUInt64(),
+                         action, aspectMask, layer, 1);
       }
 
       if(aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
       {
-        AccessAttachment(depthStencilAttachment->GetChild(0)->AsUInt64(), action, aspectMask, layer, 1);
+        AccessAttachment(depthStencilAttachment->GetChild(0)->AsUInt64(), action, aspectMask, layer,
+                         1);
       }
     }
   }

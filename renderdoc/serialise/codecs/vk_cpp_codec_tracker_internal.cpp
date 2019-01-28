@@ -35,7 +35,8 @@ void TraceTracker::EnumeratePhysicalDevicesInternal(SDChunk *o)
   RDCASSERT(indexedPhysicalDeviceID.find(physDeviceID) == indexedPhysicalDeviceID.end());
   indexedPhysicalDeviceID.emplace(physDeviceID, physDeviceIdx);
 
-  U64UMapIter queueFamilyCountIter = physDeviceQueueFamilies.emplace(physDeviceID, o->FindChild("queueCount")->AsUInt64()).first;
+  U64UMapIter queueFamilyCountIter =
+      physDeviceQueueFamilies.emplace(physDeviceID, o->FindChild("queueCount")->AsUInt64()).first;
   uint64_t queueFamilyCount = queueFamilyCountIter->second;
 
   SDObject *queueFamilyProps = o->FindChild("queueProps");
@@ -65,10 +66,12 @@ void TraceTracker::CreateDeviceInternal(SDChunk *o)
   {
     if(debug_marker == extensions->GetChild(i)->AsString())
     {
-      if (debugMarker == NULL)
+      if(debugMarker == NULL)
         debugMarker = extensions->GetChild(i)->Duplicate();
-      extensions->data.children.erase(i); // continue, there can be more than one!
-    } else {
+      extensions->data.children.erase(i);    // continue, there can be more than one!
+    }
+    else
+    {
       i++;
     }
   }
@@ -77,7 +80,8 @@ void TraceTracker::CreateDeviceInternal(SDChunk *o)
   SDObject *extensionCount = ci->GetChild(7);
   extensionCount->UInt64() = extensions->NumChildren();
 
-  acquireSemaphore = makeSDResourceId("aux.semaphore", ResourceIDGen::GetNewUniqueID())->SetTypeName("VkSemaphore");
+  acquireSemaphore = makeSDResourceId("aux.semaphore", ResourceIDGen::GetNewUniqueID())
+                         ->SetTypeName("VkSemaphore");
   TrackVarInMap(resources, "VkSemaphore", "aux.semaphore", acquireSemaphore->AsUInt64());
 }
 
@@ -146,7 +150,9 @@ void TraceTracker::CreateResourceViewInternal(SDChunk *o)
   }
 
   {
-    RDCWARN("View %llu requires resource %llu that wasn't found in createdResource or presentResources", view->AsUInt64(), resource->AsUInt64());
+    RDCWARN(
+        "View %llu requires resource %llu that wasn't found in createdResource or presentResources",
+        view->AsUInt64(), resource->AsUInt64());
   }
 }
 
@@ -155,11 +161,12 @@ void TraceTracker::BindResourceMemoryHelper(SDChunk *o)
   MemAllocWithResourcesMapIter mem_it = MemAllocFind(o->GetChild(2)->AsUInt64());
   ResourceWithViewsMapIter create_it = ResourceCreateFind(o->GetChild(1)->AsUInt64());
   RDCASSERT(create_it != ResourceCreateEnd());
-  BoundResource br = {/* create call SDObject    */ create_it->second.sdobj,
-                      /* bind call SDObject      */ o,
-                      /* serialized resource ID  */ o->GetChild(1),
-                      /* serialized requirements */ ResourceCreateFindMemReqs(o->GetChild(1)->AsUInt64()),
-                      /* serialized offset       */ o->GetChild(3)};
+  BoundResource br = {
+      /* create call SDObject    */ create_it->second.sdobj,
+      /* bind call SDObject      */ o,
+      /* serialized resource ID  */ o->GetChild(1),
+      /* serialized requirements */ ResourceCreateFindMemReqs(o->GetChild(1)->AsUInt64()),
+      /* serialized offset       */ o->GetChild(3)};
   mem_it->second.Add(br);    // Add buffer or image to the list of bound resources
 }
 
@@ -251,7 +258,8 @@ void TraceTracker::CreateSamplerInternal(SDChunk *o)
   GenericCreateResourceInternal(o);
 }
 
-void TraceTracker::CreateEventInternal(SDChunk *o) {
+void TraceTracker::CreateEventInternal(SDChunk *o)
+{
   GenericCreateResourceInternal(o);
 }
 
@@ -581,10 +589,12 @@ void TraceTracker::CreateCommandPoolInternal(SDChunk *o)
 
 void TraceTracker::AllocateCommandBuffersInternal(SDChunk *o)
 {
-  uint64_t& commandBufferCount = o->FindChild("AllocateInfo")->FindChild("commandBufferCount")->UInt64();
-  if (commandBufferCount != 1) {
-    RDCWARN("%s has AllocateInfo.commandBufferCount equal to '%llu', expected '1', setting to '1'", o->Name(),
-      commandBufferCount);
+  uint64_t &commandBufferCount =
+      o->FindChild("AllocateInfo")->FindChild("commandBufferCount")->UInt64();
+  if(commandBufferCount != 1)
+  {
+    RDCWARN("%s has AllocateInfo.commandBufferCount equal to '%llu', expected '1', setting to '1'",
+            o->Name(), commandBufferCount);
     commandBufferCount = 1;
   }
   uint64_t cmdBufferPoolID = o->FindChild("AllocateInfo")->FindChild("commandPool")->AsUInt64();

@@ -57,7 +57,7 @@ enum ResetRequirement
 struct BoundResource
 {
   SDObject *createSDObj;    // create call for the bound resource
-  SDChunk *bindSDObj;      // binding call
+  SDChunk *bindSDObj;       // binding call
   SDObject *resource;       // resource ID
   SDObject *requirement;    // serialized memory requirements
   SDObject *offset;         // binding offset
@@ -259,8 +259,8 @@ struct CmdBufferRecord
 
 struct QueueSubmit
 {
-  SDObject *sdobject;         // queue submit sdobject
-  SDObject *q;                // queue
+  SDObject *sdobject;          // queue submit sdobject
+  SDObject *q;                 // queue
   uint64_t memory_updates;     // # of completed updates
   uint64_t descset_updates;    // # of completed updates
 };

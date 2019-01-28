@@ -86,7 +86,8 @@ bool TraceTracker::CreateImageView(SDObject *o)
     std::string name = code->MakeVarName(Type(view), view->AsUInt64());
     // For each view there is a 'VkImageView_<id>[acquired_frame]' which is used in the render loop.
     std::string acquired = name + std::string("[acquired_frame]");
-    TrackVarInMap(resources, Type(view), acquired.c_str(), view->AsUInt64() + PRESENT_VARIABLE_OFFSET);
+    TrackVarInMap(resources, Type(view), acquired.c_str(),
+                  view->AsUInt64() + PRESENT_VARIABLE_OFFSET);
     return true;
   }
 
@@ -137,9 +138,10 @@ void TraceTracker::QueueSubmit(SDObject *o)
 
       wait->data.children.push_back(acquireSemaphore);
 
-      wait_dst_stage->data.children.push_back(makeSDEnum("$el", VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
-                                              ->SetCustomString("VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT")
-                                              ->SetTypeName("VkPipelineStageFlagBits"));
+      wait_dst_stage->data.children.push_back(
+          makeSDEnum("$el", VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+              ->SetCustomString("VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT")
+              ->SetTypeName("VkPipelineStageFlagBits"));
       wait_count->UInt64()++;
 
       signalSemaphoreIDs.insert(U64MapPair(ACQUIRE_SEMAPHORE_VAR_ID, 1));
@@ -286,7 +288,8 @@ bool TraceTracker::CmdPipelineBarrierFilter(SDChunk *o)
   return (memory->NumChildren() != 0 || buffer->NumChildren() != 0 || image->NumChildren() != 0);
 }
 
-bool TraceTracker::EventFuncFilter(SDChunk *o) {
+bool TraceTracker::EventFuncFilter(SDChunk *o)
+{
   return !IsValidNonNullResouce(o->GetChild(1)->AsUInt64());
 }
 
@@ -343,7 +346,8 @@ bool TraceTracker::CmdWaitEvents(SDObject *o)
   }
   image_count->UInt64() = image->NumChildren();
 
-  return (events->NumChildren() != 0 || memory->NumChildren() != 0 || buffer->NumChildren() != 0 || image->NumChildren() != 0);
+  return (events->NumChildren() != 0 || memory->NumChildren() != 0 || buffer->NumChildren() != 0 ||
+          image->NumChildren() != 0);
 }
 
 // The purpose of this function is to do several things:
@@ -356,7 +360,8 @@ void TraceTracker::CmdBeginRenderPass(SDObject *o)
   SDObject *renderpass_bi = o->GetChild(1);
   SDObject *renderpass = renderpass_bi->GetChild(2);
   SDObject *framebuffer = renderpass_bi->GetChild(3);
-  if(IsPresentationResource(renderpass->AsUInt64()) || IsPresentationResource(framebuffer->AsUInt64()))
+  if(IsPresentationResource(renderpass->AsUInt64()) ||
+     IsPresentationResource(framebuffer->AsUInt64()))
   {
     // If the renderpass shows up in presentResources, framebuffer
     // must be there too.
@@ -382,7 +387,8 @@ void TraceTracker::CmdCopyImageToBufferFilter(SDChunk *o)
 void TraceTracker::CmdCopyImageFilter(SDChunk *o)
 {
   SDObject *cmd = o->GetChild(0);
-  if(IsPresentationResource(o->GetChild(1)->AsUInt64()) || IsPresentationResource(o->GetChild(3)->AsUInt64()))
+  if(IsPresentationResource(o->GetChild(1)->AsUInt64()) ||
+     IsPresentationResource(o->GetChild(3)->AsUInt64()))
   {
     presentResources.insert(SDObjectIDMapPair(cmd->AsUInt64(), o));
     uint32_t idx = IsPresentationResource(o->GetChild(1)->AsUInt64()) ? 1 : 3;
@@ -393,7 +399,8 @@ void TraceTracker::CmdCopyImageFilter(SDChunk *o)
 void TraceTracker::CmdBlitImageFilter(SDChunk *o)
 {
   SDObject *cmd = o->GetChild(0);
-  if(IsPresentationResource(o->GetChild(1)->AsUInt64()) || IsPresentationResource(o->GetChild(3)->AsUInt64()))
+  if(IsPresentationResource(o->GetChild(1)->AsUInt64()) ||
+     IsPresentationResource(o->GetChild(3)->AsUInt64()))
   {
     presentResources.insert(SDObjectIDMapPair(cmd->AsUInt64(), o));
     uint32_t idx = IsPresentationResource(o->GetChild(1)->AsUInt64()) ? 1 : 3;
@@ -404,7 +411,8 @@ void TraceTracker::CmdBlitImageFilter(SDChunk *o)
 void TraceTracker::CmdResolveImageFilter(SDChunk *o)
 {
   SDObject *cmd = o->GetChild(0);
-  if(IsPresentationResource(o->GetChild(1)->AsUInt64()) || IsPresentationResource(o->GetChild(3)->AsUInt64()))
+  if(IsPresentationResource(o->GetChild(1)->AsUInt64()) ||
+     IsPresentationResource(o->GetChild(3)->AsUInt64()))
   {
     presentResources.insert(SDObjectIDMapPair(cmd->AsUInt64(), o));
     uint32_t idx = IsPresentationResource(o->GetChild(1)->AsUInt64()) ? 1 : 3;
@@ -442,7 +450,7 @@ bool TraceTracker::UpdateDescriptorSetWithTemplateFilter(SDChunk *o)
   for(uint64_t i = 0; i < writeDescriptorSets->NumChildren(); i++)
   {
     SDObject *wds = writeDescriptorSets->GetChild(i);
-    wds->GetChild(2)->UInt64() =o->GetChild(1)->AsUInt64();
+    wds->GetChild(2)->UInt64() = o->GetChild(1)->AsUInt64();
     if(!WriteDescriptorSetFilter(wds))
     {
       writeDescriptorSets->data.children.removeOne(wds);
@@ -521,10 +529,12 @@ bool TraceTracker::CreateComputePipelinesFilter(SDChunk *o)
   return true;
 }
 
-bool TraceTracker::CreateResourceViewFilter(SDChunk *o) {
+bool TraceTracker::CreateResourceViewFilter(SDChunk *o)
+{
   SDObject *ci = o->FindChild("CreateInfo");
   SDObject *pNextType = ci->FindChild("pNextType");
-  if (pNextType != NULL) {
+  if(pNextType != NULL)
+  {
     // Since we are removing it, it's worth checking it didn't
     // have any usefull data. If it does,this code needs to be
     // improved to handle it.
@@ -534,7 +544,8 @@ bool TraceTracker::CreateResourceViewFilter(SDChunk *o) {
   return o->FindChild("View")->AsUInt64() != 0;
 }
 
-bool TraceTracker::CreateImageFilter(SDChunk *o) {
+bool TraceTracker::CreateImageFilter(SDChunk *o)
+{
   SDObject *ci = o->FindChild("CreateInfo");
   SDObject *pNextType = ci->FindChild("pNextType");
   if(pNextType != NULL)
@@ -614,7 +625,7 @@ bool TraceTracker::BufferInfoDescSetFilter(uint64_t buffer_id, uint64_t offset, 
         "Replacing with ~0ULL",    // should I replace it with (range - offset) instead?
         buffer_id,
         buffer_size->AsUInt64(), range->AsUInt64(), offset);
-    range->UInt64() =VK_WHOLE_SIZE;
+    range->UInt64() = VK_WHOLE_SIZE;
     // Force it to be unsigned int type
     range->type.basetype = SDBasic::UnsignedInteger;
   }
@@ -654,8 +665,8 @@ bool TraceTracker::WriteDescriptorSetFilter(SDObject *wds)
         RDCWARN(
             "Descriptor set binding type %s at %llu doesn't match descriptor set layout bindings "
             "type %s at %llu",
-          ValueStr(dsType).c_str(), dsBinding->AsUInt64(), ValueStr(layoutBinding->GetChild(1)).c_str(),
-            dsBinding->AsUInt64());
+            ValueStr(dsType).c_str(), dsBinding->AsUInt64(),
+            ValueStr(layoutBinding->GetChild(1)).c_str(), dsBinding->AsUInt64());
         RDCASSERT(0);    // THIS SHOULD REALLY NEVER HAPPEN!
       }
       break;
@@ -673,7 +684,8 @@ bool TraceTracker::WriteDescriptorSetFilter(SDObject *wds)
   }
   SDObject *dsImmutSamplers = dsLayoutBinding->GetChild(4);
   // Either there were no Immutable Samplers OR there is an immutable sampler for each element.
-  RDCASSERT(dsImmutSamplers->NumChildren() == 0 || dsImmutSamplers->NumChildren() == dsLayoutBinding->GetChild(2)->AsUInt64());
+  RDCASSERT(dsImmutSamplers->NumChildren() == 0 ||
+            dsImmutSamplers->NumChildren() == dsLayoutBinding->GetChild(2)->AsUInt64());
   if(dsImmutSamplers->NumChildren() > 0)
     dsImmutSamplers = dsImmutSamplers->GetChild(dsArrayElement->AsUInt64());
 
@@ -689,8 +701,9 @@ bool TraceTracker::WriteDescriptorSetFilter(SDObject *wds)
       for(uint64_t i = 0; i < images->NumChildren();)
       {
         SDObject *image = images->GetChild(i);
-        if(!ImageInfoDescSetFilter(dsType->AsUInt64(), image->GetChild(1)->AsUInt64(), image->GetChild(0)->AsUInt64(),
-                                   dsImmutSamplers->AsUInt64(), image->GetChild(2), image))
+        if(!ImageInfoDescSetFilter(dsType->AsUInt64(), image->GetChild(1)->AsUInt64(),
+                                   image->GetChild(0)->AsUInt64(), dsImmutSamplers->AsUInt64(),
+                                   image->GetChild(2), image))
           images->data.children.removeOne(image);
         else
           i++;
@@ -708,7 +721,8 @@ bool TraceTracker::WriteDescriptorSetFilter(SDObject *wds)
       for(uint64_t i = 0; i < buffers->NumChildren();)
       {
         SDObject *buffer = buffers->GetChild(i);
-        if(!BufferInfoDescSetFilter(buffer->GetChild(0)->AsUInt64(), buffer->GetChild(1)->AsUInt64(), buffer->GetChild(2)))
+        if(!BufferInfoDescSetFilter(buffer->GetChild(0)->AsUInt64(),
+                                    buffer->GetChild(1)->AsUInt64(), buffer->GetChild(2)))
         {
           buffers->data.children.removeOne(buffer);
         }
@@ -755,7 +769,7 @@ bool TraceTracker::UpdateDescriptorSetsFilter(SDChunk *o)
   }
 
   SDObject *dsWrite_count = o->GetChild(1);
-  dsWrite_count->UInt64() =dsWrite->NumChildren();
+  dsWrite_count->UInt64() = dsWrite->NumChildren();
 
   SDObject *dsCopy = o->GetChild(4);
   for(uint64_t i = 0; i < dsCopy->NumChildren(); i++)
@@ -763,7 +777,8 @@ bool TraceTracker::UpdateDescriptorSetsFilter(SDChunk *o)
     SDObject *cds = dsCopy->GetChild(i);
     SDObject *src_desc_set = cds->GetChild(2);
     SDObject *dst_desc_set = cds->GetChild(5);
-    if(!IsValidNonNullResouce(src_desc_set->AsUInt64()) || !IsValidNonNullResouce(dst_desc_set->AsUInt64()))
+    if(!IsValidNonNullResouce(src_desc_set->AsUInt64()) ||
+       !IsValidNonNullResouce(dst_desc_set->AsUInt64()))
     {
       dsCopy->data.children.removeOne(cds);
       i--;
@@ -771,7 +786,7 @@ bool TraceTracker::UpdateDescriptorSetsFilter(SDChunk *o)
   }
 
   SDObject *dsCopy_count = o->GetChild(3);
-  dsCopy_count->UInt64() =dsCopy->NumChildren();
+  dsCopy_count->UInt64() = dsCopy->NumChildren();
   return (dsCopy->NumChildren() > 0) || (dsWrite->NumChildren() > 0);
 }
 
@@ -839,7 +854,8 @@ bool TraceTracker::InitDescSetFilter(SDChunk *o)
     {
       SDObject *dsImmutSamplers = dsLayoutBinding->GetChild(4);
       // Either there were no Immutable Samplers OR there is an immutable sampler for each element.
-      RDCASSERT(dsImmutSamplers->NumChildren() == 0 || dsImmutSamplers->NumChildren() == bindingInfo[i].count);
+      RDCASSERT(dsImmutSamplers->NumChildren() == 0 ||
+                dsImmutSamplers->NumChildren() == bindingInfo[i].count);
       if(dsImmutSamplers->NumChildren() > 0)
         dsImmutSamplers = dsImmutSamplers->GetChild(j);
 
@@ -851,7 +867,8 @@ bool TraceTracker::InitDescSetFilter(SDChunk *o)
         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
         {    // use buffer info
           SDObject *buffer = initBindings->GetChild(initBindings_index)->GetChild(0);
-          if(!BufferInfoDescSetFilter(buffer->GetChild(0)->AsUInt64(), buffer->GetChild(1)->AsUInt64(), buffer->GetChild(2)))
+          if(!BufferInfoDescSetFilter(buffer->GetChild(0)->AsUInt64(),
+                                      buffer->GetChild(1)->AsUInt64(), buffer->GetChild(2)))
           {
             continue;
           }
@@ -864,8 +881,9 @@ bool TraceTracker::InitDescSetFilter(SDChunk *o)
         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
         {    // use image info
           SDObject *image = initBindings->GetChild(initBindings_index)->GetChild(1);
-          if(!ImageInfoDescSetFilter(bindingInfo[i].type, image->GetChild(1)->AsUInt64(), image->GetChild(0)->AsUInt64(),
-                                     dsImmutSamplers->AsUInt64(), image->GetChild(2), image))
+          if(!ImageInfoDescSetFilter(bindingInfo[i].type, image->GetChild(1)->AsUInt64(),
+                                     image->GetChild(0)->AsUInt64(), dsImmutSamplers->AsUInt64(),
+                                     image->GetChild(2), image))
           {
             continue;
           }
@@ -887,8 +905,8 @@ bool TraceTracker::InitDescSetFilter(SDChunk *o)
       // get to this point.
       SDObject *extBinding = (SDObject *)makeSDObject("binding", bindingInfo[i].binding);
       SDObject *extType = makeSDEnum("type", (uint32_t)bindingInfo[i].type)
-        ->SetCustomString(bindingInfo[i].typeStr.c_str())
-        ->SetTypeName("VkDescriptorType");
+                              ->SetCustomString(bindingInfo[i].typeStr.c_str())
+                              ->SetTypeName("VkDescriptorType");
       SDObject *extArrayElement = makeSDObject("arrayElement", j);
       initBindings->GetChild(initBindings_index)->data.children.push_back(extBinding);
       initBindings->GetChild(initBindings_index)->data.children.push_back(extType);

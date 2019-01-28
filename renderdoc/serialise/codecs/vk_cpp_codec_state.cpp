@@ -23,6 +23,7 @@
 ******************************************************************************/
 #include "vk_cpp_codec_state.h"
 #include "vk_cpp_codec_common.h"
+
 #include "core/intervals.h"
 
 namespace vk_cpp_codec
@@ -112,7 +113,7 @@ bool MemoryAllocationWithBoundResources::HasAliasedResources()
 bool MemoryAllocationWithBoundResources::NeedsReset()
 {
   // allocations that have aliased resources need full reset.
-  if (HasAliasedResources())
+  if(HasAliasedResources())
     return true;
 
   // Loop through the resources, looking for one that needs a reset.
@@ -131,7 +132,7 @@ bool MemoryAllocationWithBoundResources::NeedsReset()
 bool MemoryAllocationWithBoundResources::NeedsInit()
 {
   // allocations that have aliased resources don't need initialization, only reset.
-  if (HasAliasedResources())
+  if(HasAliasedResources())
     return false;
 
   // Loop through the resources, looking for one that needs an init.
@@ -420,7 +421,7 @@ void DescriptorBinding::SetBindingObj(uint64_t index, SDObject *o, bool initiali
       bufferBindings[index] = BoundBuffer(o->GetChild(0)->AsUInt64(),    // buffer
                                           o->GetChild(1)->AsUInt64(),    // offset
                                           o->GetChild(2)->AsUInt64(),    // size
-                                          0);                 // dynamicOffset
+                                          0);                            // dynamicOffset
       break;
 
     case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
@@ -527,9 +528,10 @@ void BindingState::BeginRenderPass(SDObject *aRenderPass, SDObject *aFramebuffer
   framebuffer = aFramebuffer;
   uint64_t width = aFramebuffer->GetChild(6)->AsUInt64();
   uint64_t height = aFramebuffer->GetChild(7)->AsUInt64();
-  isFullRenderArea =
-      (aRenderArea->GetChild(0)->GetChild(0)->AsUInt64() == 0) && (aRenderArea->GetChild(0)->GetChild(1)->AsUInt64() == 0) &&
-      (aRenderArea->GetChild(1)->GetChild(0)->AsUInt64() == width) && (aRenderArea->GetChild(1)->GetChild(1)->AsUInt64() == height);
+  isFullRenderArea = (aRenderArea->GetChild(0)->GetChild(0)->AsUInt64() == 0) &&
+                     (aRenderArea->GetChild(0)->GetChild(1)->AsUInt64() == 0) &&
+                     (aRenderArea->GetChild(1)->GetChild(0)->AsUInt64() == width) &&
+                     (aRenderArea->GetChild(1)->GetChild(1)->AsUInt64() == height);
 
   uint64_t numAttachments = aRenderPass->GetChild(4)->NumChildren();
   attachmentFirstUse.clear();
