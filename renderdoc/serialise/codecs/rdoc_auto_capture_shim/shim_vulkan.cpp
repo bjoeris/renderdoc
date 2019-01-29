@@ -51,6 +51,19 @@ std::chrono::time_point<std::chrono::system_clock> quitAfter;
 
 #include "renderdoc_app.h"
 
+#if defined(__yeti__) || defined(__ggp__)
+std::string outputDir = "/var/game/";
+#elif defined(__linux__)
+std::string outputDir = ".";
+#elif defined(_WIN32) || defined(WIN32)
+std::string outputDir;
+#endif
+
+bool ShimParseCommandLineFlags(int argc, char **argv, int *arg_index)
+{
+  return ParseDirCommandLineFlag(argc, argv, arg_index, &outputDir);
+}
+
 bool ShimShouldQuitNow()
 {
   return shouldQuit && std::chrono::system_clock::now() > quitAfter;
@@ -140,14 +153,7 @@ void IsRenderDocLoaded()
   capture.api->_110.SetCaptureOptionU32(eRENDERDOC_Option_APIValidation, 1);
   capture.api->_110.SetCaptureOptionU32(eRENDERDOC_Option_CaptureCallstacks, 1);
   capture.api->_110.SetCaptureOptionU32(eRENDERDOC_Option_HookIntoChildren, 1);
-
-#if defined(__yeti__) || defined(__ggp__)
-  capture.api->_110.SetLogFilePathTemplate("/var/game/");
-#elif defined(__linux__)
-  capture.api->_110.SetLogFilePathTemplate(".");
-#elif defined(_WIN32) || defined(WIN32)
-  capture.api->_110.SetLogFilePathTemplate("");
-#endif
+  capture.api->_110.SetLogFilePathTemplate(outputDir.c_str());
 
   if(rdoc != NULL)
     CloseRDocAPI(rdoc);

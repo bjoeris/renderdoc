@@ -31,6 +31,11 @@
 AuxVkTraceResources aux;
 ResourceNamesMap ResourceNames;
 
+bool ShimParseCommandLineFlags(int argc, char **argv, int *arg_index)
+{
+  return false;
+}
+
 bool ShimShouldQuitNow()
 {
   return false;

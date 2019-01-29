@@ -79,6 +79,7 @@ void CodeWriter::Open()
     files[ID_MAIN]->PrintLnH("void %s_%s();", funcs[ID_MAIN].c_str(), funcs[i].c_str());
   }
   files[ID_MAIN]->PrintLnH("bool main_should_quit_now();");
+  files[ID_MAIN]->PrintLnH("int main_parse_command_line_flags(int argc, char ** argv, int* i);");
   if(*shimPrefix)
   {
     files[ID_VAR]->PrintLnH("#include \"sample_cpp_shim/shim_vulkan.h\"");
@@ -169,6 +170,18 @@ void CodeWriter::Close()
     {
       files[ID_MAIN]->PrintLn("return false;");
     }
+    files[ID_MAIN]->PrintLn("}");
+
+    files[ID_MAIN]->PrintLn("int main_parse_command_line_flags(int argc, char ** argv, int* i) {");
+    if(*shimPrefix)
+    {
+      files[ID_MAIN]->PrintLn("return ShimParseCommandLineFlags(argc, argv, i);");
+    }
+    else
+    {
+      files[ID_MAIN]->PrintLn("return -1;");
+    }
+
     files[ID_MAIN]->PrintLn("}");
   }
 
@@ -681,7 +694,8 @@ void CodeWriter::CreateInstance(SDObject *o, uint32_t pass, bool global_ci)
         .PrintLn("#elif defined(__yeti__)")
         .PrintLn("%s[%" PRId64 "] = \"VK_GOOGLE_yeti_surface\";", extensions->Name(), enables_surface)
         .PrintLn("#elif defined(__ggp__)")
-        .PrintLn("%s[%" PRId64 "] = \"VK_GGP_stream_descriptor_surface\";", extensions->Name(), enables_surface)
+        .PrintLn("%s[%" PRId64 "] = \"VK_GGP_stream_descriptor_surface\";", extensions->Name(),
+                 enables_surface)
         .PrintLn("#elif defined(__linux__)")
         .PrintLn("%s[%" PRId64 "] = \"VK_KHR_xlib_surface\";", extensions->Name(), enables_surface)
         .PrintLn("#endif");
@@ -974,17 +988,19 @@ void CodeWriter::CreateSwapchainKHR(SDObject *o, uint32_t pass, bool global_ci)
           instance_name, swapchain->AsUInt64(), surface.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("#elif defined(__ggp__)")
-      .PrintLn("VkStreamDescriptorSurfaceCreateInfoGGP VkStreamDescriptorSurfaceCreateInfoGGP_%" PRIu64 " = {",
-        swapchain->AsUInt64())
+      .PrintLn(
+          "VkStreamDescriptorSurfaceCreateInfoGGP VkStreamDescriptorSurfaceCreateInfoGGP_%" PRIu64
+          " = {",
+          swapchain->AsUInt64())
       .PrintLn("  /* sType = */ VK_STRUCTURE_TYPE_STREAM_DESCRIPTOR_SURFACE_CREATE_INFO_GGP,")
       .PrintLn("  /* pNext = */ NULL,")
       .PrintLn("  /* flags = */ 0,")
       .PrintLn("  /* streamDescriptor = */ 1")
       .PrintLn("};")
       .PrintLn(
-        "VkResult result = vkCreateStreamDescriptorSurfaceGGP("
-        "%s, &VkStreamDescriptorSurfaceCreateInfoGGP_%" PRIu64 ", NULL, &%s);",
-        instance_name, swapchain->AsUInt64(), surface.c_str())
+          "VkResult result = vkCreateStreamDescriptorSurfaceGGP("
+          "%s, &VkStreamDescriptorSurfaceCreateInfoGGP_%" PRIu64 ", NULL, &%s);",
+          instance_name, swapchain->AsUInt64(), surface.c_str())
       .PrintLn("assert(result == VK_SUCCESS);")
       .PrintLn("#elif defined(__yeti__)")
       .PrintLn("VkYetiSurfaceCreateInfoGOOGLE VkYetiSurfaceCreateInfoGOOGLE_%" PRIu64 " = {",

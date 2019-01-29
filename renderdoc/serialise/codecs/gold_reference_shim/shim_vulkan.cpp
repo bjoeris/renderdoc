@@ -50,6 +50,17 @@ std::map<VkRenderPass, RenderPassInfo> renderPassInfos;
 std::map<VkCommandBuffer, RenderPassInfo> cmdBufferRenderPassInfos;
 std::map<VkCommandBuffer, std::vector<ReadbackInfos>> cmdBufferReadBackInfos;
 
+#if defined(__yeti__) || defined(__ggp__)
+std::string outputDir = "/var/game/";
+#else
+std::string outputDir;
+#endif
+
+bool ShimParseCommandLineFlags(int argc, char **argv, int *arg_index)
+{
+  return ParseDirCommandLineFlag(argc, argv, arg_index, &outputDir);
+}
+
 bool ShimShouldQuitNow()
 {
   return quitNow;
@@ -83,7 +94,8 @@ VkResult shim_vkCreateImage(VkDevice device, const VkImageCreateInfo *pCreateInf
                             const char *handleName)
 {
   VkImageCreateInfo *pCI = (VkImageCreateInfo *)pCreateInfo;
-  pCI->usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;    // we might have to read back from this image.
+  pCI->usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;    // we might have to read back
+                                                    // from this image.
 
   static PFN_vkCreateImage fn = vkCreateImage;
   VkResult r = fn(device, pCreateInfo, pAllocator, pImage);
@@ -181,11 +193,14 @@ void shim_vkCmdEndRenderPass(VkCommandBuffer commandBuffer)
   {
     assert(cmdBufferRenderPassInfos.find(commandBuffer) != cmdBufferRenderPassInfos.end());
     RenderPassInfo &rpInfo = cmdBufferRenderPassInfos[commandBuffer];
-    // produce a readbacks structure that will store resources holding the attahcments data.
+    // produce a readbacks structure that will store resources holding the
+    // attachments data.
     ReadbackInfos readbacks = copyFramebufferAttachments(commandBuffer, &rpInfo);
-    // current command buffer accumulates all readbacks so it can save images on queuesubmit.
+    // current command buffer accumulates all readbacks so it can save images on
+    // queuesubmit.
     cmdBufferReadBackInfos[commandBuffer].push_back(readbacks);
-    // clear the renderpass attachments associated with the current command buffer.
+    // clear the renderpass attachments associated with the current command
+    // buffer.
     rpInfo.attachments.clear();
     cmdBufferRenderPassInfos.erase(commandBuffer);
   }
@@ -215,10 +230,7 @@ VkResult shim_vkQueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitI
           ReadbackInfo info = infos.attachments[a];
           char handleStr[32];
           snprintf(handleStr, sizeof(handleStr), "%p", info.srcImage);
-          std::string filename;
-#if defined(__yeti__) || defined(__ggp__)
-          filename = "/var/game/";
-#endif
+          std::string filename = outputDir;
           filename += std::to_string(renderPassCount) + "_attachment_" +
                       std::to_string(info.index) + "_" +
                       GetResourceName(ResourceNames, VkHandle((uint64_t)info.srcImage, "VkImage")) +
@@ -248,10 +260,7 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
     {
       VkImage srcImage =
           swapchainImageMap[(*pPresentInfo).pSwapchains[i]][(*pPresentInfo).pImageIndices[i]];
-      std::string filename;
-#if defined(__yeti__) || defined(__ggp__)
-      filename = "/var/game/";
-#endif
+      std::string filename = outputDir;
       filename +=
           "screenshot_f" + std::to_string(presentIndex) + "_sw" + std::to_string(i) + ".ppm";
       screenshot(srcImage, filename.c_str());
