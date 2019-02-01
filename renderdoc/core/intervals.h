@@ -144,7 +144,6 @@ struct Intervals
 private:
   std::map<uint64_t, T> StartPoints;
 
-public:
 private:
   IntervalsIter<T> Wrap(typename std::map<uint64_t, T>::iterator iter)
   {
@@ -169,3 +168,30 @@ public:
     return Wrap(it);
   }
 };
+
+template <typename T, typename Compose>
+void updateIntervals(Intervals<T> &a, uint64_t begin, uint64_t end, T val, Compose comp)
+{
+  for(auto i = a.find(begin); i != a.end() && i.start() < end; i++)
+    i.setValue(begin, end, comp(i.value(), val));
+}
+
+template <typename T, typename Compose>
+void mergeIntervals(Intervals<T> &a, Intervals<T> &b, Compose comp)
+{
+  auto bi = b.begin();
+  auto ai = a.find(bi.start());
+  while(ai != a.end() && bi != b.end())
+  {
+    ai.setValue(bi.start(), bi.end(), comp(ai.value(), bi.value()));
+    if(ai.end() < bi.end())
+      ai++;
+    else if(bi.end() < ai.end())
+      bi++;
+    else
+    {
+      ai++;
+      bi++;
+    }
+  }
+}
