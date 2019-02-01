@@ -631,6 +631,47 @@ void VulkanResourceManager::ClearReferencedMemory()
   m_MemFrameRefs.clear();
 }
 
+void VulkanResourceManager::Serialise_InitialContentsNeeded(WriteSerialiser &ser)
+{
+  using namespace ResourceManagerInternal;
+
+  SCOPED_LOCK(m_Lock);
+
+  std::vector<WrittenRecord> WrittenRecords;
+
+  // reasonable estimate, and these records are small
+  WrittenRecords.reserve(m_DirtyResources.size());
+
+  for(auto it = m_DirtyResources.begin(); it != m_DirtyResources.end(); ++it)
+  {
+    ResourceId id = *it;
+    VkResourceRecord *rec = GetResourceRecord(id);
+    if(rec == NULL)
+      continue;
+    VkResourceType type = IdentifyTypeByPtr(rec->Resource);
+    bool save = false;
+    if(type == eResDeviceMemory) {
+      auto memRef = m_MemFrameRefs.find(id);
+      save = (memRef != m_MemFrameRefs.end()) && (memRef->second.InitReq() != eInitReq_None);
+    }
+    else
+    {
+      auto ref = m_FrameReferencedResources.find(id);
+      save = (ref != m_FrameReferencedResources.end() && InitReq(ref->second) != eInitReq_None);
+    }
+    if(save)
+    {
+      WrittenRecord wr = { id, true };
+      WrittenRecords.push_back(wr);
+    }
+  }
+
+  uint32_t chunkSize = uint32_t(WrittenRecords.size() * sizeof(WrittenRecord) + 16);
+
+  SCOPED_SERIALISE_CHUNK(SystemChunk::InitialContentsList, chunkSize);
+  SERIALISE_ELEMENT(WrittenRecords);
+}
+
 bool VulkanResourceManager::Force_InitialState(WrappedVkRes *res, bool prepare)
 {
   return false;

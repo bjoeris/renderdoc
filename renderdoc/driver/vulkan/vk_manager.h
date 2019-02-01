@@ -416,6 +416,8 @@ public:
   void MergeReferencedMemory(std::map<ResourceId, MemRefs> &memRefs);
   void ClearReferencedMemory();
 
+  virtual void Serialise_InitialContentsNeeded(WriteSerialiser &ser);
+
 private:
   bool ResourceTypeRelease(WrappedVkRes *res);
 

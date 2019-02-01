@@ -458,7 +458,7 @@ public:
   // Serialise out which resources need initial contents, along with whether their
   // initial contents are in the serialised stream (e.g. RTs might still want to be
   // cleared on frame init).
-  void Serialise_InitialContentsNeeded(WriteSerialiser &ser);
+  virtual void Serialise_InitialContentsNeeded(WriteSerialiser &ser);
 
   // mark resource referenced somewhere in the main frame-affecting calls.
   // That means this resource should be included in the final serialise out
