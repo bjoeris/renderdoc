@@ -610,7 +610,25 @@ ResourceId VulkanResourceManager::GetFirstIDForHandle(uint64_t handle)
 void VulkanResourceManager::MarkMemoryFrameReferenced(ResourceId mem, VkDeviceSize offset,
                                                       VkDeviceSize size, FrameRefType refType)
 {
-  MarkResourceFrameReferenced(mem, refType);
+  MarkResourceFrameReferenced(mem, eFrameRef_Read);
+  MarkMemoryReferenced(m_MemFrameRefs, mem, offset, size, refType);
+}
+
+void VulkanResourceManager::MergeReferencedMemory(std::map<ResourceId, MemRefs> &memRefs)
+{
+  for(auto j = memRefs.begin(); j != memRefs.end(); j++)
+  {
+    auto i = m_MemFrameRefs.find(j->first);
+    if(i == m_MemFrameRefs.end())
+      m_MemFrameRefs.insert(*j);
+    else
+      i->second.Merge(j->second);
+  }
+}
+
+void VulkanResourceManager::ClearReferencedMemory()
+{
+  m_MemFrameRefs.clear();
 }
 
 bool VulkanResourceManager::Force_InitialState(WrappedVkRes *res, bool prepare)

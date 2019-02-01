@@ -3033,7 +3033,10 @@ VkResourceRecord::~VkResourceRecord()
 void VkResourceRecord::MarkMemoryFrameReferenced(ResourceId mem, VkDeviceSize offset,
                                                  VkDeviceSize size, FrameRefType refType)
 {
-  MarkResourceFrameReferenced(mem, refType);
+  MarkResourceFrameReferenced(mem, eFrameRef_Read);
+  MarkMemoryReferenced(cmdInfo->memFrameRefs, mem, offset, size, refType);
+  if(refType != eFrameRef_Read && refType != eFrameRef_None)
+    cmdInfo->dirtied.insert(mem);
 }
 
 void VkResourceRecord::MarkBufferFrameReferenced(VkResourceRecord *buf, VkDeviceSize offset,
@@ -3283,6 +3286,45 @@ void ResourceInfo::Update(uint32_t numBindings, const VkSparseMemoryBind *pBindi
     if(!found)
       opaquemappings.push_back(curRange);
   }
+}
+
+void MemRefs::Update(VkDeviceSize offset, VkDeviceSize size, FrameRefType refType)
+{
+  updateIntervals(rangeRefs, offset, offset + size, refType, ComposeFrameRefs);
+}
+
+void MemRefs::Merge(MemRefs &other)
+{
+  mergeIntervals(rangeRefs, other.rangeRefs, ComposeFrameRefs);
+}
+
+InitReqType MemRefs::InitReq()
+{
+  InitReqType initReq = eInitReq_None;
+  for(auto i = rangeRefs.begin(); i != rangeRefs.end(); i++)
+    initReq = std::max(initReq, ::InitReq(i.value()));
+  return initReq;
+}
+
+InitReqType MemRefs::InitReq(VkDeviceSize offset, VkDeviceSize size)
+{
+  InitReqType initReq = eInitReq_None;
+  VkDeviceSize end = offset + size;
+  for(auto i = rangeRefs.find(offset); i.start() < end; i++)
+    initReq = std::max(initReq, ::InitReq(i.value()));
+  return initReq;
+}
+
+void MarkMemoryReferenced(std::map<ResourceId, MemRefs> &memRefs, ResourceId mem,
+                          VkDeviceSize offset, VkDeviceSize size, FrameRefType refType)
+{
+  if(refType == eFrameRef_None)
+    return;
+  auto refs = memRefs.find(mem);
+  if(refs == memRefs.end())
+    memRefs.insert(std::make_pair(mem, MemRefs(offset, size, refType)));
+  else
+    refs->second.Update(offset, size, refType);
 }
 
 #if ENABLED(ENABLE_UNIT_TESTS)

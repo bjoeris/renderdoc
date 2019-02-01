@@ -25,6 +25,7 @@
 #pragma once
 
 #include "common/wrapped_pool.h"
+#include "core/intervals.h"
 #include "core/resource_manager.h"
 #include "vk_common.h"
 #include "vk_hookset_defs.h"
@@ -906,6 +907,8 @@ struct ResourceInfo
   void Update(uint32_t numBindings, const VkSparseImageMemoryBind *pBindings);
 };
 
+struct MemRefs;
+
 struct CmdBufferRecordingInfo
 {
   VkDevice device;
@@ -929,6 +932,8 @@ struct CmdBufferRecordingInfo
   set<VkDescriptorSet> boundDescSets;
 
   vector<VkResourceRecord *> subcmds;
+
+  std::map<ResourceId, MemRefs> memFrameRefs;
 
   // AdvanceFrame/Present should be called after this buffer is submitted
   bool present;
@@ -959,6 +964,7 @@ struct DescriptorSetData
   // mapping information
   static const uint32_t SPARSE_REF_BIT = 0x80000000;
   map<ResourceId, pair<uint32_t, FrameRefType> > bindFrameRefs;
+  map<ResourceId, MemRefs> bindMemRefs;
 };
 
 struct PipelineLayoutData
@@ -997,6 +1003,23 @@ struct AttachmentInfo
   VkImageMemoryBarrier barrier;
 };
 
+struct MemRefs
+{
+  Intervals<FrameRefType> rangeRefs;
+  inline MemRefs() {}
+  inline MemRefs(VkDeviceSize offset, VkDeviceSize size, FrameRefType refType)
+  {
+    rangeRefs.begin().setValue(offset, offset + size, refType);
+  }
+  void Update(VkDeviceSize offset, VkDeviceSize size, FrameRefType refType);
+  void Merge(MemRefs &other);
+  InitReqType InitReq();
+  InitReqType InitReq(VkDeviceSize offset, VkDeviceSize size);
+};
+
+void MarkMemoryReferenced(std::map<ResourceId, MemRefs> &memRefs, ResourceId mem,
+                          VkDeviceSize offset, VkDeviceSize size, FrameRefType refType);
+
 struct DescUpdateTemplate;
 
 struct VkResourceRecord : public ResourceRecord
@@ -1030,6 +1053,7 @@ public:
     cmdInfo->imgbarriers.swap(bakedCommands->cmdInfo->imgbarriers);
     cmdInfo->subcmds.swap(bakedCommands->cmdInfo->subcmds);
     cmdInfo->sparse.swap(bakedCommands->cmdInfo->sparse);
+    cmdInfo->memFrameRefs.swap(bakedCommands->cmdInfo->memFrameRefs);
   }
 
   void AddBindFrameRef(ResourceId id, FrameRefType ref, bool hasSparse = false)
@@ -1051,6 +1075,16 @@ public:
           ComposeFrameRefsUnordered(descInfo->bindFrameRefs[id].second, ref);
       descInfo->bindFrameRefs[id].first++;
     }
+  }
+
+  void AddMemFrameRef(ResourceId mem, VkDeviceSize offset, VkDeviceSize size, FrameRefType refType)
+  {
+    if(mem == ResourceId())
+    {
+      RDCERR("Unexpected NULL resource ID being added as a bind frame ref");
+      return;
+    }
+    MarkMemoryReferenced(descInfo->bindMemRefs, mem, offset, size, refType);
   }
 
   void RemoveBindFrameRef(ResourceId id)
