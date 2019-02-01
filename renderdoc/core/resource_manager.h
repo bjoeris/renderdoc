@@ -114,6 +114,23 @@ FrameRefType ComposeFrameRefsUnordered(FrameRefType first, FrameRefType second);
 
 bool IsDirtyFrameRef(FrameRefType refType);
 
+enum InitReqType
+{
+  eInitReq_None,
+  eInitReq_InitOnce,
+  eInitReq_Reset,
+};
+
+inline InitReqType InitReq(FrameRefType refType)
+{
+  switch(refType)
+  {
+    case eFrameRef_Read: return eInitReq_InitOnce;
+    case eFrameRef_ReadBeforeWrite: return eInitReq_Reset;
+    default: return eInitReq_None;
+  }
+}
+
 // handle marking a resource referenced for read or write and storing RAW access etc.
 bool MarkReferenced(std::map<ResourceId, FrameRefType> &refs, ResourceId id, FrameRefType refType);
 
