@@ -137,7 +137,7 @@ function main() {
   fi
 
   # Install the current version of bazel that is being used to build yeti/yeti.
-  readonly BAZEL_VERSION='0.21.0'
+  readonly BAZEL_VERSION='0.22.0'
   source "${YETI_ROOT}/kokoro/ubuntu/install_bazel.sh"
 
   gcloud auth activate-service-account \
