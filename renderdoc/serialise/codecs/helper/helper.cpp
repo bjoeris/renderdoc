@@ -848,7 +848,7 @@ std::string NormalizePath(std::string path)
   // Trailing slash is for concatenating file name to directory later.
   if(!path.empty() && path.back() != '/')
   {
-    path.append("/");
+    path.push_back('/');
   }
 #endif
   return path;
