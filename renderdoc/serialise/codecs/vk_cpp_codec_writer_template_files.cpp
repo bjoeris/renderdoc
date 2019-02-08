@@ -9973,7 +9973,7 @@ const char fileData_25[] =
   "ing slash if needed.\r\n  // Trailing slash is for concatenating file name to directory later.\r\n  std::replace(path.beg"
   "in(), path.end(), '/', '\\\\');\r\n  if(!path.empty() && path.back() != '\\\\')\r\n  {\r\n    path.push_back('\\\\');\r\n"
   "  }\r\n#else\r\n  // Add trailing slash if needed.\r\n  // Trailing slash is for concatenating file name to directory lat"
-  "er.\r\n  if(!path.empty() && path.back() != '/')\r\n  {\r\n    path.append(\"/\");\r\n  }\r\n#endif\r\n  return path;\r\n"
+  "er.\r\n  if(!path.empty() && path.back() != '/')\r\n  {\r\n    path.push_back('/');\r\n  }\r\n#endif\r\n  return path;\r\n"
   "}\r\n\r\nbool CreateDir(const std::string &path)\r\n{\r\n#if defined(_WIN32)\r\n  int nError = _mkdir(path.c_str());\r\n#"
   "else\r\n  mode_t nMode = 0755;\r\n  int nError = mkdir(path.c_str(), nMode);\r\n#endif\r\n  if(nError == 0)\r\n    return"
   " true;\r\n\r\n  switch(errno)\r\n  {\r\n    case ENOENT:    // something along the path does not exist\r\n    {\r\n#if de"
@@ -30067,7 +30067,7 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(helper/CMakeLists.txt)", 895, fileData_22},
   {R"(helper/format_helper.h)", 2355, fileData_23},
   {R"(helper/format_size_and_aspect.cpp)", 39140, fileData_24},
-  {R"(helper/helper.cpp)", 37612, fileData_25},
+  {R"(helper/helper.cpp)", 37615, fileData_25},
   {R"(helper/helper.h)", 12908, fileData_26},
   {R"(sample_cpp_shim/CMakeLists.txt)", 1066, fileData_27},
   {R"(sample_cpp_shim/shim_vulkan.cpp)", 115938, fileData_28},

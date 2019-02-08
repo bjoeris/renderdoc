@@ -79,7 +79,7 @@ void CodeWriter::Open()
     files[ID_MAIN]->PrintLnH("void %s_%s();", funcs[ID_MAIN].c_str(), funcs[i].c_str());
   }
   files[ID_MAIN]->PrintLnH("bool main_should_quit_now();");
-  files[ID_MAIN]->PrintLnH("int main_parse_command_line_flags(int argc, char ** argv, int* i);");
+  files[ID_MAIN]->PrintLnH("bool main_parse_command_line_flags(int argc, char ** argv, int* i);");
   if(*shimPrefix)
   {
     files[ID_VAR]->PrintLnH("#include \"sample_cpp_shim/shim_vulkan.h\"");
@@ -172,14 +172,14 @@ void CodeWriter::Close()
     }
     files[ID_MAIN]->PrintLn("}");
 
-    files[ID_MAIN]->PrintLn("int main_parse_command_line_flags(int argc, char ** argv, int* i) {");
+    files[ID_MAIN]->PrintLn("bool main_parse_command_line_flags(int argc, char ** argv, int* i) {");
     if(*shimPrefix)
     {
       files[ID_MAIN]->PrintLn("return ShimParseCommandLineFlags(argc, argv, i);");
     }
     else
     {
-      files[ID_MAIN]->PrintLn("return -1;");
+      files[ID_MAIN]->PrintLn("return false;");
     }
 
     files[ID_MAIN]->PrintLn("}");
