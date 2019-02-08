@@ -865,7 +865,7 @@ SERIALISE_VK_HANDLES();
                                                                                                       \
   /* VK_GGP_stream_descriptor_surface */                                                              \
   PNEXT_UNSUPPORTED(VK_STRUCTURE_TYPE_STREAM_DESCRIPTOR_SURFACE_CREATE_INFO_GGP)                      \
-  /* VK_GGP_stream_descriptor_surface */                                                              \
+  /* VK_GGP_frame_token */                                                              \
   PNEXT_UNSUPPORTED(VK_STRUCTURE_TYPE_PRESENT_FRAME_TOKEN_GGP)
 
 template <typename SerialiserType>
