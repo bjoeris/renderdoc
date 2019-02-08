@@ -43,6 +43,7 @@
 extern AuxVkTraceResources aux;
 extern ResourceNamesMap ResourceNames;
 
+SHIM_VK_API bool ShimParseCommandLineFlags(int argc, char **argv, int *arg_index);
 SHIM_VK_API bool ShimShouldQuitNow();
 SHIM_VK_API void ShimRelease();
 

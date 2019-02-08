@@ -46,6 +46,19 @@ const double DELTA = 0.001;
 #define FIRST_TS_STAGE VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
 #define SECOND_TS_STAGE VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
 
+#if defined(__yeti__) || defined(__ggp__)
+std::string outputDir = "/var/game/";
+#else
+std::string outputDir;
+#endif
+std::string outputFileName = "profiling_output.txt";
+
+bool ShimParseCommandLineFlags(int argc, char **argv, int *arg_index)
+{
+  return ParseDirCommandLineFlag(argc, argv, arg_index, &outputDir) ||
+         ParseFileCommandLineFlag(argc, argv, arg_index, &outputFileName);
+}
+
 ShimVkTraceResources aux;
 int presentIndex = 0;
 bool quitNow = false;
@@ -182,7 +195,8 @@ VkResult shim_vkBeginCommandBuffer(VkCommandBuffer commandBuffer,
   if(presentIndex == 0)
   {
     // Currently all command buffers are uniquely recorded in a frame.
-    // Is this always true? Can't use VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+    // Is this always true? Can't use
+    // VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
     // for figuring this out.
     assert(aux.cbCommandInfo.count(commandBuffer) == 0);
     aux.addCommandInfo(
@@ -327,12 +341,7 @@ VkResult shim_vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentI
       fprintf(stdout, "%s", cbTime.c_str());
 #endif
     }
-#if defined(__yeti__) || defined(__ggp__)
-    const char csvFileName[] = "/var/game/profiling_output.csv";
-#else
-    const char csvFileName[] = "profiling_output.csv";
-#endif
-    aux.writeAllCSV(csvFileName);
+    aux.writeAllCSV((outputDir + outputFileName).c_str());
   }
 
   quitNow = presentIndex++ > END_TS_FRAME;

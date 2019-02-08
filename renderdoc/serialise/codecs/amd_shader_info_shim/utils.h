@@ -30,3 +30,4 @@ std::string getStageStr(VkShaderStageFlagBits stage);
 void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage, const char *disassembly, size_t size);
 void printShaderInfo(VkPipeline p, VkShaderStageFlagBits stage,
                      VkShaderStatisticsInfoAMD &statistics);
+extern std::string outputDir;

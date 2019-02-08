@@ -29,24 +29,23 @@
 // capture on GGP
 #if defined(__yeti__) || defined(__ggp__)
 
-
 #if defined(__yeti__)
 #include <yeti_c/yeti.h>
-#define GgpEventQueue                    YetiEventQueue
-#define GgpEventQueueCreate              YetiEventQueueCreate
-#define GgpEventQueueProcessEvent        YetiEventQueueProcessEvent
-#define GgpSuspended                     YetiSuspended
-#define GgpStreamStoppedEvent            YetiStreamStoppedEvent
-#define GgpShutDown                      YetiShutDown
-#define GgpRemoveStreamStoppedHandler    YetiRemoveStreamStoppedHandler
-#define GgpRemoveStreamStartedHandler    YetiRemoveStreamStartedHandler
-#define GgpEventQueueDestroy             YetiEventQueueDestroy
-#define GgpReadyToStream                 YetiReadyToStream
-#define GgpHandlersRegistered            YetiHandlersRegistered
-#define GgpAddStreamStoppedHandler       YetiAddStreamStoppedHandler
-#define GgpAddStreamStartedHandler       YetiAddStreamStartedHandler
-#define kGgpStreamStopped_Exited         kYetiStreamStopped_Exited
-#define kGgpStreamStopped_Unexpected     kYetiStreamStopped_Unexpected
+#define GgpEventQueue YetiEventQueue
+#define GgpEventQueueCreate YetiEventQueueCreate
+#define GgpEventQueueProcessEvent YetiEventQueueProcessEvent
+#define GgpSuspended YetiSuspended
+#define GgpStreamStoppedEvent YetiStreamStoppedEvent
+#define GgpShutDown YetiShutDown
+#define GgpRemoveStreamStoppedHandler YetiRemoveStreamStoppedHandler
+#define GgpRemoveStreamStartedHandler YetiRemoveStreamStartedHandler
+#define GgpEventQueueDestroy YetiEventQueueDestroy
+#define GgpReadyToStream YetiReadyToStream
+#define GgpHandlersRegistered YetiHandlersRegistered
+#define GgpAddStreamStoppedHandler YetiAddStreamStoppedHandler
+#define GgpAddStreamStartedHandler YetiAddStreamStartedHandler
+#define kGgpStreamStopped_Exited kYetiStreamStopped_Exited
+#define kGgpStreamStopped_Unexpected kYetiStreamStopped_Unexpected
 #endif
 
 #if defined(__ggp__)
@@ -134,6 +133,34 @@ void Render()
   }
 }
 
+//-----------------------------------------------------------------------------
+// ParseCommandLine
+//-----------------------------------------------------------------------------
+static bool ParseCommandLine(int argc, char **argv)
+{
+  int i = 1;
+  while(i < argc)
+  {
+    if(!main_parse_command_line_flags(argc, argv, &i))
+      return false;
+  }
+
+  return true;
+}
+
+//-----------------------------------------------------------------------------
+// Usage
+//-----------------------------------------------------------------------------
+static void Usage()
+{
+  const char usage[] =
+      "Options:\n"
+      "-repeat N    -- Number of frames to run\n"
+      "-reset       -- Perform a state reset in between frames\n";
+
+  fprintf(stderr, "%s", usage);
+}
+
 const uint64_t kMicrosecondsPerFrame = 16666L;
 
 static struct
@@ -215,6 +242,12 @@ static void Finalize()
 
 int main(int argc, char **argv)
 {
+  if(!ParseCommandLine(argc, argv))
+  {
+    Usage();
+    return 1;
+  }
+
   Initialize();
 
   // Wait until user closes the window, then exit

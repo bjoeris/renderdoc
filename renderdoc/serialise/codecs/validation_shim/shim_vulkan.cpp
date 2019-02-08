@@ -36,10 +36,18 @@ VkDebugReportFlagBitsEXT debugReportFlags =
 /* Register the callback */
 VkDebugReportCallbackEXT callback;
 #if defined(__yeti__) || defined(__ggp__)
-std::ofstream file("/var/game/validation_layer_output.txt");
+std::string outputDir = "/var/game/";
 #else
-std::ofstream file("validation_layer_output.txt");
+std::string outputDir;
 #endif
+std::string outputFileName = "validation_layer_output.txt";
+std::ofstream file;
+
+bool ShimParseCommandLineFlags(int argc, char **argv, int *arg_index)
+{
+  return ParseDirCommandLineFlag(argc, argv, arg_index, &outputDir) ||
+         ParseFileCommandLineFlag(argc, argv, arg_index, &outputFileName);
+}
 
 bool quitNow = false;
 bool ShimShouldQuitNow()
@@ -55,6 +63,7 @@ void ShimRelease()
     fn(aux.instance, aux.callback, NULL);
   if(fn && callback != VK_NULL_HANDLE)
     fn(aux.instance, callback, NULL);
+  file.close();
 }
 
 inline std::string VkObjectTypeToString(VkDebugReportObjectTypeEXT ty)
@@ -135,12 +144,14 @@ VkBool32 VKAPI_PTR validationDebugReportCallback(VkDebugReportFlagsEXT flags,
   return VK_FALSE;
 }
 
-// shim_vkCreateInstance registers a debug report callback that writes validation layer output to a
+// shim_vkCreateInstance registers a debug report callback that writes
+// validation layer output to a
 // file.
 VkResult shim_vkCreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                                const VkAllocationCallbacks *pAllocator, VkInstance *pInstance,
                                const char *handleName)
 {
+  file = std::ofstream(outputDir + outputFileName);
 #if defined(_DEBUG) || defined(DEBUG)
   VkResult r = vkCreateInstance(pCreateInfo, pAllocator, pInstance);
 #else

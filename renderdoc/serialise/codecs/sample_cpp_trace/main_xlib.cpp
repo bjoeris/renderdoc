@@ -114,25 +114,28 @@ void Render()
 //-----------------------------------------------------------------------------
 static bool ParseCommandLine(int argc, char **argv)
 {
-  for(int i = 1; i < argc; ++i)
+  int i = 1;
+  while(i < argc)
   {
     if(0 == strcmp(argv[i], "-repeat"))
     {
-      ++i;
+      i += 1;
       if(i >= argc)
       {
         return false;
       }
       frameLoops = atoi(argv[i]);
+      i += 1;
     }
     else if(0 == strcmp(argv[i], "-reset"))
     {
       resourceReset = true;
+      i += 1;
     }
     else
     {
-      // Unknown command
-      return false;
+      if(!main_parse_command_line_flags(argc, argv, &i))
+        return false;
     }
   }
 

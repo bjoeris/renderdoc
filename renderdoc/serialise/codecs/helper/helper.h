@@ -44,8 +44,8 @@
 #define var_to_string(s) #s
 
 #define VK_CHECK_RESULT(f)                                                            \
-  \
-{                                                                                \
+                                                                                      \
+  {                                                                                   \
     VkResult res = f;                                                                 \
     if(res != VK_SUCCESS)                                                             \
     {                                                                                 \
@@ -55,8 +55,7 @@
       std::cout << ss.str() << std::endl;                                             \
       assert(res == VK_SUCCESS);                                                      \
     }                                                                                 \
-  \
-}
+  }
 
 struct VkHandle
 {
@@ -295,3 +294,10 @@ std::string StageProgressString(const char *stage, uint32_t i, uint32_t N);
 std::string GetEnvString(const char *envVarName);
 int GetEnvInt(const char *envVarName, int defVal = 0);
 FILE *OpenFile(char const *fileName, char const *mode);
+std::string NormalizePath(std::string path);
+bool DirExist(const std::string &path);
+bool CreateDir(const std::string &path);
+bool SetOutputDir(const char *path, std::string *output);
+bool SetOutputFileName(const char *fileName, std::string *output);
+bool ParseDirCommandLineFlag(int argc, char **argv, int *i, std::string *outputDir);
+bool ParseFileCommandLineFlag(int argc, char **argv, int *i, std::string *outputFileName);

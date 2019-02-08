@@ -24,6 +24,12 @@
 #ifndef SHIM_VK_COMPILE_STATIC_LIB
 #define SHIM_VK_EXPORT
 #endif
+#include <sys/stat.h>
+#include <sys/types.h>
+#if defined(_WIN32)
+#include <direct.h>
+#endif
+
 #include "helper/helper.h"
 
 #include "shim_vulkan.h"
@@ -31,6 +37,18 @@
 
 bool extAvailable = false;
 bool quitNow = false;
+
+#if defined(__yeti__) || defined(__ggp__)
+std::string outputDir = "/var/game/";
+#else
+std::string outputDir;
+#endif
+
+bool ShimParseCommandLineFlags(int argc, char **argv, int *arg_index)
+{
+  return ParseDirCommandLineFlag(argc, argv, arg_index, &outputDir);
+}
+
 bool ShimShouldQuitNow()
 {
   return quitNow;

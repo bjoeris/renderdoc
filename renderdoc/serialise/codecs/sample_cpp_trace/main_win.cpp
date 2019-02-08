@@ -230,25 +230,28 @@ static void ProcessMessages(bool &quit)
 //-----------------------------------------------------------------------------
 static bool ParseCommandLine()
 {
-  for(int i = 1; i < __argc; ++i)
+  int i = 1;
+  while(i < __argc)
   {
     if(0 == strcmp(__argv[i], "-repeat"))
     {
-      ++i;
+      i += 1;
       if(i >= __argc)
       {
         return false;
       }
       frameLoops = atoi(__argv[i]);
+      i += 1;
     }
     else if(0 == strcmp(__argv[i], "-reset"))
     {
       resourceReset = true;
+      i += 1;
     }
     else
     {
-      // Unknown command
-      return false;
+      if(!main_parse_command_line_flags(__argc, __argv, &i))
+        return false;
     }
   }
 

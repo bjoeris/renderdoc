@@ -21,8 +21,15 @@
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 * THE SOFTWARE.
 ******************************************************************************/
-#include "helper.h"
+#include <errno.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#if defined(_WIN32)
+#include <direct.h>
+#endif
+
 #include <string>
+#include "helper.h"
 
 PFN_vkDebugMarkerSetObjectTagEXT vkDebugMarkerSetObjectTag;
 PFN_vkDebugMarkerSetObjectNameEXT vkDebugMarkerSetObjectName;
@@ -673,11 +680,13 @@ void MapUpdate(const AuxVkTraceResources &aux, uint8_t *dst, uint8_t *src,
       {
         MemoryRemap mr = remap[i];
         Region captured_resource_region(mr.capture.offset, mr.capture.size);
-        // If this memory range doesn't overlap with any captured resource continue
+        // If this memory range doesn't overlap with any captured resource
+        // continue
         if(!RegionsOverlap(memory_region, captured_resource_region))
           continue;
 
-        // Find the inteval where these two regions overlap. It is guaranteed to be non-null.
+        // Find the inteval where these two regions overlap. It is guaranteed to
+        // be non-null.
         Region intersect = RegionsIntersect(memory_region, captured_resource_region);
 
         uint64_t skipped_resource_bytes = intersect.offset - mr.capture.offset;
@@ -812,4 +821,128 @@ const char *GetResourceName(ResourceNamesMap &map, VkHandle handle)
 #endif
   }
   return map[handle].c_str();
+}
+
+bool DirExist(const std::string &path)
+{
+  struct stat info;
+  if(stat(path.c_str(), &info) != 0)
+  {
+    return false;
+  }
+  return (info.st_mode & S_IFDIR) != 0;
+}
+
+std::string NormalizePath(std::string path)
+{
+#if defined(_WIN32)
+  // Replace slash with backslash and add trailing slash if needed.
+  // Trailing slash is for concatenating file name to directory later.
+  std::replace(path.begin(), path.end(), '/', '\\');
+  if(!path.empty() && path.back() != '\\')
+  {
+    path.push_back('\\');
+  }
+#else
+  // Add trailing slash if needed.
+  // Trailing slash is for concatenating file name to directory later.
+  if(!path.empty() && path.back() != '/')
+  {
+    path.append("/");
+  }
+#endif
+  return path;
+}
+
+bool CreateDir(const std::string &path)
+{
+#if defined(_WIN32)
+  int nError = _mkdir(path.c_str());
+#else
+  mode_t nMode = 0755;
+  int nError = mkdir(path.c_str(), nMode);
+#endif
+  if(nError == 0)
+    return true;
+
+  switch(errno)
+  {
+    case ENOENT:    // something along the path does not exist
+    {
+#if defined(_WIN32)
+      size_t pos = path.find_last_of('\\');
+#else
+      size_t pos = path.find_last_of('/');
+#endif
+      if(pos == std::string::npos)
+        return false;
+      if(!CreateDir(path.substr(0, pos)))
+        return false;
+#if defined(_WIN32)
+      return (_mkdir(path.c_str()) == 0 || DirExist(path));
+#else
+      return (mkdir(path.c_str(), mode) == 0 || DirExist(path));
+#endif
+    }
+    case EEXIST: return DirExist(path);
+    default: return false;
+  }
+}
+
+bool SetOutputFileName(const char *fileName, std::string *outputFileName)
+{
+  if(strlen(fileName) == 0)
+    return false;
+  *outputFileName = fileName;
+  return true;
+}
+
+bool SetOutputDir(const char *path, std::string *outputDir)
+{
+  std::string dirPath = NormalizePath(path);
+  if(DirExist(dirPath) || CreateDir(dirPath))
+  {
+    *outputDir = dirPath;
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+bool ParseDirCommandLineFlag(int argc, char **argv, int *i, std::string *outputDir)
+{
+  if(strcmp(argv[*i], "-d") == 0 || strcmp(argv[*i], "--dir") == 0)
+  {
+    *i = *i + 1;
+    if(*i >= argc)
+    {
+      return false;
+    }
+    if(SetOutputDir(argv[*i], outputDir))
+    {
+      *i = *i + 1;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ParseFileCommandLineFlag(int argc, char **argv, int *i, std::string *outputFileName)
+{
+  if(strcmp(argv[*i], "-f") == 0 || strcmp(argv[*i], "--file") == 0)
+  {
+    *i = *i + 1;
+    if(*i >= argc)
+    {
+      return false;
+    }
+    if(SetOutputFileName(argv[*i], outputFileName))
+    {
+      *i = *i + 1;
+      return true;
+    }
+  }
+  return false;
 }
