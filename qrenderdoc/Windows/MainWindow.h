@@ -72,6 +72,7 @@ public:
   void show();
 
   void setProgress(float val);
+  void setRemoteHost(int hostIdx);
   void takeCaptureOwnership() { m_OwnTempCapture = true; }
   void captureModified();
   void LoadFromFilename(const QString &filename, bool temporary);
