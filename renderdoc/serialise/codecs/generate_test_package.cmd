@@ -58,13 +58,13 @@ mkdir "%package_dir%" 2>nul
 mkdir "%screenshot_dir%" 2>nul
 
 echo %GREEN%Generating C++ code project in %YELLOW%'%src_dir%'%RESET%
-start /w renderdoccmd.exe convert -f "%rdc_file%" -o "%src_dir%.cpp" --shim
+renderdoccmd.exe convert -f "%rdc_file%" -o "%src_dir%.cpp" --shim
 
 echo %GREEN%Extracting reference image to %YELLOW%'%screenshot_dir%\%screenshot_file%'%GREEN%...%RESET%
 rmdir /s /q "%screenshot_tmp_dir%" 2>nul
 del "%screenshot_dir%\%screenshot_file%" 2>nul
 mkdir "%screenshot_tmp_dir%" 2>nul
-start /w renderdoccmd.exe thumb "%rdc_file%" -o "%screenshot_tmp_dir%\screenshot_reference.ppm"
+renderdoccmd.exe thumb "%rdc_file%" -o "%screenshot_tmp_dir%\screenshot_reference.ppm"
 if %errorlevel% neq 0 exit /b %errorlevel%
 pushd "%screenshot_tmp_dir%" > nul
 bash -c "tar -czf ../%screenshot_file% screenshot_reference.ppm" > nul
@@ -75,7 +75,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 mkdir "%rdoc_auto_capture_dir%" 2>nul
 copy /y "%screenshot_dir%\%screenshot_file%" "%rdoc_auto_capture_dir%" > nul
 mkdir "%thumbnails_dir%" 2>nul
-start /w renderdoccmd.exe thumb "%rdc_file%" -o "%thumbnails_dir%\%package_name%.png"
+renderdoccmd.exe thumb "%rdc_file%" -o "%thumbnails_dir%\%package_name%.png"
 
 echo %GREEN%Building for GGP...%RESET%
 pushd "%src_dir%" > nul

@@ -881,7 +881,7 @@ bool CreateDir(const std::string &path)
 #if defined(_WIN32)
       return (_mkdir(path.c_str()) == 0 || DirExist(path));
 #else
-      return (mkdir(path.c_str(), mode) == 0 || DirExist(path));
+      return (mkdir(path.c_str(), nMode) == 0 || DirExist(path));
 #endif
     }
     case EEXIST: return DirExist(path);

@@ -43,7 +43,7 @@ mkdir "%src_dir%" 2>nul
 mkdir "%package_src_dir%" 2>nul
 
 echo %GREEN%Generating C++ code project in %YELLOW%'%src_dir%'%RESET%
-start /w renderdoccmd.exe convert -f "%TEMP%\%package_name%.rdc" -o "%src_dir%.cpp" --shim
+renderdoccmd.exe convert -f "%TEMP%\%package_name%.rdc" -o "%src_dir%.cpp" --shim
 
 echo %GREEN%Building for GGP...%RESET%
 pushd "%src_dir%" > nul
@@ -66,7 +66,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 
 echo %GREEN%Package successfully created at %YELLOW%'%package_tgz%'%RESET%
 
-if %run% == "" goto :eof
+if "%run%" == "" goto :eof
 
 echo %GREEN%Setting up gamelet to run the package...%RESET%
 ggp ssh put %package_tgz%

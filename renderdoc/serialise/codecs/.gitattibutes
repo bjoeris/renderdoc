@@ -1,0 +1,2 @@
+# Make sure shell scripts use Linux line endings (\r make Bash really unhappy)
+*.sh text eol=lf

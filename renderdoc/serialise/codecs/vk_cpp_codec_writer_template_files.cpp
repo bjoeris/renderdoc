@@ -84,15 +84,15 @@ const char fileData_6[] =
   "d \"\" -H. -B_build_files\\win_vs2017x64_ninja -DCMAKE_BUILD_TYPE=%BUILD_TYPE%\r\nninja -C _build_files\\win_vs2017x64_ni"
   "nja\r\nexit /b %errorlevel%\r\n";
 const char fileData_7[] =
-  "BUILD_TYPE=Release\r\nif [ -n \"$1\" ]; then\r\n  BUILD_TYPE=$1\r\nfi\r\nwhich cmake && which ninja && rm -rf _build_file"
-  "s/ggp_build && mkdir -p _build_files/ggp_build && cmake -G Ninja --build \"\" -B_build_files/ggp_build -H. -DCMAKE_BUILD_"
-  "TYPE=$BUILD_TYPE -DENABLE_GGP=ON -DCMAKE_TOOLCHAIN_FILE=\"$GGP_SDK_PATH/cmake/ggp.cmake\" && ninja -C _build_files/ggp_bu"
-  "ild && echo \"Build complete\"\r\n";
+  "BUILD_TYPE=Release\nif [ -n \"$1\" ]; then\n  BUILD_TYPE=$1\nfi\nwhich cmake && which ninja && rm -rf _build_files/ggp_bu"
+  "ild && mkdir -p _build_files/ggp_build && cmake -G Ninja --build \"\" -B_build_files/ggp_build -H. -DCMAKE_BUILD_TYPE=$BU"
+  "ILD_TYPE -DENABLE_GGP=ON -DCMAKE_TOOLCHAIN_FILE=\"$GGP_SDK_PATH/cmake/ggp.cmake\" && ninja -C _build_files/ggp_build && e"
+  "cho \"Build complete\"\n";
 const char fileData_8[] =
-  "BUILD_TYPE=Release\r\nif [ -n \"$1\" ]; then\r\n  BUILD_TYPE=$1\r\nfi\r\nwhich cmake && which ninja && export CC=clang &&"
-  " export CXX=clang++ && rm -rf _build_files/linux_build && mkdir -p _build_files/linux_build && cmake -G Ninja --build \"\""
-  " -B_build_files/linux_build -H. -DCMAKE_BUILD_TYPE=$BUILD_TYPE && ninja -C _build_files/linux_build && echo \"Build compl"
-  "ete\"\r\n";
+  "BUILD_TYPE=Release\nif [ -n \"$1\" ]; then\n  BUILD_TYPE=$1\nfi\nwhich cmake && which ninja && export CC=clang && export "
+  "CXX=clang++ && rm -rf _build_files/linux_build && mkdir -p _build_files/linux_build && cmake -G Ninja --build \"\" -B_bui"
+  "ld_files/linux_build -H. -DCMAKE_BUILD_TYPE=$BUILD_TYPE && ninja -C _build_files/linux_build && echo \"Build complete\"\n"
+;
 const char fileData_9[] =
   "SET (THIS_PROJECT_NAME amd_shader_info_shim)\r\nPROJECT(${THIS_PROJECT_NAME})\r\n\r\nADD_LIBRARY(${THIS_PROJECT_NAME} SHA"
   "RED \"shim_vulkan.h\" \"shim_vulkan.cpp\" \"shim_vulkan_base.cpp\" \"utils.h\" \"utils.cpp\")\r\n\r\nTARGET_COMPILE_DEFIN"
@@ -9980,19 +9980,19 @@ const char fileData_25[] =
   "fined(_WIN32)\r\n      size_t pos = path.find_last_of('\\\\');\r\n#else\r\n      size_t pos = path.find_last_of('/');\r\n"
   "#endif\r\n      if(pos == std::string::npos)\r\n        return false;\r\n      if(!CreateDir(path.substr(0, pos)))\r\n   "
   "     return false;\r\n#if defined(_WIN32)\r\n      return (_mkdir(path.c_str()) == 0 || DirExist(path));\r\n#else\r\n    "
-  "  return (mkdir(path.c_str(), mode) == 0 || DirExist(path));\r\n#endif\r\n    }\r\n    case EEXIST: return DirExist(path)"
-  ";\r\n    default: return false;\r\n  }\r\n}\r\n\r\nbool SetOutputFileName(const char *fileName, std::string *outputFileNa"
-  "me)\r\n{\r\n  if(strlen(fileName) == 0)\r\n    return false;\r\n  *outputFileName = fileName;\r\n  return true;\r\n}\r\n\r"
-  "\nbool SetOutputDir(const char *path, std::string *outputDir)\r\n{\r\n  std::string dirPath = NormalizePath(path);\r\n  i"
-  "f(DirExist(dirPath) || CreateDir(dirPath))\r\n  {\r\n    *outputDir = dirPath;\r\n    return true;\r\n  }\r\n  else\r\n  "
-  "{\r\n    return false;\r\n  }\r\n}\r\n\r\nbool ParseDirCommandLineFlag(int argc, char **argv, int *i, std::string *output"
-  "Dir)\r\n{\r\n  if(strcmp(argv[*i], \"-d\") == 0 || strcmp(argv[*i], \"--dir\") == 0)\r\n  {\r\n    *i = *i + 1;\r\n    if"
-  "(*i >= argc)\r\n    {\r\n      return false;\r\n    }\r\n    if(SetOutputDir(argv[*i], outputDir))\r\n    {\r\n      *i ="
-  " *i + 1;\r\n      return true;\r\n    }\r\n  }\r\n  return false;\r\n}\r\n\r\nbool ParseFileCommandLineFlag(int argc, cha"
-  "r **argv, int *i, std::string *outputFileName)\r\n{\r\n  if(strcmp(argv[*i], \"-f\") == 0 || strcmp(argv[*i], \"--file\")"
-  " == 0)\r\n  {\r\n    *i = *i + 1;\r\n    if(*i >= argc)\r\n    {\r\n      return false;\r\n    }\r\n    if(SetOutputFileN"
-  "ame(argv[*i], outputFileName))\r\n    {\r\n      *i = *i + 1;\r\n      return true;\r\n    }\r\n  }\r\n  return false;\r\n"
-  "}\r\n";
+  "  return (mkdir(path.c_str(), nMode) == 0 || DirExist(path));\r\n#endif\r\n    }\r\n    case EEXIST: return DirExist(path"
+  ");\r\n    default: return false;\r\n  }\r\n}\r\n\r\nbool SetOutputFileName(const char *fileName, std::string *outputFileN"
+  "ame)\r\n{\r\n  if(strlen(fileName) == 0)\r\n    return false;\r\n  *outputFileName = fileName;\r\n  return true;\r\n}\r\n"
+  "\r\nbool SetOutputDir(const char *path, std::string *outputDir)\r\n{\r\n  std::string dirPath = NormalizePath(path);\r\n "
+  " if(DirExist(dirPath) || CreateDir(dirPath))\r\n  {\r\n    *outputDir = dirPath;\r\n    return true;\r\n  }\r\n  else\r\n"
+  "  {\r\n    return false;\r\n  }\r\n}\r\n\r\nbool ParseDirCommandLineFlag(int argc, char **argv, int *i, std::string *outp"
+  "utDir)\r\n{\r\n  if(strcmp(argv[*i], \"-d\") == 0 || strcmp(argv[*i], \"--dir\") == 0)\r\n  {\r\n    *i = *i + 1;\r\n    "
+  "if(*i >= argc)\r\n    {\r\n      return false;\r\n    }\r\n    if(SetOutputDir(argv[*i], outputDir))\r\n    {\r\n      *i"
+  " = *i + 1;\r\n      return true;\r\n    }\r\n  }\r\n  return false;\r\n}\r\n\r\nbool ParseFileCommandLineFlag(int argc, c"
+  "har **argv, int *i, std::string *outputFileName)\r\n{\r\n  if(strcmp(argv[*i], \"-f\") == 0 || strcmp(argv[*i], \"--file\""
+  ") == 0)\r\n  {\r\n    *i = *i + 1;\r\n    if(*i >= argc)\r\n    {\r\n      return false;\r\n    }\r\n    if(SetOutputFile"
+  "Name(argv[*i], outputFileName))\r\n    {\r\n      *i = *i + 1;\r\n      return true;\r\n    }\r\n  }\r\n  return false;\r"
+  "\n}\r\n";
 const char fileData_26[] =
   "/******************************************************************************\r\n* The MIT License (MIT)\r\n*\r\n* Copy"
   "right (c) 2018 Google LLC\r\n*\r\n* Permission is hereby granted, free of charge, to any person obtaining a copy\r\n* of "
@@ -30049,8 +30049,8 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(build_vs2015_ninja.bat)", 446, fileData_4},
   {R"(build_vs2017.bat)", 226, fileData_5},
   {R"(build_vs2017_ninja.bat)", 475, fileData_6},
-  {R"(build_ggp.sh)", 379, fileData_7},
-  {R"(build_xlib.sh)", 357, fileData_8},
+  {R"(build_ggp.sh)", 374, fileData_7},
+  {R"(build_xlib.sh)", 352, fileData_8},
   {R"(amd_shader_info_shim/CMakeLists.txt)", 937, fileData_9},
   {R"(amd_shader_info_shim/shim_vulkan.cpp)", 8959, fileData_10},
   {R"(amd_shader_info_shim/shim_vulkan.h)", 64817, fileData_11},
@@ -30067,7 +30067,7 @@ TemplateFileDesc CodeWriter::TemplateFiles[] = {
   {R"(helper/CMakeLists.txt)", 895, fileData_22},
   {R"(helper/format_helper.h)", 2355, fileData_23},
   {R"(helper/format_size_and_aspect.cpp)", 39140, fileData_24},
-  {R"(helper/helper.cpp)", 37615, fileData_25},
+  {R"(helper/helper.cpp)", 37616, fileData_25},
   {R"(helper/helper.h)", 12908, fileData_26},
   {R"(sample_cpp_shim/CMakeLists.txt)", 1066, fileData_27},
   {R"(sample_cpp_shim/shim_vulkan.cpp)", 115938, fileData_28},
