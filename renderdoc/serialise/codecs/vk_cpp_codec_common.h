@@ -59,7 +59,8 @@ inline std::string ValueStr(SDObject *ptr)
   if(ptr->IsBuffer())
   {
     std::string buf_name = ptr->AsString();
-    RDCASSERT(!buf_name.empty());
+    if(buf_name.empty())
+      buf_name = "buffer_" + std::to_string(ptr->AsUInt64());
     // A value for for a Buffer is it's $name.data().
     result = buf_name + ".data()";
     // just-in-time fix for vkCreatShaderModule pCode variable
