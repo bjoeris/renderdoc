@@ -908,6 +908,7 @@ struct ResourceInfo
 };
 
 struct MemRefs;
+struct ImgRefs;
 
 struct CmdBufferRecordingInfo
 {
@@ -1423,6 +1424,8 @@ public:
                                  FrameRefType refType);
   void MarkImageFrameReferenced(VkResourceRecord *img, const ImageLayouts &layout,
                                 const ImageRange &range, FrameRefType refType);
+  void MarkImageViewFrameReferenced(VkResourceRecord *view, const ImageLayouts &layout,
+                                    const ImageRange &range, FrameRefType refType);
   void MarkBufferFrameReferenced(VkResourceRecord *buf, VkDeviceSize offset, VkDeviceSize size,
                                  FrameRefType refType);
   void MarkBufferImageCopyFrameReferenced(VkResourceRecord *buf, VkResourceRecord *img,
@@ -1508,6 +1511,9 @@ public:
 
       return ret;
     }
+
+    // view type <= 6
+    VkImageViewType viewType : 3;
 
     // only need 4 bits for the aspects
     uint32_t aspectMask : 4;
