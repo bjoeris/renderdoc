@@ -2905,6 +2905,101 @@ VkImageAspectFlags FormatImageAspects(VkFormat fmt)
     return VK_IMAGE_ASPECT_COLOR_BIT;
 }
 
+int ImgRefs::GetAspectCount()
+{
+  int aspectCount = 0;
+  VkImageAspectFlags aspect = 1;
+  while(true)
+  {
+    if(aspect & aspectMask)
+      ++aspectCount;
+    if((aspectMask & ~aspect) < aspect)
+      break;    // `aspect` is the >= most significant set bit in `aspectMask`
+    aspect <<= 1;
+  }
+  return aspectCount;
+}
+
+int ImgRefs::SubresourceIndex(VkImageAspectFlagBits aspect, int level, int layer)
+{
+  int aspectIndex = 0;
+  if(areAspectsSplit)
+  {
+    for(VkImageAspectFlags a = 1; a <= aspectMask; a <<= 1)
+    {
+      if(a & aspectMask)
+      {
+        if(a == (VkImageAspectFlags)aspect)
+          break;
+        ++aspectIndex;
+      }
+    }
+  }
+  return SubresourceIndex(aspectIndex, level, layer);
+}
+
+int ImgRefs::SubresourceIndex(int aspectIndex, int level, int layer)
+{
+  if(!areAspectsSplit)
+    aspectIndex = 0;
+  int splitLevelCount = 1;
+  if(areLevelsSplit)
+    splitLevelCount = levelCount;
+  else
+    level = 0;
+  int splitLayerCount = 1;
+  if(areLayersSplit)
+    splitLayerCount = layerCount;
+  else
+    layer = 0;
+  RDCASSERT(level < splitLevelCount && layer < splitLayerCount);
+  return (aspectIndex * splitLevelCount + level) * splitLayerCount + layer;
+}
+
+void ImgRefs::Split(bool splitAspects, bool splitLevels, bool splitLayers)
+{
+  int newSplitAspectCount = 1;
+  int oldSplitAspectCount = 1;
+  if(splitAspects || areAspectsSplit)
+  {
+    newSplitAspectCount = GetAspectCount();
+    if(splitAspects)
+      oldSplitAspectCount = newSplitAspectCount;
+  }
+
+  int oldSplitLevelCount = areLevelsSplit ? levelCount : 1;
+  int newSplitLevelCount = splitLevels ? levelCount : oldSplitLevelCount;
+
+  int oldSplitLayerCount = areLayersSplit ? layerCount : 1;
+  int newSplitLayerCount = splitLayers ? layerCount : oldSplitLayerCount;
+
+  int newSize = newSplitAspectCount * newSplitLevelCount * newSplitLayerCount;
+  if(newSize == (int)rangeRefs.size())
+    return;
+  rangeRefs.resize(newSize);
+
+  for(int newAspectIndex = newSplitAspectCount - 1; newAspectIndex >= 0; --newAspectIndex)
+  {
+    int oldAspectIndex = areAspectsSplit ? newAspectIndex : 0;
+    for(int newLevel = newSplitLevelCount - 1; newLevel >= 0; --newLevel)
+    {
+      int oldLevel = areLevelsSplit ? newLevel : 0;
+      for(int newLayer = newSplitLayerCount - 1; newLayer >= 0; --newLayer)
+      {
+        int oldLayer = areLayersSplit ? newLayer : 0;
+        int oldIndex =
+            (oldAspectIndex * oldSplitLevelCount + oldLevel) * oldSplitLayerCount + oldLayer;
+        int newIndex =
+            (newAspectIndex * newSplitLevelCount + newLevel) * newSplitLayerCount + newLayer;
+        rangeRefs[newIndex] = rangeRefs[oldIndex];
+      }
+    }
+  }
+  areAspectsSplit = newSplitAspectCount > 1;
+  areLevelsSplit = newSplitLevelCount > 1;
+  areLayersSplit = newSplitLayerCount > 1;
+}
+
 VkResourceRecord::~VkResourceRecord()
 {
   VkResourceType resType = Resource != NULL ? IdentifyTypeByPtr(Resource) : eResUnknown;

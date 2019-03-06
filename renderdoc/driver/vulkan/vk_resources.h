@@ -1003,6 +1003,204 @@ struct AttachmentInfo
   VkImageMemoryBarrier barrier;
 };
 
+struct ImageRange
+{
+  ImageRange() {}
+  ImageRange(const VkImageSubresourceRange &range)
+      : aspectMask(range.aspectMask),
+        baseMipLevel(range.baseMipLevel),
+        levelCount(range.levelCount),
+        baseArrayLayer(range.baseArrayLayer),
+        layerCount(range.layerCount)
+  {
+  }
+  ImageRange(const VkImageSubresourceLayers &range)
+      : aspectMask(range.aspectMask),
+        baseMipLevel(range.mipLevel),
+        levelCount(1),
+        baseArrayLayer(range.baseArrayLayer),
+        layerCount(range.layerCount)
+  {
+  }
+  VkImageAspectFlags aspectMask = 0;
+  uint32_t baseMipLevel = 0;
+  uint32_t levelCount = VK_REMAINING_MIP_LEVELS;
+  uint32_t baseArrayLayer = 0;
+  uint32_t layerCount = VK_REMAINING_ARRAY_LAYERS;
+  VkOffset3D offset = {};
+  VkExtent3D extent = {};
+  bool is2DView = false;
+};
+
+struct ImgRefs
+{
+  std::vector<FrameRefType> rangeRefs;
+  WrappedVkRes *initializedLiveRes;
+  VkImageType type;
+  VkImageAspectFlags aspectMask;
+  int levelCount;
+  int layerCount;
+  VkExtent3D extent;
+
+  bool areAspectsSplit = false;
+  bool areLevelsSplit = false;
+  bool areLayersSplit = false;
+
+  int GetAspectCount();
+
+  ImgRefs() : initializedLiveRes(NULL) {}
+  inline ImgRefs(VkImageType type, VkImageAspectFlags aspectMask, int levelCount, int layerCount,
+                 VkExtent3D extent)
+      : rangeRefs(1, eFrameRef_None),
+        initializedLiveRes(NULL),
+        type(type),
+        aspectMask(aspectMask),
+        levelCount(levelCount),
+        layerCount(layerCount),
+        extent(extent)
+  {
+  }
+  int SubresourceIndex(VkImageAspectFlagBits aspect, int level, int layer);
+  int SubresourceIndex(int aspectIndex, int level, int layer);
+  void Split(bool splitAspects, bool splitLevels, bool splitLayers);
+  template <typename Compose>
+  FrameRefType Update(ImageRange range, FrameRefType refType, Compose comp);
+  inline FrameRefType Update(const ImageRange &range, FrameRefType refType)
+  {
+    return Update(range, refType, ComposeFrameRefs);
+  }
+  template <typename Compose>
+  FrameRefType Merge(const ImgRefs &other, Compose comp);
+  inline FrameRefType Merge(const ImgRefs &other) { return Merge(other, ComposeFrameRefs); }
+};
+
+template <typename Compose>
+FrameRefType ImgRefs::Update(ImageRange range, FrameRefType refType, Compose comp)
+{
+  if(range.extent.width == 0 && range.extent.height == 0 && range.extent.depth == 0)
+    range.extent = extent;
+
+  if(range.levelCount == VK_REMAINING_MIP_LEVELS)
+    range.levelCount = levelCount;
+
+  if(range.layerCount == VK_REMAINING_ARRAY_LAYERS)
+    range.layerCount = layerCount;
+
+  if(refType == eFrameRef_CompleteWrite &&
+     (range.offset.x != 0 || range.offset.y != 0 || range.extent.width != extent.width ||
+      range.extent.height != extent.height))
+    // Complete write, but only to part of the image.
+    // We don't track writes at the pixel level, so turn this into a partial write
+    refType = eFrameRef_PartialWrite;
+
+  if(type == VK_IMAGE_TYPE_3D && !range.is2DView)
+  {
+    // The Vulkan spec does not allow 3D images with array layers.
+    // We treat depth slices of 3D images as array layers; this is the correct behaviour if viewed
+    // through a 2D VkImageView.
+    // When a 3D image is *not* viewed through a 2D VkImageView, we translate the depth
+    // offset/extent into layers, as if this were using a 2D VkImageView.
+    range.baseArrayLayer = range.offset.z;
+    range.layerCount = range.extent.depth;
+  }
+
+  Split(range.aspectMask != aspectMask,
+        range.baseMipLevel != 0 || (int)range.levelCount != levelCount,
+        range.baseArrayLayer != 0 || (int)range.layerCount != layerCount);
+
+  std::vector<VkImageAspectFlags> splitAspects;
+  if(areAspectsSplit)
+  {
+    for(VkImageAspectFlags aspect = 1; (aspectMask & ~aspect) >= aspect; aspect <<= 1)
+    {
+      if(aspect & aspectMask)
+        splitAspects.push_back(aspect);
+    }
+  }
+  else
+  {
+    splitAspects.push_back(aspectMask);
+  }
+
+  int splitLevelCount = 1;
+  int levelEnd = 1;
+  if(areLevelsSplit)
+  {
+    splitLevelCount = levelCount;
+    levelEnd = (int)(range.baseMipLevel + range.levelCount);
+  }
+
+  int splitLayerCount = 1;
+  int layerEnd = 1;
+  if(areLayersSplit)
+  {
+    splitLayerCount = layerCount;
+    layerEnd = (int)(range.baseArrayLayer + range.layerCount);
+  }
+
+  FrameRefType maxRefType = eFrameRef_None;
+  for(int aspectIndex = 0; aspectIndex < (int)splitAspects.size(); ++aspectIndex)
+  {
+    VkImageAspectFlags aspect = splitAspects[aspectIndex];
+    if((aspect & range.aspectMask) == 0)
+      continue;
+    for(int level = (int)range.baseMipLevel; level < levelEnd; ++level)
+    {
+      for(int layer = (int)range.baseArrayLayer; layer < layerEnd; ++layer)
+      {
+        int index = (aspectIndex * splitLevelCount + level) * splitLayerCount + layer;
+        rangeRefs[index] = comp(rangeRefs[index], refType);
+        maxRefType = RDCMAX(maxRefType, rangeRefs[index]);
+      }
+    }
+  }
+  return maxRefType;
+}
+
+template <typename Compose>
+FrameRefType ImgRefs::Merge(const ImgRefs &other, Compose comp)
+{
+  Split(other.areAspectsSplit, other.areLevelsSplit, other.areLayersSplit);
+
+  RDCASSERT(aspectMask == other.aspectMask);
+  RDCASSERT(levelCount == other.levelCount);
+  RDCASSERT(layerCount == other.layerCount);
+
+  int splitAspectCount = 1;
+  int otherSplitAspectCount = 1;
+  if(areAspectsSplit)
+    splitAspectCount = GetAspectCount();
+  if(other.areAspectsSplit)
+    otherSplitAspectCount = splitAspectCount;
+
+  int splitLevelCount = areLevelsSplit ? levelCount : 1;
+  int otherSplitLevelCount = other.areLevelsSplit ? other.levelCount : 1;
+
+  int splitLayerCount = areLayersSplit ? layerCount : 1;
+  int otherSplitLayerCount = other.areLayersSplit ? other.layerCount : 1;
+
+  FrameRefType maxRefType = eFrameRef_None;
+  for(int aspectIndex = 0; aspectIndex < splitAspectCount; ++aspectIndex)
+  {
+    int otherAspectIndex = other.areAspectsSplit ? aspectIndex : 0;
+    for(int level = 0; level < splitLevelCount; ++level)
+    {
+      int otherLevel = other.areLevelsSplit ? level : 0;
+      for(int layer = 0; layer < splitLayerCount; ++layer)
+      {
+        int otherLayer = other.areLayersSplit ? layer : 0;
+        int index = (aspectIndex * splitLevelCount + level) * splitLayerCount + layer;
+        int otherIndex =
+            (otherAspectIndex * otherSplitLevelCount + otherLevel) * otherSplitLayerCount +
+            otherLayer;
+        rangeRefs[index] = comp(rangeRefs[index], other.rangeRefs[otherIndex]);
+        maxRefType = RDCMAX(maxRefType, rangeRefs[index]);
+      }
+    }
+  }
+  return maxRefType;
+}
+
 struct MemRefs
 {
   Intervals<FrameRefType> rangeRefs;
@@ -1049,6 +1247,20 @@ FrameRefType MemRefs::Merge(MemRefs &other, Compose comp)
                     return ref;
                   });
   return maxRefType;
+}
+
+struct ImageLayouts;
+
+template <typename Compose>
+FrameRefType MarkImageReferenced(std::map<ResourceId, ImgRefs> &imgRefs, ResourceId img,
+                                 const ImageLayouts &layout, const ImageRange &range,
+                                 FrameRefType refType, Compose comp);
+
+inline FrameRefType MarkImageReferenced(std::map<ResourceId, ImgRefs> &imgRefs, ResourceId img,
+                                        const ImageLayouts &layout, const ImageRange &range,
+                                        FrameRefType refType)
+{
+  return MarkImageReferenced(imgRefs, img, layout, range, refType, ComposeFrameRefs);
 }
 
 template <typename Compose>
@@ -1355,3 +1567,24 @@ void GetYUVShaderParameters(VkFormat f, Vec4u &YUVDownsampleRate, Vec4u &YUVACha
 uint32_t GetByteSize(uint32_t Width, uint32_t Height, uint32_t Depth, VkFormat Format, uint32_t mip);
 uint32_t GetPlaneByteSize(uint32_t Width, uint32_t Height, uint32_t Depth, VkFormat Format,
                           uint32_t mip, uint32_t plane);
+
+template <typename Compose>
+FrameRefType MarkImageReferenced(std::map<ResourceId, ImgRefs> &imgRefs, ResourceId img,
+                                 const ImageLayouts &layout, const ImageRange &range,
+                                 FrameRefType refType, Compose comp)
+{
+  if(refType == eFrameRef_None)
+    return refType;
+  auto refs = imgRefs.find(img);
+  if(refs == imgRefs.end())
+  {
+    RDCASSERT(layout.imageType != 0);
+    RDCASSERT(layout.extent.width != 0 && layout.extent.height != 0 && layout.extent.depth != 0);
+    refs =
+        imgRefs
+            .insert(std::make_pair(img, ImgRefs(layout.imageType, FormatImageAspects(layout.format),
+                                                layout.levelCount, layout.layerCount, layout.extent)))
+            .first;
+  }
+  return refs->second.Update(range, refType, comp);
+}
