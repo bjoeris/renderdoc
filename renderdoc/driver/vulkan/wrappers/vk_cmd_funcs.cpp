@@ -1246,12 +1246,8 @@ void WrappedVulkan::vkCmdBeginRenderPass(VkCommandBuffer commandBuffer,
       if(att == NULL)
         break;
 
-      record->MarkResourceFrameReferenced(att->baseResource, eFrameRef_ReadBeforeWrite);
-      if(att->baseResourceMem != ResourceId())
-        record->MarkResourceFrameReferenced(att->baseResourceMem, eFrameRef_Read);
-      if(att->resInfo)
-        record->cmdInfo->sparse.insert(att->resInfo);
-      record->cmdInfo->dirtied.insert(att->baseResource);
+      record->MarkImageViewFrameReferenced(att, m_ImageLayouts[att->baseResource], ImageRange(),
+                                           eFrameRef_ReadBeforeWrite);
     }
 
     record->cmdInfo->framebuffer = fb;
@@ -3841,11 +3837,9 @@ void WrappedVulkan::vkCmdPushDescriptorSetKHR(VkCommandBuffer commandBuffer,
           // as they might not even point to a valid object
           if(write.descriptorType != VK_DESCRIPTOR_TYPE_SAMPLER)
           {
-            record->MarkResourceFrameReferenced(GetResID(write.pImageInfo[d].imageView),
-                                                eFrameRef_Read);
-            if(GetRecord(write.pImageInfo[d].imageView)->baseResource != ResourceId())
-              record->MarkResourceFrameReferenced(
-                  GetRecord(write.pImageInfo[d].imageView)->baseResource, ref);
+            VkResourceRecord *view = GetRecord(write.pImageInfo[d].imageView);
+            record->MarkImageViewFrameReferenced(view, m_ImageLayouts[view->baseResource],
+                                                 ImageRange(), ref);
           }
 
           if(write.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER ||
@@ -3996,6 +3990,7 @@ void WrappedVulkan::vkCmdPushDescriptorSetWithTemplateKHR(
   // since it's relatively expensive to walk the memory, we gather frame references at the same time
   // as unwrapping
   std::vector<std::pair<ResourceId, FrameRefType> > frameRefs;
+  std::vector<std::pair<VkImageView, FrameRefType> > imgViewFrameRefs;
   std::vector<std::pair<VkBufferView, FrameRefType> > bufViewFrameRefs;
   std::vector<std::pair<VkDescriptorBufferInfo, FrameRefType> > bufFrameRefs;
 
@@ -4053,9 +4048,7 @@ void WrappedVulkan::vkCmdPushDescriptorSetWithTemplateKHR(
           }
           if(hasImage)
           {
-            frameRefs.push_back(std::make_pair(GetResID(info->imageView), eFrameRef_Read));
-            if(GetRecord(info->imageView)->baseResource != ResourceId())
-              frameRefs.push_back(std::make_pair(GetRecord(info->imageView)->baseResource, ref));
+            imgViewFrameRefs.push_back(std::make_pair(info->imageView, ref));
             info->imageView = Unwrap(info->imageView);
           }
         }
@@ -4095,6 +4088,12 @@ void WrappedVulkan::vkCmdPushDescriptorSetWithTemplateKHR(
     record->MarkResourceFrameReferenced(GetResID(descriptorUpdateTemplate), eFrameRef_Read);
     for(size_t i = 0; i < frameRefs.size(); i++)
       record->MarkResourceFrameReferenced(frameRefs[i].first, frameRefs[i].second);
+    for(size_t i = 0; i < imgViewFrameRefs.size(); i++)
+    {
+      VkResourceRecord *view = GetRecord(imgViewFrameRefs[i].first);
+      record->MarkImageViewFrameReferenced(view, m_ImageLayouts[view->baseResource], ImageRange(),
+                                           imgViewFrameRefs[i].second);
+    }
     for(size_t i = 0; i < bufViewFrameRefs.size(); i++)
       record->MarkBufferViewFrameReferenced(GetRecord(bufViewFrameRefs[i].first),
                                             bufViewFrameRefs[i].second);

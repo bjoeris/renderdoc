@@ -1411,15 +1411,34 @@ void WrappedVulkan::vkCmdBlitImage(VkCommandBuffer commandBuffer, VkImage srcIma
 
     record->AddChunk(scope.Get());
 
-    record->MarkResourceFrameReferenced(GetResID(srcImage), eFrameRef_Read);
-    record->MarkResourceFrameReferenced(GetRecord(srcImage)->baseResource, eFrameRef_Read);
-    record->MarkResourceFrameReferenced(GetResID(destImage), eFrameRef_PartialWrite);
-    record->MarkResourceFrameReferenced(GetRecord(destImage)->baseResource, eFrameRef_Read);
-    record->cmdInfo->dirtied.insert(GetResID(destImage));
-    if(GetRecord(srcImage)->resInfo)
-      record->cmdInfo->sparse.insert(GetRecord(srcImage)->resInfo);
-    if(GetRecord(destImage)->resInfo)
-      record->cmdInfo->sparse.insert(GetRecord(destImage)->resInfo);
+    for(uint32_t i = 0; i < regionCount; i++)
+    {
+      const VkImageBlit &region = pRegions[i];
+
+      ImageRange srcRange(region.srcSubresource);
+
+      srcRange.offset = {std::min(region.srcOffsets[0].x, region.srcOffsets[1].x),
+                         std::min(region.srcOffsets[0].y, region.srcOffsets[1].y),
+                         std::min(region.srcOffsets[0].z, region.srcOffsets[1].z)};
+      srcRange.extent = {
+          (uint32_t)(std::max(region.srcOffsets[0].x, region.srcOffsets[1].x) - srcRange.offset.x),
+          (uint32_t)(std::max(region.srcOffsets[0].y, region.srcOffsets[1].y) - srcRange.offset.y),
+          (uint32_t)(std::max(region.srcOffsets[0].z, region.srcOffsets[1].z) - srcRange.offset.z)};
+
+      ImageRange dstRange(region.dstSubresource);
+      dstRange.offset = {std::min(region.dstOffsets[0].x, region.dstOffsets[1].x),
+                         std::min(region.dstOffsets[0].y, region.dstOffsets[1].y),
+                         std::min(region.dstOffsets[0].z, region.dstOffsets[1].z)};
+      dstRange.extent = {
+          (uint32_t)(std::max(region.dstOffsets[0].x, region.dstOffsets[1].x) - dstRange.offset.x),
+          (uint32_t)(std::max(region.dstOffsets[0].y, region.dstOffsets[1].y) - dstRange.offset.y),
+          (uint32_t)(std::max(region.dstOffsets[0].z, region.dstOffsets[1].z) - dstRange.offset.z)};
+
+      record->MarkImageFrameReferenced(GetRecord(srcImage), m_ImageLayouts[GetResID(srcImage)],
+                                       srcRange, eFrameRef_Read);
+      record->MarkImageFrameReferenced(GetRecord(destImage), m_ImageLayouts[GetResID(destImage)],
+                                       dstRange, eFrameRef_CompleteWrite);
+    }
   }
 }
 
@@ -1535,15 +1554,23 @@ void WrappedVulkan::vkCmdResolveImage(VkCommandBuffer commandBuffer, VkImage src
 
     record->AddChunk(scope.Get());
 
-    record->MarkResourceFrameReferenced(GetResID(srcImage), eFrameRef_Read);
-    record->MarkResourceFrameReferenced(GetRecord(srcImage)->baseResource, eFrameRef_Read);
-    record->MarkResourceFrameReferenced(GetResID(destImage), eFrameRef_PartialWrite);
-    record->MarkResourceFrameReferenced(GetRecord(destImage)->baseResource, eFrameRef_Read);
-    record->cmdInfo->dirtied.insert(GetResID(destImage));
-    if(GetRecord(srcImage)->resInfo)
-      record->cmdInfo->sparse.insert(GetRecord(srcImage)->resInfo);
-    if(GetRecord(destImage)->resInfo)
-      record->cmdInfo->sparse.insert(GetRecord(destImage)->resInfo);
+    for(uint32_t i = 0; i < regionCount; i++)
+    {
+      const VkImageResolve &region = pRegions[i];
+
+      ImageRange srcRange(region.srcSubresource);
+      srcRange.offset = region.srcOffset;
+      srcRange.extent = region.extent;
+
+      ImageRange dstRange(region.dstSubresource);
+      dstRange.offset = region.dstOffset;
+      dstRange.extent = region.extent;
+
+      record->MarkImageFrameReferenced(GetRecord(srcImage), m_ImageLayouts[GetResID(srcImage)],
+                                       srcRange, eFrameRef_Read);
+      record->MarkImageFrameReferenced(GetRecord(destImage), m_ImageLayouts[GetResID(destImage)],
+                                       dstRange, eFrameRef_CompleteWrite);
+    }
   }
 }
 
@@ -1657,15 +1684,23 @@ void WrappedVulkan::vkCmdCopyImage(VkCommandBuffer commandBuffer, VkImage srcIma
                              destImageLayout, regionCount, pRegions);
 
     record->AddChunk(scope.Get());
-    record->MarkResourceFrameReferenced(GetResID(srcImage), eFrameRef_Read);
-    record->MarkResourceFrameReferenced(GetRecord(srcImage)->baseResource, eFrameRef_Read);
-    record->MarkResourceFrameReferenced(GetResID(destImage), eFrameRef_PartialWrite);
-    record->MarkResourceFrameReferenced(GetRecord(destImage)->baseResource, eFrameRef_Read);
-    record->cmdInfo->dirtied.insert(GetResID(destImage));
-    if(GetRecord(srcImage)->resInfo)
-      record->cmdInfo->sparse.insert(GetRecord(srcImage)->resInfo);
-    if(GetRecord(destImage)->resInfo)
-      record->cmdInfo->sparse.insert(GetRecord(destImage)->resInfo);
+    for(uint32_t i = 0; i < regionCount; i++)
+    {
+      const VkImageCopy &region = pRegions[i];
+
+      ImageRange srcRange(region.srcSubresource);
+      srcRange.offset = region.srcOffset;
+      srcRange.extent = region.extent;
+
+      ImageRange dstRange(region.dstSubresource);
+      dstRange.offset = region.dstOffset;
+      dstRange.extent = region.extent;
+
+      record->MarkImageFrameReferenced(GetRecord(srcImage), m_ImageLayouts[GetResID(srcImage)],
+                                       srcRange, eFrameRef_Read);
+      record->MarkImageFrameReferenced(GetRecord(destImage), m_ImageLayouts[GetResID(destImage)],
+                                       dstRange, eFrameRef_CompleteWrite);
+    }
   }
 }
 
@@ -1771,7 +1806,7 @@ void WrappedVulkan::vkCmdCopyBufferToImage(VkCommandBuffer commandBuffer, VkBuff
     record->AddChunk(scope.Get());
     record->MarkBufferImageCopyFrameReferenced(GetRecord(srcBuffer), GetRecord(destImage),
                                                m_ImageLayouts[GetResID(destImage)], regionCount,
-                                               pRegions, eFrameRef_Read, eFrameRef_PartialWrite);
+                                               pRegions, eFrameRef_Read, eFrameRef_CompleteWrite);
   }
 }
 
@@ -2096,10 +2131,15 @@ void WrappedVulkan::vkCmdClearColorImage(VkCommandBuffer commandBuffer, VkImage 
                                    pRanges);
 
     record->AddChunk(scope.Get());
-    record->MarkResourceFrameReferenced(GetResID(image), eFrameRef_PartialWrite);
     record->MarkResourceFrameReferenced(GetRecord(image)->baseResource, eFrameRef_Read);
     if(GetRecord(image)->resInfo)
       record->cmdInfo->sparse.insert(GetRecord(image)->resInfo);
+
+    for(uint32_t i = 0; i < rangeCount; i++)
+    {
+      record->MarkImageFrameReferenced(GetRecord(image), m_ImageLayouts[GetResID(image)],
+                                       pRanges[i], eFrameRef_CompleteWrite);
+    }
   }
 }
 
@@ -2203,10 +2243,12 @@ void WrappedVulkan::vkCmdClearDepthStencilImage(VkCommandBuffer commandBuffer, V
                                           rangeCount, pRanges);
 
     record->AddChunk(scope.Get());
-    record->MarkResourceFrameReferenced(GetResID(image), eFrameRef_PartialWrite);
-    record->MarkResourceFrameReferenced(GetRecord(image)->baseResource, eFrameRef_Read);
-    if(GetRecord(image)->resInfo)
-      record->cmdInfo->sparse.insert(GetRecord(image)->resInfo);
+
+    for(uint32_t i = 0; i < rangeCount; i++)
+    {
+      record->MarkImageFrameReferenced(GetRecord(image), m_ImageLayouts[GetResID(image)],
+                                       pRanges[i], eFrameRef_CompleteWrite);
+    }
   }
 }
 
