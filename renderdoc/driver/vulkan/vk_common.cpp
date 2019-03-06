@@ -872,7 +872,9 @@ void DescriptorSetSlot::RemoveBindRefs(VkResourceRecord *record)
   imageInfo.sampler = VK_NULL_HANDLE;
 }
 
-void DescriptorSetSlot::AddBindRefs(VkResourceRecord *record, FrameRefType ref)
+void DescriptorSetSlot::AddBindRefs(VkResourceRecord *record,
+                                    const map<ResourceId, ImageLayouts> &imageLayouts,
+                                    FrameRefType ref)
 {
   if(texelBufferView != VK_NULL_HANDLE)
   {
@@ -885,11 +887,10 @@ void DescriptorSetSlot::AddBindRefs(VkResourceRecord *record, FrameRefType ref)
   }
   if(imageInfo.imageView != VK_NULL_HANDLE)
   {
-    record->AddBindFrameRef(GetResID(imageInfo.imageView), eFrameRef_Read,
-                            GetRecord(imageInfo.imageView)->resInfo != NULL);
-    record->AddBindFrameRef(GetRecord(imageInfo.imageView)->baseResource, ref);
-    if(GetRecord(imageInfo.imageView)->baseResourceMem != ResourceId())
-      record->AddBindFrameRef(GetRecord(imageInfo.imageView)->baseResourceMem, eFrameRef_Read);
+    VkResourceRecord *view = GetRecord(imageInfo.imageView);
+    auto layoutIter = imageLayouts.find(view->baseResource);
+    RDCASSERT(layoutIter != imageLayouts.end());
+    record->AddImgFrameRef(view, layoutIter->second, ref);
   }
   if(imageInfo.sampler != VK_NULL_HANDLE)
   {

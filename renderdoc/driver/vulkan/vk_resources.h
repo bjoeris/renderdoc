@@ -967,6 +967,7 @@ struct DescriptorSetData
   static const uint32_t SPARSE_REF_BIT = 0x80000000;
   map<ResourceId, pair<uint32_t, FrameRefType> > bindFrameRefs;
   map<ResourceId, MemRefs> bindMemRefs;
+  map<ResourceId, ImgRefs> bindImgRefs;
 };
 
 struct PipelineLayoutData
@@ -1348,6 +1349,37 @@ public:
       p.first++;
       p.first |= (hasSparse ? DescriptorSetData::SPARSE_REF_BIT : 0);
     }
+  }
+
+  void AddImgFrameRef(VkResourceRecord *view, const ImageLayouts &layout, FrameRefType refType)
+  {
+    AddBindFrameRef(view->GetResourceID(), eFrameRef_Read, view->resInfo != NULL);
+    AddBindFrameRef(view->baseResourceMem, eFrameRef_Read, false);
+
+    pair<uint32_t, FrameRefType> &p = descInfo->bindFrameRefs[view->baseResource];
+    if((p.first & ~DescriptorSetData::SPARSE_REF_BIT) == 0)
+    {
+      descInfo->bindImgRefs.erase(view->baseResource);
+      p.first = 1;
+      p.second = eFrameRef_None;
+    }
+    else
+    {
+      p.first++;
+    }
+
+    ImageRange imgRange;
+    imgRange.aspectMask = view->viewRange.aspectMask;
+    imgRange.baseMipLevel = view->viewRange.baseMipLevel;
+    imgRange.levelCount = VK_REMAINING_MIP_LEVELS;
+    imgRange.baseArrayLayer = view->viewRange.baseArrayLayer;
+    imgRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+    imgRange.is2DView = view->viewRange.viewType != VK_IMAGE_VIEW_TYPE_3D;
+
+    FrameRefType maxRef =
+        MarkImageReferenced(descInfo->bindImgRefs, view->baseResource, layout, imgRange, refType);
+
+    p.second = std::max(p.second, maxRef);
   }
 
   void AddMemFrameRef(ResourceId mem, VkDeviceSize offset, VkDeviceSize size, FrameRefType refType)

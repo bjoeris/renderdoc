@@ -1057,7 +1057,7 @@ void WrappedVulkan::vkUpdateDescriptorSets(VkDevice device, uint32_t writeCount,
           bind.bufferInfo = descWrite.pBufferInfo[d];
         }
 
-        bind.AddBindRefs(record, ref);
+        bind.AddBindRefs(record, m_ImageLayouts, ref);
       }
     }
 
@@ -1116,7 +1116,7 @@ void WrappedVulkan::vkUpdateDescriptorSets(VkDevice device, uint32_t writeCount,
 
         bind.RemoveBindRefs(dstrecord);
         bind = (*srcbinding)[curSrcIdx];
-        bind.AddBindRefs(dstrecord, ref);
+        bind.AddBindRefs(dstrecord, m_ImageLayouts, ref);
       }
     }
   }
@@ -1425,7 +1425,7 @@ void WrappedVulkan::vkUpdateDescriptorSetWithTemplate(
           bind.bufferInfo = *(VkDescriptorBufferInfo *)src;
         }
 
-        bind.AddBindRefs(record, ref);
+        bind.AddBindRefs(record, m_ImageLayouts, ref);
       }
     }
   }

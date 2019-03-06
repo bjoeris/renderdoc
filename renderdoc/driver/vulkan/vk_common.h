@@ -365,6 +365,8 @@ struct VkResourceRecord;
 
 FrameRefType GetRefType(VkDescriptorType descType);
 
+struct ImageLayouts;
+
 // the possible contents of a descriptor set slot,
 // taken from the VkWriteDescriptorSet
 struct DescriptorSetSlot
@@ -374,7 +376,8 @@ struct DescriptorSetSlot
   VkBufferView texelBufferView;
 
   void RemoveBindRefs(VkResourceRecord *record);
-  void AddBindRefs(VkResourceRecord *record, FrameRefType ref);
+  void AddBindRefs(VkResourceRecord *record, const map<ResourceId, ImageLayouts> &imageLayouts,
+                   FrameRefType ref);
 };
 
 DECLARE_REFLECTION_STRUCT(DescriptorSetSlot);
