@@ -868,6 +868,7 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
         record->bakedCommands->AddResourceReferences(GetResourceManager());
         record->bakedCommands->AddReferencedIDs(refdIDs);
 
+        GetResourceManager()->MergeReferencedImages(record->bakedCommands->cmdInfo->imgFrameRefs);
         GetResourceManager()->MergeReferencedMemory(record->bakedCommands->cmdInfo->memFrameRefs);
 
         // ref the parent command buffer's alloc record, this will pull in the cmd buffer pool
@@ -879,6 +880,8 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
           record->bakedCommands->cmdInfo->subcmds[sub]->bakedCommands->AddResourceReferences(
               GetResourceManager());
           record->bakedCommands->cmdInfo->subcmds[sub]->bakedCommands->AddReferencedIDs(refdIDs);
+          GetResourceManager()->MergeReferencedImages(
+              record->bakedCommands->cmdInfo->subcmds[sub]->bakedCommands->cmdInfo->imgFrameRefs);
           GetResourceManager()->MergeReferencedMemory(
               record->bakedCommands->cmdInfo->subcmds[sub]->bakedCommands->cmdInfo->memFrameRefs);
           GetResourceManager()->MarkResourceFrameReferenced(

@@ -3045,6 +3045,26 @@ VkResourceRecord::~VkResourceRecord()
     SAFE_DELETE(descTemplateInfo);
 }
 
+void VkResourceRecord::MarkImageFrameReferenced(VkResourceRecord *img, const ImageLayouts &layout,
+                                                const ImageRange &range, FrameRefType refType)
+{
+  // mark backing memory as read
+  MarkResourceFrameReferenced(img->baseResource, eFrameRef_Read);
+
+  ResourceId id = img->GetResourceID();
+  if(refType != eFrameRef_Read && refType != eFrameRef_None)
+    cmdInfo->dirtied.insert(id);
+  if(img->resInfo)
+    cmdInfo->sparse.insert(img->resInfo);
+
+  FrameRefType maxRef = MarkImageReferenced(cmdInfo->imgFrameRefs, id, layout, range, refType);
+
+  // maintain the reference type of the image itself as the maximum reference type of any
+  // subresource
+  MarkResourceFrameReferenced(
+      id, maxRef, [](FrameRefType x, FrameRefType y) -> FrameRefType { return std::max(x, y); });
+}
+
 void VkResourceRecord::MarkMemoryFrameReferenced(ResourceId mem, VkDeviceSize offset,
                                                  VkDeviceSize size, FrameRefType refType)
 {

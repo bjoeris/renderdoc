@@ -933,6 +933,7 @@ struct CmdBufferRecordingInfo
 
   vector<VkResourceRecord *> subcmds;
 
+  std::map<ResourceId, ImgRefs> imgFrameRefs;
   std::map<ResourceId, MemRefs> memFrameRefs;
 
   // AdvanceFrame/Present should be called after this buffer is submitted
@@ -1322,6 +1323,7 @@ public:
     cmdInfo->imgbarriers.swap(bakedCommands->cmdInfo->imgbarriers);
     cmdInfo->subcmds.swap(bakedCommands->cmdInfo->subcmds);
     cmdInfo->sparse.swap(bakedCommands->cmdInfo->sparse);
+    cmdInfo->imgFrameRefs.swap(bakedCommands->cmdInfo->imgFrameRefs);
     cmdInfo->memFrameRefs.swap(bakedCommands->cmdInfo->memFrameRefs);
   }
 
@@ -1419,6 +1421,8 @@ public:
 
   void MarkMemoryFrameReferenced(ResourceId mem, VkDeviceSize offset, VkDeviceSize size,
                                  FrameRefType refType);
+  void MarkImageFrameReferenced(VkResourceRecord *img, const ImageLayouts &layout,
+                                const ImageRange &range, FrameRefType refType);
   void MarkBufferFrameReferenced(VkResourceRecord *buf, VkDeviceSize offset, VkDeviceSize size,
                                  FrameRefType refType);
   void MarkBufferImageCopyFrameReferenced(VkResourceRecord *buf, VkResourceRecord *img,
