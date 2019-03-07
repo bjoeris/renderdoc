@@ -1743,6 +1743,7 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
 
     GetResourceManager()->Serialise_InitialContentsNeeded(ser);
     GetResourceManager()->InsertDeviceMemoryRefs(ser);
+    GetResourceManager()->InsertImageRefs(ser);
 
     {
       SCOPED_SERIALISE_CHUNK(SystemChunk::CaptureScope, 16);
@@ -2849,6 +2850,11 @@ bool WrappedVulkan::ProcessChunk(ReadSerialiser &ser, VulkanChunk chunk)
     {
       std::vector<MemRefInterval> data;
       return GetResourceManager()->Serialise_DeviceMemoryRefs(ser, data);
+    }
+    case VulkanChunk::ImageRefs:
+    {
+      std::vector<ImgRefsPair> data;
+      return GetResourceManager()->Serialise_ImageRefs(ser, data);
     }
     default:
     {

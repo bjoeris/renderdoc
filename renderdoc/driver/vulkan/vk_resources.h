@@ -1006,6 +1006,21 @@ struct AttachmentInfo
   VkImageMemoryBarrier barrier;
 };
 
+struct FrameRefTypeInterval
+{
+  uint64_t start;
+  FrameRefType refType;
+};
+
+DECLARE_REFLECTION_STRUCT(FrameRefTypeInterval);
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, FrameRefTypeInterval &el)
+{
+  SERIALISE_MEMBER(start);
+  SERIALISE_MEMBER(refType);
+}
+
 struct ImageRange
 {
   ImageRange() {}
@@ -1076,6 +1091,46 @@ struct ImgRefs
   FrameRefType Merge(const ImgRefs &other, Compose comp);
   inline FrameRefType Merge(const ImgRefs &other) { return Merge(other, ComposeFrameRefs); }
 };
+
+// TODO: Is there a way to just serialize std::pair<ResourceId, ImgRefs>, rather than needing this
+// struct?
+struct ImgRefsPair
+{
+  ResourceId image;
+  ImgRefs imgRefs;
+  inline uint32_t SerializedSizeEstimate()
+  {
+    // assuming 8 bytes for each encoded member
+    return 8 * (1 +                                     // image ResourceId
+                1 +                                     // rangeRefs size
+                (uint32_t)imgRefs.rangeRefs.size() +    // rangeRefs elements
+                1 +                                     // type
+                1 +                                     // aspectMask
+                1 +                                     // levelCount
+                1 +                                     // layerCount
+                3 +                                     // extent
+                1 +                                     // areAspectsSplit
+                1 +                                     // areLevelsSplit
+                1);                                     // areLayersSplit
+  }
+};
+
+DECLARE_REFLECTION_STRUCT(ImgRefsPair);
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, ImgRefsPair &el)
+{
+  SERIALISE_MEMBER(image);
+  SERIALISE_MEMBER(imgRefs.rangeRefs);
+  SERIALISE_MEMBER(imgRefs.type);
+  SERIALISE_MEMBER(imgRefs.aspectMask);
+  SERIALISE_MEMBER(imgRefs.levelCount);
+  SERIALISE_MEMBER(imgRefs.layerCount);
+  SERIALISE_MEMBER(imgRefs.extent);
+  SERIALISE_MEMBER(imgRefs.areAspectsSplit);
+  SERIALISE_MEMBER(imgRefs.areLevelsSplit);
+  SERIALISE_MEMBER(imgRefs.areLayersSplit);
+}
 
 template <typename Compose>
 FrameRefType ImgRefs::Update(ImageRange range, FrameRefType refType, Compose comp)
