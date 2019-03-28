@@ -1367,6 +1367,46 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, VkInitialContents ini
     VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
                                           VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
 
+    ResourceId orig = GetResourceManager()->GetOriginalID(id);
+    ImgRefs *imgRefs = NULL;
+    bool initialized = false;
+    VkImageAspectFlags aspectMask = FormatImageAspects(m_CreationInfo.m_Image[id].format);
+    int aspectCount = 0, levelCount = m_CreationInfo.m_Image[id].arrayLayers,
+        layerCount = m_CreationInfo.m_Image[id].arrayLayers;
+    for(VkImageAspectFlags a = 1; a <= aspectMask; a <<= 1)
+      if(a & aspectMask)
+        ++aspectCount;
+    std::vector<InitReqType> resetReq((size_t)(aspectCount * levelCount * layerCount),
+                                      eInitReq_Reset);
+    if(GetResourceManager()->OptimizeInitialState())
+    {
+      imgRefs = GetResourceManager()->FindImgRefs(orig);
+      if(imgRefs)
+      {
+        initialized = imgRefs->initializedLiveRes == live;
+        imgRefs->initializedLiveRes = live;
+        for(int aspectIndex = 0; aspectIndex < aspectCount; ++aspectIndex)
+        {
+          for(int level = 0; level < levelCount; ++level)
+          {
+            for(int layer = 0; layer < layerCount; ++layer)
+            {
+              InitReqType t =
+                  InitReq(imgRefs->rangeRefs[imgRefs->SubresourceIndex(aspectIndex, level, layer)]);
+              if(t == eInitReq_InitOnce)
+              {
+                if(initialized)
+                  t = eInitReq_None;
+                else
+                  t = eInitReq_Reset;
+              }
+              resetReq[(aspectIndex * levelCount + level) * layerCount + layer] = t;
+            }
+          }
+        }
+      }
+    }
+
     if(initial.tag == VkInitialContents::Sparse)
     {
       Apply_SparseInitialState((WrappedVkImage *)live, initial);
@@ -1834,6 +1874,28 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, VkInitialContents ini
 
     for(size_t si = 0; si < m_ImageLayouts[id].subresourceStates.size(); si++)
     {
+      //bool isTransitionNeeded = false;
+      //VkImageSubresourceRange r = m_ImageLayouts[id].subresourceStates[si].subresourceRange;
+      //int aspectIndex = 0;
+      //for(VkImageAspectFlags aspect = 1; aspect <= r.aspectMask; aspect <<= 1)
+      //{
+      //  if(aspect & r.aspectMask)
+      //  {
+      //    for(int level = r.baseMipLevel;
+      //        level - r.baseMipLevel < r.levelCount && level < levelCount; ++level)
+      //    {
+      //      for(int layer = r.baseArrayLayer;
+      //          layer - r.baseArrayLayer < r.layerCount && layer < layerCount; ++layer)
+      //      {
+      //        InitReqType t = resetReq[(aspectIndex * levelCount + level) * layerCount + layer];
+      //        isTransitionNeeded |= (t == eInitReq_Reset) || (t == eInitReq_Clear);
+      //      }
+      //    }
+      //    ++aspectIndex;
+      //  }
+      //}
+      //if(!isTransitionNeeded)
+      //  continue;
       dstimBarrier.subresourceRange = m_ImageLayouts[id].subresourceStates[si].subresourceRange;
       dstimBarrier.oldLayout = m_ImageLayouts[id].subresourceStates[si].newLayout;
       dstimBarrier.srcAccessMask = VK_ACCESS_ALL_WRITE_BITS | MakeAccessMask(dstimBarrier.oldLayout);
@@ -1888,8 +1950,9 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, VkInitialContents ini
 
             bufOffset += GetPlaneByteSize(extent.width, extent.height, extent.depth, fmt, 0, i);
 
-            ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
-                                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            if(resetReq[(i * levelCount + m) * layerCount + a] == eInitReq_Reset)
+              ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
+                                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
           }
         }
         else
@@ -1903,8 +1966,9 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, VkInitialContents ini
           // pass 0 for mip since we've already pre-downscaled extent
           bufOffset += GetByteSize(extent.width, extent.height, extent.depth, sizeFormat, 0);
 
-          ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
-                                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+          if(resetReq[m * layerCount + a] == eInitReq_Reset)
+            ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
+                                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
           if(sizeFormat != fmt)
           {
@@ -1916,8 +1980,9 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, VkInitialContents ini
 
             bufOffset += GetByteSize(extent.width, extent.height, extent.depth, VK_FORMAT_S8_UINT, 0);
 
-            ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
-                                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            if(resetReq[(levelCount + m) * layerCount + a] == eInitReq_Reset)
+              ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
+                                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
           }
         }
 
@@ -1945,6 +2010,28 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, VkInitialContents ini
 
     for(size_t si = 0; si < m_ImageLayouts[id].subresourceStates.size(); si++)
     {
+      // bool isTransitionNeeded = false;
+      // VkImageSubresourceRange r = m_ImageLayouts[id].subresourceStates[si].subresourceRange;
+      // int aspectIndex = 0;
+      // for(VkImageAspectFlags aspect = 1; aspect <= r.aspectMask; aspect <<= 1)
+      //{
+      //  if(aspect & r.aspectMask)
+      //  {
+      //    for(int level = r.baseMipLevel;
+      //        level - r.baseMipLevel < r.levelCount && level < levelCount; ++level)
+      //    {
+      //      for(int layer = r.baseArrayLayer;
+      //          layer - r.baseArrayLayer < r.layerCount && layer < layerCount; ++layer)
+      //      {
+      //        InitReqType t = resetReq[(aspectIndex * levelCount + level) * layerCount + layer];
+      //        isTransitionNeeded |= (t == eInitReq_Reset) || (t == eInitReq_Clear);
+      //      }
+      //    }
+      //    ++aspectIndex;
+      //  }
+      //}
+      // if(!isTransitionNeeded)
+      //  continue;
       dstimBarrier.subresourceRange = m_ImageLayouts[id].subresourceStates[si].subresourceRange;
       dstimBarrier.newLayout = m_ImageLayouts[id].subresourceStates[si].newLayout;
       dstimBarrier.dstAccessMask |= MakeAccessMask(dstimBarrier.newLayout);

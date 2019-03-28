@@ -1090,6 +1090,8 @@ struct ImgRefs
   template <typename Compose>
   FrameRefType Merge(const ImgRefs &other, Compose comp);
   inline FrameRefType Merge(const ImgRefs &other) { return Merge(other, ComposeFrameRefs); }
+  bool IsResetNeeded(VkImageSubresourceRange range) const;
+  bool IsResetNeeded(const VkImageSubresourceLayers &region) const;
 };
 
 // TODO: Is there a way to just serialize std::pair<ResourceId, ImgRefs>, rather than needing this

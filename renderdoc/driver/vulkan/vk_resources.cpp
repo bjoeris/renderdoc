@@ -3000,6 +3000,84 @@ void ImgRefs::Split(bool splitAspects, bool splitLevels, bool splitLayers)
   areLayersSplit = newSplitLayerCount > 1;
 }
 
+bool ImgRefs::IsResetNeeded(VkImageSubresourceRange range) const
+{
+  if(!areAspectsSplit)
+    range.aspectMask = aspectMask;
+  if(!areLevelsSplit)
+  {
+    range.baseMipLevel = 0;
+    range.levelCount = levelCount;
+  }
+  else if(range.levelCount == VK_REMAINING_MIP_LEVELS)
+    range.levelCount = levelCount - range.baseMipLevel;
+  if(!areLayersSplit)
+  {
+    range.baseArrayLayer = 0;
+    range.layerCount = layerCount;
+  }
+  else if(range.layerCount == VK_REMAINING_ARRAY_LAYERS)
+    range.layerCount = layerCount - range.baseArrayLayer;
+
+  std::vector<VkImageAspectFlags> splitAspects;
+  if(areAspectsSplit)
+  {
+    for(VkImageAspectFlags aspect = 1; (aspectMask & ~aspect) >= aspect; aspect <<= 1)
+    {
+      if(aspect & aspectMask)
+        splitAspects.push_back(aspect);
+    }
+  }
+  else
+  {
+    splitAspects.push_back(aspectMask);
+  }
+
+  int splitLevelCount = 1;
+  int levelEnd = 1;
+  if(areLevelsSplit)
+  {
+    splitLevelCount = levelCount;
+    levelEnd = (int)(range.baseMipLevel + range.levelCount);
+  }
+
+  int splitLayerCount = 1;
+  int layerEnd = 1;
+  if(areLayersSplit)
+  {
+    splitLayerCount = layerCount;
+    layerEnd = (int)(range.baseArrayLayer + range.layerCount);
+  }
+
+  for(int aspectIndex = 0; aspectIndex < (int)splitAspects.size(); ++aspectIndex)
+  {
+    VkImageAspectFlags aspect = splitAspects[aspectIndex];
+    if((aspect & range.aspectMask) == 0)
+      continue;
+    for(int level = (int)range.baseMipLevel; level < levelEnd; ++level)
+    {
+      for(int layer = (int)range.baseArrayLayer; layer < layerEnd; ++layer)
+      {
+        int index = (aspectIndex * splitLevelCount + level) * splitLayerCount + layer;
+        if(IsDirtyFrameRef(rangeRefs[index]))
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool ImgRefs::IsResetNeeded(const VkImageSubresourceLayers &region) const
+{
+  VkImageSubresourceRange range;
+  range.aspectMask = region.aspectMask;
+  range.baseMipLevel = region.mipLevel;
+  range.levelCount = 1;
+  range.baseArrayLayer = region.baseArrayLayer;
+  range.layerCount = region.layerCount;
+  return IsResetNeeded(range);
+}
+
 VkResourceRecord::~VkResourceRecord()
 {
   VkResourceType resType = Resource != NULL ? IdentifyTypeByPtr(Resource) : eResUnknown;
