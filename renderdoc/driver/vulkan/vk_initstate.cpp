@@ -1375,6 +1375,24 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
     VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
                                           VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
 
+    ResourceId orig = GetResourceManager()->GetOriginalID(id);
+    ImgRefs *imgRefs = NULL;
+    bool initialized = false;
+    if(GetResourceManager()->OptimizeInitialState())
+    {
+      imgRefs = GetResourceManager()->FindImgRefs(orig);
+      if(imgRefs)
+      {
+        initialized = imgRefs->initializedLiveRes == live;
+        imgRefs->initializedLiveRes = live;
+      }
+    }
+    ImgRefs defaultImgRefs;
+    if(imgRefs == NULL)
+    {
+      defaultImgRefs.Update(ImageRange(), eFrameRef_ReadBeforeWrite);
+      imgRefs = &defaultImgRefs;
+    }
     if(initial.tag == VkInitialContents::Sparse)
     {
       Apply_SparseInitialState((WrappedVkImage *)live, initial);
@@ -1919,8 +1937,9 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
 
             bufOffset += GetPlaneByteSize(extent.width, extent.height, extent.depth, fmt, 0, i);
 
-            ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
-                                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            if(imgRefs->SubresourceNeedsReset(i, m, a, initialized))
+              ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
+                                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
           }
         }
         else
@@ -1934,8 +1953,9 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
           // pass 0 for mip since we've already pre-downscaled extent
           bufOffset += GetByteSize(extent.width, extent.height, extent.depth, sizeFormat, 0);
 
-          ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
-                                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+          if(imgRefs->SubresourceNeedsReset(0, m, a, initialized))
+            ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
+                                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
           if(sizeFormat != fmt)
           {
@@ -1947,8 +1967,9 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
 
             bufOffset += GetByteSize(extent.width, extent.height, extent.depth, VK_FORMAT_S8_UINT, 0);
 
-            ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
-                                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            if(imgRefs->SubresourceNeedsReset(1, m, a, initialized))
+              ObjDisp(cmd)->CmdCopyBufferToImage(Unwrap(cmd), Unwrap(buf), ToHandle<VkImage>(live),
+                                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
           }
         }
 

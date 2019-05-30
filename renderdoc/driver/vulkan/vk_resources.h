@@ -1125,6 +1125,25 @@ struct ImgRefs
   {
     return rangeRefs[SubresourceIndex(aspectIndex, level, layer)];
   }
+  inline InitReqType SubresourceInitReq(VkImageAspectFlagBits aspect, int level, int layer) const
+  {
+    return InitReq(SubresourceRef(aspect, level, layer));
+  }
+  inline InitReqType SubresourceInitReq(int aspectIndex, int level, int layer) const
+  {
+    return InitReq(SubresourceRef(aspectIndex, level, layer));
+  }
+  inline bool SubresourceNeedsReset(VkImageAspectFlagBits aspect, int level, int layer,
+                                    bool initialized) const
+  {
+    InitReqType req = SubresourceInitReq(aspect, level, layer);
+    return req == eInitReq_Reset || (req == eInitReq_InitOnce && !initialized);
+  }
+  inline bool SubresourceNeedsReset(int aspectIndex, int level, int layer, bool initialized) const
+  {
+    InitReqType req = SubresourceInitReq(aspectIndex, level, layer);
+    return req == eInitReq_Reset || (req == eInitReq_InitOnce && !initialized);
+  }
   void Split(bool splitAspects, bool splitLevels, bool splitLayers);
   template <typename Compose>
   FrameRefType Update(ImageRange range, FrameRefType refType, Compose comp);
