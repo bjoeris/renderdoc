@@ -1,0 +1,321 @@
+{{/**********************************************************************************/}}
+{{/* The MIT License (MIT)                                                          */}}
+{{/*                                                                                */}}
+{{/* Copyright (c) 2019 Google LLC                                                  */}}
+{{/*                                                                                */}}
+{{/* Permission is hereby granted, free of charge, to any person obtaining a copy   */}}
+{{/* of this software and associated documentation files (the "Software"), to deal  */}}
+{{/* in the Software without restriction, including without limitation the rights   */}}
+{{/* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell      */}}
+{{/* copies of the Software, and to permit persons to whom the Software is          */}}
+{{/* furnished to do so, subject to the following conditions:                       */}}
+{{/*                                                                                */}}
+{{/* The above copyright notice and this permission notice shall be included in     */}}
+{{/* all copies or substantial portions of the Software.                            */}}
+{{/*                                                                                */}}
+{{/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR     */}}
+{{/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,       */}}
+{{/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE    */}}
+{{/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER         */}}
+{{/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,  */}}
+{{/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN      */}}
+{{/* THE SOFTWARE.                                                                  */}}
+{{/**********************************************************************************/}}
+
+{{define "CPP.Type"}}
+  {{if Or (IsSDString $) (And (IsSDArray $) (Eq (Type $) "string"))}}const char *{{S}}
+  {{else}}{{Type $}} {{S}}
+  {{end}}
+{{end}}
+
+{{define "CPP.Value.Default"}}
+  {{     if Not (IsSDObject $)}}{{$}}{{S}}
+  {{else if IsSDResource $}}
+    {{if $ | ToUInt | Eq 0}}
+      NULL{{S}}
+    {{else}}
+      {{if IsSDPointer $}}&{{S}}{{end}}
+      {{/* {{GlobalVar $}}{{S}} */}}
+      {{template "CPP.GlobalVariable" $}}
+    {{end}}
+  {{else if HasCustomString $}}{{$}}{{S}}
+  {{else if IsSDNull $}}NULL{{S}}
+  {{else if IsSDString $}}"{{Escape $}}"{{S}}
+  {{else if IsSDUInt64 $}}{{$}}ull{{S}}
+  {{else if IsSDInt64 $}}{{$}}ll{{S}}
+  {{else if IsSDUInt $}}{{$}}u{{S}}
+  {{else if IsSDFloat32 $}}{{$}}f{{S}}
+  {{else if IsSDBuffer $}}{{BufferVar $}}.data(){{S}}
+  {{else if IsSDStruct $}}{{template "CPP.InlineStruct" Dict "name" (Name $) "obj" $}}
+  {{else}}{{$}}{{S}}
+  {{end}}
+{{end}}
+
+{{define "CPP.Value"}}
+  {{template "CPP.Value.Default"}}
+{{end}}
+
+{{define "CPP.GlobalVariable.Type"}}
+  {{if IsSDObject $}}
+    {{Type $}}{{S}}
+  {{else if $.type}}
+    {{$.type}}{{S}}
+  {{else if IsSDObject $.id}}
+    {{Type $.id}}{{S}}
+  {{else}}
+    {{Error "Invalid arguments"}}
+  {{end}}
+{{end}}
+
+{{define "CPP.GlobalVariable.Name"}}
+  {{if IsSDObject $}}
+    {{template "CPP.GlobalVariable.Type"}}_{{ToUInt $}}{{S}}
+  {{else}}
+    {{$name := $.name}}
+    {{if Not $name}}
+      {{$name = $.type}}
+      {{if Not $name}}
+        {{$name = Macro "CPP.GlobalVariable.Type"}}
+      {{end}}
+    {{end}}
+    {{if $.id}}
+      {{$name = Print $name "_" (ToUInt $.id)}}
+    {{end}}
+    {{$name}}{{S}}
+  {{end}}
+{{end}}
+
+{{define "CPP.GlobalVariable.h"}}
+  extern {{$.type}} {{$.name}};
+{{end}}
+
+{{define "CPP.GlobalVariable.cpp"}}
+  {{$.type}} {{$.name}}{{S}}
+  {{if $.value}}
+    = {{template "CPP.Value" $.value}}{{S}}
+  {{end}}
+  ;
+{{end}}
+
+{{define "CPP.GlobalVariable"}}
+  {{$name := Macro "CPP.GlobalVariable.Name"}}
+  {{$type := Macro "CPP.GlobalVariable.Type"}}
+  {{$unpacked := Dict "name" $name "type" $type "value" $.value}}
+  {{if RegisterGlobalVar $name}}
+    {{ExecTemplate "variables.h" "CPP.GlobalVariable.h" $unpacked}}
+    {{ExecTemplate "variables.cpp" "CPP.GlobalVariable.cpp" $unpacked}}
+  {{end}}
+  {{$name}}{{S}}
+{{end}}
+
+{{define "CPP.InlineStruct"}}
+  {{$children := $.obj | RemoveHidden | RemoveDuplicates}}
+  {{if And (IsSDNull $.obj) ($children | Size | Eq 0)}}
+    NULL{{S}}
+  {{else}}
+    {
+      {{$name := Print $.name $.suffix}}
+      {{$path := $.path}}
+      {{if Not $path}}
+        {{$path = $name}}
+      {{end}}
+      {{range $i, $childName, $child := $children}}
+
+        {{/* If the child is a local variable, this is what it is called */}}
+        {{$childVar := Macro "CPP.LocalVariableName" (Dict "name" $childName "obj" $child "suffix" $.suffix)}}
+      
+        {{/* String used to describe the child in a comment in the generated code */}}
+        {{/* For struct fields, this is just the field name; for arrays, this something like "array[42]" */}}
+        {{$childPath := $childName}}
+
+        {{/* String to generate the correct `childComment` in the recursive call. */}}
+        {{/* This is used so that nested arrays get `childComment`s like "array[1][2]". */}}
+        {{/* {{$childPath := $childComment}} */}}
+        {{if IsSDArray $.obj}}
+          {{$childVar = Print $name "_" $i}}
+          {{$childPath = Print $path "[" $i "]"}}
+          {{/* {{$childComment = $childPath}} */}}
+        {{end}}
+
+        /* {{$childPath}} = */ {{S}}
+        {{if And (IsSDObject $child) (Not (IsInlineable $child))}}{{$childVar}},
+        {{else if And (Not (HasCustomString $child)) (Or (IsSDStruct $child) (IsSDArray $child))}}
+          {{template "CPP.InlineStruct" Dict "name" $childVar "obj" $child "path" $childPath}},
+        {{else}}{{template "CPP.Value" $child}},
+        {{end}}
+      {{end}}
+    }{{S}}
+  {{end}}
+{{end}}
+
+{{define "CPP.LocalVariableName"}}
+  {{if IsSDObject $}}
+    {{Name $}}{{S}}
+  {{else}}
+    {{$name := $.name}}
+    {{if Not $name}}
+      {{$name = Name $.obj}}
+    {{end}}
+    {{$name}}{{$.suffix}}{{S}}
+  {{end}}
+{{end}}
+
+{{define "CPP.DeclareLocalVariable"}}
+  {{if IsSDObject $}}
+    {{$ = Dict "obj" $ "name" (Name $) "suffix" ""}}
+  {{end}}
+  {{$name := Macro "CPP.LocalVariableName" $}}
+  {{$children := $.obj | RemoveHidden | RemoveDuplicates}}
+  {{if IsSDUnion $.obj}}
+    {{template "CPP.Type" $.obj}} {{$name}};
+    {{template "CPP.Assign" (Dict "path" $name "obj" $.obj)}}
+  {{else if And (Lt 0 ($children | Size)) (Or (IsSDStruct $.obj) (IsSDArray $.obj) (IsSDUnion $.obj))}}
+    {{range $i, $childName, $child := $children}}
+      {{$childSuffix := $.suffix}}
+      {{if IsSDArray $.obj}}
+        {{$childSuffix = Print $.suffix "_" $i}}
+        {{$childName = Name $.obj}}
+      {{end}}
+      {{if And (IsSDObject $child) (Not (IsInlineable $child))}}
+        {{template "CPP.DeclareLocalVariable" Dict "name" $childName "obj" $child "suffix" $childSuffix}}
+      {{end}}
+    {{end}}
+
+    {{$type := Macro "CPP.Type" $.obj}}
+    {{if IsSDPointer $.obj}}
+      {{$name = Print $name "[1]"}}
+    {{else if IsSDArray $.obj}}
+      {{$name = Print $name "[" (Size $.obj) "]"}}
+    {{end}}
+    {{$type}} {{$name}} = {{template "CPP.InlineStruct" $}};
+  {{end}}
+{{end}}
+
+{{define "CPP.Assign"}}
+  {{if Or (IsSDStruct $.obj) (IsSDArray $.obj) (IsSDUnion $.obj)}}
+    {{$children := $.obj | RemoveHidden | RemoveDuplicates}}
+    {{range $i, $childName, $child := $children}}
+      {{$childPath := ""}}
+      {{if IsSDArray $.obj}}
+        {{$childPath = Print "[" $i "]"}}
+      {{else if IsSDPointer $.obj}}
+        {{$childPath = Print "->" $childName}}
+      {{else}}
+        {{$childPath = Print "." $childName}}
+      {{end}}
+
+      {{/* Comment out non-canonical union branch assignments */}}
+      {{$comment := ""}}
+      {{if And (IsSDUnion $.obj) (Ne $i (CaninonicalUnionBranch $.obj))}}
+        {{$comment = "// "}}
+      {{end}}
+
+      {{PushPrefix $comment}}
+      {{template "CPP.Assign" Dict "path" (Print $.path $childPath) "obj" $child}}
+      {{PopPrefix}}
+    {{end}}
+  {{else}}
+    {{$.path}} = {{template "CPP.Value" $.obj}};
+  {{end}}
+{{end}}
+
+{{define "CPP.DeclareArg"}}
+  {{if IsSDObject $}}
+    {{if Or (IsSDStruct $) (IsSDArray $) (Not (IsInlineable $))}}
+      {{/* Declare a local variable for any args that either can't be */}}
+      {{/* inlined (like pointers), or look bad when inlined */}}
+      {{/* (like non-pointer structs) */}}
+      {{template "CPP.DeclareLocalVariable" $}}
+    {{end}}
+  {{end}}
+{{end}}
+
+{{define "CPP.ArgValue"}}
+  {{     if Not (IsSDObject $)}}{{$}}{{S}}
+  {{else if Or (IsSDStruct $) (IsSDArray $) (Not (IsInlineable $))}}
+    {{$children := $ | RemoveHidden | RemoveDuplicates}}
+    {{if Or (IsSDNull $) (Eq 0 ($children | Size))}}
+      NULL{{S}}
+    {{else}}
+      {{/* This is value will have a local variable variable declared in */}}
+      {{/* "CPP.DeclareArg", so just return the name of that variable. */}}
+      {{template "CPP.LocalVariableName" $}}
+    {{end}}
+  {{else}}
+    {{template "CPP.Value" $}}
+  {{end}}
+{{end}}
+
+{{define "CPP.CallFunction"}}
+  {{if IsSDObject $}}
+    {{$ = Dict "name" (Name $) "args" (RemoveHidden $)}}
+  {{end}}
+  {{if $.check}}
+    {{$.check}}({{S}}
+  {{end}}
+  {{range $arg := $.args}}
+    {{template "CPP.DeclareArg" $arg}}
+  {{end}}
+  {{$.name}}({{S}}
+  {{range $i, $_, $arg := $.args}}
+    {{if Gt $i 0}}, {{S}}{{end}}
+    {{template "CPP.ArgValue" $arg}}
+  {{end}}
+  {{if $.check}}){{S}}
+  {{end}}
+  );
+{{end}}
+
+{{define "CPP.DefaultChunk"}}
+  {{template "CPP.CallFunction" $}}
+{{end}}
+
+{{define "CPP.ChunkBody.Default"}}
+  {{$name := Name $}}
+  {{     if Eq $name "Driver Initialisation Parameters"}}
+    {{template "CPP.DriverInit"}}
+  {{else if Eq $name "List of Initial Contents Resources"}}
+    {{template "CPP.InitialContentsList"}}
+  {{else if Eq $name "Initial Contents"}}
+    {{template "CPP.InitialContents"}}
+  {{else if Eq $name "Beginning of Capture"}}
+    {{template "CPP.CaptureBegin"}}
+  {{else if Eq $name "Frame Metadata"}}
+    {{template "CPP.CaptureScope"}}
+  {{else if Eq $name "End of Capture"}}
+    {{template "CPP.CaptureEnd"}}
+  {{else}}
+    {{template "CPP.DefaultChunk"}}
+  {{end}}
+{{end}}
+
+{{define "CPP.ChunkBody"}}
+  {{template "CPP.ChunkBody.Default"}}
+{{end}}
+
+{{define "CPP.Chunk"}}
+  { /* {{$.chunkId}} {{Name $.chunk}} */
+    /* Chunk args:
+      {{range $i, $argName, $arg := $.chunk}}
+        {{$i}} {{$argName}}
+      {{end}}
+    */
+    {{template "CPP.ChunkBody" $.chunk}}
+  }
+{{end}}
+
+{{define "CPP.IfDefPlatform"}}
+  {{if $.win32}}
+    #ifdef _WIN32
+    {{$.win32}}
+    #endif
+  {{end}}
+{{end}}
+
+{{define "CPP.PhaseMain"}}
+  void main_{{$.phase}}() {
+    {{range $i := Range $.count}}
+      {{$.phase}}_{{$i}}();
+    {{end}}
+  }
+{{end}}
