@@ -1,0 +1,615 @@
+{{/**********************************************************************************/}}
+{{/* The MIT License (MIT)                                                          */}}
+{{/*                                                                                */}}
+{{/* Copyright (c) 2019 Google LLC                                                  */}}
+{{/*                                                                                */}}
+{{/* Permission is hereby granted, free of charge, to any person obtaining a copy   */}}
+{{/* of this software and associated documentation files (the "Software"), to deal  */}}
+{{/* in the Software without restriction, including without limitation the rights   */}}
+{{/* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell      */}}
+{{/* copies of the Software, and to permit persons to whom the Software is          */}}
+{{/* furnished to do so, subject to the following conditions:                       */}}
+{{/*                                                                                */}}
+{{/* The above copyright notice and this permission notice shall be included in     */}}
+{{/* all copies or substantial portions of the Software.                            */}}
+{{/*                                                                                */}}
+{{/* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR     */}}
+{{/* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,       */}}
+{{/* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE    */}}
+{{/* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER         */}}
+{{/* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,  */}}
+{{/* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN      */}}
+{{/* THE SOFTWARE.                                                                  */}}
+{{/**********************************************************************************/}}
+
+{{define "CPP.Value"}}
+  {{if And (IsSDEnum $) (HasCustomString $) (Type $ | EndsWith "Flags")}}
+    {{$i := $ | FindSubstring "("}}
+    {{$j := $ | FindSubstring ")"}}
+    {{if Le 0 $i $j}}
+      {{$ | Substring (Add $i 1) (Subtract $j $i 1)}}{{S}}
+    {{else}}
+      {{template "CPP.Value.Default"}}
+    {{end}}
+  {{else if And (IsSDBuffer $) (Eq (Name $) "pCode")}}
+    (const uint32_t*){{BufferVar $}}.data(){{S}}
+  {{else}}
+    {{template "CPP.Value.Default"}}
+  {{end}}
+{{end}}
+
+{{define "Vulkan.InstanceVar"}}
+  {{template "CPP.GlobalVariable" (GetGlobal "VkInstance")}}
+{{end}}
+
+{{define "Vulkan.PhysicalDeviceVar"}}
+  {{template "CPP.GlobalVariable" (GetGlobal "VkPhysicalDevice")}}
+{{end}}
+
+{{define "Vulkan.QueueFamilyPropertiesVar"}}
+  {{template "CPP.GlobalVariable" (Dict "type" "std::vector<VkQueueFamilyProperties>" "name" "QueueFamilyProperties" "id" (GetGlobal "VkPhysicalDevice"))}}
+{{end}}
+
+{{define "Vulkan.vkEnumeratePhysicalDevices.early"}}
+  { /* vkEnumeratePhysicalDevices */
+  uint32_t physicalDeviceCount = 0u;
+  {{$instance := Macro "Vulkan.InstanceVar"}}
+  {{SetGlobal "VkPhysicalDevice" $.PhysicalDevice}}
+  {{$physicalDevice := Macro "Vulkan.PhysicalDeviceVar"}}
+  {{$physicalDeviceProps := Macro "CPP.GlobalVariable" (Dict "type" "VkPhysicalDeviceProperties" "id" $.PhysicalDevice)}}
+  {{$memoryProps := Macro "CPP.GlobalVariable" (Dict "type" "VkPhysicalDeviceMemoryProperties" "id" $.PhysicalDevice)}}
+  {{$memoryPropsCap := Macro "CPP.GlobalVariable" (Dict "type" "VkPhysicalDeviceMemoryProperties" "name" "VkPhysicalDeviceMemoryProperties_captured" "id" $.PhysicalDevice)}}
+  {{$physicalDeviceFeatures := Macro "CPP.GlobalVariable" (Dict "type" "VkPhysicalDeviceFeatures" "id" $.PhysicalDevice)}}
+  {{$queueProps := Macro "Vulkan.QueueFamilyPropertiesVar"}}
+  CHECK_VK_SUCCESS(vkEnumeratePhysicalDevices({{$instance}}, &physicalDeviceCount, NULL));
+  CHECK(physicalDeviceCount > 0u);
+  std::vector<VkPhysicalDevice> physicalDevices((size_t)physicalDeviceCount);
+  CHECK_VK_SUCCESS(vkEnumeratePhysicalDevices({{$instance}}, &physicalDeviceCount, physicalDevices.data()));
+
+  {{if Lt 0 $.PhysicalDeviceIndex}}
+    if(physicalDevices.size() > {{$.PhysicalDeviceIndex}})
+      {{$physicalDevice}} = physicalDevices[{{$.PhysicalDeviceIndex}}];  // trace was captured on device {{$.PhysicalDeviceIndex}}
+    else
+      {{$physicalDevice}} = physicalDevices[{{$.PhysicalDeviceIndex}}];  // fallback to device 0
+  {{else}}
+    {{$physicalDevice}} = physicalDevices[0]; // trace was captured on device 0
+  {{end}}
+
+  {{template "CPP.DeclareLocalVariable" Dict "obj" $.physProps "suffix" "_captured"}}
+  vkGetPhysicalDeviceProperties({{$physicalDevice}}, &{{$physicalDeviceProps}});
+
+  {{template "CPP.DeclareLocalVariable" Dict "obj" $.memProps "suffix" "_captured"}}
+  {{$memoryPropsCap}} = {{template "CPP.LocalVariableName" Dict "obj" $.memProps "suffix" "_captured"}};
+  vkGetPhysicalDeviceMemoryProperties({{$physicalDevice}}, &{{$memoryProps}});
+  aux.physDeviceMemoryProperties = {{$memoryProps}};
+
+  {{template "CPP.DeclareLocalVariable" Dict "obj" $.physFeatures "suffix" "_captured"}}
+  vkGetPhysicalDeviceFeatures({{$physicalDevice}}, &{{$physicalDeviceFeatures}});
+
+  {{template "CPP.DeclareLocalVariable" Dict "obj" $.queueProps "suffix" "_captured"}}
+  uint32_t queueFamilyCount = 0u;
+  vkGetPhysicalDeviceQueueFamilyProperties({{$physicalDevice}}, &queueFamilyCount, NULL);
+  {{$queueProps}}.resize(queueFamilyCount);
+  vkGetPhysicalDeviceQueueFamilyProperties({{$physicalDevice}}, &queueFamilyCount, {{$queueProps}}.data());
+  }
+{{end}}
+
+{{define "Vulkan.vkEnumeratePhysicalDevices"}}
+  {{ExecTemplate "early_create.cpp" "Vulkan.vkEnumeratePhysicalDevices.early"}}
+{{end}}
+
+
+{{define "Vulkan.vkGetDeviceQueue"}}
+  {{Name $}}({{S}}
+  {{range $i, $argName, $arg := RemoveHidden $}}
+    {{if Gt $i 0}}, {{S}}{{end}}
+    {{if Eq $argName "Queue"}}&{{template "CPP.GlobalVariable" $arg}}{{S}}
+    {{else}}
+      {{template "CPP.ArgValue" $arg}}
+    {{end}}
+  {{end}}
+  );
+{{end}}
+
+{{define "Vulkan.vkCreateSwapchainKHR.Win32Surface"}}
+  {{$hinstance := Macro "CPP.GlobalVariable" (Dict "type" "HINSTANCE" "name" "appHinstance" "value" "NULL")}}
+  {{$hwnd := Macro "CPP.GlobalVariable" (Dict "type" "HWND" "name" "appHwnd" "value" "NULL")}}
+
+  VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {
+    /* sType = */ VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+    /* pNext = */ NULL,
+    /* flags = */ 0,
+    /* hinstance = */ {{$hinstance}},
+    /* hwnd = */ {{$hwnd}},
+  };
+  CHECK_VK_SUCCESS(vkCreateWin32SurfaceKHR(aux.instance, &surfaceCreateInfo, NULL, &{{$}}));
+{{end}}
+
+{{define "Vulkan.vkCreateSwapchainKHR"}}
+  {{$_ := Macro "CPP.GlobalVariable" (Dict "type" "const uint32_t" "name" "resolutionWidth" "value" $.CreateInfo.imageExtent.width)}}
+  {{$_ := Macro "CPP.GlobalVariable" (Dict "type" "const uint32_t" "name" "resolutionHeight" "value" $.CreateInfo.imageExtent.height)}}
+
+  {{$device := Macro "CPP.GlobalVariable" $.device}}
+  {{$surface := Macro "CPP.GlobalVariable" (Dict "type" "VkSurfaceKHR" "id" $.SwapChain)}}
+  {{$swapchain := Macro "CPP.GlobalVariable" $.SwapChain}}
+
+  {{$createWin32Surface := Macro "Vulkan.vkCreateSwapchainKHR.Win32Surface" $surface}}
+  {{template "CPP.IfDefPlatform" Dict "win32" $createWin32Surface}}
+
+  {{$surfaceSupported := Macro "CPP.GlobalVariable" (Dict "type" "std::vector<VkBool32>" "name" "SurfaceSupported" "id" $.SwapChain)}}
+  {{$queueFamilyProps := Macro "Vulkan.QueueFamilyPropertiesVar"}}
+  {{$physDev := Macro "Vulkan.PhysicalDeviceVar"}}
+  {{$surfaceSupported}}.resize({{$queueFamilyProps}}.size());
+  for(uint32_t i=0; i<{{$surfaceSupported}}.size(); ++i) {
+    CHECK_VK_SUCCESS(vkGetPhysicalDeviceSurfaceSupportKHR({{$physDev}}, i, {{$surface}}, &{{$surfaceSupported}}[i]));
+  }
+  uint32_t surfaceFormatCount = 0;
+  CHECK_VK_SUCCESS(vkGetPhysicalDeviceSurfaceFormatsKHR({{$physDev}}, {{$surface}}, &surfaceFormatCount, NULL));
+  {{$surfaceFormats := Macro "CPP.GlobalVariable" (Dict "type" "std::vector<VkSurfaceFormatKHR>" "name" "SurfaceFormats" "id" $.SwapChain)}}
+  {{$surfaceFormats}}.resize(surfaceFormatCount);
+  CHECK_VK_SUCCESS(vkGetPhysicalDeviceSurfaceFormatsKHR({{$physDev}}, {{$surface}}, &surfaceFormatCount, {{$surfaceFormats}}.data()));
+  uint32_t presentModeCount = 0;
+  CHECK_VK_SUCCESS(vkGetPhysicalDeviceSurfacePresentModesKHR({{$physDev}}, {{$surface}}, &presentModeCount, NULL));
+  {{$surfacePresentModes := Macro "CPP.GlobalVariable" (Dict "type" "std::vector<VkPresentModeKHR>" "name" "SurfacePresentModes" "id" $.SwapChain)}}
+  {{$surfacePresentModes}}.resize(presentModeCount);
+  CHECK_VK_SUCCESS(vkGetPhysicalDeviceSurfacePresentModesKHR({{$physDev}}, {{$surface}}, &presentModeCount, {{$surfacePresentModes}}.data()));
+  {{$surfaceCapabilities := Macro "CPP.GlobalVariable" (Dict "type" "VkSurfaceCapabilitiesKHR" "id" $.SwapChain)}}
+  CHECK_VK_SUCCESS(vkGetPhysicalDeviceSurfaceCapabilitiesKHR({{$physDev}}, {{$surface}}, &{{$surfaceCapabilities}}));
+  {{$}}
+
+  VkSwapchainCreateInfoKHR CreateInfo = {
+    {{range $childName, $child := $.CreateInfo | RemoveHidden}}
+      /* {{Name $child}} = */ {{S}}
+      {{if Eq "surface" $childName}}
+        {{$surface}},
+      {{else}}
+        {{template "CPP.Value" $child}},
+      {{end}}
+    {{end}}
+  };
+  {{template "CPP.DeclareArg" $.pAllocator}}
+
+  CHECK_VK_SUCCESS({{Name $}}({{S}}
+    {{$device}}, {{S}}
+    &{{template "CPP.ArgValue" $.CreateInfo}}, {{S}}
+    {{template "CPP.ArgValue" $.pAllocator}}, {{S}}
+    &{{$swapchain}}));
+  {{$swapchainImages := Macro "CPP.GlobalVariable" (Dict "type" "std::vector<VkImage>" "name" "VkSwapchainKHR_images" "id" $.SwapChain)}}
+  uint32_t swapchainImageCount = 0u;
+  CHECK_VK_SUCCESS(vkGetSwapchainImagesKHR({{$device}}, {{$swapchain}}, &swapchainImageCount, NULL));
+  {{$swapchainImages}}.resize(swapchainImageCount);
+  CHECK_VK_SUCCESS(vkGetSwapchainImagesKHR({{$device}}, {{$swapchain}}, &swapchainImageCount, {{$swapchainImages}}.data()));
+
+  {{$swapchainVirtualImages := Macro "CPP.GlobalVariable" (Dict "type" "std::vector<VkImage>" "name" "VkSwapchainKHR_virtual_images" "id" $.SwapChain)}}
+  {{$swapchainVirtualImages}}.resize({{$.NumImages}});
+  aux.swapchain = {{$swapchain}};
+  aux.realSwapchainImages = {{$swapchainImages}};
+  CHECK_VK_SUCCESS(CreateVirtualSwapchainImages(aux, {{template "CPP.ArgValue" $.CreateInfo}}, {{$swapchainVirtualImages}}.data(), {{$.NumImages}}));
+{{end}}
+
+{{define "Vulkan.vkGetSwapchainImagesKHR"}}
+  {{$image := Macro "CPP.GlobalVariable" $.SwapchainImage}}
+  {{$swapchainVirtualImages := Macro "CPP.GlobalVariable" (Dict "type" "std::vector<VkImage>" "name" "VkSwapchainKHR_virtual_images" "id" $.Swapchain)}}
+  {{$image}} = {{$swapchainVirtualImages}}[{{$.SwapchainImageIndex}}];
+{{end}}
+
+{{define "Vulkan.vkCreateBuffer"}}
+  {{$device := Macro "CPP.GlobalVariable" $.device}}
+  {{template "CPP.DeclareLocalVariable" $.CreateInfo}}
+  {{$createInfo := Macro "CPP.LocalVariableName" $.CreateInfo}}
+  {{$allocator := Macro "CPP.Value" $.pAllocator}}
+  {{$buffer := Macro "CPP.GlobalVariable" $.Buffer}}
+  CHECK_VK_SUCCESS({{Name $}}({{$device}}, &{{$createInfo}}, {{$allocator}}, &{{$buffer}}));
+{{end}}
+
+{{define "Vulkan.vkCreateImage"}}
+  {{$device := Macro "CPP.GlobalVariable" $.device}}
+  {{template "CPP.DeclareLocalVariable" $.CreateInfo}}
+  {{$createInfo := Macro "CPP.LocalVariableName" $.CreateInfo}}
+  {{$allocator := Macro "CPP.Value" $.pAllocator}}
+  {{$image := Macro "CPP.GlobalVariable" $.Image}}
+  CHECK_VK_SUCCESS({{Name $}}({{$device}}, &{{$createInfo}}, {{$allocator}}, &{{$image}}));
+{{end}}
+
+{{define "Vulkan.vkBeginCommandBuffer"}}
+  {{$commandBuffer := Macro "CPP.GlobalVariable" $.CommandBuffer}}
+  {{template "CPP.DeclareLocalVariable" $.BeginInfo}}
+  {{$beginInfo := Macro "CPP.LocalVariableName" $.BeginInfo}}
+  CHECK_VK_SUCCESS({{Name $}}({{$commandBuffer}}, &{{$beginInfo}}));
+{{end}}
+
+{{define "Vulkan.vkEndCommandBuffer"}}
+  {{$commandBuffer := Macro "CPP.GlobalVariable" $.CommandBuffer}}
+  CHECK_VK_SUCCESS({{Name $}}({{$commandBuffer}}));
+{{end}}
+
+{{define "Vulkan.vkCmdBeginRenderPass"}}
+  {{$commandBuffer := Macro "CPP.GlobalVariable" $.commandBuffer}}
+  {{template "CPP.DeclareLocalVariable" $.RenderPassBegin}}
+  {{$beginInfo := Macro "CPP.LocalVariableName" $.RenderPassBegin}}
+  {{Name $}}({{$commandBuffer}}, &{{$beginInfo}}, {{$.contents}});
+{{end}}
+
+{{define "Vulkan.vkFlushMappedMemoryRanges"}}
+  {{template "CPP.DeclareLocalVariable" $.MemRange}}
+  {{$device := Macro "CPP.GlobalVariable" $.device}}
+  {{$memory := Macro "CPP.GlobalVariable" $.MemRange.memory}}
+  {{$allocateInfo := Macro "CPP.GlobalVariable" (Dict "type" "VkMemoryAllocateInfo" "id" $.MemRange.memory)}}
+  {{$remap := Macro "CPP.GlobalVariable" (Dict "type" "MemoryRemapVec" "id" $.MemRange.memory)}}
+  uint8_t* data = NULL;
+  CHECK_VK_SUCCESS(vkMapMemory({{$device}}, {{$memory}}, 0, VK_WHOLE_SIZE, 0, (void**)&data));
+  MapUpdate(aux, data, {{template "CPP.Value" $.MappedData}}, MemRange, {{$allocateInfo}}, {{$remap}}, {{$device}});
+  vkUnmapMemory({{$device}}, {{$memory}});
+{{end}}
+
+{{define "Vulkan.InitDeviceMemory"}}
+  /* Initializing Device Memory: {{template "CPP.Value" $.id}} */
+{{end}}
+
+{{define "Vulkan.InitImage"}}
+  /* Initializing Image: {{template "CPP.Value" $.id}} */
+{{end}}
+
+{{define "Vulkan.InitDescriptorSet"}}
+  /* Initializing Descriptor Set: {{template "CPP.Value" $.id}} */
+  {{$descSetAI := GetGlobal (Print "VkDescriptorSetAI_" (ToUInt $.id))}}
+  {{$layoutId := $descSetAI.pSetLayouts | Index 0}}
+  {{$layoutCI := GetGlobal (Print "VkDescriptorSetLayoutCI_" ($layoutId | ToUInt))}}
+  {{$descWrites := VkInitDescriptorSetWrites $ $layoutCI}}
+  {{template "CPP.DeclareLocalVariable" $descWrites}}
+  vkUpdateDescriptorSets({{template "Vulkan.DeviceVar"}}, {{Size $descWrites}}, {{template "CPP.ArgValue" $descWrites}}, 0, NULL);
+{{end}}
+
+{{define "Vulkan.vkCreateDescriptorSetLayout"}}
+  {{SetGlobal (Print "VkDescriptorSetLayoutCI_" (ToUInt $.SetLayout)) $.CreateInfo}}
+  {{template "Vulkan.vkCreate"}}
+{{end}}
+
+{{define "Vulkan.vkAllocateDescriptorSets"}}
+  {{SetGlobal (Print "VkDescriptorSetAI_" (ToUInt $.DescriptorSet)) $.AllocateInfo}}
+  {{template "Vulkan.vkCreate"}}
+{{end}}
+
+{{define "Vulkan.vkCreateDebugUtilsMessengerEXT.wrapper"}}
+  {{if RegisterGlobalVar $.name}}
+    VkResult vkCreateDebugUtilsMessengerEXT(VkInstance instance,
+        const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+        const VkAllocationCallbacks* pAllocator,
+        VkDebugUtilsMessengerEXT* pMessenger) {
+      if({{$.pfn}} != NULL)
+        return {{$.pfn}}(instance, pCreateInfo, pAllocator, pMessenger);
+    }
+  {{end}}
+{{end}}
+
+{{define "Vulkan.DriverInit.early"}}
+  { /* vkCreateInstance */
+  {{$validationEnabled := Macro "CPP.GlobalVariable" (Dict "type" "bool" "name" "validation_enabled" "value" "true")}};
+  {{$_ := Macro "CPP.GlobalVariable" (Dict "type" "AuxVkTraceResources" "name" "aux")}}
+  VkApplicationInfo pApplicationInfo[1] = {
+    /* sType */ VK_STRUCTURE_TYPE_APPLICATION_INFO,
+    /* pNext */ NULL,
+    /* pApplicationName */ "RenderDoc Capturing App", /* original: "{{$.InitParams.AppName}}" */
+    /* applicationVersion */ 0, /* original: {{$.InitParams.AppVersion}} */
+    /* pEngineName */ "RenderDoc", /* original: "{{$.InitParams.EngineName}}" */
+    /* engineVersion */ 0, /* original: "{{$.InitParams.EngineVersion}} */
+    /* apiVersion */ {{$.InitParams.APIVersion}},
+  };
+  std::vector<const char *> enabledLayerNames = {
+    {{range $layer := $.InitParams.Layers}}
+      {{if Eq $layer "VK_LAYER_RENDERDOC_Capture"}}
+      {{else if Eq $layer "VK_LAYER_LUNARG_standard_validation"}}
+      {{else if Eq $layer "VK_LAYER_KHRONOS_validation"}}
+      {{else}}
+        "{{$layer}}",
+      {{end}}
+    {{end}}
+  };
+  std::vector<const char *> enabledExtensionNames = {
+    {{range $ext := $.InitParams.Extensions}}
+      {{if Eq $ext "VK_EXT_debug_report"}}
+      {{else if Eq $ext "VK_EXT_debug_utils"}}
+      {{else}}
+        "{{$ext}}",
+      {{end}}
+    {{end}}
+  };
+  const void *pNext = NULL;
+  VkDebugUtilsMessengerCreateInfoEXT debugMessengerCreateInfo;
+  if({{$validationEnabled}}) {
+    enabledLayerNames.push_back("VK_LAYER_KHRONOS_validation");
+    enabledExtensionNames.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    VkDebugUtilsMessageSeverityFlagsEXT messageSeverity =
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    VkDebugUtilsMessageTypeFlagsEXT messageType =
+      VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+      VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+      VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    debugMessengerCreateInfo = DebugUtilsMessengerCreateInfo(messageSeverity, messageType);
+    pNext = &debugMessengerCreateInfo;
+  }
+  VkInstanceCreateInfo pInstanceCreateInfo[1] = {
+    /* sType */ VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+    /* pNext */ pNext,
+    /* flags */ 0,
+    /* pApplicationInfo */ pApplicationInfo,
+    /* enabledLayerCount */ (uint32_t)enabledLayerNames.size(),
+    /* ppEnabledLayerNames */ enabledLayerNames.data(),
+    /* enabledExtensionCount */ (uint32_t)enabledExtensionNames.size(),
+    /* ppEnabledExtensionNames */ enabledExtensionNames.data(),
+  };
+  {{SetGlobal "VkInstance" $.InitParams.InstanceID}}
+  {{$instance := Macro "Vulkan.InstanceVar"}}
+  {{$args := Array "pInstanceCreateInfo" "NULL" (Print "&" $instance)}}
+  {{template "CPP.CallFunction" Dict "name" "vkCreateInstance" "args" $args "check" "CHECK_VK_SUCCESS"}}
+  aux.instance = {{$instance}};
+  if({{$validationEnabled}}) {
+    {{$pfnCreateDebugMessenger := Macro "Vulkan.InstanceProcAddr" "vkCreateDebugUtilsMessengerEXT"}}
+    {{ExecTemplate "variables.cpp" "Vulkan.vkCreateDebugUtilsMessengerEXT.wrapper" (Dict "pfn" $pfnCreateDebugMessenger)}}
+    CHECK_VK_SUCCESS(vkCreateDebugUtilsMessengerEXT({{$instance}}, &debugMessengerCreateInfo, NULL, &aux.messenger));
+  }
+  }
+{{end}}
+
+{{define "Vulkan.DeviceVar"}}
+  {{template "CPP.GlobalVariable" (GetGlobal "VkDevice")}}
+{{end}}
+
+{{define "Vulkan.vkCreateDevice.early"}}
+  { /* vkCreateDevice */
+  {{SetGlobal "VkDevice" $.Device}}
+  {{$device := Macro "Vulkan.DeviceVar"}}
+  {{$physicalDevice := Macro "CPP.GlobalVariable" $.physicalDevice}}
+  {{$debugMarkerEnabled := false}}
+  {{$debugMarkerExt := "VK_EXT_debug_marker"}}
+  std::vector<const char *> enabledExtensions = {
+    {{range $ext := $.CreateInfo.ppEnabledExtensionNames}}
+      {{if Eq $ext $debugMarkerExt}}
+        {{$debugMarkerEnabled = true}}
+      {{else}}
+        {{template "CPP.Value" $ext}},
+      {{end}}
+    {{end}}
+  };
+  {{if $debugMarkerEnabled}}
+    if(IsExtSupported({{$physicalDevice}}, "{{$debugMarkerExt}}")) {
+      enabledExtensions.push_back("{{$debugMarkerExt}}");
+    }
+  {{end}}
+  {{$ = SetCustomString $ "CreateInfo.enabledExtensionCount" "(uint32_t)enabledExtensions.size()"}}
+  {{$ = SetCustomString $ "CreateInfo.ppEnabledExtensionNames" "enabledExtensions.data()"}}
+  {{template "Vulkan.vkCreate" $}}
+  InitializeAuxResources(&aux, aux.instance, {{$physicalDevice}}, {{$device}});
+  }
+{{end}}
+
+{{define "Vulkan.vkCreateDevice"}}
+  {{ExecTemplate "early_create.cpp" "Vulkan.vkCreateDevice.early"}}
+{{end}}
+
+{{define "CPP.InitialContentsList"}}
+  /* Vulkan InitialContentsList */
+{{end}}
+
+{{define "CPP.InitialContents"}}
+  /* Vulkan InitialContents */
+  {{$type := Print $.type}}
+  {{if Eq $type "eResDeviceMemory"}}
+    {{template "Vulkan.InitDeviceMemory"}}
+  {{else if Eq $type "eResImage"}}
+    {{template "Vulkan.InitImage"}}
+  {{else if Eq $type "eResDescriptorSet"}}
+    {{template "Vulkan.InitDescriptorSet"}}
+  {{else}}
+    UNKNOWN INITIAL CONTENTS TYPE: {{$type}}
+  {{end}}
+{{end}}
+
+{{define "CPP.CaptureBegin"}}
+  /* Vulkan CaptureBegin */
+  CHECK_VK_SUCCESS(AcquireVirtualSwapchainImage(aux, presented_image));
+{{end}}
+
+{{define "CPP.CaptureScope"}}
+  /* Vulkan CaptureScope */
+{{end}}
+
+{{define "CPP.CaptureEnd"}}
+  /* Vulkan CaptureEnd */
+  {{$_ := Macro "CPP.GlobalVariable" (Dict "type" "VkImage&" "name" "presented_image" "value" $.PresentedImage)}}
+  PresentVirtualSwapchainImage(aux, presented_image);
+  vkQueueWaitIdle(aux.queue);
+{{end}}
+
+{{define "Vulkan.vkCreate"}}
+  {{$name := Name $}}
+  {{$args := RemoveHidden $}}
+  {{range $arg := $args}}
+    {{template "CPP.DeclareArg" $arg}}
+  {{end}}
+  CHECK_VK_SUCCESS({{$name}}({{S}}
+  {{range $i, $argName, $arg := $args}}
+    {{if Gt $i 0}}, {{S}}{{end}}
+    {{if Eq (Add 1 $i) (Size $)}}
+      &{{Macro "CPP.GlobalVariable" $arg}}{{S}}
+    {{else}}
+      {{if Or (Eq "CreateInfo" $argName) (Eq "AllocateInfo" $argName)}}&{{S}}{{end}}
+      {{template "CPP.ArgValue" $arg}}
+    {{end}}
+  {{end}}
+  ));
+{{end}}
+
+{{define "CPP.DriverInit"}}
+  {{ExecTemplate "early_create.cpp" "Vulkan.DriverInit.early"}}
+{{end}}
+
+{{define "Vulkan.vkCmdDebugMarkerBeginEXT.wrapper"}}
+  {{if RegisterGlobalVar $.name}}
+    void vkCmdDebugMarkerBeginEXT(VkCommandBuffer commandBuffer, const VkDebugMarkerMarkerInfoEXT* pMarkerInfo) {
+      if({{$.pfn}} != NULL)
+        {{$.pfn}}(commandBuffer, pMarkerInfo);
+    }
+  {{end}}
+{{end}}
+
+{{define "Vulkan.vkCmdDebugMarkerBeginEXT"}}
+  {{$pfn := Macro "Vulkan.DeviceProcAddr"}}
+  {{$ = MakePointer $ "pMarker"}}
+  {{ExecTemplate "variables.cpp" "Vulkan.vkCmdDebugMarkerBeginEXT.wrapper" (Dict "name" (Name $) "pfn" $pfn)}}
+  {{template "CPP.CallFunction" $}}
+{{end}}
+
+{{define "Vulkan.vkCmdDebugMarkerEndEXT.wrapper"}}
+  {{if RegisterGlobalVar $.name}}
+    void vkCmdDebugMarkerEndEXT(VkCommandBuffer commandBuffer) {
+      if({{$.pfn}} != NULL)
+        {{$.pfn}}(commandBuffer);
+    }
+  {{end}}
+{{end}}
+
+{{define "Vulkan.vkCmdDebugMarkerEndEXT"}}
+  {{$pfn := Macro "Vulkan.DeviceProcAddr"}}
+  {{ExecTemplate "variables.cpp" "Vulkan.vkCmdDebugMarkerEndEXT.wrapper" (Dict "name" (Name $) "pfn" $pfn)}}
+  {{template "CPP.CallFunction" $}}
+{{end}}
+
+{{define "CPP.ChunkBody"}}
+  {{$name := Name $}}
+  {{     if Eq $name "vkEnumeratePhysicalDevices"}}
+    {{template "Vulkan.vkEnumeratePhysicalDevices"}}
+  {{else if Eq $name "vkCreateDevice"}}
+    {{template "Vulkan.vkCreateDevice"}}
+  {{else if Eq  $name "vkCreateSwapchainKHR"}}
+    {{template "Vulkan.vkCreateSwapchainKHR"}}
+  {{else if Eq  $name "vkGetSwapchainImagesKHR"}}
+    {{template "Vulkan.vkGetSwapchainImagesKHR"}}
+  {{else if Eq  $name "vkGetDeviceQueue"}}
+    {{template "Vulkan.vkGetDeviceQueue"}}
+  {{else if Eq $name "vkCreateBuffer"}}
+    {{template "Vulkan.vkCreateBuffer"}}
+  {{else if Eq $name "vkCreateImage"}}
+    {{template "Vulkan.vkCreateImage"}}
+  {{else if Eq $name "vkCreateDescriptorSetLayout"}}
+    {{template "Vulkan.vkCreateDescriptorSetLayout"}}
+  {{else if Eq $name "vkAllocateDescriptorSets"}}
+    {{template "Vulkan.vkAllocateDescriptorSets"}}
+  {{else if Eq $name "vkBeginCommandBuffer"}}
+    {{template "Vulkan.vkBeginCommandBuffer"}}
+  {{else if Eq $name "vkEndCommandBuffer"}}
+    {{template "Vulkan.vkEndCommandBuffer"}}
+  {{else if Eq $name "vkCmdBeginRenderPass"}}
+    {{template "Vulkan.vkCmdBeginRenderPass"}}
+  {{else if Eq $name "vkFlushMappedMemoryRanges"}}
+    {{template "Vulkan.vkFlushMappedMemoryRanges"}}
+  {{else if Eq $name "vkCmdDebugMarkerBeginEXT"}}
+    {{template "Vulkan.vkCmdDebugMarkerBeginEXT"}}
+  {{else if Eq $name "vkCmdDebugMarkerEndEXT"}}
+    {{template "Vulkan.vkCmdDebugMarkerEndEXT"}}
+  {{else if Or ($name | StartsWith "vkCreate") ($name | StartsWith "vkAllocate")}}
+    {{template "Vulkan.vkCreate"}}
+  {{else if Eq $name "Internal: Device Memory References"}}
+  {{else if Eq $name "Image Memory References"}}
+  {{else}}
+    {{template "CPP.ChunkBody.Default"}}
+  {{end}}
+{{end}}
+
+{{define "Vulkan.BeginAuxCmdBuffer"}}
+  CHECK_VK_SUCCESS(vkResetFences(aux.device, 1, &aux.fence));
+    VkCommandBufferBeginInfo cmd_buffer_bi = {
+      /* sType = */ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      /* pNext = */ NULL,
+      /* flags = */ 0,
+      /* pInheritanceInfo = */ NULL,
+    };
+  CHECK_VK_SUCCESS(vkBeginCommandBuffer(aux.command_buffer, &cmd_buffer_bi));
+{{end}}
+
+{{define "Vulkan.EndAuxCmdBuffer"}}
+  CHECK_VK_SUCCESS(vkEndCommandBuffer(aux.command_buffer));
+  VkSubmitInfo si = {
+    /* sType = */ VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    /* pNext = */ NULL,
+    /* waitSemaphoreCount = */ 0,
+    /* pWaitSemaphores = */ NULL,
+    /* pWaitDstStageMask = */ NULL,
+    /* commandBufferCount = */ 1,
+    /* pCommandBuffers */ &aux.command_buffer,
+    /* signalSemaphoreCount = */ 0,
+    /* pSignalSemaphores = */ NULL,
+  };
+  CHECK_VK_SUCCESS(vkQueueSubmit(aux.queue, 1, &si, aux.fence));
+  CHECK_VK_SUCCESS(vkQueueWaitIdle(aux.queue));
+{{end}}
+
+{{define "Vulkan.InstanceProcAddr.get"}}
+  {{$.pfn}} = ({{$.type}})vkGetInstanceProcAddr({{template "Vulkan.InstanceVar"}}, "{{$.name}}");
+{{end}}
+{{define "Vulkan.InstanceProcAddr"}}
+  {{$name := $}}
+  {{if IsSDObject $}}
+    {{$name = Name $}}
+  {{end}}
+  {{$type := Print "PFN_" $name }}
+  {{$pfn := Print "pfn" $name}}
+  {{template "CPP.GlobalVariable" Dict "type" $type "name" $pfn "value" "VK_NULL_HANDLE"}}
+  {{ExecTemplate "early_create.cpp" "Vulkan.InstanceProcAddr.get" (Dict "type" $type "name" $name "pfn" $pfn)}}
+{{end}}
+
+{{define "Vulkan.DeviceProcAddr.get"}}
+  {{$.pfn}} = ({{$.type}})vkGetDeviceProcAddr({{template "Vulkan.DeviceVar"}}, "{{$.name}}");
+{{end}}
+
+{{define "Vulkan.DeviceProcAddr"}}
+  {{$name := $}}
+  {{if IsSDObject $}}
+    {{$name = Name $}}
+  {{end}}
+  {{$type := Print "PFN_" $name }}
+  {{$pfn := Print "pfn" $name}}
+  {{template "CPP.GlobalVariable" Dict "type" $type "name" $pfn "value" "VK_NULL_HANDLE"}}
+  {{ExecTemplate "early_create.cpp" "Vulkan.DeviceProcAddr.get" (Dict "type" $type "name" $name "pfn" $pfn)}}
+{{end}}
+
+{{define "CPP.PhaseMain"}}
+  {{$needsCmdBuf := Or (Eq $.phase "init") (Eq $.phase "reset")}}
+  {{$needsProgress := Or (Eq $.phase "early_create") (Eq $.phase "create") (Eq $.phase "init")}}
+  void main_{{$.phase}}() {
+    {{if $needsCmdBuf}}
+      CHECK_VK_SUCCESS(vkResetFences(aux.device, 1, &aux.fence));
+      VkCommandBufferBeginInfo cmd_buffer_bi = {
+        /* sType = */ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        /* pNext = */ NULL,
+        /* flags = */ 0,
+        /* pInheritanceInfo = */ NULL,
+      };
+      CHECK_VK_SUCCESS(vkBeginCommandBuffer(aux.command_buffer, &cmd_buffer_bi));
+    {{end}}
+    {{range $i := Range $.count}}
+      {{if $needsProgress}}
+        PostStageProgress("{{$.phase}}", {{Add 1 $i}}, {{$.count}});
+      {{end}}
+      {{$.phase}}_{{$i}}();
+    {{end}}
+    {{if $needsCmdBuf}}
+      CHECK_VK_SUCCESS(vkEndCommandBuffer(aux.command_buffer));
+      VkSubmitInfo si = {
+        /* sType = */ VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        /* pNext = */ NULL,
+        /* waitSemaphoreCount = */ 0,
+        /* pWaitSemaphores = */ NULL,
+        /* pWaitDstStageMask = */ NULL,
+        /* commandBufferCount = */ 1,
+        /* pCommandBuffers = */ &aux.command_buffer,
+        /* signalSemaphoreCount = */ 0,
+        /* pSignalSemaphores = */ NULL,
+      };
+      CHECK_VK_SUCCESS(vkQueueSubmit(aux.queue, 1, &si, aux.fence));
+      CHECK_VK_SUCCESS(vkWaitForFences(aux.device, 1, &aux.fence, VK_TRUE, ~0ull));
+    {{end}}
+  }
+{{end}}
