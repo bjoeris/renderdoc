@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include <cstdarg>
 #include <ostream>
 #include <string>
 
@@ -74,6 +75,7 @@ private:
     // accessors for capacity, preserving the state bits
     size_t get_capacity() const { return _capacity & CAPACITY_MASK; };
     void set_capacity(size_t s) { _capacity = ALLOC_STATE | s; }
+
   private:
     // the capacity currently available in the allocated storage. Doesn't include NULL terminator
     size_t _capacity;
@@ -102,6 +104,7 @@ private:
     // We keep these accessors though just in case that changes in future
     size_t get_size() const { return _size; }
     void set_size(size_t s) { _size = (unsigned char)s; }
+
   private:
     // we only have 6-bits of this available is enough for up to 63 size, more than what we can
     // store anyway.
@@ -546,7 +549,7 @@ public:
     return data()[size() - 1];
   }
 
-  rdcstr substr(size_t offs, size_t length = ~0U)
+  rdcstr substr(size_t offs, size_t length = ~0U) const
   {
     const size_t sz = size();
     if(offs >= sz)
@@ -556,6 +559,33 @@ public:
       length = sz - offs;
 
     return rdcstr(c_str() + offs, length);
+  }
+
+  bool substrEq(size_t offs, const rdcstr &substr) const
+  {
+    if(offs + substr.size() > size())
+      return false;
+    for(size_t i = 0; i < substr.size(); ++i)
+    {
+      if((*this)[offs + i] != substr[i])
+        return false;
+    }
+    return true;
+  }
+
+  rdcarray<rdcstr> split(char c) const
+  {
+    rdcarray<rdcstr> res;
+    for(size_t i = 0; i < size();)
+    {
+      int32_t j = indexOf(c, i);
+      size_t length = (size_t)j - i;
+      if(j < 0)
+        length = size() - i;
+      res.push_back(substr(i, length));
+      i += length + 1;
+    }
+    return res;
   }
 
   rdcstr &operator+=(const char *const str)
@@ -684,6 +714,72 @@ public:
   // define ordering operators
   bool operator<(const rdcstr &o) const { return strcmp(c_str(), o.c_str()) < 0; }
   bool operator>(const rdcstr &o) const { return strcmp(c_str(), o.c_str()) > 0; }
+
+private:
+  template <typename Arg>
+  struct PrintfArg
+  {
+    using PrintfType = Arg;
+    inline static PrintfType transform(Arg arg) { return arg; }
+  };
+  template <>
+  struct PrintfArg<rdcstr>
+  {
+    using PrintfType = const char *;
+    inline static PrintfType transform(const rdcstr &str) { return str.c_str(); }
+  };
+  template <>
+  struct PrintfArg<std::string>
+  {
+    using PrintfType = const char *;
+    inline static PrintfType transform(const rdcstr &str) { return str.c_str(); }
+  };
+  // Appends the string produced by `sprintf`.
+  // This version does NOT safely handle `rdcstr` args.
+  rdcstr &sprintfRaw(const char *fmt, ...)
+  {
+    va_list args0, args1;
+    va_start(args0, fmt);
+    va_copy(args1, args0);
+
+    size_t offset = size();
+    resize(capacity());
+    char *dst = data() + offset;
+    size_t sz = size() - offset + 1;
+    int len = vsnprintf(dst, sz, fmt, args0);
+
+    if(len >= sz)
+    {
+      // ran out of space to write
+      resize((size_t)len);
+      dst = data() + offset;
+      sz = size() - offset + 1;
+      len = vsnprintf(dst, sz, fmt, args1);
+    }
+
+    if(len >= 0)
+      resize((size_t)len);
+
+    va_end(args0);
+    va_end(args1);
+    return *this;
+  }
+
+public:
+  // Appends the string produced by `sprintf`.
+  // This version will convert `rdcstr` args to `const char *`.
+  // E.g.
+  // ```
+  // rdcstr foo = "foo";
+  // rdcstr bar = "bar";
+  // foo.sprintf(" %s", bar);
+  //   ==> foo == "foo bar"
+  // ```
+  template <typename... Args>
+  rdcstr &sprintf(const char *fmt, const Args &... args)
+  {
+    return sprintfRaw(fmt, PrintfArg<std::remove_reference_t<Args>>::transform(args)...);
+  }
 // Qt compatibility
 #if defined(RENDERDOC_QT_COMPAT)
   rdcstr(const QString &in)

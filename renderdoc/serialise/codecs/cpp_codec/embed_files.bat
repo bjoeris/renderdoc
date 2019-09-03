@@ -1,0 +1,1 @@
+python embed_files.py .\cpp_codec_resource_files.cpp ./resource_files *

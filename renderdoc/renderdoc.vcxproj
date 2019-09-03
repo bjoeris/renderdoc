@@ -219,6 +219,20 @@
     <ClInclude Include="os\win32\win32_specific.h" />
     <ClInclude Include="replay\replay_driver.h" />
     <ClInclude Include="replay\replay_controller.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\cpp_codec_common.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\cpp_codec_file.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\cpp_codec_resource.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\cpp_codec_transformer.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\cpp_codec_writer.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\cpp_templates.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\exec.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\func.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\lex.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\parse.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\value.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\writer.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\vk_cpp_codec_transformer.h" />
+    <ClInclude Include="serialise\codecs\cpp_codec\vk_cpp_codec_writer.h" />
     <ClInclude Include="serialise\codecs\vk_cpp_codec_common.h" />
     <ClInclude Include="serialise\lz4io.h" />
     <ClInclude Include="serialise\rdcfile.h" />
@@ -535,6 +549,24 @@
     <ClCompile Include="replay\replay_output.cpp" />
     <ClCompile Include="replay\replay_controller.cpp" />
     <ClCompile Include="serialise\codecs\chrome_json_codec.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\cpp_codec.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\cpp_codec_resource.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\cpp_codec_resource_files.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\cpp_codec_transformer.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\cpp_codec_writer.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\cpp_funcs.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\cpp_templates.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\exec.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\exec_tests.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\func.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\func_tests.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\lex.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\lex_tests.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\parse.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\parse_tests.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\value.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\writer.cpp" />
+    <ClCompile Include="serialise\codecs\cpp_codec\vk_cpp_codec_writer.cpp" />
     <ClCompile Include="serialise\codecs\xml_codec.cpp" />
     <ClCompile Include="serialise\comp_io_tests.cpp" />
     <ClCompile Include="serialise\lz4io.cpp" />
@@ -588,6 +620,8 @@
     <None Include="data\hlsl\texdisplay.hlsl" />
     <None Include="os\win32\comexport.def" />
     <None Include="replay\renderdoc_serialise.inl" />
+    <None Include="serialise\codecs\cpp_codec\resource_files\templates\CPPTemplates.tmpl" />
+    <None Include="serialise\codecs\cpp_codec\resource_files\templates\VkTemplates.tmpl" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="renderdoc.natvis" />

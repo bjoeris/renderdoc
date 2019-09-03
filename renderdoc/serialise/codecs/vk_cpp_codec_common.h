@@ -61,7 +61,7 @@ inline std::string ValueStr(SDObject *ptr)
     // A value for for a Buffer is it's $name.data().
     result = buf_name + ".data()";
     // just-in-time fix for vkCreatShaderModule pCode variable
-    if(ptr->name == "pCode")
+    if(ptr->name == " pCode")
       result = "(const uint32_t*) " + result;
   }
   else if(ptr->IsNULL())

@@ -102,6 +102,7 @@ enum class SDBasic : uint32_t
   Boolean,
   Character,
   Resource,
+  Code,
 };
 
 DECLARE_REFLECTION_ENUM(SDBasic);
@@ -185,9 +186,96 @@ For variable size types like structs, arrays, etc it will be set to 0.
 )");
   uint64_t byteSize;
 
-protected:
-  friend struct SDObject;
-  friend struct SDChunk;
+  static SDType NullPointer(const rdcstr &n)
+  {
+    SDType t(n);
+    t.basetype = SDBasic::Null;
+    t.flags |= SDTypeFlags::Nullable;
+    return t;
+  }
+
+  static SDType Pointer(const rdcstr &n)
+  {
+    SDType t(n);
+    t.flags |= SDTypeFlags::Nullable;
+    return t;
+  }
+
+  static SDType Enum(const rdcstr &n)
+  {
+    SDType t;
+    t.name = n;
+    t.basetype = SDBasic::Enum;
+    t.byteSize = sizeof(int);
+    return t;
+  }
+  static SDType String()
+  {
+    SDType t;
+    t.name = "string";
+    t.basetype = SDBasic::String;
+    return t;
+  }
+  static SDType Int32()
+  {
+    SDType t;
+    t.name = "int32_t";
+    t.basetype = SDBasic::SignedInteger;
+    t.byteSize = sizeof(int32_t);
+    return t;
+  }
+  static SDType UInt32()
+  {
+    SDType t;
+    t.name = "uint32_t";
+    t.basetype = SDBasic::UnsignedInteger;
+    t.byteSize = sizeof(uint32_t);
+    return t;
+  }
+  static SDType Int64()
+  {
+    SDType t;
+    t.name = "int64_t";
+    t.basetype = SDBasic::SignedInteger;
+    t.byteSize = sizeof(int64_t);
+    return t;
+  }
+  static SDType UInt64()
+  {
+    SDType t;
+    t.name = "uint64_t";
+    t.basetype = SDBasic::UnsignedInteger;
+    t.byteSize = sizeof(uint64_t);
+    return t;
+  }
+  static SDType Bool()
+  {
+    SDType t;
+    t.name = "bool";
+    t.basetype = SDBasic::Boolean;
+    t.byteSize = sizeof(bool);
+    return t;
+  }
+  static SDType Double()
+  {
+    SDType t;
+    t.name = "double";
+    t.basetype = SDBasic::Float;
+    t.byteSize = sizeof(double);
+    return t;
+  }
+  static SDType Char()
+  {
+    SDType t;
+    t.name = "char";
+    t.basetype = SDBasic::Character;
+    t.byteSize = sizeof(char);
+    return t;
+  }
+
+  // protected:
+  //  friend struct SDObject;
+  //  friend struct SDChunk;
 
   SDType() = default;
   SDType(const SDType &) = default;
@@ -217,6 +305,7 @@ enum class SDChunkFlags : uint64_t
   NoFlags = 0x0,
   OpaqueChunk = 0x1,
   HasCallstack = 0x2,
+  CheckSuccess = 0x40,
 };
 
 BITMASK_OPERATORS(SDChunkFlags);
@@ -344,6 +433,21 @@ struct SDObject
     name = n;
     data.basic.u = 0;
   }
+  SDObject(const rdcstr &n, const SDType &t) : type(t)
+  {
+    name = n;
+    data.basic.u = 0;
+  }
+  SDObject(const rdcstr &n, const SDType &t, const rdcstr &str) : type(t)
+  {
+    name = n;
+    data.str = str;
+  }
+  SDObject(const rdcstr &n, const SDType &t, uint64_t val) : type(t)
+  {
+    name = n;
+    data.basic.u = val;
+  }
 
   ~SDObject()
   {
@@ -354,7 +458,7 @@ struct SDObject
   }
 
   DOCUMENT("Create a deep copy of this object.");
-  SDObject *Duplicate()
+  SDObject *Duplicate() const
   {
     SDObject *ret = new SDObject();
     ret->name = name;
@@ -456,9 +560,13 @@ struct SDObject
   inline bool IsBuffer() const { return type.basetype == SDBasic::Buffer; }
   inline bool IsPointer() const
   {
-    return (type.flags & SDTypeFlags::Nullable) && (NumChildren() != 0);
+    return (type.flags & SDTypeFlags::Nullable) != SDTypeFlags::NoFlags;
   }
   inline bool IsResource() const { return type.basetype == SDBasic::Resource; }
+  inline bool IsHidden() const
+  {
+    return (type.flags & SDTypeFlags::Hidden) != SDTypeFlags::NoFlags;
+  }
   inline bool IsUnion() const
   {
     return (type.basetype == SDBasic::Struct) && (type.flags & SDTypeFlags::Union);
@@ -467,10 +575,15 @@ struct SDObject
   {
     return IsNULL() || (!IsStruct() && !IsArray() && !IsPointer() && !IsUnion());
   }
-
+  inline bool IsSimplePtrType() const
+  {
+    return IsPointer() && !IsStruct() && !IsArray() && !IsUnion();
+  }
   // Is it possible to fully inline the data structure declaration?
   inline bool IsInlineable() const
   {
+    if(IsSimpleType() || IsResource())
+      return true;
     // if it has elements that are not inlineable, return false.
     for(size_t i = 0; i < NumChildren(); i++)
       if(!GetChild(i)->IsInlineable())
@@ -489,6 +602,16 @@ struct SDObject
     return this;
   }
   SDObject *SetCustomString(const char *customString)
+  {
+    data.str = customString;
+    type.flags = SDTypeFlags::HasCustomString;
+    return this;
+  }
+  bool HasCustomString() const
+  {
+    return (type.flags & SDTypeFlags::HasCustomString) != SDTypeFlags::NoFlags;
+  }
+  SDObject *SetCustomString(const rdcstr &customString)
   {
     data.str = customString;
     type.flags = SDTypeFlags::HasCustomString;
@@ -679,7 +802,7 @@ inline SDObject *makeSDUInt32(const char *name, uint32_t val)
 }
 
 DOCUMENT("Make a structured object out of a floating point value");
-inline SDObject *makeSDFloat(const char *name, float val)
+inline SDObject *makeSDFloat(const char *name, double val)
 {
   SDObject *ret = new SDObject(name, "float"_lit);
   ret->type.basetype = SDBasic::Float;
@@ -781,7 +904,7 @@ struct SDChunk : public SDObject
   SDChunkMetaData metadata;
 
   DOCUMENT("Create a deep copy of this chunk.");
-  SDChunk *Duplicate()
+  SDChunk *Duplicate() const
   {
     SDChunk *ret = new SDChunk();
     ret->name = name;

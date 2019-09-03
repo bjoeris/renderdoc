@@ -429,6 +429,12 @@ public:
     setUsedCount(usedCount + 1);
   }
 
+  void pop_back()
+  {
+    if(usedCount > 0)
+      setUsedCount(usedCount - 1);
+  }
+
   void insert(size_t offs, const T *el, size_t count)
   {
     if(el + count >= begin() && end() >= el)

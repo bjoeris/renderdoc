@@ -169,6 +169,38 @@ set(sources
     serialise/rdcfile.h
     serialise/codecs/xml_codec.cpp
     serialise/codecs/chrome_json_codec.cpp
+    serialise/codecs/cpp_codec/cpp_codec_common.h
+    serialise/codecs/cpp_codec/cpp_codec_file.h
+    serialise/codecs/cpp_codec/cpp_codec_resource_files.cpp
+    serialise/codecs/cpp_codec/cpp_codec_resource.cpp
+    serialise/codecs/cpp_codec/cpp_codec_resource.h
+    serialise/codecs/cpp_codec/cpp_codec_transformer.cpp
+    serialise/codecs/cpp_codec/cpp_codec_transformer.h
+    serialise/codecs/cpp_codec/cpp_codec_writer.cpp
+    serialise/codecs/cpp_codec/cpp_codec_writer.h
+    serialise/codecs/cpp_codec/cpp_codec.cpp
+    serialise/codecs/cpp_codec/vk_cpp_codec_transformer.h
+    serialise/codecs/cpp_codec/vk_cpp_codec_writer.cpp
+    serialise/codecs/cpp_codec/vk_cpp_codec_writer.h
+    serialise/codecs/cpp_codec/templates/cpp_funcs.cpp
+    serialise/codecs/cpp_codec/templates/cpp_templates.cpp
+    serialise/codecs/cpp_codec/templates/cpp_templates.h
+    serialise/codecs/cpp_codec/templates/exec_tests.cpp
+    serialise/codecs/cpp_codec/templates/exec.cpp
+    serialise/codecs/cpp_codec/templates/exec.h
+    serialise/codecs/cpp_codec/templates/func_tests.cpp
+    serialise/codecs/cpp_codec/templates/func.cpp
+    serialise/codecs/cpp_codec/templates/func.h
+    serialise/codecs/cpp_codec/templates/lex_tests.cpp
+    serialise/codecs/cpp_codec/templates/lex.cpp
+    serialise/codecs/cpp_codec/templates/lex.h
+    serialise/codecs/cpp_codec/templates/parse_tests.cpp
+    serialise/codecs/cpp_codec/templates/parse.cpp
+    serialise/codecs/cpp_codec/templates/parse.h
+    serialise/codecs/cpp_codec/templates/value.cpp
+    serialise/codecs/cpp_codec/templates/value.h
+    serialise/codecs/cpp_codec/templates/writer.cpp
+    serialise/codecs/cpp_codec/templates/writer.h
     serialise/comp_io_tests.cpp
     serialise/serialiser_tests.cpp
     serialise/streamio_tests.cpp

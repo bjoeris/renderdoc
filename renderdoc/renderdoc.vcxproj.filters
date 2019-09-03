@@ -139,6 +139,15 @@
     <Filter Include="OS\Posix\GGP">
       <UniqueIdentifier>{b76c42f4-d523-4417-a474-56d278d35a36}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Common\Serialise\Codecs\cpp_codec\templates">
+      <UniqueIdentifier>{5b309004-0f56-40cd-a51d-b1857d4b137e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Codecs\cpp_codec\resource_files">
+      <UniqueIdentifier>{a93b760b-507e-476d-96d4-b3929fa5517b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common\Serialise\Codecs\cpp_codec\resource_files\templates">
+      <UniqueIdentifier>{acd0ae77-17aa-4861-adef-74046ee9a713}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="maths\camera.h">
@@ -488,6 +497,48 @@
     </ClInclude>
     <ClInclude Include="core\remote_server.h">
       <Filter>Core\networking</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\cpp_codec_file.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\cpp_codec_transformer.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\cpp_codec_writer.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\cpp_codec_common.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\vk_cpp_codec_writer.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec\vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\vk_cpp_codec_transformer.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec\vulkan</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\lex.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\parse.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\exec.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\value.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\func.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\cpp_templates.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\templates\writer.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClInclude>
+    <ClInclude Include="serialise\codecs\cpp_codec\cpp_codec_resource.h">
+      <Filter>Common\Serialise\Codecs\cpp_codec</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -866,6 +917,60 @@
     <ClCompile Include="core\bit_flag_iterator_tests.cpp">
       <Filter>Core</Filter>
     </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\cpp_codec_transformer.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\cpp_codec_writer.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\cpp_codec.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\vk_cpp_codec_writer.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\vulkan</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\lex.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\parse.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\exec.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\lex_tests.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\parse_tests.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\exec_tests.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\func_tests.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\func.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\value.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\cpp_funcs.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\cpp_templates.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\templates\writer.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec\templates</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\cpp_codec_resource.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec</Filter>
+    </ClCompile>
+    <ClCompile Include="serialise\codecs\cpp_codec\cpp_codec_resource_files.cpp">
+      <Filter>Common\Serialise\Codecs\cpp_codec</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="os\win32\comexport.def">
@@ -975,6 +1080,12 @@
     </None>
     <None Include="data\hlsl\texdisplay.hlsl">
       <Filter>Resources\hlsl</Filter>
+    </None>
+    <None Include="serialise\codecs\cpp_codec\resource_files\templates\CPPTemplates.tmpl">
+      <Filter>Common\Serialise\Codecs\cpp_codec\resource_files\templates</Filter>
+    </None>
+    <None Include="serialise\codecs\cpp_codec\resource_files\templates\VkTemplates.tmpl">
+      <Filter>Common\Serialise\Codecs\cpp_codec\resource_files\templates</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
