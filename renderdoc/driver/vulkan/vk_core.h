@@ -442,6 +442,10 @@ private:
   VkCommandBuffer GetExtQueueCmd(uint32_t queueFamilyIdx);
   void SubmitAndFlushExtQueue(uint32_t queueFamilyIdx);
 
+  void SubmitAndFlushImageStateBarriers(ImageBarrierSequence *barriers);
+  void InlineSetupImageBarriers(VkCommandBuffer cmd, ImageBarrierSequence *batches);
+  void InlineCleanupImageBarriers(VkCommandBuffer cmd, ImageBarrierSequence *batches);
+
   struct QueueRemap
   {
     uint32_t family;
@@ -1005,7 +1009,7 @@ public:
     RDCASSERT(m_PhysicalDevice != VK_NULL_HANDLE);
     return m_PhysicalDevice;
   }
-  VkCommandBuffer GetNextCmd();
+  VkCommandBuffer GetNextCmd(bool addPending = true);
   void RemovePendingCommandBuffer(VkCommandBuffer cmd);
   void AddPendingCommandBuffer(VkCommandBuffer cmd);
   void SubmitCmds(VkSemaphore *unwrappedWaitSemaphores = NULL,
