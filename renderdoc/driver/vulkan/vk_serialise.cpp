@@ -3755,18 +3755,20 @@ void DoSerialise(SerialiserType &ser, TaggedImageSubresourceState &el)
   if(ser.VersionAtLeast(0xD))
   {
     // added in 0xD
-    uint32_t &queueFamilyIndex = el.state.queueFamilyIndex;
-    SERIALISE_ELEMENT(queueFamilyIndex);
+    uint32_t &newQueueFamilyIndex = el.state.newQueueFamilyIndex;
+    SERIALISE_ELEMENT(newQueueFamilyIndex);
   }
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_SERIALIZE)
   if(ser.VersionAtLeast(0x11))
   {
-    uint32_t &firstQueueFamilyIndex = el.state.firstQueueFamilyIndex;
-    SERIALISE_ELEMENT(firstQueueFamilyIndex);
+    uint32_t &oldQueueFamilyIndex = el.state.oldQueueFamilyIndex;
+    SERIALISE_ELEMENT(oldQueueFamilyIndex);
   }
-  else
+  else if(ser.IsReading())
+#endif
   {
-    el.state.firstQueueFamilyIndex = el.state.queueFamilyIndex;
+    el.state.oldQueueFamilyIndex = el.state.newQueueFamilyIndex;
   }
 
   VkImageSubresourceRange subresourceRange;
@@ -3776,14 +3778,23 @@ void DoSerialise(SerialiserType &ser, TaggedImageSubresourceState &el)
   if(ser.IsReading())
     el.range = ImageSubresourceRange(subresourceRange);
 
-  if(ser.VersionLess(0x11))
-  {
-    VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    SERIALISE_ELEMENT(oldLayout);
-  }
+  VkImageLayout &oldLayout = el.state.oldLayout;
+  SERIALISE_ELEMENT(oldLayout);
+  if(ser.IsReading() && el.state.oldLayout == UNKNOWN_PREV_IMG_LAYOUT)
+    el.state.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-  VkImageLayout &layout = el.state.layout;
-  SERIALISE_ELEMENT(layout);
+  VkImageLayout &newLayout = el.state.newLayout;
+  SERIALISE_ELEMENT(newLayout);
+  if(ser.IsReading() && el.state.newLayout == UNKNOWN_PREV_IMG_LAYOUT)
+    el.state.newLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+#if ENABLED(RDOC_NEW_IMAGE_STATE_SERIALIZE)
+  if(ser.VersionAtLeast(0x11))
+  {
+    FrameRefType &refType = el.state.refType;
+    SERIALISE_ELEMENT(refType);
+  }
+#endif
 }
 
 template <class SerialiserType>
@@ -3796,7 +3807,11 @@ void DoSerialise(SerialiserType &ser, PartialQueueFamilyTransfer &el)
 template <typename SerialiserType>
 void DoSerialise(SerialiserType &ser, ImageState &el)
 {
+#if ENABLED(RDOC_NEW_IMAGE_STATE_SERIALIZE)
   if(ser.VersionAtLeast(0xD) && ser.VersionLess(0x11))
+#else
+  if(ser.VersionAtLeast(0xD))
+#endif
   {
     // added in 0xD, removed in 0x11
     uint32_t queueFamilyIndex = 0;
@@ -3804,19 +3819,25 @@ void DoSerialise(SerialiserType &ser, ImageState &el)
   }
   rdcarray<TaggedImageSubresourceState> subresourceStates;
   if(ser.IsWriting())
+  {
     el.subresourceStates.ToArray(subresourceStates);
+  }
   SERIALISE_ELEMENT(subresourceStates);
+
+  SERIALISE_ELEMENT_LOCAL(imageInfo, el.info());
+
   if(ser.IsReading())
+  {
+    el = ImageState(VK_NULL_HANDLE, imageInfo);
     el.subresourceStates.FromArray(subresourceStates);
-
-  ImageInfo imageInfo = el.info();
-  SERIALISE_ELEMENT(imageInfo);
-
+  }
+#if ENABLED(RDOC_NEW_IMAGE_STATE_SERIALIZE)
   if(ser.VersionAtLeast(0x11))
   {
-    SERIALISE_MEMBER(initialLayout);
-    SERIALISE_MEMBER(queueFamilyTransfers);
+    SERIALISE_MEMBER(oldQueueFamilyTransfers);
+    SERIALISE_MEMBER(newQueueFamilyTransfers);
   }
+#endif
 }
 
 template <typename SerialiserType>
@@ -3827,6 +3848,13 @@ void DoSerialise(SerialiserType &ser, ImageInfo &el)
   SERIALISE_MEMBER(sampleCount);
   SERIALISE_MEMBER(extent);
   SERIALISE_MEMBER(format);
+#if ENABLED(RDOC_NEW_IMAGE_STATE_SERIALIZE)
+  if(ser.VersionAtLeast(0x11))
+  {
+    SERIALISE_MEMBER(initialLayout);
+    SERIALISE_MEMBER(sharingMode);
+  }
+#endif
 }
 
 template <typename SerialiserType>

@@ -246,6 +246,37 @@ void VulkanResourceManager::MergeBarriers(
 }
 
 template <typename SerialiserType>
+void VulkanResourceManager::SerialiseImageStates2(SerialiserType &ser,
+                                                  std::map<ResourceId, ImageState> &states)
+{
+  SERIALISE_ELEMENT_LOCAL(NumImages, (uint32_t)states.size());
+
+  auto srcit = states.begin();
+
+  std::vector<rdcpair<ResourceId, ImageRegionState> > vec;
+
+  std::set<ResourceId> updatedState;
+
+  for(uint32_t i = 0; i < NumImages; i++)
+  {
+    SERIALISE_ELEMENT_LOCAL(Image, (ResourceId)(srcit->first)).TypedAs("VkImage"_lit);
+    SERIALISE_ELEMENT_LOCAL(ImageState, (::ImageState)(srcit->second));
+    if(ser.IsReading())
+      states.insert({Image, ImageState});
+    else
+      ++srcit;
+
+    if(ser.IsWriting())
+      srcit++;
+  }
+}
+
+template void VulkanResourceManager::SerialiseImageStates2(ReadSerialiser &ser,
+                                                           std::map<ResourceId, ImageState> &states);
+template void VulkanResourceManager::SerialiseImageStates2(WriteSerialiser &ser,
+                                                           std::map<ResourceId, ImageState> &states);
+
+template <typename SerialiserType>
 void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
                                                  std::map<ResourceId, ImageLayouts> &states,
                                                  std::vector<VkImageMemoryBarrier> &barriers)
