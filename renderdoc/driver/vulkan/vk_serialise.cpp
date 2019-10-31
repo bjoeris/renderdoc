@@ -3749,6 +3749,76 @@ void DoSerialise(SerialiserType &ser, ImageLayouts &el)
   SERIALISE_MEMBER(imageInfo);
 }
 
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, TaggedImageSubresourceState &el)
+{
+  if(ser.VersionAtLeast(0xD))
+  {
+    // added in 0xD
+    uint32_t &queueFamilyIndex = el.state.queueFamilyIndex;
+    SERIALISE_ELEMENT(queueFamilyIndex);
+  }
+
+  if(ser.VersionAtLeast(0x11))
+  {
+    uint32_t &firstQueueFamilyIndex = el.state.firstQueueFamilyIndex;
+    SERIALISE_ELEMENT(firstQueueFamilyIndex);
+  }
+  else
+  {
+    el.state.firstQueueFamilyIndex = el.state.queueFamilyIndex;
+  }
+
+  VkImageSubresourceRange subresourceRange;
+  if(ser.IsWriting())
+    subresourceRange = el.range;
+  SERIALISE_ELEMENT(subresourceRange);
+  if(ser.IsReading())
+    el.range = ImageSubresourceRange(subresourceRange);
+
+  if(ser.VersionLess(0x11))
+  {
+    VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    SERIALISE_ELEMENT(oldLayout);
+  }
+
+  VkImageLayout &layout = el.state.layout;
+  SERIALISE_ELEMENT(layout);
+}
+
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, PartialQueueFamilyTransfer &el)
+{
+  SERIALISE_MEMBER(direction);
+  SERIALISE_MEMBER(barrier);
+}
+
+template <typename SerialiserType>
+void DoSerialise(SerialiserType &ser, ImageState &el)
+{
+  if(ser.VersionAtLeast(0xD) && ser.VersionLess(0x11))
+  {
+    // added in 0xD, removed in 0x11
+    uint32_t queueFamilyIndex = 0;
+    SERIALISE_ELEMENT(queueFamilyIndex);
+  }
+  rdcarray<TaggedImageSubresourceState> subresourceStates;
+  if(ser.IsWriting())
+    el.subresourceStates.ToArray(subresourceStates);
+  SERIALISE_ELEMENT(subresourceStates);
+  if(ser.IsReading())
+    el.subresourceStates.FromArray(subresourceStates);
+
+  ImageInfo imageInfo = el.info();
+  SERIALISE_ELEMENT(imageInfo);
+
+  if(ser.VersionAtLeast(0x11))
+  {
+    SERIALISE_MEMBER(initialLayout);
+    SERIALISE_MEMBER(queueFamilyTransfers);
+  }
+}
+
 template <typename SerialiserType>
 void DoSerialise(SerialiserType &ser, ImageInfo &el)
 {
@@ -7957,6 +8027,9 @@ INSTANTIATE_SERIALISE_TYPE(DescriptorSetSlot);
 INSTANTIATE_SERIALISE_TYPE(ImageRegionState);
 INSTANTIATE_SERIALISE_TYPE(ImageLayouts);
 INSTANTIATE_SERIALISE_TYPE(ImageInfo);
+INSTANTIATE_SERIALISE_TYPE(TaggedImageSubresourceState);
+INSTANTIATE_SERIALISE_TYPE(PartialQueueFamilyTransfer);
+INSTANTIATE_SERIALISE_TYPE(ImageState);
 
 #if ENABLED(RDOC_WIN32)
 template <typename SerialiserType>

@@ -3206,6 +3206,1115 @@ VkImageAspectFlags FormatImageAspects(VkFormat fmt)
     return VK_IMAGE_ASPECT_COLOR_BIT;
 }
 
+ImageSubresourceRange ImageInfo::FullRange() const
+{
+  return ImageSubresourceRange(
+      /* aspectMask = */ Aspects(),
+      /* baseMipLevel = */ 0u,
+      /* levelCount = */ (uint32_t)levelCount,
+      /* baseArrayLayer = */ 0u,
+      /* layerCount = */ (uint32_t)layerCount);
+}
+
+void ImageSubresourceState::Update(const ImageSubresourceState &other, FrameRefCompFunc compose)
+{
+  if(oldQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+    oldQueueFamilyIndex = other.oldQueueFamilyIndex;
+
+  if(other.newQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED)
+    newQueueFamilyIndex = other.newQueueFamilyIndex;
+
+  if(oldLayout == UNKNOWN_PREV_IMG_LAYOUT)
+    oldLayout = other.oldLayout;
+
+  if(other.newLayout != UNKNOWN_PREV_IMG_LAYOUT)
+    newLayout = other.newLayout;
+
+  refType = compose(refType, other.refType);
+}
+
+bool ImageSubresourceState::Update(const ImageSubresourceState &other,
+                                   ImageSubresourceState &result, FrameRefCompFunc compose) const
+{
+  result = *this;
+  result.Update(other, compose);
+
+  return result != *this;
+}
+
+template <typename Map, typename Pair>
+typename ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>
+    &ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>::operator++()
+{
+  if(!IsValid())
+    return *this;
+  FixSubRange();
+
+  ++m_layer;
+  if(AreLayersSplit(m_splitFlags) && m_layer < m_range.baseArrayLayer + m_range.layerCount)
+  {
+    m_value.m_range.baseArrayLayer = m_layer;
+    return *this;
+  }
+  m_value.m_range.baseArrayLayer = m_layer = m_range.baseArrayLayer;
+
+  ++m_level;
+  if(AreLevelsSplit(m_splitFlags) && m_level < m_range.baseMipLevel + m_range.levelCount)
+  {
+    m_value.m_range.baseMipLevel = m_level;
+    return *this;
+  }
+  m_value.m_range.baseMipLevel = m_level = m_range.baseMipLevel;
+
+  ++m_aspectIndex;
+  if(AreAspectsSplit(m_splitFlags) && m_aspectIndex < m_aspectCount)
+  {
+    auto aspectIt =
+        ImageAspectFlagIter(m_map->m_aspectMask, (VkImageAspectFlagBits)m_value.m_range.aspectMask);
+    ++aspectIt;
+    m_value.m_range.aspectMask = *aspectIt;
+    return *this;
+  }
+
+  m_aspectIndex = m_aspectCount;
+  return *this;
+}
+template
+    typename ImageSubresourceMap::SubresourceRangeIterTemplate<ImageSubresourceMap,
+                                                               ImageSubresourceMap::SubresourcePairRef>
+        &ImageSubresourceMap::SubresourceRangeIterTemplate<
+            ImageSubresourceMap, ImageSubresourceMap::SubresourcePairRef>::operator++();
+template typename ImageSubresourceMap::SubresourceRangeIterTemplate<
+    const ImageSubresourceMap, ImageSubresourceMap::ConstSubresourcePairRef>
+    &ImageSubresourceMap::SubresourceRangeIterTemplate<
+        const ImageSubresourceMap, ImageSubresourceMap::ConstSubresourcePairRef>::operator++();
+
+void ImageSubresourceMap::Split(bool splitAspects, bool splitLevels, bool splitLayers)
+{
+  uint16_t newFlags = m_flags;
+  if(splitAspects)
+    newFlags |= (uint16_t)FlagBits::AreAspectsSplit;
+  if(splitLevels)
+    newFlags |= (uint16_t)FlagBits::AreLevelsSplit;
+  if(splitLayers)
+    newFlags |= (uint16_t)FlagBits::AreLayersSplit;
+  if(newFlags == m_flags)
+    // not splitting anything new
+    return;
+
+  uint32_t newSplitAspectCount = 1;
+  if(splitAspects || AreAspectsSplit())
+  {
+    newSplitAspectCount = m_aspectCount;
+  }
+
+  uint32_t oldSplitLevelCount = AreLevelsSplit() ? info().levelCount : 1;
+  uint32_t newSplitLevelCount = splitLevels ? info().levelCount : oldSplitLevelCount;
+
+  uint32_t oldSplitLayerCount = AreLayersSplit() ? info().layerCount : 1;
+  uint32_t newSplitLayerCount = splitLayers ? info().layerCount : oldSplitLayerCount;
+
+  uint32_t newSize = newSplitAspectCount * newSplitLevelCount * newSplitLayerCount;
+  m_values.resize(newSize);
+
+  for(uint32_t newAspectIndex = newSplitAspectCount - 1; newAspectIndex < newSplitAspectCount;
+      --newAspectIndex)
+  {
+    uint32_t oldAspectIndex = AreAspectsSplit() ? newAspectIndex : 0;
+    for(uint32_t newLevel = newSplitLevelCount - 1; newLevel < newSplitLevelCount; --newLevel)
+    {
+      uint32_t oldLevel = AreLevelsSplit() ? newLevel : 0;
+      for(uint32_t newLayer = newSplitLayerCount - 1; newLayer < newSplitLayerCount; --newLayer)
+      {
+        uint32_t oldLayer = AreLayersSplit() ? newLayer : 0;
+        uint32_t oldIndex =
+            (oldAspectIndex * oldSplitLevelCount + oldLevel) * oldSplitLayerCount + oldLayer;
+        uint32_t newIndex =
+            (newAspectIndex * newSplitLevelCount + newLevel) * newSplitLayerCount + newLayer;
+        m_values[newIndex] = m_values[oldIndex];
+      }
+    }
+  }
+  m_flags = newFlags;
+}
+
+size_t ImageSubresourceMap::SubresourceIndex(uint32_t aspectIndex, uint32_t level, uint32_t layer) const
+{
+  if(!AreAspectsSplit())
+    aspectIndex = 0;
+  int splitLevelCount = 1;
+  if(AreLevelsSplit())
+    splitLevelCount = info().levelCount;
+  else
+    level = 0;
+  int splitLayerCount = 1;
+  if(AreLayersSplit())
+    splitLayerCount = info().layerCount;
+  else
+    layer = 0;
+  return (aspectIndex * splitLevelCount + level) * splitLayerCount + layer;
+}
+
+void ImageSubresourceMap::ToArray(rdcarray<TaggedImageSubresourceState> &arr)
+{
+  arr.reserve(arr.size() + m_values.size());
+  for(auto src = begin(); src != end(); ++src)
+  {
+    arr.push_back(*src);
+  }
+}
+
+void ImageSubresourceMap::FromArray(const rdcarray<TaggedImageSubresourceState> &arr)
+{
+  if(arr.empty())
+  {
+    RDCERR("No values for ImageSubresourceMap");
+    return;
+  }
+  Split(arr.front().range);
+  if(m_values.size() != arr.size())
+  {
+    RDCERR("Incorrect number of values for ImageSubresourceMap");
+    return;
+  }
+  auto src = arr.begin();
+  auto dst = begin();
+  while(src != arr.end())
+  {
+    if(src->range != dst->range())
+      RDCERR("Subresource range mismatch in ImageSubresourceMap");
+    else
+      dst->SetState(src->state);
+    ++src;
+    ++dst;
+  }
+}
+
+bool IntervalsOverlap(uint32_t base1, uint32_t count1, uint32_t base2, uint32_t count2)
+{
+  if((base1 + count1) < base1)
+  {
+    // integer overflow
+    if(count1 != VK_REMAINING_MIP_LEVELS)
+      RDCWARN("Integer overflow in interval: base=%u, count=%u", base1, count1);
+    count1 = UINT32_MAX - base1;
+  }
+  if((base2 + count2) < base2)
+  {
+    // integer overflow
+    if(count2 != VK_REMAINING_MIP_LEVELS)
+      RDCWARN("Integer overflow in interval: base=%u, count=%u", base2, count2);
+    count2 = UINT32_MAX - base2;
+  }
+  if(count1 == 0 || count2 == 0)
+    return false;    // one of the intervals is empty, so no overlap
+  if(base1 > base2)
+  {
+    std::swap(base1, base2);
+    std::swap(count1, count2);
+  }
+  return base2 < base1 + count1;
+}
+
+bool IntervalContainedIn(uint32_t base1, uint32_t count1, uint32_t base2, uint32_t count2)
+{
+  if((base1 + count1) < base1)
+  {
+    // integer overflow
+    if(count1 != VK_REMAINING_MIP_LEVELS)
+      RDCWARN("Integer overflow in interval: base=%u, count=%u", base1, count1);
+    count1 = UINT32_MAX - base1;
+  }
+  if((base2 + count2) < base2)
+  {
+    // integer overflow
+    if(count2 != VK_REMAINING_MIP_LEVELS)
+      RDCWARN("Integer overflow in interval: base=%u, count=%u", base2, count2);
+    count2 = UINT32_MAX - base2;
+  }
+  return base1 >= base2 && base1 + count1 <= base2 + count2;
+}
+
+bool ValidateLevelRange(uint32_t &baseMipLevel, uint32_t &levelCount, uint32_t imageLevelCount)
+{
+  bool res = true;
+  if(baseMipLevel > imageLevelCount)
+  {
+    RDCWARN("baseMipLevel (%u) is greater than image levelCount (%u)", baseMipLevel, imageLevelCount);
+    RDCDUMP();
+    baseMipLevel = imageLevelCount;
+    res = false;
+  }
+  if(levelCount == VK_REMAINING_MIP_LEVELS)
+  {
+    levelCount = imageLevelCount - baseMipLevel;
+  }
+  else if(levelCount > imageLevelCount - baseMipLevel)
+  {
+    RDCWARN("baseMipLevel (%u) + levelCount (%u) is greater than the image levelCount (%u)",
+            baseMipLevel, levelCount, imageLevelCount);
+    RDCDUMP();
+    levelCount = imageLevelCount - baseMipLevel;
+    res = false;
+  }
+  return res;
+}
+
+bool ValidateLayerRange(uint32_t &baseArrayLayer, uint32_t &layerCount, uint32_t imageLayerCount)
+{
+  bool res = true;
+  if(baseArrayLayer > imageLayerCount)
+  {
+    RDCWARN("baseArrayLayer (%u) is greater than image layerCount (%u)", baseArrayLayer,
+            imageLayerCount);
+    RDCDUMP();
+    baseArrayLayer = imageLayerCount;
+    res = false;
+  }
+  if(layerCount == VK_REMAINING_ARRAY_LAYERS)
+  {
+    layerCount = imageLayerCount - baseArrayLayer;
+  }
+  else if(layerCount > imageLayerCount - baseArrayLayer)
+  {
+    RDCWARN("baseArrayLayer (%u) + layerCount (%u) is greater than the image layerCount (%u)",
+            baseArrayLayer, layerCount, imageLayerCount);
+    RDCDUMP();
+    layerCount = imageLayerCount - baseArrayLayer;
+    res = false;
+  }
+  return res;
+}
+
+template <typename Map, typename Pair>
+ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>::SubresourceRangeIterTemplate(
+    Map &map, const VkImageSubresourceRange &range)
+    : m_map(&map), m_range(range), m_level(range.baseMipLevel), m_layer(range.baseArrayLayer)
+{
+  if(!ValidateLevelRange(m_range.baseMipLevel, m_range.levelCount, m_map->info().levelCount))
+    m_level = range.baseMipLevel;
+  if(!ValidateLayerRange(m_range.baseArrayLayer, m_range.layerCount, m_map->info().layerCount))
+    m_layer = range.baseArrayLayer;
+  m_aspectCount = 0;
+  for(auto aspectIt = ImageAspectFlagIter::begin(range.aspectMask);
+      aspectIt != ImageAspectFlagIter::end(); ++aspectIt)
+    ++m_aspectCount;
+  m_splitFlags = (uint16_t)ImageSubresourceMap::FlagBits::IsUninitialized;
+  FixSubRange();
+}
+template ImageSubresourceMap::SubresourceRangeIterTemplate<ImageSubresourceMap,
+                                                           ImageSubresourceMap::SubresourcePairRef>::
+    SubresourceRangeIterTemplate(ImageSubresourceMap &map, const VkImageSubresourceRange &range);
+template ImageSubresourceMap::SubresourceRangeIterTemplate<
+    const ImageSubresourceMap, ImageSubresourceMap::ConstSubresourcePairRef>::
+    SubresourceRangeIterTemplate(const ImageSubresourceMap &map,
+                                 const VkImageSubresourceRange &range);
+
+template <typename Map, typename Pair>
+void ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>::FixSubRange()
+{
+  if(m_splitFlags == m_map->m_flags)
+    return;
+  uint16_t oldFlags = m_splitFlags;
+  m_splitFlags = m_map->m_flags;
+
+  if(AreLevelsSplit(m_splitFlags))
+  {
+    m_value.m_range.baseMipLevel = m_level;
+    m_value.m_range.levelCount = 1u;
+  }
+  else
+  {
+    m_value.m_range.baseMipLevel = 0u;
+    m_value.m_range.levelCount = m_map->info().levelCount;
+  }
+
+  if(AreLayersSplit(m_splitFlags))
+  {
+    m_value.m_range.baseArrayLayer = m_layer;
+    m_value.m_range.layerCount = 1u;
+  }
+  else
+  {
+    m_value.m_range.baseArrayLayer = 0u;
+    m_value.m_range.layerCount = m_map->info().layerCount;
+  }
+
+  if(!AreAspectsSplit(m_splitFlags))
+  {
+    m_value.m_range.aspectMask = m_map->m_aspectMask;
+  }
+  else if(!AreAspectsSplit(oldFlags))
+  {
+    // aspects are split in the map, but are not yet split in this iterator.
+    // We need to find the aspectMask.
+    uint32_t i = 0;
+    for(auto it = ImageAspectFlagIter::begin(m_map->m_aspectMask); it != ImageAspectFlagIter::end();
+        ++it, ++i)
+    {
+      if(i >= m_aspectIndex && (((*it) & m_range.aspectMask) != 0))
+      {
+        m_value.m_range.aspectMask = *it;
+        break;
+      }
+    }
+    m_aspectIndex = i;
+  }
+}
+template void ImageSubresourceMap::SubresourceRangeIterTemplate<
+    ImageSubresourceMap, ImageSubresourceMap::SubresourcePairRef>::FixSubRange();
+template void ImageSubresourceMap::SubresourceRangeIterTemplate<
+    const ImageSubresourceMap, ImageSubresourceMap::ConstSubresourcePairRef>::FixSubRange();
+
+template <typename Map, typename Pair>
+Pair *ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>::operator->()
+{
+  FixSubRange();
+  m_value.m_state = &m_map->SubresourceValue(m_aspectIndex, m_level, m_layer);
+  return &m_value;
+}
+template ImageSubresourceMap::SubresourcePairRef *ImageSubresourceMap::SubresourceRangeIterTemplate<
+    ImageSubresourceMap, ImageSubresourceMap::SubresourcePairRef>::operator->();
+template ImageSubresourceMap::ConstSubresourcePairRef *ImageSubresourceMap::SubresourceRangeIterTemplate<
+    const ImageSubresourceMap, ImageSubresourceMap::ConstSubresourcePairRef>::operator->();
+
+template <typename Map, typename Pair>
+Pair &ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>::operator*()
+{
+  FixSubRange();
+  m_value.m_state = &m_map->SubresourceValue(m_aspectIndex, m_level, m_layer);
+  return m_value;
+}
+template ImageSubresourceMap::SubresourcePairRef &ImageSubresourceMap::SubresourceRangeIterTemplate<
+    ImageSubresourceMap, ImageSubresourceMap::SubresourcePairRef>::operator*();
+template ImageSubresourceMap::ConstSubresourcePairRef &ImageSubresourceMap::SubresourceRangeIterTemplate<
+    const ImageSubresourceMap, ImageSubresourceMap::ConstSubresourcePairRef>::operator*();
+
+template <typename Barrier>
+void BarrierSequence<Barrier>::Add(uint32_t batchIndex, uint32_t queueFamilyIndex,
+                                   const Barrier &barrier)
+{
+  if(batches.size() <= batchIndex)
+    batches.resize(batchIndex + 1);
+  rdcarray<rdcarray<Barrier>> &batch = batches[batchIndex];
+  if(batch.size() <= queueFamilyIndex)
+    batch.resize(queueFamilyIndex + 1);
+  batch[queueFamilyIndex].push_back(barrier);
+  ++barrierCount;
+}
+template void BarrierSequence<VkImageMemoryBarrier>::Add(uint32_t batchIndex,
+                                                         uint32_t queueFamilyIndex,
+                                                         const VkImageMemoryBarrier &barrier);
+
+template <typename Barrier>
+void BarrierSequence<Barrier>::Merge(const BarrierSequence<Barrier> &other)
+{
+  if(other.batches.size() > batches.size())
+    batches.resize(other.batches.size());
+  for(uint32_t batchIndex = 0; batchIndex < other.batches.size(); ++batchIndex)
+  {
+    rdcarray<rdcarray<Barrier>> &batch = batches[batchIndex];
+    const rdcarray<rdcarray<Barrier>> &otherBatch = other.batches[batchIndex];
+    if(otherBatch.size() > batch.size())
+      batch.resize(otherBatch.size());
+    for(uint32_t queueFamilyIndex = 0; queueFamilyIndex < otherBatch.size(); ++queueFamilyIndex)
+    {
+      rdcarray<Barrier> &barriers = batch[queueFamilyIndex];
+      const rdcarray<Barrier> &otherBarriers = otherBatch[queueFamilyIndex];
+      barriers.insert(barriers.size(), otherBarriers.begin(), otherBarriers.size());
+      barrierCount += otherBarriers.size();
+    }
+  }
+}
+template void BarrierSequence<VkImageMemoryBarrier>::Merge(
+    const BarrierSequence<VkImageMemoryBarrier> &other);
+
+template <typename Barrier>
+bool BarrierSequence<Barrier>::IsBatchEmpty(uint32_t batchIndex) const
+{
+  if(batchIndex >= batches.size())
+    return true;
+  for(const rdcarray<Barrier> *it = batches[batchIndex].begin(); it != batches[batchIndex].end(); ++it)
+  {
+    if(!it->empty())
+      return false;
+  }
+  return true;
+}
+template bool BarrierSequence<VkImageMemoryBarrier>::IsBatchEmpty(uint32_t batchIndex) const;
+
+template <typename Barrier>
+void BarrierSequence<Barrier>::ExtractBatch(uint32_t batchIndex, rdcarray<rdcarray<Barrier>> &result)
+{
+  if(batchIndex >= batches.size())
+    return;
+  batches[batchIndex].swap(result);
+  batches[batchIndex].clear();
+  for(rdcarray<Barrier> *it = result.begin(); it != result.end(); ++it)
+    barrierCount -= it->size();
+}
+template void BarrierSequence<VkImageMemoryBarrier>::ExtractBatch(
+    uint32_t batchIndex, rdcarray<rdcarray<VkImageMemoryBarrier>> &result);
+
+template <typename Barrier>
+void BarrierSequence<Barrier>::ExtractFirstBatchForQueue(uint32_t queueFamilyIndex,
+                                                         rdcarray<Barrier> &result)
+{
+  for(uint32_t batchIndex = 0; batchIndex < batches.size(); ++batchIndex)
+  {
+    if(!IsBatchEmpty(batchIndex))
+    {
+      batches[batchIndex][queueFamilyIndex].swap(result);
+      batches[batchIndex][queueFamilyIndex].clear();
+      barrierCount -= result.size();
+      return;
+    }
+  }
+}
+template void BarrierSequence<VkImageMemoryBarrier>::ExtractFirstBatchForQueue(
+    uint32_t queueFamilyIndex, rdcarray<VkImageMemoryBarrier> &result);
+
+template <typename Barrier>
+void BarrierSequence<Barrier>::ExtractLastBatchForQueue(uint32_t queueFamilyIndex,
+                                                        rdcarray<Barrier> &result)
+{
+  for(uint32_t batchIndex = (uint32_t)batches.size(); batchIndex > 0;)
+  {
+    --batchIndex;
+    if(!IsBatchEmpty(batchIndex))
+    {
+      batches[batchIndex][queueFamilyIndex].swap(result);
+      batches[batchIndex][queueFamilyIndex].clear();
+      barrierCount -= result.size();
+      return;
+    }
+  }
+}
+template void BarrierSequence<VkImageMemoryBarrier>::ExtractLastBatchForQueue(
+    uint32_t queueFamilyIndex, rdcarray<VkImageMemoryBarrier> &result);
+
+template <>
+rdcstr DoStringise(const QueueFamilyTransferDirection &el)
+{
+  BEGIN_ENUM_STRINGISE(QueueFamilyTransferDirection)
+  {
+    STRINGISE_ENUM_CLASS(Release);
+    STRINGISE_ENUM_CLASS(Acquire);
+  }
+  END_ENUM_STRINGISE();
+}
+
+ImageState ImageState::InitialState() const
+{
+  ImageState result(handle, info());
+  InitialState(result);
+  return result;
+}
+
+void ImageState::InitialState(ImageState &result) const
+{
+  result.subresourceStates = subresourceStates;
+  for(auto it = result.subresourceStates.begin(); it != result.subresourceStates.end(); ++it)
+  {
+    ImageSubresourceState &sub = it->state();
+    sub.newLayout = sub.oldLayout = info().initialLayout;
+    sub.newQueueFamilyIndex = sub.oldQueueFamilyIndex;
+    sub.refType = eFrameRef_None;
+  }
+}
+
+ImageState ImageState::CommandBufferInitialState() const
+{
+  return ImageState(handle, info());
+}
+
+ImageState ImageState::UniformState(const ImageSubresourceState &sub) const
+{
+  ImageState result(handle, info());
+  result.subresourceStates.begin()->SetState(sub);
+  return result;
+}
+
+ImageState ImageState::ContentInitializationState(InitPolicy policy, bool initialized,
+                                                  uint32_t queueFamilyIndex, VkImageLayout copyLayout,
+                                                  VkImageLayout clearLayout) const
+{
+  ImageState result = *this;
+  for(auto it = result.subresourceStates.begin(); it != result.subresourceStates.end(); ++it)
+  {
+    ImageSubresourceState &sub = it->state();
+    InitReqType initReq = InitReq(sub.refType, policy, initialized);
+    if(initReq == eInitReq_None)
+      continue;
+    sub.newQueueFamilyIndex = queueFamilyIndex;
+    if(initReq == eInitReq_Copy)
+      sub.newLayout = copyLayout;
+    else if(initReq == eInitReq_Clear)
+      sub.newLayout = clearLayout;
+  }
+  return result;
+}
+
+void ImageState::RemoveQueueFamilyTransfer(VkImageMemoryBarrier *it)
+{
+  if(it < newQueueFamilyTransfers.begin() || it >= newQueueFamilyTransfers.end())
+    RDCERR("Attempting to remove queue family transfer at invalid address");
+  std::swap(*it, newQueueFamilyTransfers.back());
+  newQueueFamilyTransfers.erase(newQueueFamilyTransfers.size() - 1);
+}
+
+void ImageState::Update(VkImageSubresourceRange range, const ImageSubresourceState &dst,
+                        FrameRefCompFunc compose)
+{
+  ValidateLevelRange(range.baseMipLevel, range.levelCount, info().levelCount);
+  ValidateLayerRange(range.baseArrayLayer, range.layerCount, info().layerCount);
+
+  bool didSplit = false;
+  for(auto it = subresourceStates.RangeBegin(range); it != subresourceStates.end(); ++it)
+  {
+    ImageSubresourceState subState;
+    if(it->state().Update(dst, subState, compose))
+    {
+      if(!didSplit)
+      {
+        subresourceStates.Split(range);
+        didSplit = true;
+      }
+      RDCASSERT(it->range().ContainedIn(range));
+      it->SetState(subState);
+      maxRefType = ComposeFrameRefsDisjoint(maxRefType, subState.refType);
+    }
+  }
+}
+
+void ImageState::Merge(const ImageState &other, FrameRefCompFunc compose)
+{
+  if(handle == VK_NULL_HANDLE)
+    handle = other.handle;
+  for(auto it = other.oldQueueFamilyTransfers.begin(); it != other.oldQueueFamilyTransfers.end(); ++it)
+  {
+    RecordQueueFamilyAcquire(*it);
+  }
+  bool didSplit = false;
+  for(auto oIt = other.subresourceStates.begin(); oIt != other.subresourceStates.end(); ++oIt)
+  {
+    for(auto it = subresourceStates.RangeBegin(oIt->range()); it != subresourceStates.end(); ++it)
+    {
+      ImageSubresourceState subState;
+      if(it->state().Update(oIt->state(), subState, compose))
+      {
+        if(!didSplit)
+        {
+          subresourceStates.Split(oIt->range());
+          didSplit = true;
+        }
+        RDCASSERT(it->range().ContainedIn(oIt->range()));
+        it->SetState(subState);
+        maxRefType = ComposeFrameRefsDisjoint(maxRefType, subState.refType);
+      }
+    }
+  }
+  for(auto it = other.newQueueFamilyTransfers.begin(); it != other.newQueueFamilyTransfers.end(); ++it)
+  {
+    RecordQueueFamilyRelease(*it);
+  }
+}
+
+void ImageState::MergeCaptureBeginState(const ImageState &initialState)
+{
+  RDCASSERT(oldQueueFamilyTransfers.empty());
+  RDCASSERT(newQueueFamilyTransfers.empty());
+  oldQueueFamilyTransfers = initialState.oldQueueFamilyTransfers;
+  subresourceStates = initialState.subresourceStates;
+  maxRefType = initialState.maxRefType;
+}
+
+void ImageState::Merge(std::map<ResourceId, ImageState> &states,
+                       const std::map<ResourceId, ImageState> &dstStates, FrameRefCompFunc compose)
+{
+  auto it = states.begin();
+  auto dstIt = dstStates.begin();
+  while(dstIt != dstStates.end())
+  {
+    if(it == states.end() || dstIt->first < it->first)
+    {
+      it = states.insert(it, {dstIt->first, dstIt->second.InitialState()});
+    }
+    else if(it->first < dstIt->first)
+    {
+      ++it;
+      continue;
+    }
+
+    it->second.Merge(dstIt->second, compose);
+    ++it;
+    ++dstIt;
+  }
+}
+
+void ImageState::DiscardContents(const ImageSubresourceRange &range)
+{
+  Update(range, ImageSubresourceState(VK_QUEUE_FAMILY_IGNORED, VK_IMAGE_LAYOUT_UNDEFINED));
+}
+
+void ImageState::RecordQueueFamilyRelease(const VkImageMemoryBarrier &barrier)
+{
+  for(auto it = newQueueFamilyTransfers.begin(); it != newQueueFamilyTransfers.end(); ++it)
+  {
+    if(ImageSubresourceRange(barrier.subresourceRange).Overlaps(it->subresourceRange))
+    {
+      RDCWARN("Queue family release barriers overlap");
+      RemoveQueueFamilyTransfer(it);
+      --it;
+    }
+  }
+  newQueueFamilyTransfers.push_back(barrier);
+}
+
+void ImageState::RecordQueueFamilyAcquire(const VkImageMemoryBarrier &barrier)
+{
+  bool foundRelease = false;
+  ImageSubresourceRange acquireRange(barrier.subresourceRange);
+  for(auto it = newQueueFamilyTransfers.begin(); it != newQueueFamilyTransfers.end(); ++it)
+  {
+    ImageSubresourceRange releaseRange(it->subresourceRange);
+    if(acquireRange.Overlaps(releaseRange))
+    {
+      if(acquireRange != releaseRange)
+        RDCWARN(
+            "Overlapping queue family release and acquire barriers have different "
+            "subresourceRange");
+      if(barrier.srcQueueFamilyIndex != it->srcQueueFamilyIndex ||
+         barrier.dstQueueFamilyIndex != it->dstQueueFamilyIndex)
+        RDCWARN("Queue family mismatch between release and acquire barriers");
+      if(barrier.oldLayout != it->oldLayout || barrier.newLayout != it->newLayout)
+        RDCWARN("Image layouts mismatch between release and acquire barriers");
+      if(foundRelease)
+        RDCWARN("Found multiple release barriers for acquire barrier");
+      RemoveQueueFamilyTransfer(it);
+      --it;
+      foundRelease = true;
+    }
+  }
+  if(!foundRelease)
+  {
+    oldQueueFamilyTransfers.push_back(barrier);
+  }
+}
+
+void ImageState::RecordBarrier(VkImageMemoryBarrier barrier, uint32_t queueFamilyIndex)
+{
+  if(barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL ||
+     barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT ||
+     barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL ||
+     barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
+  {
+    RDCERR("External/foreign queue families are not supported");
+    return;
+  }
+  if(info().sharingMode == VK_SHARING_MODE_CONCURRENT &&
+     !(barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED &&
+       barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED))
+  {
+    RDCERR("Barrier contains invalid queue families for VK_SHARING_MODE_CONCURRENT");
+    return;
+  }
+  else if(info().sharingMode == VK_SHARING_MODE_EXCLUSIVE)
+  {
+    if(barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED ||
+       barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+    {
+      if(barrier.srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED ||
+         barrier.dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED)
+      {
+        RDCERR("Barrier contains invalid queue families for VK_SHARING_MODE_EXCLUSIVE: (%s, %s)",
+               ToStr(barrier.srcQueueFamilyIndex).c_str(),
+               ToStr(barrier.dstQueueFamilyIndex).c_str());
+        return;
+      }
+      barrier.srcQueueFamilyIndex = queueFamilyIndex;
+      barrier.dstQueueFamilyIndex = queueFamilyIndex;
+    }
+    else if(barrier.srcQueueFamilyIndex == queueFamilyIndex)
+    {
+      if(barrier.dstQueueFamilyIndex != queueFamilyIndex)
+      {
+        RecordQueueFamilyRelease(barrier);
+        // Skip the updates to the subresource states.
+        // These will be updated by the acquire.
+        // This allows us to restore a released-but-not-acquired state by first transitioning to the
+        // subresource states (which will match the srcQueueFamilyIndex/oldLayout), and then
+        // applying the release barrier.
+        return;
+      }
+    }
+    else if(barrier.dstQueueFamilyIndex == queueFamilyIndex)
+    {
+      RecordQueueFamilyAcquire(barrier);
+    }
+    else
+    {
+      RDCERR("Ownership transfer from queue family %u to %u submitted to queue family %u",
+             barrier.srcQueueFamilyIndex, barrier.dstAccessMask, queueFamilyIndex);
+    }
+  }
+
+  Update(barrier.subresourceRange, ImageSubresourceState(barrier),
+         ComposeFrameRefs);    // TODO: we should avoid updating the frame refs when replaying
+}
+
+bool ImageState::CloseTransfers(uint32_t batchIndex, VkAccessFlags dstAccessMask,
+                                ImageBarrierSequence *barriers, CaptureState capState)
+{
+  if(newQueueFamilyTransfers.empty())
+    return false;
+  for(auto it = newQueueFamilyTransfers.begin(); it != newQueueFamilyTransfers.end(); ++it)
+  {
+    Update(it->subresourceRange, ImageSubresourceState(it->dstQueueFamilyIndex, it->newLayout));
+
+    it->dstAccessMask = dstAccessMask;
+    it->image = handle;
+    barriers->Add(batchIndex, it->dstQueueFamilyIndex, *it);
+  }
+  newQueueFamilyTransfers.clear();
+  return true;
+}
+
+bool ImageState::RestoreTransfers(uint32_t batchIndex,
+                                  const rdcarray<VkImageMemoryBarrier> &transfers,
+                                  VkAccessFlags srcAccessMask, ImageBarrierSequence *barriers,
+                                  CaptureState capState)
+{
+  // TODO: figure out why `transfers` has duplicate entries
+  if(transfers.empty())
+    return false;
+  for(auto it = transfers.begin(); it != transfers.end(); ++it)
+  {
+    VkImageMemoryBarrier barrier = *it;
+    barrier.srcAccessMask = srcAccessMask;
+    barrier.image = handle;
+    barriers->Add(batchIndex, barrier.srcQueueFamilyIndex, barrier);
+    RecordQueueFamilyRelease(barrier);
+  }
+  return true;
+}
+
+void ImageState::ResetToOldState(CaptureState capState, ImageBarrierSequence *barriers)
+{
+  VkAccessFlags srcAccessMask = VK_ACCESS_ALL_WRITE_BITS;
+  VkAccessFlags dstAccessMask = VK_ACCESS_ALL_READ_BITS;
+  const uint32_t CLOSE_TRANSFERS_BATCH_INDEX = 0;
+  const uint32_t MAIN_BATCH_INDEX = 1;
+  const uint32_t ACQUIRE_BATCH_INDEX = 2;
+  const uint32_t RESTORE_TRANSFERS_BATCH_INDEX = 3;
+  CloseTransfers(CLOSE_TRANSFERS_BATCH_INDEX, dstAccessMask, barriers, capState);
+
+  for(auto subIt = subresourceStates.begin(); subIt != subresourceStates.end(); ++subIt)
+  {
+    VkImageLayout oldLayout = subIt->state().newLayout;
+    VkImageLayout newLayout = subIt->state().oldLayout;
+    subIt->state().newLayout = subIt->state().oldLayout;
+
+    if(newLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+    {
+      // contents discarded, no barrier necessary
+      continue;
+    }
+
+    uint32_t srcQueueFamilyIndex = subIt->state().newQueueFamilyIndex;
+    uint32_t dstQueueFamilyIndex = subIt->state().oldQueueFamilyIndex;
+    uint32_t submitQueueFamilyIndex = srcQueueFamilyIndex;
+    subIt->state().newQueueFamilyIndex = subIt->state().oldQueueFamilyIndex;
+    subIt->state().refType = eFrameRef_None;
+
+    if(srcQueueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL ||
+       srcQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
+    {
+      srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    }
+    if(dstQueueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL ||
+       dstQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
+    {
+      dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    }
+
+    if(info().sharingMode == VK_SHARING_MODE_EXCLUSIVE)
+    {
+      if(srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+      {
+        submitQueueFamilyIndex = dstQueueFamilyIndex;
+        dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+      }
+      else if(dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+      {
+        srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+      }
+    }
+    else
+    {
+      srcQueueFamilyIndex = dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    }
+    if(srcQueueFamilyIndex == dstQueueFamilyIndex && oldLayout == newLayout)
+      continue;
+    RDCASSERT(submitQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
+
+    VkImageMemoryBarrier barrier = {
+        /* sType = */ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        /* pNext = */ NULL,
+        /* srcAccessMask = */ srcAccessMask,
+        /* dstAccessMask = */ dstAccessMask,
+        /* oldLayout = */ oldLayout,
+        /* newLayout = */ newLayout,
+        /* srcQueueFamilyIndex = */ srcQueueFamilyIndex,
+        /* dstQueueFamilyIndex = */ dstQueueFamilyIndex,
+        /* image = */ handle,
+        /* subresourceRange = */ subIt->range(),
+    };
+    barriers->Add(MAIN_BATCH_INDEX, submitQueueFamilyIndex, barrier);
+
+    // acquire the subresource in the dstQueueFamily, if necessary
+    if(barrier.srcQueueFamilyIndex != barrier.dstQueueFamilyIndex)
+    {
+      barriers->Add(ACQUIRE_BATCH_INDEX, barrier.dstQueueFamilyIndex, barrier);
+    }
+  }
+  RestoreTransfers(RESTORE_TRANSFERS_BATCH_INDEX, oldQueueFamilyTransfers, srcAccessMask, barriers,
+                   capState);
+}
+
+void ImageState::Transition(const ImageState &dstState, VkAccessFlags srcAccessMask,
+                            VkAccessFlags dstAccessMask, CaptureState capState,
+                            ImageBarrierSequence *barriers)
+{
+  const uint32_t CLOSE_TRANSFERS_BATCH_INDEX = 0;
+  const uint32_t MAIN_BATCH_INDEX = 1;
+  const uint32_t ACQUIRE_BATCH_INDEX = 2;
+  const uint32_t RESTORE_TRANSFERS_BATCH_INDEX = 3;
+  CloseTransfers(CLOSE_TRANSFERS_BATCH_INDEX, dstAccessMask, barriers, capState);
+  for(auto dstIt = dstState.subresourceStates.begin(); dstIt != dstState.subresourceStates.end();
+      ++dstIt)
+  {
+    const ImageSubresourceRange &dstRng = dstIt->range();
+    const ImageSubresourceState &dstSub = dstIt->state();
+    for(auto it = subresourceStates.RangeBegin(dstRng); it != subresourceStates.end(); ++it)
+    {
+      ImageSubresourceState srcSub;
+      if(!it->state().Update(dstSub, srcSub))
+        // subresource state did not change, so no need for a barrier
+        continue;
+
+      subresourceStates.Split(dstRng);
+      std::swap(it->state(), srcSub);
+
+      ImageSubresourceRange srcRng = it->range();
+
+      VkImageLayout oldLayout = srcSub.newLayout;
+      if(oldLayout == UNKNOWN_PREV_IMG_LAYOUT)
+        oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+      VkImageLayout newLayout = dstSub.newLayout;
+      if(newLayout == UNKNOWN_PREV_IMG_LAYOUT || newLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+        // ignore transitions to undefined
+        continue;
+      uint32_t srcQueueFamilyIndex = srcSub.newQueueFamilyIndex;
+      uint32_t dstQueueFamilyIndex = dstSub.newQueueFamilyIndex;
+
+      if(oldLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+        // transitions from undefined discard the contents anyway, so no queue family ownership
+        // transfer is necessary
+        srcQueueFamilyIndex = dstQueueFamilyIndex;
+
+      if(newLayout == VK_IMAGE_LAYOUT_PREINITIALIZED &&
+         srcSub.newLayout != VK_IMAGE_LAYOUT_PREINITIALIZED)
+      {
+        // Transitioning to PREINITIALIZED, which is invalid. This happens when we are resetting to
+        // an earlier image state.
+        // Instead, we transition to GENERAL, and make the image owned by oldQueueFamilyIndex.
+        newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        dstQueueFamilyIndex = srcSub.oldQueueFamilyIndex;
+        RDCASSERT(dstQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
+      }
+
+      if(IsReplayMode(capState))
+      {
+        // Get rid of PRESENT layouts
+        SanitiseReplayImageLayout(oldLayout);
+        SanitiseReplayImageLayout(newLayout);
+
+        if(oldLayout == VK_IMAGE_LAYOUT_PREINITIALIZED &&
+           newLayout != VK_IMAGE_LAYOUT_PREINITIALIZED && !IsLoading(capState))
+        {
+          // Transitioning away from PREINITIALIZED, but we aren't loading, so we've already
+          // transitioned out of PREINITIALIZED before. We couldn't transition back into
+          // PREINITIALIZED, so instead left the image in GENERAL, and ensured it was on
+          // firstQueueFamilyIndex (see above).
+          oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+          srcQueueFamilyIndex = srcSub.oldQueueFamilyIndex;
+          RDCASSERT(srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
+        }
+      }
+
+      uint32_t submitQueueFamilyIndex = (srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED)
+                                            ? srcQueueFamilyIndex
+                                            : dstQueueFamilyIndex;
+      if(submitQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED ||
+         submitQueueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL ||
+         submitQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
+      {
+        RDCERR("Ignoring state transition submitted to invalid queue family %u",
+               submitQueueFamilyIndex);
+        RDCDUMP();
+        continue;
+      }
+      if(info().sharingMode == VK_SHARING_MODE_CONCURRENT)
+      {
+        srcQueueFamilyIndex = dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+      }
+      else
+      {
+        if(srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+        {
+          RDCWARN("ImageState::Transition: src queue family == VK_QUEUE_FAMILY_IGNORED.");
+          srcQueueFamilyIndex = dstQueueFamilyIndex;
+        }
+        if(dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+        {
+          RDCWARN("ImageState::Transition: dst queue family == VK_QUEUE_FAMILY_IGNORED.");
+          dstQueueFamilyIndex = srcQueueFamilyIndex;
+        }
+      }
+
+      if(srcQueueFamilyIndex == dstQueueFamilyIndex && oldLayout == newLayout)
+        // Skip the barriers, because it would do nothing
+        continue;
+
+      VkImageAspectFlags aspectMask = srcRng.aspectMask & dstRng.aspectMask;
+      uint32_t baseMipLevel = RDCMAX(dstRng.baseMipLevel, srcRng.baseMipLevel);
+      uint32_t endMipLevel =
+          RDCMIN(dstRng.baseMipLevel + dstRng.levelCount, srcRng.baseMipLevel + srcRng.levelCount);
+      uint32_t baseArrayLayer = RDCMAX(dstRng.baseArrayLayer, srcRng.baseArrayLayer);
+      uint32_t endArrayLayer = RDCMIN(dstRng.baseArrayLayer + dstRng.layerCount,
+                                      srcRng.baseArrayLayer + srcRng.layerCount);
+      VkImageMemoryBarrier barrier = {
+          /* sType = */ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+          /* pNext = */ NULL,
+          /* srcAccessMask = */ srcAccessMask,
+          /* dstAccessMask = */ dstAccessMask,
+          /* oldLayout = */ oldLayout,
+          /* newLayout = */ newLayout,
+          /* srcQueueFamilyIndex = */ srcQueueFamilyIndex,
+          /* dstQueueFamilyIndex = */ dstQueueFamilyIndex,
+          /* image = */ handle,
+          /* subresourceRange = */ {
+              /* aspectMask = */ aspectMask,
+              /* baseMipLevel = */ baseMipLevel,
+              /* levelCount = */ endMipLevel - baseMipLevel,
+              /* baseArrayLayer = */ baseArrayLayer,
+              /* layerCount = */ endArrayLayer - baseArrayLayer,
+          },
+      };
+      barriers->Add(MAIN_BATCH_INDEX, submitQueueFamilyIndex, barrier);
+
+      // acquire the subresource in the dstQueueFamily, if necessary
+      if(barrier.srcQueueFamilyIndex != barrier.dstQueueFamilyIndex)
+      {
+        barriers->Add(ACQUIRE_BATCH_INDEX, barrier.dstQueueFamilyIndex, barrier);
+      }
+    }
+  }
+  RestoreTransfers(RESTORE_TRANSFERS_BATCH_INDEX, dstState.newQueueFamilyTransfers, srcAccessMask,
+                   barriers, capState);
+}
+
+void ImageState::Transition(uint32_t queueFamilyIndex, VkImageLayout layout,
+                            VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
+                            CaptureState capState, ImageBarrierSequence *barriers)
+{
+  Transition(UniformState(ImageSubresourceState(queueFamilyIndex, layout)), srcAccessMask,
+             dstAccessMask, capState, barriers);
+}
+
+void ImageState::TempTransition(const ImageState &dstState, VkAccessFlags preSrcAccessMask,
+                                VkAccessFlags preDstAccessMask, VkAccessFlags postSrcAccessmask,
+                                VkAccessFlags postDstAccessMask, CaptureState capState,
+                                ImageBarrierSequence *setupBarriers,
+                                ImageBarrierSequence *cleanupBarriers) const
+{
+  ImageState temp(*this);
+  temp.Transition(dstState, preSrcAccessMask, preDstAccessMask, capState, setupBarriers);
+  temp.Transition(*this, postSrcAccessmask, postDstAccessMask, capState, cleanupBarriers);
+}
+
+void ImageState::TempTransition(uint32_t queueFamilyIndex, VkImageLayout layout,
+                                VkAccessFlags accessMask, CaptureState capState,
+                                ImageBarrierSequence *setupBarriers,
+                                ImageBarrierSequence *cleanupBarriers) const
+{
+  TempTransition(UniformState(ImageSubresourceState(queueFamilyIndex, layout)),
+                 VK_ACCESS_ALL_WRITE_BITS, accessMask, accessMask, VK_ACCESS_ALL_READ_BITS,
+                 capState, setupBarriers, cleanupBarriers);
+}
+
+void ImageState::InlineTransition(VkCommandBuffer cmd, uint32_t queueFamilyIndex,
+                                  const ImageState &dstState, VkAccessFlags srcAccessMask,
+                                  VkAccessFlags dstAccessMask, CaptureState capState)
+{
+  ImageBarrierSequence barriers;
+  Transition(dstState, srcAccessMask, dstAccessMask, capState, &barriers);
+  if(barriers.empty())
+    return;
+  rdcarray<VkImageMemoryBarrier> barriersArray;
+  barriers.ExtractFirstBatchForQueue(queueFamilyIndex, barriersArray);
+  if(!barriersArray.empty())
+    DoPipelineBarrier(cmd, (uint32_t)barriersArray.size(), barriersArray.data());
+  if(!barriers.empty())
+  {
+    RDCERR("Could not inline all image state transition barriers");
+  }
+}
+
+void ImageState::InlineTransition(VkCommandBuffer cmd, uint32_t queueFamilyIndex,
+                                  VkImageLayout layout, VkAccessFlags srcAccessMask,
+                                  VkAccessFlags dstAccessMask, CaptureState capState)
+{
+  InlineTransition(cmd, queueFamilyIndex,
+                   UniformState(ImageSubresourceState(queueFamilyIndex, layout)), srcAccessMask,
+                   dstAccessMask, capState);
+}
+
+InitReqType ImageState::MaxInitReq(const ImageSubresourceRange &range, InitPolicy policy,
+                                   bool initialized) const
+{
+  FrameRefType refType = eFrameRef_None;
+  for(auto it = subresourceStates.RangeBegin(range); it != subresourceStates.end(); ++it)
+  {
+    ComposeFrameRefsDisjoint(refType, it->state().refType);
+  }
+  return InitReq(refType, policy, initialized);
+}
+
+void ImageState::BeginCapture()
+{
+  maxRefType = eFrameRef_None;
+
+  // Forget any pending queue family release operations.
+  // If the matching queue family acquire operation happens during the frame,
+  // an implicit release operation will be put into `oldQueueFamilyTransfers`.
+  newQueueFamilyTransfers.clear();
+
+  // Also clear implicit queue family acquire operations because these correspond to release
+  // operations already submitted (and therefore not part of the capture).
+  oldQueueFamilyTransfers.clear();
+
+  for(auto it = subresourceStates.begin(); it != subresourceStates.end(); ++it)
+  {
+    ImageSubresourceState state = it->state();
+    state.oldLayout = state.newLayout;
+    state.oldQueueFamilyIndex = state.newQueueFamilyIndex;
+    state.refType = eFrameRef_None;
+    it->SetState(state);
+  }
+}
+
 int ImgRefs::GetAspectCount() const
 {
   int aspectCount = 0;
