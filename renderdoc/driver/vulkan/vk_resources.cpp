@@ -4739,8 +4739,15 @@ void VkResourceRecord::MarkImageFrameReferenced(VkResourceRecord *img, const Ima
   if(img->resInfo && img->resInfo->IsSparse())
     cmdInfo->sparse.insert(img->resInfo);
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+  ImageSubresourceRange range2(range);
+
+  FrameRefType maxRef = MarkImageReferenced(cmdInfo->imageStates, id, img->resInfo->imageInfo,
+                                            range2, pool->queueFamilyIndex, refType);
+#else
   FrameRefType maxRef =
       MarkImageReferenced(cmdInfo->imgFrameRefs, id, img->resInfo->imageInfo, range, refType);
+#endif
 
   // maintain the reference type of the image itself as the maximum reference type of any
   // subresource
@@ -4762,6 +4769,35 @@ void VkResourceRecord::MarkImageViewFrameReferenced(VkResourceRecord *view, cons
   if(refType != eFrameRef_Read && refType != eFrameRef_None)
     cmdInfo->dirtied.insert(img);
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+  ImageSubresourceRange imgRange;
+  imgRange.aspectMask = view->viewRange.aspectMask;
+
+  imgRange.baseMipLevel = range.baseMipLevel;
+  imgRange.levelCount = range.levelCount;
+  ValidateLevelRange(imgRange.baseMipLevel, imgRange.levelCount, view->viewRange.levelCount());
+  imgRange.baseMipLevel += view->viewRange.baseMipLevel;
+
+  if(view->resInfo->imageInfo.imageType == VK_IMAGE_TYPE_3D &&
+     view->viewRange.viewType() != VK_IMAGE_VIEW_TYPE_3D)
+  {
+    imgRange.baseDepthSlice = range.baseArrayLayer;
+    imgRange.sliceCount = range.layerCount;
+    ValidateLayerRange(imgRange.baseDepthSlice, imgRange.sliceCount, view->viewRange.layerCount());
+    imgRange.baseDepthSlice += view->viewRange.baseArrayLayer;
+  }
+  else
+  {
+    imgRange.baseArrayLayer = range.baseArrayLayer;
+    imgRange.layerCount = range.layerCount;
+    ValidateLayerRange(imgRange.baseDepthSlice, imgRange.sliceCount, view->viewRange.layerCount());
+    imgRange.baseArrayLayer += view->viewRange.baseArrayLayer;
+  }
+  imgRange.Validate(view->resInfo->imageInfo);
+
+  FrameRefType maxRef = MarkImageReferenced(cmdInfo->imageStates, img, view->resInfo->imageInfo,
+                                            imgRange, pool->queueFamilyIndex, refType);
+#else
   ImageRange imgRange;
   imgRange.aspectMask = view->viewRange.aspectMask;
   imgRange.baseMipLevel = view->viewRange.baseMipLevel + range.baseMipLevel;
@@ -4771,9 +4807,9 @@ void VkResourceRecord::MarkImageViewFrameReferenced(VkResourceRecord *view, cons
   imgRange.offset = range.offset;
   imgRange.extent = range.extent;
   imgRange.viewType = view->viewRange.viewType();
-
   FrameRefType maxRef =
       MarkImageReferenced(cmdInfo->imgFrameRefs, img, view->resInfo->imageInfo, imgRange, refType);
+#endif
 
   // maintain the reference type of the image itself as the maximum reference type of any
   // subresource
@@ -5149,6 +5185,21 @@ void ResourceInfo::Update(uint32_t numBindings, const VkSparseMemoryBind *pBindi
     if(!found)
       opaquemappings.push_back(newRange);
   }
+}
+
+FrameRefType MarkImageReferenced(std::map<ResourceId, ImageState> &imageStates, ResourceId img,
+                                 const ImageInfo &imageInfo, const ImageSubresourceRange &range,
+                                 uint32_t queueFamilyIndex, FrameRefType refType,
+                                 FrameRefCompFunc compose)
+{
+  if(refType == eFrameRef_None)
+    return refType;
+  auto it = imageStates.find(img);
+  if(it == imageStates.end())
+    it = imageStates.insert({img, ImageState(VK_NULL_HANDLE, imageInfo)}).first;
+  it->second.Update(
+      range, ImageSubresourceState(queueFamilyIndex, UNKNOWN_PREV_IMG_LAYOUT, refType), compose);
+  return it->second.maxRefType;
 }
 
 #if ENABLED(ENABLE_UNIT_TESTS)

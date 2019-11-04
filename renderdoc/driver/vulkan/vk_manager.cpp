@@ -940,6 +940,45 @@ void VulkanResourceManager::ApplyBarriers(uint32_t queueFamilyIndex,
   }
 }
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+void VulkanResourceManager::RecordBarriers(std::map<ResourceId, ImageState> &states,
+                                           uint32_t queueFamilyIndex, uint32_t numBarriers,
+                                           const VkImageMemoryBarrier *barriers)
+{
+  TRDBG("Recording %u barriers", numBarriers);
+
+  for(uint32_t ti = 0; ti < numBarriers; ti++)
+  {
+    const VkImageMemoryBarrier &t = barriers[ti];
+
+    ResourceId id = IsReplayMode(m_State) ? GetNonDispWrapper(t.image)->id : GetResID(t.image);
+
+    if(id == ResourceId())
+    {
+      RDCERR("Couldn't get ID for image %p in barrier", t.image);
+      continue;
+    }
+
+    auto stateIt = states.find(id);
+    if(stateIt == states.end())
+    {
+      LockedConstImageStateRef globalState = m_Core->FindConstImageState(id);
+      if(!globalState)
+      {
+        RDCERR("Recording barrier for unknown image: %s", ToStr(id).c_str());
+        continue;
+      }
+      stateIt = states.insert({id, globalState->CommandBufferInitialState()}).first;
+    }
+
+    ImageState &state = stateIt->second;
+    state.RecordBarrier(t, queueFamilyIndex);
+  }
+
+  TRDBG("Post-record, there are %u states", (uint32_t)states.size());
+}
+#endif
+
 ResourceId VulkanResourceManager::GetFirstIDForHandle(uint64_t handle)
 {
   for(auto it = m_CurrentResourceMap.begin(); it != m_CurrentResourceMap.end(); ++it)
@@ -964,19 +1003,6 @@ ResourceId VulkanResourceManager::GetFirstIDForHandle(uint64_t handle)
   }
 
   return ResourceId();
-}
-
-void VulkanResourceManager::MarkImageFrameReferenced(const VkResourceRecord *img,
-                                                     const ImageRange &range, FrameRefType refType)
-{
-  MarkImageFrameReferenced(img->GetResourceID(), img->resInfo->imageInfo, range, refType);
-}
-
-void VulkanResourceManager::MarkImageFrameReferenced(ResourceId img, const ImageInfo &imageInfo,
-                                                     const ImageRange &range, FrameRefType refType)
-{
-  FrameRefType maxRef = MarkImageReferenced(m_ImgFrameRefs, img, imageInfo, range, refType);
-  MarkResourceFrameReferenced(img, maxRef, ComposeFrameRefsDisjoint);
 }
 
 void VulkanResourceManager::MarkMemoryFrameReferenced(ResourceId mem, VkDeviceSize offset,

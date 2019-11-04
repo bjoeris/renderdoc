@@ -406,7 +406,9 @@ bool WrappedVulkan::Serialise_vkCreateCommandPool(SerialiserType &ser, VkDevice 
     // remap the queue family index
     CreateInfo.queueFamilyIndex = m_QueueRemapping[CreateInfo.queueFamilyIndex][0].family;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
     m_commandQueueFamilies[CmdPool] = CreateInfo.queueFamilyIndex;
+#endif
 
     VkResult ret = ObjDisp(device)->CreateCommandPool(Unwrap(device), &CreateInfo, NULL, &pool);
 
@@ -419,7 +421,9 @@ bool WrappedVulkan::Serialise_vkCreateCommandPool(SerialiserType &ser, VkDevice 
     {
       ResourceId live = GetResourceManager()->WrapResource(Unwrap(device), pool);
       GetResourceManager()->AddLiveResource(CmdPool, pool);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
       m_commandQueueFamilies[live] = CreateInfo.queueFamilyIndex;
+#endif
     }
 
     AddResource(CmdPool, ResourceType::Pool, "Command Pool");
@@ -514,11 +518,16 @@ bool WrappedVulkan::Serialise_vkAllocateCommandBuffers(SerialiserType &ser, VkDe
     {
       ResourceId live = GetResourceManager()->WrapResource(Unwrap(device), cmd);
       GetResourceManager()->AddLiveResource(CommandBuffer, cmd);
+
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
       m_commandQueueFamilies[live] = m_commandQueueFamilies[GetResID(AllocateInfo.commandPool)];
+#endif
     }
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
     m_commandQueueFamilies[CommandBuffer] =
         m_commandQueueFamilies[GetResID(AllocateInfo.commandPool)];
+#endif
 
     AddResource(CommandBuffer, ResourceType::CommandBuffer, "Command Buffer");
     DerivedResource(device, CommandBuffer);
@@ -1564,13 +1573,18 @@ void WrappedVulkan::vkCmdEndRenderPass(VkCommandBuffer commandBuffer)
 
     const rdcarray<VkImageMemoryBarrier> &barriers = record->cmdInfo->rpbarriers;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
     // apply the implicit layout transitions here
+    GetResourceManager()->RecordBarriers(record->cmdInfo->imageStates, record->pool->queueFamilyIndex,
+                                         (uint32_t)barriers.size(), barriers.data());
+#else
     {
       SCOPED_LOCK(m_ImageLayoutsLock);
       GetResourceManager()->RecordBarriers(GetRecord(commandBuffer)->cmdInfo->imgbarriers,
                                            m_ImageLayouts, (uint32_t)barriers.size(),
                                            barriers.data());
     }
+#endif
   }
 }
 
@@ -2022,13 +2036,18 @@ void WrappedVulkan::vkCmdEndRenderPass2KHR(VkCommandBuffer commandBuffer,
 
     const rdcarray<VkImageMemoryBarrier> &barriers = record->cmdInfo->rpbarriers;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
     // apply the implicit layout transitions here
+    GetResourceManager()->RecordBarriers(record->cmdInfo->imageStates, record->pool->queueFamilyIndex,
+                                         (uint32_t)barriers.size(), barriers.data());
+#else
     {
       SCOPED_LOCK(m_ImageLayoutsLock);
       GetResourceManager()->RecordBarriers(GetRecord(commandBuffer)->cmdInfo->imgbarriers,
                                            m_ImageLayouts, (uint32_t)barriers.size(),
                                            barriers.data());
     }
+#endif
   }
 }
 
@@ -2866,10 +2885,16 @@ void WrappedVulkan::vkCmdPipelineBarrier(
 
     if(imageMemoryBarrierCount > 0)
     {
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      GetResourceManager()->RecordBarriers(record->cmdInfo->imageStates,
+                                           record->pool->queueFamilyIndex, imageMemoryBarrierCount,
+                                           pImageMemoryBarriers);
+#else
       SCOPED_LOCK(m_ImageLayoutsLock);
       GetResourceManager()->RecordBarriers(GetRecord(commandBuffer)->cmdInfo->imgbarriers,
                                            m_ImageLayouts, imageMemoryBarrierCount,
                                            pImageMemoryBarriers);
+#endif
     }
   }
 }
@@ -3486,8 +3511,13 @@ void WrappedVulkan::vkCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t
             execRecord->bakedCommands->cmdInfo->boundDescSets.end());
         record->cmdInfo->subcmds.push_back(execRecord);
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+        ImageState::Merge(record->cmdInfo->imageStates,
+                          execRecord->bakedCommands->cmdInfo->imageStates, ComposeFrameRefs);
+#else
         GetResourceManager()->MergeBarriers(record->cmdInfo->imgbarriers,
                                             execRecord->bakedCommands->cmdInfo->imgbarriers);
+#endif
       }
     }
   }

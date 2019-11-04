@@ -94,8 +94,10 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
     const ResourceInfo &resInfo = *im->record->resInfo;
     const ImageInfo &imageInfo = resInfo.imageInfo;
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
     if(!GetResourceManager()->FindImgRefs(id))
       GetResourceManager()->AddImageFrameRefs(id, imageInfo);
+#endif
 
     if(resInfo.IsSparse())
     {
@@ -104,6 +106,13 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
       return Prepare_SparseInitialState((WrappedVkImage *)res);
     }
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+    LockedImageStateRef state = FindImageState(im->id);
+
+    // if the image has no memory bound, nothing is to be fetched
+    if(!state || !state->isMemoryBound)
+      return true;
+#else
     VkCommandBuffer extQCmd = VK_NULL_HANDLE;
 
     ImageLayouts *layout = NULL;
@@ -124,15 +133,16 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
     if(!layout->isMemoryBound)
       return true;
 
-    VkDevice d = GetDev();
-    // INITSTATEBATCH
-    VkCommandBuffer cmd = GetNextCmd();
-
     if(layout->queueFamilyIndex != m_QueueFamilyIdx)
     {
       // get a command buffer for giving up ownership before the copy and acquiring it afterwards.
       extQCmd = GetExtQueueCmd(layout->queueFamilyIndex);
     }
+#endif
+
+    VkDevice d = GetDev();
+    // INITSTATEBATCH
+    VkCommandBuffer cmd = GetNextCmd();
 
     // must ensure offset remains valid. Must be multiple of block size, or 4, depending on format
     VkDeviceSize bufAlignment = 4;
@@ -280,55 +290,60 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
     vkr = ObjDisp(d)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
     if(extQCmd != VK_NULL_HANDLE)
     {
       vkr = ObjDisp(d)->BeginCommandBuffer(Unwrap(extQCmd), &beginInfo);
       RDCASSERTEQUAL(vkr, VK_SUCCESS);
     }
+#endif
 
-    VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
+    VkImageAspectFlags copyAspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
     if(IsStencilOnlyFormat(imageInfo.format))
     {
-      aspectFlags = VK_IMAGE_ASPECT_STENCIL_BIT;
+      copyAspectFlags = VK_IMAGE_ASPECT_STENCIL_BIT;
     }
     else if(IsDepthOrStencilFormat(imageInfo.format))
     {
-      aspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
+      copyAspectFlags = VK_IMAGE_ASPECT_DEPTH_BIT;
     }
     else if(planeCount > 1)
     {
-      aspectFlags = VK_IMAGE_ASPECT_PLANE_0_BIT;
+      copyAspectFlags = VK_IMAGE_ASPECT_PLANE_0_BIT;
       if(planeCount >= 2)
-        aspectFlags |= VK_IMAGE_ASPECT_PLANE_1_BIT;
+        copyAspectFlags |= VK_IMAGE_ASPECT_PLANE_1_BIT;
       if(planeCount >= 3)
-        aspectFlags |= VK_IMAGE_ASPECT_PLANE_2_BIT;
+        copyAspectFlags |= VK_IMAGE_ASPECT_PLANE_2_BIT;
     }
+    VkImageAspectFlags barrierAspectFlags = copyAspectFlags;
+    if(copyAspectFlags == VK_IMAGE_ASPECT_DEPTH_BIT && !IsDepthOnlyFormat(imageInfo.format))
+      barrierAspectFlags |= VK_IMAGE_ASPECT_STENCIL_BIT;
 
+    // update the real image layout into transfer-source
+    VkImageLayout newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    if(arrayIm != VK_NULL_HANDLE)
+      newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+    ImageBarrierSequence setupBarriers, cleanupBarriers;
+    state->TempTransition(m_QueueFamilyIdx, newLayout,
+                          VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_READ_BIT, &setupBarriers,
+                          &cleanupBarriers, GetImageTransitionInfo());
+    InlineSetupImageBarriers(cmd, &setupBarriers);
+    m_setupImageBarriers.Merge(setupBarriers);
+#else
     VkImageMemoryBarrier srcimBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         NULL,
-        0,
-        0,
+        VK_ACCESS_ALL_WRITE_BITS,    // ensure all previous writes have completed
+        VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_READ_BIT,    // before we go reading
         VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        newLayout,
         layout->queueFamilyIndex,
         m_QueueFamilyIdx,
         realim,
-        {aspectFlags, 0, (uint32_t)imageInfo.levelCount, 0, (uint32_t)numLayers},
+        {barrierAspectFlags, 0, (uint32_t)imageInfo.levelCount, 0, (uint32_t)numLayers},
     };
-
-    if(aspectFlags == VK_IMAGE_ASPECT_DEPTH_BIT && !IsDepthOnlyFormat(imageInfo.format))
-      srcimBarrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-
-    // update the real image layout into transfer-source
-    srcimBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    if(arrayIm != VK_NULL_HANDLE)
-      srcimBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-    // ensure all previous writes have completed
-    srcimBarrier.srcAccessMask = VK_ACCESS_ALL_WRITE_BITS;
-    // before we go reading
-    srcimBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_READ_BIT;
 
     for(size_t si = 0; si < layout->subresourceStates.size(); si++)
     {
@@ -350,7 +365,7 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
 
       SubmitAndFlushExtQueue(layout->queueFamilyIndex);
     }
-
+#endif
     if(arrayIm != VK_NULL_HANDLE)
     {
       VkImageMemoryBarrier arrayimBarrier = {
@@ -363,8 +378,7 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
           VK_QUEUE_FAMILY_IGNORED,
           VK_QUEUE_FAMILY_IGNORED,
           Unwrap(arrayIm),
-          {srcimBarrier.subresourceRange.aspectMask, 0, VK_REMAINING_MIP_LEVELS, 0,
-           VK_REMAINING_ARRAY_LAYERS},
+          {barrierAspectFlags, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS},
       };
 
       DoPipelineBarrier(cmd, 1, &arrayimBarrier);
@@ -405,7 +419,7 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
             0,
             0,
             0,
-            {aspectFlags, (uint32_t)m, (uint32_t)a, 1},
+            {copyAspectFlags, (uint32_t)m, (uint32_t)a, 1},
             {
                 0, 0, 0,
             },
@@ -476,7 +490,18 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
     RDCASSERTMSG("buffer wasn't sized sufficiently!", bufOffset <= bufInfo.size, bufOffset,
                  readbackmem.size, imageInfo.extent, imageInfo.format, numLayers,
                  imageInfo.levelCount);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+    InlineCleanupImageBarriers(cmd, &cleanupBarriers);
+    m_cleanupImageBarriers.Merge(cleanupBarriers);
 
+    vkr = ObjDisp(d)->EndCommandBuffer(Unwrap(cmd));
+    RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+    SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+    SubmitCmds();
+    FlushQ();
+    SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+#else
     // transfer back to whatever it was
     srcimBarrier.oldLayout = srcimBarrier.newLayout;
 
@@ -520,6 +545,7 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
     // INITSTATEBATCH
     SubmitCmds();
     FlushQ();
+#endif
 
     ObjDisp(d)->DestroyBuffer(Unwrap(d), Unwrap(dstBuf), NULL);
     GetResourceManager()->ReleaseWrappedResource(dstBuf);

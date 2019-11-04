@@ -917,10 +917,18 @@ void WrappedVulkan::vkCmdWaitEvents(VkCommandBuffer commandBuffer, uint32_t even
 
     if(imageMemoryBarrierCount > 0)
     {
-      SCOPED_LOCK(m_ImageLayoutsLock);
-      GetResourceManager()->RecordBarriers(GetRecord(commandBuffer)->cmdInfo->imgbarriers,
-                                           m_ImageLayouts, imageMemoryBarrierCount,
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      GetResourceManager()->RecordBarriers(record->cmdInfo->imageStates,
+                                           record->pool->queueFamilyIndex, imageMemoryBarrierCount,
                                            pImageMemoryBarriers);
+#else
+      {
+        SCOPED_LOCK(m_ImageLayoutsLock);
+        GetResourceManager()->RecordBarriers(GetRecord(commandBuffer)->cmdInfo->imgbarriers,
+                                             m_ImageLayouts, imageMemoryBarrierCount,
+                                             pImageMemoryBarriers);
+      }
+#endif
     }
 
     record->AddChunk(scope.Get());
