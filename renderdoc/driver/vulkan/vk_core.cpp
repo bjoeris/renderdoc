@@ -418,8 +418,10 @@ void WrappedVulkan::SubmitAndFlushImageStateBarriers(ImageBarrierSequence *barri
 
   VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
                                         VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-  rdcarray<VkQueue> queues;
+  rdcarray<VkFence> queueFamilyFences;
+  rdcarray<VkFence> submittedFences;
   rdcarray<rdcarray<VkImageMemoryBarrier>> batch;
+  VkResult vkr;
   for(uint32_t batchIndex = 0; !barriers->empty(); ++batchIndex)
   {
     barriers->ExtractBatch(batchIndex, batch);
@@ -432,27 +434,6 @@ void WrappedVulkan::SubmitAndFlushImageStateBarriers(ImageBarrierSequence *barri
       VkCommandBuffer cmd = VK_NULL_HANDLE;
       VkQueue queue = VK_NULL_HANDLE;
 
-#if ENABLED(SINGLE_FLUSH_VALIDATE)
-      for(aute it = queueBatch.begin(); it != queueBatch.end(); ++it)
-      {
-        if(queueFamilyIndex == m_QueueFamilyIdx)
-          cmd = GetNextCmd();
-        else
-          cmd = GetExtQueueCmd(queueFamilyIndex);
-
-        VkResult vkr = ObjDisp(cmd)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
-        RDCASSERTEQUAL(vkr, VK_SUCCESS);
-
-        DoPipelineBarrier(cmd, 1, it);
-        vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
-        RDCASSERTEQUAL(vkr, VK_SUCCESS);
-
-        if(queueFamilyIndex == m_QueueFamilyIdx)
-          SubmitCmds();
-        else
-          SubmitAndFlushExtQueue(queueFamilyIndex);
-      }
-#else
       if(queueFamilyIndex == m_QueueFamilyIdx)
       {
         cmd = GetNextCmd(false);
@@ -464,15 +445,7 @@ void WrappedVulkan::SubmitAndFlushImageStateBarriers(ImageBarrierSequence *barri
         queue = m_ExternalQueues[queueFamilyIndex].queue;
       }
 
-      VkResult vkr = ObjDisp(cmd)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
-      RDCASSERTEQUAL(vkr, VK_SUCCESS);
-
-      DoPipelineBarrier(cmd, (uint32_t)queueBatch.size(), queueBatch.data());
-
-      vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
-      RDCASSERTEQUAL(vkr, VK_SUCCESS);
-
-      cmd = Unwrap(cmd);
+      VkCommandBuffer unwrappedCmd = Unwrap(cmd);
 
       VkSubmitInfo submitInfo = {
           VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -481,23 +454,70 @@ void WrappedVulkan::SubmitAndFlushImageStateBarriers(ImageBarrierSequence *barri
           NULL,
           NULL,    // wait semaphores
           1,
-          &cmd,    // command buffers
+          &unwrappedCmd,    // command buffers
           0,
           NULL,    // signal semaphores
       };
 
-      vkr = ObjDisp(queue)->QueueSubmit(Unwrap(queue), 1, &submitInfo, VK_NULL_HANDLE);
+#if ENABLED(SINGLE_FLUSH_VALIDATE)
+      for(auto it = queueBatch.begin(); it != queueBatch.end(); ++it)
+      {
+        vkr = ObjDisp(cmd)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
+        RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+        DoPipelineBarrier(cmd, 1, it);
+        vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
+        RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+        vkr = ObjDisp(queue)->QueueSubmit(Unwrap(queue), 1, &submitInfo, VK_NULL_HANDLE);
+        RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+        vkr = ObjDisp(queue)->QueueWaitIdle(Unwrap(queue));
+        RDCASSERTEQUAL(vkr, VK_SUCCESS);
+      }
+#else
+      vkr = ObjDisp(cmd)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
       RDCASSERTEQUAL(vkr, VK_SUCCESS);
-      queues.push_back(queue);
+
+      DoPipelineBarrier(cmd, (uint32_t)queueBatch.size(), queueBatch.data());
+
+      vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+
+      while(queueFamilyIndex >= queueFamilyFences.size())
+      {
+        VkFenceCreateInfo fenceInfo = {
+            /* sType = */ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            /* pNext = */ NULL,
+            /* flags = */ 0,
+        };
+        queueFamilyFences.push_back(VK_NULL_HANDLE);
+        vkr = ObjDisp(m_Device)->CreateFence(Unwrap(m_Device), &fenceInfo, NULL,
+                                             &queueFamilyFences.back());
+        RDCASSERTEQUAL(vkr, VK_SUCCESS);
+      }
+
+      VkFence fence = queueFamilyFences[queueFamilyIndex];
+
+      vkr = ObjDisp(queue)->QueueSubmit(Unwrap(queue), 1, &submitInfo, fence);
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+      submittedFences.push_back(fence);
 #endif
       queueBatch.clear();
     }
-    for(auto queueIt = queues.begin(); queueIt != queues.end(); ++queueIt)
+    if(!submittedFences.empty())
     {
-      VkResult vkr = ObjDisp(*queueIt)->QueueWaitIdle(Unwrap(*queueIt));
+      vkr = ObjDisp(m_Device)->WaitForFences(Unwrap(m_Device), (uint32_t)submittedFences.size(),
+                                             submittedFences.data(), VK_TRUE, 1000000000);
       RDCASSERTEQUAL(vkr, VK_SUCCESS);
+      vkr = ObjDisp(m_Device)->ResetFences(Unwrap(m_Device), (uint32_t)submittedFences.size(),
+                                           submittedFences.data());
+      RDCASSERTEQUAL(vkr, VK_SUCCESS);
+      submittedFences.clear();
     }
   }
+  for(VkFence *it = queueFamilyFences.begin(); it != queueFamilyFences.end(); ++it)
+    ObjDisp(m_Device)->DestroyFence(Unwrap(m_Device), *it, NULL);
 }
 
 void WrappedVulkan::InlineSetupImageBarriers(VkCommandBuffer cmd, ImageBarrierSequence *barriers)
@@ -1680,13 +1700,28 @@ void WrappedVulkan::StartFrameCapture(void *dev, void *wnd)
     }
 
     GetResourceManager()->PrepareInitialContents();
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+    SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+    SubmitCmds();
+    FlushQ();
+    SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+#endif
 
     RDCDEBUG("Attempting capture");
     m_FrameCaptureRecord->DeleteChunks();
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) && ENABLED(RDOC_NEW_IMAGE_STATE_SERIALIZE)
+    {
+      SCOPED_LOCK(m_ImageStatesLock);
+      for(auto it = m_ImageStates.begin(); it != m_ImageStates.end(); ++it)
+      {
+        it->second.LockWrite()->BeginCapture();
+      }
+    }
+#endif
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE_SERIALIZE)
     {
       CACHE_THREAD_SERIALISER();
-
       SCOPED_SERIALISE_CHUNK(SystemChunk::CaptureBegin);
 
       Serialise_BeginCaptureFrame(ser);
@@ -1695,6 +1730,7 @@ void WrappedVulkan::StartFrameCapture(void *dev, void *wnd)
       // before any command buffers
       m_HeaderChunk = scope.Get();
     }
+#endif
 
     m_State = CaptureState::ActiveCapturing;
   }
@@ -2055,6 +2091,16 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
       Serialise_CaptureScope(ser);
     }
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_SERIALIZE)
+    {
+      WriteSerialiser &captureBeginSer = GetThreadSerialiser();
+      ScopedChunk scope(captureBeginSer, SystemChunk::CaptureBegin);
+
+      Serialise_BeginCaptureFrame(captureBeginSer);
+
+      m_HeaderChunk = scope.Get();
+    }
+#endif
     m_HeaderChunk->Write(ser);
 
     // don't need to lock access to m_CmdBufferRecords as we are no longer
@@ -4191,6 +4237,7 @@ const DrawcallDescription *WrappedVulkan::GetDrawcall(uint32_t eventId)
   return m_Drawcalls[eventId];
 }
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
 uint32_t WrappedVulkan::FindCommandQueueFamily(ResourceId cmdId)
 {
   auto it = m_commandQueueFamilies.find(cmdId);
@@ -4206,6 +4253,85 @@ void WrappedVulkan::InsertCommandQueueFamily(ResourceId cmdId, uint32_t queueFam
 {
   m_commandQueueFamilies[cmdId] = queueFamilyIndex;
 }
+LockedImageStateRef WrappedVulkan::FindImageState(ResourceId id)
+{
+  SCOPED_LOCK(m_ImageStatesLock);
+  auto it = m_ImageStates.find(id);
+  if(it != m_ImageStates.end())
+    return it->second.LockWrite();
+  else
+    return LockedImageStateRef();
+}
+
+LockedConstImageStateRef WrappedVulkan::FindConstImageState(ResourceId id)
+{
+  SCOPED_LOCK(m_ImageStatesLock);
+  auto it = m_ImageStates.find(id);
+  if(it != m_ImageStates.end())
+    return it->second.LockRead();
+  else
+    return LockedConstImageStateRef();
+}
+
+LockedImageStateRef WrappedVulkan::InsertImageState(VkImage handle, ResourceId id,
+                                                    const ImageInfo &info, bool *inserted)
+{
+  SCOPED_LOCK(m_ImageStatesLock);
+  auto it = m_ImageStates.find(id);
+  if(it != m_ImageStates.end())
+  {
+    if(inserted != NULL)
+      *inserted = false;
+    return it->second.LockWrite();
+  }
+  else
+  {
+    if(inserted != NULL)
+      *inserted = true;
+    it = m_ImageStates.insert({id, LockingImageState(handle, info)}).first;
+    return it->second.LockWrite();
+  }
+}
+
+bool WrappedVulkan::EraseImageState(ResourceId id)
+{
+  SCOPED_LOCK(m_ImageStatesLock);
+  auto it = m_ImageStates.find(id);
+  if(it != m_ImageStates.end())
+  {
+    m_ImageStates.erase(it);
+    return true;
+  }
+  return false;
+}
+
+void WrappedVulkan::UpdateImageStates(const std::map<ResourceId, ImageState> &dstStates,
+                                      FrameRefCompFunc compose)
+{
+  SCOPED_LOCK(m_ImageStatesLock);
+  auto it = m_ImageStates.begin();
+  auto dstIt = dstStates.begin();
+  while(dstIt != dstStates.end())
+  {
+    if(it == m_ImageStates.end() || dstIt->first < it->first)
+    {
+      it = m_ImageStates
+               .insert({dstIt->first, LockingImageState(dstIt->second.handle, dstIt->second.info())})
+               .first;
+      dstIt->second.InitialState(*it->second.LockWrite());
+    }
+    else if(it->first < dstIt->first)
+    {
+      ++it;
+      continue;
+    }
+
+    it->second.LockWrite()->Merge(dstIt->second, compose);
+    ++dstIt;
+    ++it;
+  }
+}
+#endif
 
 #if ENABLED(ENABLE_UNIT_TESTS)
 

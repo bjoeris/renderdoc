@@ -136,6 +136,8 @@
 #endif
 
 #define RDOC_NEW_IMAGE_STATE_CAPTURE OPTION_OFF
+#define RDOC_NEW_IMAGE_STATE_REPLAY OPTION_OFF
+#define RDOC_NEW_IMAGE_STATE_SERIALIZE OPTION_OFF
 
 /////////////////////////////////////////////////
 // Global constants

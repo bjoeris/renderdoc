@@ -266,8 +266,14 @@ public:
                      std::vector<rdcpair<ResourceId, ImageRegionState> > &states,
                      std::map<ResourceId, ImageLayouts> &layouts);
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+  void RecordBarriers(std::map<ResourceId, ImageState> &states, uint32_t queueFamilyIndex,
+                      uint32_t numBarriers, const VkImageMemoryBarrier *barriers);
+
   template <typename SerialiserType>
-  void SerialiseImageStates2(SerialiserType &ser, std::map<ResourceId, ImageState> &states);
+  void SerialiseImageStates2(SerialiserType &ser, std::map<ResourceId, LockingImageState> &states);
+#endif
+
   template <typename SerialiserType>
   void SerialiseImageStates(SerialiserType &ser, std::map<ResourceId, ImageLayouts> &states,
                             std::vector<VkImageMemoryBarrier> &barriers);
@@ -434,10 +440,6 @@ public:
 
   void SetInternalResource(ResourceId id);
 
-  void MarkImageFrameReferenced(const VkResourceRecord *img, const ImageRange &range,
-                                FrameRefType refType);
-  void MarkImageFrameReferenced(ResourceId img, const ImageInfo &imageInfo, const ImageRange &range,
-                                FrameRefType refType);
   void MarkMemoryFrameReferenced(ResourceId mem, VkDeviceSize start, VkDeviceSize end,
                                  FrameRefType refType);
   void AddMemoryFrameRefs(ResourceId mem);

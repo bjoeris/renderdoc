@@ -871,6 +871,7 @@ struct SwapchainInfo
   int arraySize;
 
   bool shared;
+  VkSharingMode imageSharingMode;
 
   VkRenderPass rp;
 
@@ -898,13 +899,18 @@ struct ImageInfo
   int sampleCount = 0;
   VkExtent3D extent = {0, 0, 0};
   VkFormat format = VK_FORMAT_UNDEFINED;
+  VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  VkSharingMode sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   ImageInfo() {}
-  ImageInfo(VkFormat format, VkExtent3D extent, int levelCount, int layerCount, int sampleCount)
+  ImageInfo(VkFormat format, VkExtent3D extent, int levelCount, int layerCount, int sampleCount,
+            VkImageLayout initialLayout, VkSharingMode sharingMode)
       : format(format),
         extent(extent),
         levelCount(levelCount),
         layerCount(layerCount),
-        sampleCount(sampleCount)
+        sampleCount(sampleCount),
+        initialLayout(initialLayout),
+        sharingMode(sharingMode)
   {
   }
   ImageInfo(const VkImageCreateInfo &ci)
@@ -912,7 +918,9 @@ struct ImageInfo
         levelCount(ci.mipLevels),
         sampleCount((int)ci.samples),
         extent(ci.extent),
-        format(ci.format)
+        format(ci.format),
+        initialLayout(ci.initialLayout),
+        sharingMode(ci.sharingMode)
   {
     // The Vulkan spec Valid Usage for `VkImageCreateInfo` specifies that the height and depth of 1D
     // images, and the depth of 2D images must equal 1. We need to ensure this holds, even if the
@@ -928,7 +936,11 @@ struct ImageInfo
     }
   }
   ImageInfo(const SwapchainInfo &swapInfo)
-      : layerCount(swapInfo.arraySize), levelCount(1), sampleCount(1), format(swapInfo.format)
+      : layerCount(swapInfo.arraySize),
+        levelCount(1),
+        sampleCount(1),
+        format(swapInfo.format),
+        sharingMode(swapInfo.imageSharingMode)
   {
     extent.width = swapInfo.extent.width;
     extent.height = swapInfo.extent.height;
@@ -973,6 +985,7 @@ struct ResourceInfo
 
 struct MemRefs;
 struct ImgRefs;
+struct ImageState;
 
 struct CmdBufferRecordingInfo
 {
@@ -982,7 +995,9 @@ struct CmdBufferRecordingInfo
   VkResourceRecord *framebuffer = NULL;
   VkResourceRecord *allocRecord = NULL;
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || DISABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
   std::vector<rdcpair<ResourceId, ImageRegionState> > imgbarriers;
+#endif
 
   // sparse resources referenced by this command buffer (at submit time
   // need to go through the sparse mapping and reference all memory)
@@ -1003,7 +1018,14 @@ struct CmdBufferRecordingInfo
 
   std::vector<VkResourceRecord *> subcmds;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+  std::map<ResourceId, ImageState> imageStates;
+#endif
+
+#if DISABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || DISABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
   std::map<ResourceId, ImgRefs> imgFrameRefs;
+#endif
+
   std::map<ResourceId, MemRefs> memFrameRefs;
 
   // AdvanceFrame/Present should be called after this buffer is submitted
@@ -1039,7 +1061,13 @@ struct DescriptorSetData
   static const uint32_t SPARSE_REF_BIT = 0x80000000;
   std::map<ResourceId, rdcpair<uint32_t, FrameRefType> > bindFrameRefs;
   std::map<ResourceId, MemRefs> bindMemRefs;
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+  std::map<ResourceId, ImageState> bindImageStates;
+#endif
+
+#if DISABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || DISABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
   std::map<ResourceId, ImgRefs> bindImgRefs;
+#endif
 };
 
 struct PipelineLayoutData
@@ -1534,6 +1562,57 @@ struct ImageState
 
 DECLARE_REFLECTION_STRUCT(ImageState);
 
+template <typename ImageStateT>
+class LockedImageStateRefTemplate
+{
+public:
+  LockedImageStateRefTemplate() = default;
+  LockedImageStateRefTemplate(ImageStateT *state, Threading::SpinLock &spin)
+      : m_state(state), m_lock(spin)
+  {
+  }
+  inline ImageStateT &operator*() const { return *m_state; }
+  inline ImageStateT *operator->() const { return m_state; }
+  inline operator bool() const { return m_state != NULL; }
+private:
+  ImageStateT *m_state = NULL;
+  Threading::ScopedSpinLock m_lock;
+};
+
+class LockedConstImageStateRef : public LockedImageStateRefTemplate<const ImageState>
+{
+public:
+  LockedConstImageStateRef() = default;
+  LockedConstImageStateRef(const ImageState *state, Threading::SpinLock &spin)
+      : LockedImageStateRefTemplate<const ImageState>(state, spin)
+  {
+  }
+};
+
+class LockedImageStateRef : public LockedImageStateRefTemplate<ImageState>
+{
+public:
+  LockedImageStateRef() = default;
+  LockedImageStateRef(ImageState *state, Threading::SpinLock &spin)
+      : LockedImageStateRefTemplate<ImageState>(state, spin)
+  {
+  }
+};
+
+class LockingImageState
+{
+public:
+  LockingImageState() = default;
+  LockingImageState(VkImage handle, const ImageInfo &imageInfo) : m_state(handle, imageInfo) {}
+  LockingImageState(const ImageState &state) : m_state(state) {}
+  LockedImageStateRef LockWrite() { return LockedImageStateRef(&m_state, m_lock); }
+  LockedConstImageStateRef LockRead() { return LockedConstImageStateRef(&m_state, m_lock); }
+  inline ImageState *state() { return &m_state; }
+private:
+  ImageState m_state;
+  Threading::SpinLock m_lock;
+};
+
 struct TaggedImageState
 {
   ResourceId id;
@@ -1813,6 +1892,11 @@ inline FrameRefType MarkImageReferenced(std::map<ResourceId, ImgRefs> &imgRefs, 
   return MarkImageReferenced(imgRefs, img, imageInfo, range, refType, ComposeFrameRefs);
 }
 
+FrameRefType MarkImageReferenced(std::map<ResourceId, ImageState> &imageStates, ResourceId img,
+                                 const ImageInfo &imageInfo, const ImageSubresourceRange &range,
+                                 uint32_t queueFamilyIndex, FrameRefType refType,
+                                 FrameRefCompFunc comp = ComposeFrameRefs);
+
 template <typename Compose>
 FrameRefType MarkMemoryReferenced(std::map<ResourceId, MemRefs> &memRefs, ResourceId mem,
                                   VkDeviceSize offset, VkDeviceSize size, FrameRefType refType,
@@ -1869,10 +1953,15 @@ public:
     SwapChunks(bakedCommands);
     cmdInfo->dirtied.swap(bakedCommands->cmdInfo->dirtied);
     cmdInfo->boundDescSets.swap(bakedCommands->cmdInfo->boundDescSets);
-    cmdInfo->imgbarriers.swap(bakedCommands->cmdInfo->imgbarriers);
     cmdInfo->subcmds.swap(bakedCommands->cmdInfo->subcmds);
     cmdInfo->sparse.swap(bakedCommands->cmdInfo->sparse);
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+    RDCASSERT(bakedCommands->cmdInfo->imageStates.empty());
+    cmdInfo->imageStates.swap(bakedCommands->cmdInfo->imageStates);
+#else
+    cmdInfo->imgbarriers.swap(bakedCommands->cmdInfo->imgbarriers);
     cmdInfo->imgFrameRefs.swap(bakedCommands->cmdInfo->imgFrameRefs);
+#endif
     cmdInfo->memFrameRefs.swap(bakedCommands->cmdInfo->memFrameRefs);
   }
 
@@ -1908,7 +1997,11 @@ public:
     rdcpair<uint32_t, FrameRefType> &p = descInfo->bindFrameRefs[view->baseResource];
     if((p.first & ~DescriptorSetData::SPARSE_REF_BIT) == 0)
     {
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+      descInfo->bindImageStates.erase(view->baseResource);
+#else
       descInfo->bindImgRefs.erase(view->baseResource);
+#endif
       p.first = 1;
       p.second = eFrameRef_None;
     }
@@ -1920,8 +2013,14 @@ public:
     ImageRange imgRange = ImageRange((VkImageSubresourceRange)view->viewRange);
     imgRange.viewType = view->viewRange.viewType();
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+    FrameRefType maxRef =
+        MarkImageReferenced(descInfo->bindImageStates, view->baseResource, view->resInfo->imageInfo,
+                            ImageSubresourceRange(imgRange), pool->queueFamilyIndex, refType);
+#else
     FrameRefType maxRef = MarkImageReferenced(descInfo->bindImgRefs, view->baseResource,
                                               view->resInfo->imageInfo, imgRange, refType);
+#endif
 
     p.second = ComposeFrameRefsDisjoint(p.second, maxRef);
   }

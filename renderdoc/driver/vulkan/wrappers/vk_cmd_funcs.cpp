@@ -1564,13 +1564,18 @@ void WrappedVulkan::vkCmdEndRenderPass(VkCommandBuffer commandBuffer)
 
     const std::vector<VkImageMemoryBarrier> &barriers = record->cmdInfo->rpbarriers;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
     // apply the implicit layout transitions here
+    GetResourceManager()->RecordBarriers(record->cmdInfo->imageStates, record->pool->queueFamilyIndex,
+                                         (uint32_t)barriers.size(), barriers.data());
+#else
     {
       SCOPED_LOCK(m_ImageLayoutsLock);
       GetResourceManager()->RecordBarriers(GetRecord(commandBuffer)->cmdInfo->imgbarriers,
                                            m_ImageLayouts, (uint32_t)barriers.size(),
                                            barriers.data());
     }
+#endif
   }
 }
 
@@ -2022,13 +2027,18 @@ void WrappedVulkan::vkCmdEndRenderPass2KHR(VkCommandBuffer commandBuffer,
 
     const std::vector<VkImageMemoryBarrier> &barriers = record->cmdInfo->rpbarriers;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
     // apply the implicit layout transitions here
+    GetResourceManager()->RecordBarriers(record->cmdInfo->imageStates, record->pool->queueFamilyIndex,
+                                         (uint32_t)barriers.size(), barriers.data());
+#else
     {
       SCOPED_LOCK(m_ImageLayoutsLock);
       GetResourceManager()->RecordBarriers(GetRecord(commandBuffer)->cmdInfo->imgbarriers,
                                            m_ImageLayouts, (uint32_t)barriers.size(),
                                            barriers.data());
     }
+#endif
   }
 }
 
@@ -2866,10 +2876,16 @@ void WrappedVulkan::vkCmdPipelineBarrier(
 
     if(imageMemoryBarrierCount > 0)
     {
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+      GetResourceManager()->RecordBarriers(record->cmdInfo->imageStates,
+                                           record->pool->queueFamilyIndex, imageMemoryBarrierCount,
+                                           pImageMemoryBarriers);
+#else
       SCOPED_LOCK(m_ImageLayoutsLock);
       GetResourceManager()->RecordBarriers(GetRecord(commandBuffer)->cmdInfo->imgbarriers,
                                            m_ImageLayouts, imageMemoryBarrierCount,
                                            pImageMemoryBarriers);
+#endif
     }
   }
 }
@@ -3488,8 +3504,13 @@ void WrappedVulkan::vkCmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t
             execRecord->bakedCommands->cmdInfo->boundDescSets.end());
         record->cmdInfo->subcmds.push_back(execRecord);
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+        ImageState::Merge(record->cmdInfo->imageStates,
+                          execRecord->bakedCommands->cmdInfo->imageStates, ComposeFrameRefs);
+#else
         GetResourceManager()->MergeBarriers(record->cmdInfo->imgbarriers,
                                             execRecord->bakedCommands->cmdInfo->imgbarriers);
+#endif
       }
     }
   }

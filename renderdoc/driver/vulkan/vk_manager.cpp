@@ -245,37 +245,67 @@ void VulkanResourceManager::MergeBarriers(
   TRDBG("Post-merge, there are %u states", (uint32_t)dststates.size());
 }
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
 template <typename SerialiserType>
 void VulkanResourceManager::SerialiseImageStates2(SerialiserType &ser,
-                                                  std::map<ResourceId, ImageState> &states)
+                                                  std::map<ResourceId, LockingImageState> &states)
 {
   SERIALISE_ELEMENT_LOCAL(NumImages, (uint32_t)states.size());
 
   auto srcit = states.begin();
-
-  std::vector<rdcpair<ResourceId, ImageRegionState> > vec;
 
   std::set<ResourceId> updatedState;
 
   for(uint32_t i = 0; i < NumImages; i++)
   {
     SERIALISE_ELEMENT_LOCAL(Image, (ResourceId)(srcit->first)).TypedAs("VkImage"_lit);
-    SERIALISE_ELEMENT_LOCAL(ImageState, (::ImageState)(srcit->second));
-    if(ser.IsReading())
-      states.insert({Image, ImageState});
-    else
-      ++srcit;
-
     if(ser.IsWriting())
-      srcit++;
+    {
+      LockedImageStateRef lockedState = srcit->second.LockWrite();
+      ::ImageState &ImageState = *lockedState;
+      SERIALISE_ELEMENT(ImageState);
+      ++srcit;
+    }
+    else
+    {
+      ::ImageState ImageState;
+      SERIALISE_ELEMENT(ImageState);
+      ResourceId liveid;
+      if(IsReplayingAndReading() && HasLiveResource(Image))
+        liveid = GetLiveID(Image);
+
+      if(liveid != ResourceId())
+      {
+        ImageState.newQueueFamilyTransfers.clear();
+        for(auto it = ImageState.subresourceStates.begin();
+            it != ImageState.subresourceStates.end(); ++it)
+        {
+          // Set the current image state (`newLayout`, `newQueueFamilyIndex`, `refType`) to the
+          // initial image state, so that calling `ResetToOldState` will move the image from the
+          // initial state to the state it was in at the beginning of the capture.
+          ImageSubresourceState state = it->state();
+          state.newLayout = ImageState.info().initialLayout;
+          state.newQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+          state.refType = eFrameRef_None;
+          it->SetState(state);
+        }
+
+        auto stit = states.find(liveid);
+        if(stit == states.end())
+          states.insert({liveid, LockingImageState(ImageState)});
+        else
+          stit->second.LockWrite()->MergeCaptureBeginState(ImageState);
+      }
+    }
   }
 }
+template void VulkanResourceManager::SerialiseImageStates2(
+    WriteSerialiser &ser, std::map<ResourceId, LockingImageState> &states);
+template void VulkanResourceManager::SerialiseImageStates2(
+    ReadSerialiser &ser, std::map<ResourceId, LockingImageState> &states);
+#endif
 
-template void VulkanResourceManager::SerialiseImageStates2(ReadSerialiser &ser,
-                                                           std::map<ResourceId, ImageState> &states);
-template void VulkanResourceManager::SerialiseImageStates2(WriteSerialiser &ser,
-                                                           std::map<ResourceId, ImageState> &states);
-
+#if DISABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || DISABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
 template <typename SerialiserType>
 void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
                                                  std::map<ResourceId, ImageLayouts> &states,
@@ -443,6 +473,7 @@ template void VulkanResourceManager::SerialiseImageStates(ReadSerialiser &ser,
 template void VulkanResourceManager::SerialiseImageStates(WriteSerialiser &ser,
                                                           std::map<ResourceId, ImageLayouts> &states,
                                                           std::vector<VkImageMemoryBarrier> &barriers);
+#endif
 
 template <class SerialiserType>
 void DoSerialise(SerialiserType &ser, MemRefInterval &el)
@@ -827,6 +858,45 @@ void VulkanResourceManager::ApplyBarriers(uint32_t queueFamilyIndex,
   }
 }
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+void VulkanResourceManager::RecordBarriers(std::map<ResourceId, ImageState> &states,
+                                           uint32_t queueFamilyIndex, uint32_t numBarriers,
+                                           const VkImageMemoryBarrier *barriers)
+{
+  TRDBG("Recording %u barriers", numBarriers);
+
+  for(uint32_t ti = 0; ti < numBarriers; ti++)
+  {
+    const VkImageMemoryBarrier &t = barriers[ti];
+
+    ResourceId id = IsReplayMode(m_State) ? GetNonDispWrapper(t.image)->id : GetResID(t.image);
+
+    if(id == ResourceId())
+    {
+      RDCERR("Couldn't get ID for image %p in barrier", t.image);
+      continue;
+    }
+
+    auto stateIt = states.find(id);
+    if(stateIt == states.end())
+    {
+      LockedConstImageStateRef globalState = m_Core->FindConstImageState(id);
+      if(!globalState)
+      {
+        RDCERR("Recording barrier for unknown image: %s", ToStr(id).c_str());
+        continue;
+      }
+      stateIt = states.insert({id, globalState->CommandBufferInitialState()}).first;
+    }
+
+    ImageState &state = stateIt->second;
+    state.RecordBarrier(t, queueFamilyIndex);
+  }
+
+  TRDBG("Post-record, there are %u states", (uint32_t)states.size());
+}
+#endif
+
 ResourceId VulkanResourceManager::GetFirstIDForHandle(uint64_t handle)
 {
   for(auto it = m_CurrentResourceMap.begin(); it != m_CurrentResourceMap.end(); ++it)
@@ -851,19 +921,6 @@ ResourceId VulkanResourceManager::GetFirstIDForHandle(uint64_t handle)
   }
 
   return ResourceId();
-}
-
-void VulkanResourceManager::MarkImageFrameReferenced(const VkResourceRecord *img,
-                                                     const ImageRange &range, FrameRefType refType)
-{
-  MarkImageFrameReferenced(img->GetResourceID(), img->resInfo->imageInfo, range, refType);
-}
-
-void VulkanResourceManager::MarkImageFrameReferenced(ResourceId img, const ImageInfo &imageInfo,
-                                                     const ImageRange &range, FrameRefType refType)
-{
-  FrameRefType maxRef = MarkImageReferenced(m_ImgFrameRefs, img, imageInfo, range, refType);
-  MarkResourceFrameReferenced(img, maxRef, ComposeFrameRefsDisjoint);
 }
 
 void VulkanResourceManager::MarkMemoryFrameReferenced(ResourceId mem, VkDeviceSize offset,

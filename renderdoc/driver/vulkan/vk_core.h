@@ -429,6 +429,11 @@ private:
   std::vector<uint32_t> m_QueueFamilyCounts;
   std::vector<uint32_t> m_QueueFamilyIndices;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+  ImageBarrierSequence m_setupImageBarriers;
+  ImageBarrierSequence m_cleanupImageBarriers;
+#endif
+
   // a small amount of helper code during capture for handling resources on different queues in init
   // states
   struct ExternalQueue
@@ -583,7 +588,13 @@ private:
       uint32_t subpass = 0;
     } state;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+    std::map<ResourceId, ImageState> imageStates;
+#endif
+
+#if DISABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || DISABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
     std::vector<rdcpair<ResourceId, ImageRegionState>> imgbarriers;
+#endif
 
     ResourceId pushDescriptorID[2][64];
 
@@ -759,13 +770,22 @@ private:
     m_ForcedReferences.push_back(record);
   }
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
   // used on replay side to track the queue family of command buffers and pools
   std::map<ResourceId, uint32_t> m_commandQueueFamilies;
 
+  // used both on capture and replay side to track image state. Only locked
+  // in capture
+  std::map<ResourceId, LockingImageState> m_ImageStates;
+  Threading::CriticalSection m_ImageStatesLock;
+#endif
+
+#if DISABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || DISABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
   // used both on capture and replay side to track image layouts. Only locked
   // in capture
   std::map<ResourceId, ImageLayouts> m_ImageLayouts;
   Threading::CriticalSection m_ImageLayoutsLock;
+#endif
 
   // find swapchain for an image
   std::map<RENDERDOC_WindowHandle, VkSwapchainKHR> m_SwapLookup;
@@ -1045,8 +1065,18 @@ public:
     return m_PhysicalDeviceData.performanceQueryFeatures;
   }
   VkDriverInfo GetDriverInfo() { return m_PhysicalDeviceData.driverInfo; }
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
   uint32_t FindCommandQueueFamily(ResourceId cmdId);
   void InsertCommandQueueFamily(ResourceId cmdId, uint32_t queueFamilyIndex);
+  LockedImageStateRef FindImageState(ResourceId id);
+  LockedConstImageStateRef FindConstImageState(ResourceId id);
+  LockedImageStateRef InsertImageState(VkImage handle, ResourceId id, const ImageInfo &info,
+                                       bool *inserted = NULL);
+  bool EraseImageState(ResourceId id);
+  void UpdateImageStates(const std::map<ResourceId, ImageState> &dstStates,
+                         FrameRefCompFunc compose = KeepOldFrameRef);
+#endif
+
   // Device initialization
 
   IMPLEMENT_FUNCTION_SERIALISED(VkResult, vkCreateInstance, const VkInstanceCreateInfo *pCreateInfo,

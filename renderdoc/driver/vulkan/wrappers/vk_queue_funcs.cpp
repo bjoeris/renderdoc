@@ -810,7 +810,9 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
 
     std::set<ResourceId> refdIDs;
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
     VkResourceRecord *queueRecord = GetRecord(queue);
+#endif
 
     for(uint32_t s = 0; s < submitCount; s++)
     {
@@ -821,12 +823,16 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
         VkResourceRecord *record = GetRecord(pSubmits[s].pCommandBuffers[i]);
         present |= record->bakedCommands->cmdInfo->present;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+        UpdateImageStates(record->bakedCommands->cmdInfo->imageStates, ComposeFrameRefs);
+#else
         {
           SCOPED_LOCK(m_ImageLayoutsLock);
           GetResourceManager()->ApplyBarriers(queueRecord->queueFamilyIndex,
                                               record->bakedCommands->cmdInfo->imgbarriers,
                                               m_ImageLayouts);
         }
+#endif
 
         for(auto it = record->bakedCommands->cmdInfo->dirtied.begin();
             it != record->bakedCommands->cmdInfo->dirtied.end(); ++it)
@@ -885,7 +891,11 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
                 GetResourceManager()->MarkSparseMapReferenced(sparserecord->resInfo);
               }
             }
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+            UpdateImageStates(setrecord->descInfo->bindImageStates, ComposeFrameRefs);
+#else
             GetResourceManager()->MergeReferencedImages(setrecord->descInfo->bindImgRefs);
+#endif
             GetResourceManager()->MergeReferencedMemory(setrecord->descInfo->bindMemRefs);
           }
 
@@ -897,35 +907,39 @@ VkResult WrappedVulkan::vkQueueSubmit(VkQueue queue, uint32_t submitCount,
           record->bakedCommands->AddResourceReferences(GetResourceManager());
           record->bakedCommands->AddReferencedIDs(refdIDs);
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
           GetResourceManager()->MergeReferencedImages(record->bakedCommands->cmdInfo->imgFrameRefs);
+#endif
           GetResourceManager()->MergeReferencedMemory(record->bakedCommands->cmdInfo->memFrameRefs);
 
           // ref the parent command buffer's alloc record, this will pull in the cmd buffer pool
           GetResourceManager()->MarkResourceFrameReferenced(
               record->cmdInfo->allocRecord->GetResourceID(), eFrameRef_Read);
 
-          for(size_t sub = 0; sub < record->bakedCommands->cmdInfo->subcmds.size(); sub++)
-          {
-            record->bakedCommands->cmdInfo->subcmds[sub]->bakedCommands->AddResourceReferences(
-                GetResourceManager());
-            record->bakedCommands->cmdInfo->subcmds[sub]->bakedCommands->AddReferencedIDs(refdIDs);
-            GetResourceManager()->MergeReferencedImages(
-                record->bakedCommands->cmdInfo->subcmds[sub]->bakedCommands->cmdInfo->imgFrameRefs);
-            GetResourceManager()->MergeReferencedMemory(
-                record->bakedCommands->cmdInfo->subcmds[sub]->bakedCommands->cmdInfo->memFrameRefs);
-            GetResourceManager()->MarkResourceFrameReferenced(
-                record->bakedCommands->cmdInfo->subcmds[sub]->cmdInfo->allocRecord->GetResourceID(),
-                eFrameRef_Read);
+          const std::vector<VkResourceRecord *> &subcmds = record->bakedCommands->cmdInfo->subcmds;
 
-            record->bakedCommands->cmdInfo->subcmds[sub]->bakedCommands->AddRef();
+          for(size_t sub = 0; sub < subcmds.size(); sub++)
+          {
+            VkResourceRecord *bakedSubcmds = subcmds[sub]->bakedCommands;
+            bakedSubcmds->AddResourceReferences(GetResourceManager());
+            bakedSubcmds->AddReferencedIDs(refdIDs);
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+            UpdateImageStates(bakedSubcmds->cmdInfo->imageStates, ComposeFrameRefs);
+#else
+            GetResourceManager()->MergeReferencedImages(bakedSubcmds->cmdInfo->imgFrameRefs);
+#endif
+            GetResourceManager()->MergeReferencedMemory(bakedSubcmds->cmdInfo->memFrameRefs);
+            GetResourceManager()->MarkResourceFrameReferenced(
+                subcmds[sub]->cmdInfo->allocRecord->GetResourceID(), eFrameRef_Read);
+
+            bakedSubcmds->AddRef();
           }
 
           {
             SCOPED_LOCK(m_CmdBufferRecordsLock);
             m_CmdBufferRecords.push_back(record->bakedCommands);
-            for(size_t sub = 0; sub < record->bakedCommands->cmdInfo->subcmds.size(); sub++)
-              m_CmdBufferRecords.push_back(
-                  record->bakedCommands->cmdInfo->subcmds[sub]->bakedCommands);
+            for(size_t sub = 0; sub < subcmds.size(); sub++)
+              m_CmdBufferRecords.push_back(subcmds[sub]->bakedCommands);
           }
 
           record->bakedCommands->AddRef();
