@@ -228,6 +228,7 @@
     <ClCompile Include="texture_zoo.cpp" />
     <ClCompile Include="vk\vk_khr_buffer_address.cpp" />
     <ClCompile Include="vk\vk_mesh_zoo.cpp" />
+    <ClCompile Include="vk\vk_image_queue_families.cpp" />
     <ClCompile Include="vk\vk_parameter_zoo.cpp" />
     <ClCompile Include="vk\vk_imageless_framebuffer.cpp" />
     <ClCompile Include="vk\vk_image_layouts.cpp" />

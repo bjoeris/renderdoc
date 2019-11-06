@@ -241,23 +241,38 @@ struct DebugUtilsMessengerCreateInfoEXT : public VkDebugUtilsMessengerCreateInfo
   operator const VkDebugUtilsMessengerCreateInfoEXT *() const { return this; }
 };
 
-struct DeviceQueueCreateInfo : public VkDeviceQueueCreateInfo
+struct DeviceQueueCreateInfo : private VkDeviceQueueCreateInfo
 {
-  DeviceQueueCreateInfo(uint32_t queueFamilyIndex, uint32_t queueCount,
-                        const std::vector<float> &priorities =
-                            {
-                                1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-                                1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-                            })
-      : VkDeviceQueueCreateInfo()
+  using VkDeviceQueueCreateInfo::sType;
+  using VkDeviceQueueCreateInfo::pNext;
+  using VkDeviceQueueCreateInfo::flags;
+  using VkDeviceQueueCreateInfo::queueFamilyIndex;
+
+  inline uint32_t getQueueCount() const { return (uint32_t)queuePriorities.size(); }
+  DeviceQueueCreateInfo(uint32_t queueFamilyIndex, uint32_t queueCount)
+      : VkDeviceQueueCreateInfo(), queuePriorities(queueCount, 1.0f)
   {
     sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     pNext = NULL;
     flags = 0;
     this->queueFamilyIndex = queueFamilyIndex;
-    this->queueCount = queueCount;
-    this->pQueuePriorities = priorities.data();
+    this->queueCount = (uint32_t)queuePriorities.size();
+    this->pQueuePriorities = queuePriorities.data();
   }
+  DeviceQueueCreateInfo(uint32_t queueFamilyIndex, const std::vector<float> &priorities)
+      : VkDeviceQueueCreateInfo(), queuePriorities(priorities)
+  {
+    sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    pNext = NULL;
+    flags = 0;
+    this->queueFamilyIndex = queueFamilyIndex;
+    this->queueCount = (uint32_t)queuePriorities.size();
+    this->pQueuePriorities = queuePriorities.data();
+  }
+
+  operator const VkDeviceQueueCreateInfo *() const { return this; }
+private:
+  std::vector<float> queuePriorities;
 };
 
 struct DeviceCreateInfo : public VkDeviceCreateInfo
@@ -886,24 +901,42 @@ struct PresentInfoKHR : public VkPresentInfoKHR
   operator const VkPresentInfoKHR *() const { return this; }
 };
 
-struct SubmitInfo : public VkSubmitInfo
+struct SubmitInfo : private VkSubmitInfo
 {
-  SubmitInfo(const std::vector<VkCommandBuffer> &cmds)
+  using VkSubmitInfo::sType;
+  using VkSubmitInfo::pNext;
+
+  SubmitInfo(const std::vector<VkCommandBuffer> &cmds,
+             const std::vector<std::pair<VkSemaphore, VkPipelineStageFlags>> &waitSemaphores = {},
+             const std::vector<VkSemaphore> &signalSemaphores = {})
+      : m_commandBuffers(cmds), m_signalSemaphores(signalSemaphores)
   {
+    m_waitSemaphores.reserve(waitSemaphores.size());
+    m_waitDstStageMasks.reserve(waitSemaphores.size());
+    for(auto it = waitSemaphores.begin(); it != waitSemaphores.end(); ++it)
+    {
+      m_waitSemaphores.push_back(it->first);
+      m_waitDstStageMasks.push_back(it->second);
+    }
     sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     pNext = NULL;
-    this->commandBufferCount = (uint32_t)cmds.size();
-    this->pCommandBuffers = cmds.data();
+    this->commandBufferCount = (uint32_t)m_commandBuffers.size();
+    this->pCommandBuffers = m_commandBuffers.data();
 
-    this->waitSemaphoreCount = 0;
-    this->pWaitSemaphores = NULL;
-    this->pWaitDstStageMask = NULL;
+    this->waitSemaphoreCount = (uint32_t)m_waitSemaphores.size();
+    this->pWaitSemaphores = m_waitSemaphores.data();
+    this->pWaitDstStageMask = m_waitDstStageMasks.data();
 
-    this->signalSemaphoreCount = 0;
-    this->pSignalSemaphores = NULL;
+    this->signalSemaphoreCount = (uint32_t)m_signalSemaphores.size();
+    this->pSignalSemaphores = m_signalSemaphores.data();
   }
 
   operator const VkSubmitInfo *() const { return this; }
+private:
+  std::vector<VkCommandBuffer> m_commandBuffers;
+  std::vector<VkSemaphore> m_waitSemaphores;
+  std::vector<VkPipelineStageFlags> m_waitDstStageMasks;
+  std::vector<VkSemaphore> m_signalSemaphores;
 };
 
 struct CommandBufferBeginInfo : public VkCommandBufferBeginInfo

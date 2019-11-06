@@ -13,6 +13,7 @@ set(VULKAN_SRC
         vk/vk_draw_zoo.cpp
         vk/vk_ext_buffer_address.cpp
         vk/vk_image_layouts.cpp
+        vk/vk_image_queue_families.cpp
         vk/vk_imageless_framebuffer.cpp
         vk/vk_indirect.cpp
         vk/vk_int8_ibuffer.cpp

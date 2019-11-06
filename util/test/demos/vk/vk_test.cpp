@@ -396,7 +396,7 @@ void VulkanGraphicsTest::Prepare(int argc, char **argv)
   }
 }
 
-bool VulkanGraphicsTest::Init()
+bool VulkanGraphicsTest::Init(const std::vector<vkh::DeviceQueueCreateInfo> &requestedQueues)
 {
   // parse parameters here to override parameters
   if(!GraphicsTest::Init())
@@ -436,6 +436,16 @@ bool VulkanGraphicsTest::Init()
     TEST_ERROR("No graphics/compute queues available");
     return false;
   }
+  vkh::DeviceQueueCreateInfo mainQueueInfo(queueFamilyIndex, queueCount);
+  std::vector<VkDeviceQueueCreateInfo> queues;
+  queues.push_back(*(const VkDeviceQueueCreateInfo *)mainQueueInfo);
+  for(auto it = requestedQueues.begin(); it != requestedQueues.end(); ++it)
+  {
+    if(it->queueFamilyIndex == queueFamilyIndex)
+      queues.front().queueCount = std::max(queueCount, it->getQueueCount());
+    else
+      queues.push_back(*(const VkDeviceQueueCreateInfo *)*it);
+  }
 
   std::vector<VkExtensionProperties> supportedExts;
   CHECK_VKR(vkh::enumerateDeviceExtensionProperties(supportedExts, phys, NULL));
@@ -458,10 +468,8 @@ bool VulkanGraphicsTest::Init()
   }
 
   CHECK_VKR(vkCreateDevice(
-      phys, vkh::DeviceCreateInfo({vkh::DeviceQueueCreateInfo(queueFamilyIndex, queueCount)},
-                                  enabledLayers, devExts, features)
-                .next(devInfoNext),
-      NULL, &device));
+      phys, vkh::DeviceCreateInfo(queues, enabledLayers, devExts, features).next(devInfoNext), NULL,
+      &device));
 
   volkLoadDevice(device);
 
@@ -610,9 +618,11 @@ void VulkanGraphicsTest::FinishUsingBackbuffer(VkCommandBuffer cmd, VkAccessFlag
                                });
 }
 
-void VulkanGraphicsTest::Submit(int index, int totalSubmits, const std::vector<VkCommandBuffer> &cmds,
-                                const std::vector<VkCommandBuffer> &seccmds, VulkanWindow *window,
-                                VkQueue q)
+void VulkanGraphicsTest::Submit(
+    int index, int totalSubmits, const std::vector<VkCommandBuffer> &cmds,
+    const std::vector<VkCommandBuffer> &seccmds, VulkanWindow *window, VkQueue q,
+    const std::vector<std::pair<VkSemaphore, VkPipelineStageFlags>> &waitSemaphores,
+    const std::vector<VkSemaphore> &signalSemaphores)
 {
   if(window == NULL)
     window = mainWindow;
@@ -620,7 +630,7 @@ void VulkanGraphicsTest::Submit(int index, int totalSubmits, const std::vector<V
   if(q == VK_NULL_HANDLE)
     q = queue;
 
-  window->Submit(index, totalSubmits, cmds, seccmds, q);
+  window->Submit(index, totalSubmits, cmds, seccmds, q, waitSemaphores, signalSemaphores);
 }
 
 void VulkanGraphicsTest::Present(VulkanWindow *window, VkQueue q)
@@ -1049,24 +1059,22 @@ void VulkanWindow::Acquire()
 }
 
 void VulkanWindow::Submit(int index, int totalSubmits, const std::vector<VkCommandBuffer> &cmds,
-                          const std::vector<VkCommandBuffer> &seccmds, VkQueue q)
+                          const std::vector<VkCommandBuffer> &seccmds, VkQueue q,
+                          const std::vector<std::pair<VkSemaphore, VkPipelineStageFlags>> &waitSemaphores,
+                          const std::vector<VkSemaphore> &signalSemaphores)
 {
   VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
-  VkSubmitInfo submit = vkh::SubmitInfo(cmds);
+  std::vector<std::pair<VkSemaphore, VkPipelineStageFlags>> waitSemaphoresCopy(waitSemaphores);
+  std::vector<VkSemaphore> signalSemaphoresCopy(signalSemaphores);
 
   if(index == 0)
-  {
-    submit.waitSemaphoreCount = 1;
-    submit.pWaitDstStageMask = &waitStage;
-    submit.pWaitSemaphores = &renderStartSemaphore;
-  }
+    waitSemaphoresCopy.push_back({renderStartSemaphore, waitStage});
 
   if(index == totalSubmits - 1)
-  {
-    submit.signalSemaphoreCount = 1;
-    submit.pSignalSemaphores = &renderEndSemaphore;
-  }
+    signalSemaphoresCopy.push_back(renderEndSemaphore);
+
+  vkh::SubmitInfo submit(cmds, waitSemaphoresCopy, signalSemaphoresCopy);
 
   VkFence fence;
   CHECK_VKR(vkCreateFence(m_Test->device, vkh::FenceCreateInfo(), NULL, &fence));
@@ -1079,7 +1087,7 @@ void VulkanWindow::Submit(int index, int totalSubmits, const std::vector<VkComma
   for(const VkCommandBuffer &cmd : seccmds)
     pendingCommandBuffers[1].push_back(std::make_pair(cmd, fence));
 
-  CHECK_VKR(vkQueueSubmit(q, 1, &submit, fence));
+  CHECK_VKR(vkQueueSubmit(q, 1, (const VkSubmitInfo *)submit, fence));
 }
 
 void VulkanWindow::Present(VkQueue queue)
