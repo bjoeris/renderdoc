@@ -140,7 +140,9 @@ struct VulkanWindow : public GraphicsWindow
   bool Initialised() { return swap != VK_NULL_HANDLE; }
   VkCommandBuffer GetCommandBuffer(VkCommandBufferLevel level);
   void Submit(int index, int totalSubmits, const std::vector<VkCommandBuffer> &cmds,
-              const std::vector<VkCommandBuffer> &seccmds, VkQueue q);
+              const std::vector<VkCommandBuffer> &seccmds, VkQueue q,
+              const std::vector<std::pair<VkSemaphore, VkPipelineStageFlags>> &waitSemaphores = {},
+              const std::vector<VkSemaphore> &signalSemaphores = {});
   void Present(VkQueue q);
   void Acquire();
 
@@ -176,7 +178,7 @@ struct VulkanGraphicsTest : public GraphicsTest
   VulkanGraphicsTest();
 
   void Prepare(int argc, char **argv);
-  bool Init();
+  bool Init(const std::vector<vkh::DeviceQueueCreateInfo> &queues = {});
   void Shutdown();
   VulkanWindow *MakeWindow(int width, int height, const char *title);
 
@@ -187,7 +189,9 @@ struct VulkanGraphicsTest : public GraphicsTest
                              VulkanWindow *window = NULL);
   void Submit(int index, int totalSubmits, const std::vector<VkCommandBuffer> &cmds,
               const std::vector<VkCommandBuffer> &seccmds = {}, VulkanWindow *window = NULL,
-              VkQueue q = VK_NULL_HANDLE);
+              VkQueue q = VK_NULL_HANDLE,
+              const std::vector<std::pair<VkSemaphore, VkPipelineStageFlags>> &waitSemaphores = {},
+              const std::vector<VkSemaphore> &signalSemaphores = {});
   void Present(VulkanWindow *window = NULL, VkQueue q = VK_NULL_HANDLE);
 
   VkPipelineShaderStageCreateInfo CompileShaderModule(
