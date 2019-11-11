@@ -1709,6 +1709,7 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
   RDCLOG("Finished capture, Frame %u", m_CapturedFrames.back().frameNumber);
 
   VkImage backbuffer = VK_NULL_HANDLE;
+  const PresentInfo *presentInfo = NULL;
   VkResourceRecord *swaprecord = NULL;
 
   if(swap != VK_NULL_HANDLE)
@@ -1720,7 +1721,8 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
 
     const SwapchainInfo &swapInfo = *swaprecord->swapInfo;
 
-    backbuffer = swapInfo.images[swapInfo.lastPresent].im;
+    presentInfo = &swapInfo.lastPresent;
+    backbuffer = swapInfo.images[presentInfo->imageIndex].im;
 
     // mark all images referenced as well
     for(size_t i = 0; i < swapInfo.images.size(); i++)
@@ -1739,7 +1741,8 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
 
       const SwapchainInfo &swapInfo = *swaprecord->swapInfo;
 
-      backbuffer = swapInfo.images[swapInfo.lastPresent].im;
+      presentInfo = &swapInfo.lastPresent;
+      backbuffer = swapInfo.images[presentInfo->imageIndex].im;
 
       // mark all images referenced as well
       for(size_t i = 0; i < swapInfo.images.size(); i++)
@@ -1831,7 +1834,8 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
         {swapInfo.imageInfo.extent.width, swapInfo.imageInfo.extent.height, 1},
     };
 
-    uint32_t swapQueueIndex = m_ImageLayouts[GetResID(backbuffer)].queueFamilyIndex;
+    VkResourceRecord *queueRecord = GetRecord(swapInfo.lastPresent.presentQueue);
+    uint32_t swapQueueIndex = queueRecord->queueFamilyIndex;
 
     VkImageMemoryBarrier bbBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
