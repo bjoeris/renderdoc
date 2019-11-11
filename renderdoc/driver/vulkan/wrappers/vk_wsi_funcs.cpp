@@ -367,8 +367,12 @@ bool WrappedVulkan::Serialise_vkCreateSwapchainKHR(SerialiserType &ser, VkDevice
 
     VkImageCreateFlags imageFlags = 0;
 
+    if(CreateInfo.flags & VK_SWAPCHAIN_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT_KHR)
+      imageFlags |= VK_IMAGE_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT;
+    if(CreateInfo.flags & VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR)
+      imageFlags |= VK_IMAGE_CREATE_PROTECTED_BIT;
     if(CreateInfo.flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR)
-      imageFlags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+      imageFlags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT | VK_IMAGE_CREATE_EXTENDED_USAGE_BIT_KHR;
 
     const VkImageCreateInfo imInfo = {
         VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
