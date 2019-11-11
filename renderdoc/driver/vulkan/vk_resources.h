@@ -857,6 +857,13 @@ struct ImageRegionState
 
 DECLARE_REFLECTION_STRUCT(ImageRegionState);
 
+struct PresentInfo
+{
+  VkQueue presentQueue;
+  rdcarray<VkSemaphore> waitSemaphores;
+  uint32_t imageIndex;
+};
+
 struct SwapchainInfo
 {
   VkFormat format;
@@ -877,7 +884,7 @@ struct SwapchainInfo
     VkFramebuffer fb;
   };
   std::vector<SwapImage> images;
-  uint32_t lastPresent;
+  PresentInfo lastPresent;
 };
 
 struct ImageInfo
