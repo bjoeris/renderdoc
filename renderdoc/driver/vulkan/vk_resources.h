@@ -923,6 +923,13 @@ struct ImageInfo
 
 DECLARE_REFLECTION_STRUCT(ImageInfo);
 
+struct PresentInfo
+{
+  VkQueue presentQueue;
+  rdcarray<VkSemaphore> waitSemaphores;
+  uint32_t imageIndex;
+};
+
 struct SwapchainInfo
 {
   ImageInfo imageInfo;
@@ -941,7 +948,7 @@ struct SwapchainInfo
     VkFramebuffer fb;
   };
   rdcarray<SwapImage> images;
-  uint32_t lastPresent;
+  PresentInfo lastPresent;
 };
 
 // these structs are allocated for images and buffers, then pointed to (non-owning) by views
