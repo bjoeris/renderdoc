@@ -880,6 +880,19 @@ void VulkanDebugManager::CreateCustomShaderTex(uint32_t width, uint32_t height, 
 
   // need to update image layout into valid state
 
+  VkCommandBuffer cmd = m_pDriver->GetNextCmd();
+
+  VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
+                                        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+
+  ObjDisp(dev)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
+
+#if ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+  m_pDriver->FindImageState(GetResID(m_Custom.TexImg))
+      ->InlineTransition(cmd, m_pDriver->m_QueueFamilyIdx, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                         0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, m_pDriver->m_State);
+#else
+
   VkImageMemoryBarrier barrier = {
       VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
       NULL,
@@ -896,14 +909,8 @@ void VulkanDebugManager::CreateCustomShaderTex(uint32_t width, uint32_t height, 
   m_pDriver->m_ImageLayouts[GetResID(m_Custom.TexImg)].subresourceStates[0].newLayout =
       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-  VkCommandBuffer cmd = m_pDriver->GetNextCmd();
-
-  VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
-                                        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-
-  ObjDisp(dev)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
-
   DoPipelineBarrier(cmd, 1, &barrier);
+#endif
 
   vkr = ObjDisp(dev)->EndCommandBuffer(Unwrap(cmd));
   RDCASSERTEQUAL(vkr, VK_SUCCESS);

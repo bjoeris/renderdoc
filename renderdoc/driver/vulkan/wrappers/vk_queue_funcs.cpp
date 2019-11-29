@@ -267,9 +267,14 @@ bool WrappedVulkan::Serialise_vkQueueSubmit(SerialiserType &ser, VkQueue queue, 
 
           BakedCmdBufferInfo &cmdBufInfo = m_BakedCmdBufferInfo[cmd];
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+          // ImageState::Merge(m_ImageStates, m_BakedCmdBufferInfo[liveCmd].imageStates, false);
+          UpdateImageStates(m_BakedCmdBufferInfo[liveCmd].imageStates);
+#else
           GetResourceManager()->ApplyBarriers(m_CreationInfo.m_Queue[GetResID(queue)],
                                               m_BakedCmdBufferInfo[liveCmd].imgbarriers,
                                               m_ImageLayouts);
+#endif
 
           std::string name = StringFormat::Fmt("=> %s[%u]: vkBeginCommandBuffer(%s)",
                                                basename.c_str(), c, ToStr(cmd).c_str());
@@ -398,9 +403,13 @@ bool WrappedVulkan::Serialise_vkQueueSubmit(SerialiserType &ser, VkQueue queue, 
 #endif
               rerecordedCmds.push_back(Unwrap(cmd));
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+              UpdateImageStates(m_BakedCmdBufferInfo[rerecord].imageStates);
+#else
               GetResourceManager()->ApplyBarriers(m_CreationInfo.m_Queue[GetResID(queue)],
                                                   m_BakedCmdBufferInfo[rerecord].imgbarriers,
                                                   m_ImageLayouts);
+#endif
             }
             else
             {

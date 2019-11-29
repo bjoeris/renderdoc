@@ -950,10 +950,12 @@ private:
                                                       int32_t messageCode, const char *pLayerPrefix,
                                                       const char *pMessage, void *pUserData);
   void AddFrameTerminator(uint64_t queueMarkerTag);
+#if DISABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
   void ImageInitializationBarriers(ResourceId id, WrappedVkRes *live, InitPolicy policy,
                                    bool initialized, const ImgRefs *imgRefs,
                                    std::vector<VkImageMemoryBarrier> &setupBarriers,
                                    std::vector<VkImageMemoryBarrier> &cleanupBarriers) const;
+#endif
   void SubmitExtQBarriers(const std::map<uint32_t, std::vector<VkImageMemoryBarrier>> &extQBarriers);
 
 public:

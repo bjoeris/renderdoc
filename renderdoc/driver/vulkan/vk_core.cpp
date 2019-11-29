@@ -1544,15 +1544,19 @@ void WrappedVulkan::FirstFrame()
 template <typename SerialiserType>
 bool WrappedVulkan::Serialise_BeginCaptureFrame(SerialiserType &ser)
 {
+#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+  SCOPED_LOCK(m_ImageStatesLock);
+  if(IsCaptureMode(m_State) || IsLoading(m_State))
+    GetResourceManager()->SerialiseImageStates2(ser, m_ImageStates);
+#else
   std::vector<VkImageMemoryBarrier> imgBarriers;
-
-  {
-    SCOPED_LOCK(m_ImageLayoutsLock);    // not needed on replay, but harmless also
-    GetResourceManager()->SerialiseImageStates(ser, m_ImageLayouts, imgBarriers);
-  }
+  SCOPED_LOCK(m_ImageLayoutsLock);
+  GetResourceManager()->SerialiseImageStates(ser, m_ImageLayouts, imgBarriers);
+#endif
 
   SERIALISE_CHECK_READ_ERRORS();
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
   if(IsReplayingAndReading())
   {
     VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
@@ -1640,6 +1644,7 @@ bool WrappedVulkan::Serialise_BeginCaptureFrame(SerialiserType &ser)
     }
     // don't need to flush here
   }
+#endif
 
   return true;
 }
@@ -2483,8 +2488,15 @@ ReplayStatus WrappedVulkan::ContextReplayLog(CaptureState readType, uint32_t sta
 
     ApplyInitialContents();
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+    SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
     SubmitCmds();
     FlushQ();
+    SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+#else
+    SubmitCmds();
+    FlushQ();
+#endif
 
     SetDebugMessageSink(sink);
   }
@@ -2699,6 +2711,21 @@ void WrappedVulkan::ApplyInitialContents()
   // actually apply the initial contents here
   GetResourceManager()->ApplyInitialContents();
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+  for(auto it = m_ImageStates.begin(); it != m_ImageStates.end(); ++it)
+  {
+    if(GetResourceManager()->HasCurrentResource(it->first))
+    {
+      it->second.LockWrite()->ResetToOldState(m_State, &m_cleanupImageBarriers);
+    }
+    else
+    {
+      it = m_ImageStates.erase(it);
+      --it;
+    }
+  }
+#endif
+
   // likewise again to make sure the initial states are all applied
   cmd = GetNextCmd();
 
@@ -2711,7 +2738,10 @@ void WrappedVulkan::ApplyInitialContents()
   RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
 #if ENABLED(SINGLE_FLUSH_VALIDATE)
+  SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
   SubmitCmds();
+  FlushQ();
+  SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
 #endif
 }
 
@@ -3313,8 +3343,15 @@ void WrappedVulkan::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
     ApplyInitialContents();
     VkMarkerRegion::End();
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+    SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
     SubmitCmds();
     FlushQ();
+    SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+#else
+    SubmitCmds();
+    FlushQ();
+#endif
   }
 
   m_State = CaptureState::ActiveReplaying;
@@ -3439,7 +3476,10 @@ void WrappedVulkan::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
     }
 
 #if ENABLED(SINGLE_FLUSH_VALIDATE)
+    SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
     SubmitCmds();
+    FlushQ();
+    SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
 #endif
   }
 

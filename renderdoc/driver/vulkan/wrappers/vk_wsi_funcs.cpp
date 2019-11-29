@@ -363,6 +363,8 @@ bool WrappedVulkan::Serialise_vkCreateSwapchainKHR(SerialiserType &ser, VkDevice
     swapinfo.shared = (CreateInfo.presentMode == VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR ||
                        CreateInfo.presentMode == VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR);
 
+    swapinfo.imageSharingMode = CreateInfo.imageSharingMode;
+
     swapinfo.images.resize(NumImages);
 
     VkImageCreateFlags imageFlags = 0;
@@ -447,6 +449,12 @@ bool WrappedVulkan::Serialise_vkCreateSwapchainKHR(SerialiserType &ser, VkDevice
 
       m_CreationInfo.m_Names[liveId] = StringFormat::Fmt("Presentable Image %u", i);
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+      {
+        LockedImageStateRef state = InsertImageState(Unwrap(im), liveId, ImageInfo(swapinfo));
+        state->isMemoryBound = true;
+      }
+#else
       VkImageSubresourceRange range;
       range.baseMipLevel = range.baseArrayLayer = 0;
       range.levelCount = 1;
@@ -463,6 +471,7 @@ bool WrappedVulkan::Serialise_vkCreateSwapchainKHR(SerialiserType &ser, VkDevice
       layouts.subresourceStates.clear();
       layouts.subresourceStates.push_back(ImageRegionState(
           VK_QUEUE_FAMILY_IGNORED, range, UNKNOWN_PREV_IMG_LAYOUT, VK_IMAGE_LAYOUT_UNDEFINED));
+#endif
     }
   }
 
