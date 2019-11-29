@@ -1381,13 +1381,26 @@ bool WrappedVulkan::Serialise_CaptureScope(SerialiserType &ser)
   return true;
 }
 
-void WrappedVulkan::EndCaptureFrame(VkImage presentImage)
+void WrappedVulkan::EndCaptureFrame(VkImage presentImage, const PresentInfo &presentInfo)
 {
   CACHE_THREAD_SERIALISER();
   ser.SetDrawChunk();
   SCOPED_SERIALISE_CHUNK(SystemChunk::CaptureEnd);
 
+  std::vector<ResourceId> waitSemaphores;
+  waitSemaphores.resize(presentInfo.waitSemaphores.size());
+  for(size_t i = 0; i < waitSemaphores.size(); ++i)
+    waitSemaphores[i] = GetResID(presentInfo.waitSemaphores[i]);
+
   SERIALISE_ELEMENT_LOCAL(PresentedImage, GetResID(presentImage)).TypedAs("VkImage"_lit);
+#if ENABLED(RDOC_NEW_IMAGE_STATE_SERIALIZE)
+  if(ser.VersionAtLeast(0x11))
+  {
+    SERIALISE_ELEMENT_LOCAL(PresentQueue, GetResID(presentInfo.presentQueue))
+        .TypedAs("VkQueue"_lit);
+    SERIALISE_ELEMENT_LOCAL(WaitSemaphores, waitSemaphores).TypedAs("VkSemaphore"_lit);
+  }
+#endif
 
   m_FrameCaptureRecord->AddChunk(scope.Get());
 }
@@ -1675,7 +1688,7 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
   // transition back to IDLE atomically
   {
     SCOPED_WRITELOCK(m_CapTransitionLock);
-    EndCaptureFrame(backbuffer);
+    EndCaptureFrame(backbuffer, *presentInfo);
 
     m_State = CaptureState::BackgroundCapturing;
 
