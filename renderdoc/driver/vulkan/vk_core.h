@@ -813,7 +813,7 @@ private:
 
   template <typename SerialiserType>
   bool Serialise_BeginCaptureFrame(SerialiserType &ser);
-  void EndCaptureFrame(VkImage presentImage);
+  void EndCaptureFrame(VkImage presentImage, const PresentInfo &presentInfo);
 
   void FirstFrame();
 
