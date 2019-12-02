@@ -461,6 +461,10 @@ VkResult WrappedVulkan::vkCreateCommandPool(VkDevice device,
       VkResourceRecord *record = GetResourceManager()->AddResourceRecord(*pCmdPool);
       record->queueFamilyIndex = pCreateInfo->queueFamilyIndex;
       record->AddChunk(chunk);
+
+// #if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+//       InsertCommandQueueFamily(id, record->queueFamilyIndex);
+// #endif
     }
     else
     {
@@ -617,6 +621,15 @@ VkResult WrappedVulkan::vkAllocateCommandBuffers(VkDevice device,
         record->cmdInfo->allocInfo.commandBufferCount = 1;
         record->cmdInfo->allocRecord = allocRecord;
         record->cmdInfo->present = false;
+
+// #if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE)
+//         ResourceId poolId = record->pool->GetResourceID();
+//         auto poolQueueFamilyIt = m_commandQueueFamilies.find(poolId);
+//         if(poolQueueFamilyIt == m_commandQueueFamilies.end())
+//           RDCERR("Missing queue family for %s", ToStr(poolId).c_str());
+//         else
+//           InsertCommandQueueFamily(record->GetResourceID(), poolQueueFamilyIt->second);
+// #endif
       }
       else
       {
@@ -655,21 +668,21 @@ bool WrappedVulkan::Serialise_vkBeginCommandBuffer(SerialiserType &ser, VkComman
   SERIALISE_ELEMENT(AllocateInfo).Hidden();
 
   SERIALISE_CHECK_READ_ERRORS();
-  
-#if ENABLED(RDOC_NEW_IMAGE_STATE_CAPTURE) || ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
-  auto cmdQueueFamilyIt = m_commandQueueFamilies.find(CommandBuffer);
-  if(cmdQueueFamilyIt == m_commandQueueFamilies.end())
-  {
-    RDCERR("Unknown queue family for %s", ToStr(CommandBuffer).c_str());
-  }
-  else
-  {
-    InsertCommandQueueFamily(BakedCommandBuffer, cmdQueueFamilyIt->second);
-  }
-#endif
 
   if(IsReplayingAndReading())
   {
+#if ENABLED(RDOC_NEW_IMAGE_STATE_REPLAY)
+    auto cmdQueueFamilyIt = m_commandQueueFamilies.find(CommandBuffer);
+    if(cmdQueueFamilyIt == m_commandQueueFamilies.end())
+    {
+      RDCERR("Unknown queue family for %s", ToStr(CommandBuffer).c_str());
+    }
+    else
+    {
+      InsertCommandQueueFamily(BakedCommandBuffer, cmdQueueFamilyIt->second);
+    }
+#endif
+
     m_LastCmdBufferID = CommandBuffer;
 
     // when loading, allocate a new resource ID for each push descriptor slot in this command buffer
