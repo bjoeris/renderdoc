@@ -3219,6 +3219,109 @@ ImageSubresourceRange ImageInfo::FullRange() const
       /* sliceCount = */ extent.depth);
 }
 
+template <typename Barrier>
+void BarrierSequence<Barrier>::Add(uint32_t batchIndex, uint32_t queueFamilyIndex,
+                                   const Barrier &barrier)
+{
+  if(batches.size() <= batchIndex)
+    batches.resize(batchIndex + 1);
+  rdcarray<rdcarray<Barrier> > &batch = batches[batchIndex];
+  if(batch.size() <= queueFamilyIndex)
+    batch.resize(queueFamilyIndex + 1);
+  batch[queueFamilyIndex].push_back(barrier);
+  ++barrierCount;
+}
+template void BarrierSequence<VkImageMemoryBarrier>::Add(uint32_t batchIndex,
+                                                         uint32_t queueFamilyIndex,
+                                                         const VkImageMemoryBarrier &barrier);
+
+template <typename Barrier>
+void BarrierSequence<Barrier>::Merge(const BarrierSequence<Barrier> &other)
+{
+  if(other.batches.size() > batches.size())
+    batches.resize(other.batches.size());
+  for(uint32_t batchIndex = 0; batchIndex < other.batches.size(); ++batchIndex)
+  {
+    rdcarray<rdcarray<Barrier> > &batch = batches[batchIndex];
+    const rdcarray<rdcarray<Barrier> > &otherBatch = other.batches[batchIndex];
+    if(otherBatch.size() > batch.size())
+      batch.resize(otherBatch.size());
+    for(uint32_t queueFamilyIndex = 0; queueFamilyIndex < otherBatch.size(); ++queueFamilyIndex)
+    {
+      rdcarray<Barrier> &barriers = batch[queueFamilyIndex];
+      const rdcarray<Barrier> &otherBarriers = otherBatch[queueFamilyIndex];
+      barriers.insert(barriers.size(), otherBarriers.begin(), otherBarriers.size());
+      barrierCount += otherBarriers.size();
+    }
+  }
+}
+template void BarrierSequence<VkImageMemoryBarrier>::Merge(
+    const BarrierSequence<VkImageMemoryBarrier> &other);
+
+template <typename Barrier>
+bool BarrierSequence<Barrier>::IsBatchEmpty(uint32_t batchIndex) const
+{
+  if(batchIndex >= batches.size())
+    return true;
+  for(const rdcarray<Barrier> *it = batches[batchIndex].begin(); it != batches[batchIndex].end(); ++it)
+  {
+    if(!it->empty())
+      return false;
+  }
+  return true;
+}
+template bool BarrierSequence<VkImageMemoryBarrier>::IsBatchEmpty(uint32_t batchIndex) const;
+
+template <typename Barrier>
+void BarrierSequence<Barrier>::ExtractBatch(uint32_t batchIndex, rdcarray<rdcarray<Barrier> > &result)
+{
+  if(batchIndex >= batches.size())
+    return;
+  batches[batchIndex].swap(result);
+  batches[batchIndex].clear();
+  for(rdcarray<Barrier> *it = result.begin(); it != result.end(); ++it)
+    barrierCount -= it->size();
+}
+template void BarrierSequence<VkImageMemoryBarrier>::ExtractBatch(
+    uint32_t batchIndex, rdcarray<rdcarray<VkImageMemoryBarrier> > &result);
+
+template <typename Barrier>
+void BarrierSequence<Barrier>::ExtractFirstBatchForQueue(uint32_t queueFamilyIndex,
+                                                         rdcarray<Barrier> &result)
+{
+  for(uint32_t batchIndex = 0; batchIndex < batches.size(); ++batchIndex)
+  {
+    if(!IsBatchEmpty(batchIndex))
+    {
+      batches[batchIndex][queueFamilyIndex].swap(result);
+      batches[batchIndex][queueFamilyIndex].clear();
+      barrierCount -= result.size();
+      return;
+    }
+  }
+}
+template void BarrierSequence<VkImageMemoryBarrier>::ExtractFirstBatchForQueue(
+    uint32_t queueFamilyIndex, rdcarray<VkImageMemoryBarrier> &result);
+
+template <typename Barrier>
+void BarrierSequence<Barrier>::ExtractLastBatchForQueue(uint32_t queueFamilyIndex,
+                                                        rdcarray<Barrier> &result)
+{
+  for(uint32_t batchIndex = (uint32_t)batches.size(); batchIndex > 0;)
+  {
+    --batchIndex;
+    if(!IsBatchEmpty(batchIndex))
+    {
+      batches[batchIndex][queueFamilyIndex].swap(result);
+      batches[batchIndex][queueFamilyIndex].clear();
+      barrierCount -= result.size();
+      return;
+    }
+  }
+}
+template void BarrierSequence<VkImageMemoryBarrier>::ExtractLastBatchForQueue(
+    uint32_t queueFamilyIndex, rdcarray<VkImageMemoryBarrier> &result);
+
 int ImgRefs::GetAspectCount() const
 {
   int aspectCount = 0;
