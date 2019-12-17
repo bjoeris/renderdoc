@@ -1254,6 +1254,206 @@ struct ImageSubresourceRange
   }
 };
 
+struct ImageSubresourceState
+{
+  uint32_t oldQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  uint32_t newQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  VkImageLayout oldLayout = UNKNOWN_PREV_IMG_LAYOUT;
+  VkImageLayout newLayout = UNKNOWN_PREV_IMG_LAYOUT;
+  FrameRefType refType = eFrameRef_None;
+
+  inline ImageSubresourceState() {}
+  inline ImageSubresourceState(const VkImageMemoryBarrier &barrier)
+      : oldQueueFamilyIndex(barrier.srcQueueFamilyIndex),
+        newQueueFamilyIndex(barrier.dstQueueFamilyIndex),
+        oldLayout(barrier.oldLayout),
+        newLayout(barrier.newLayout)
+  {
+  }
+  inline ImageSubresourceState(uint32_t queueFamilyIndex, VkImageLayout layout,
+                               FrameRefType refType = eFrameRef_None)
+      : oldQueueFamilyIndex(queueFamilyIndex),
+        newQueueFamilyIndex(queueFamilyIndex),
+        oldLayout(layout),
+        newLayout(layout),
+        refType(refType)
+  {
+  }
+  inline bool operator==(const ImageSubresourceState &other) const
+  {
+    return oldQueueFamilyIndex == other.oldQueueFamilyIndex &&
+           newQueueFamilyIndex == other.newQueueFamilyIndex && oldLayout == other.oldLayout &&
+           newLayout == other.newLayout && refType == other.refType;
+  }
+  inline bool operator!=(const ImageSubresourceState &other) const { return !(*this == other); }
+  void Update(const ImageSubresourceState &other, FrameRefCompFunc compose);
+  bool Update(const ImageSubresourceState &other, ImageSubresourceState &result,
+              FrameRefCompFunc compose) const;
+};
+
+class ImageSubresourceMap
+{
+  friend class SubresourceRangeIterator;
+
+  rdcarray<ImageSubresourceState> m_values;
+  VkImageAspectFlags m_aspectMask = 0u;
+  ImageInfo m_imageInfo;
+  enum class FlagBits : uint16_t
+  {
+    AreAspectsSplit = 0x1,
+    AreLevelsSplit = 0x2,
+    AreLayersSplit = 0x4,
+    IsDepthSplit = 0x8,
+    IsUninitialized = 0x8000,
+  };
+  uint16_t m_flags = 0;
+  uint16_t m_aspectCount = 0;
+  inline static bool AreAspectsSplit(uint16_t flags)
+  {
+    return (flags & (uint16_t)FlagBits::AreAspectsSplit) != 0;
+  }
+  inline static bool AreLevelsSplit(uint16_t flags)
+  {
+    return (flags & (uint16_t)FlagBits::AreLevelsSplit) != 0;
+  }
+  inline static bool AreLayersSplit(uint16_t flags)
+  {
+    return (flags & (uint16_t)FlagBits::AreLayersSplit) != 0;
+  }
+  inline static bool IsDepthSplit(uint16_t flags)
+  {
+    return (flags & (uint16_t)FlagBits::IsDepthSplit) != 0;
+  }
+  inline bool AreAspectsSplit() const { return AreAspectsSplit(m_flags); }
+  inline bool AreLevelsSplit() const { return AreLevelsSplit(m_flags); }
+  inline bool AreLayersSplit() const { return AreLayersSplit(m_flags); }
+  inline bool IsDepthSplit() const { return IsDepthSplit(m_flags); }
+  void Split(bool splitAspects, bool splitLevels, bool splitLayers, bool splitDepth);
+  size_t SubresourceIndex(uint32_t aspectIndex, uint32_t level, uint32_t layer, uint32_t z) const;
+
+public:
+  inline const ImageInfo &GetImageInfo() const { return m_imageInfo; }
+  inline ImageSubresourceMap() {}
+  inline ImageSubresourceMap(const ImageInfo &imageInfo)
+      : m_values(1), m_imageInfo(imageInfo), m_aspectMask(FormatImageAspects(imageInfo.format))
+  {
+    for(auto it = ImageAspectFlagIter::begin(m_aspectMask); it != ImageAspectFlagIter::end(); ++it)
+      ++m_aspectCount;
+  }
+
+  inline ImageSubresourceState &SubresourceValue(uint32_t aspectIndex, uint32_t level,
+                                                 uint32_t layer, uint32_t slice)
+  {
+    return m_values[SubresourceIndex(aspectIndex, level, layer, slice)];
+  }
+  inline const ImageSubresourceState &SubresourceValue(uint32_t aspectIndex, uint32_t level,
+                                                       uint32_t layer, uint32_t slice) const
+  {
+    return m_values[SubresourceIndex(aspectIndex, level, layer, slice)];
+  }
+  inline void Split(const ImageSubresourceRange &range)
+  {
+    Split(range.aspectMask != m_aspectMask,
+          range.baseMipLevel != 0u || range.levelCount < (uint32_t)GetImageInfo().levelCount,
+          range.baseArrayLayer != 0u || range.layerCount < (uint32_t)GetImageInfo().layerCount,
+          range.baseDepthSlice != 0u || range.sliceCount < GetImageInfo().extent.depth);
+  }
+  inline void Clear()
+  {
+    m_values.clear();
+    m_values.resize(1);
+    m_flags = 0;
+  }
+
+  template <typename Map, typename Pair>
+  class SubresourceRangeIterTemplate
+  {
+  public:
+    inline bool operator==(const SubresourceRangeIterTemplate &other)
+    {
+      bool isValid = IsValid();
+      bool otherIsValid = other.IsValid();
+      return (!isValid && !otherIsValid) ||
+             (isValid && otherIsValid &&
+              (m_aspectIndex == other.m_aspectIndex || !m_map->AreAspectsSplit()) &&
+              (m_level == other.m_level || !m_map->AreLevelsSplit()) &&
+              (m_layer == other.m_layer || !m_map->AreLayersSplit()) &&
+              (m_slice == other.m_slice || !m_map->IsDepthSplit()));
+    }
+    inline bool operator!=(const SubresourceRangeIterTemplate &other) { return !(*this == other); }
+    SubresourceRangeIterTemplate &operator++();
+    Pair *operator->();
+    Pair &operator*();
+
+    friend class ImageSubresourceMap;
+
+  protected:
+    Map *m_map = NULL;
+    uint16_t m_splitFlags = 0u;
+    ImageSubresourceRange m_range = {};
+    uint32_t m_aspectCount = 0u;
+    uint32_t m_aspectIndex = 0u;
+    uint32_t m_level = 0u;
+    uint32_t m_layer = 0u;
+    uint32_t m_slice = 0u;
+    Pair m_value;
+    SubresourceRangeIterTemplate() {}
+    SubresourceRangeIterTemplate(Map &map, const ImageSubresourceRange &range);
+    inline bool IsValid() const
+    {
+      return m_aspectIndex < m_aspectCount && m_level < m_range.baseMipLevel + m_range.levelCount &&
+             m_layer < m_range.baseArrayLayer + m_range.layerCount &&
+             m_slice < m_range.baseDepthSlice + m_range.sliceCount;
+    }
+    void FixSubRange();
+  };
+
+  template <typename State>
+  class SubresourcePairRefTemplate
+  {
+  public:
+    inline const ImageSubresourceRange &range() const { return m_range; }
+    inline State &state() { return *m_state; }
+    inline const State &state() const { return *m_state; }
+    SubresourcePairRefTemplate &operator=(const SubresourcePairRefTemplate &other) = delete;
+
+  protected:
+    template <typename Map, typename Pair>
+    friend class SubresourceRangeIterTemplate;
+    ImageSubresourceRange m_range;
+    State *m_state;
+  };
+
+  class SubresourcePairRef : public SubresourcePairRefTemplate<ImageSubresourceState>
+  {
+  public:
+    inline SubresourcePairRef &SetState(const ImageSubresourceState &state)
+    {
+      *m_state = state;
+      return *this;
+    }
+  };
+  using ConstSubresourcePairRef = SubresourcePairRefTemplate<const ImageSubresourceState>;
+
+  using SubresourceRangeIter = SubresourceRangeIterTemplate<ImageSubresourceMap, SubresourcePairRef>;
+  using SubresourceRangeConstIter =
+      SubresourceRangeIterTemplate<const ImageSubresourceMap, ConstSubresourcePairRef>;
+
+  inline SubresourceRangeIter RangeBegin(const ImageSubresourceRange &range)
+  {
+    return SubresourceRangeIter(*this, range);
+  }
+  inline SubresourceRangeConstIter RangeBegin(const ImageSubresourceRange &range) const
+  {
+    return SubresourceRangeConstIter(*this, range);
+  }
+  inline SubresourceRangeIter begin() { return RangeBegin(GetImageInfo().FullRange()); }
+  inline SubresourceRangeConstIter begin() const { return RangeBegin(GetImageInfo().FullRange()); }
+  inline SubresourceRangeIter end() { return SubresourceRangeIter(); }
+  inline SubresourceRangeConstIter end() const { return SubresourceRangeConstIter(); }
+  inline size_t size() const { return m_values.size(); }
+};
+
 template <typename Barrier>
 struct BarrierSequence
 {
@@ -1272,6 +1472,104 @@ struct BarrierSequence
 };
 
 using ImageBarrierSequence = BarrierSequence<VkImageMemoryBarrier>;
+
+struct ImageTransitionInfo
+{
+  CaptureState capState;
+  inline ImageTransitionInfo(CaptureState capState)
+      : capState(capState)
+  {
+  }
+  inline FrameRefCompFunc GetFrameRefCompFunc()
+  {
+    if(IsCaptureMode(capState))
+      return ComposeFrameRefs;
+    else
+      return KeepOldFrameRef;
+  }
+};
+
+struct ImageState
+{
+  ImageSubresourceMap subresourceStates;
+  rdcarray<VkImageMemoryBarrier> oldQueueFamilyTransfers;
+  rdcarray<VkImageMemoryBarrier> newQueueFamilyTransfers;
+  bool isMemoryBound = false;
+  ResourceId boundMemory = ResourceId();
+  VkDeviceSize boundMemoryOffset = 0ull;
+  VkDeviceSize boundMemorySize = 0ull;
+  FrameRefType maxRefType = eFrameRef_None;
+  VkImage handle = VK_NULL_HANDLE;
+
+  inline const ImageInfo &GetImageInfo() const { return subresourceStates.GetImageInfo(); }
+  inline ImageState() {}
+  inline ImageState(VkImage handle, const ImageInfo &imageInfo)
+      : handle(handle), subresourceStates(imageInfo)
+  {
+  }
+  ImageState InitialState() const;
+  void InitialState(ImageState &result) const;
+  ImageState CommandBufferInitialState() const;
+  ImageState UniformState(const ImageSubresourceState &sub) const;
+  ImageState ContentInitializationState(InitPolicy policy, bool initialized,
+                                        uint32_t queueFamilyIndex, VkImageLayout copyLayout,
+                                        VkImageLayout clearLayout) const;
+  void RemoveQueueFamilyTransfer(VkImageMemoryBarrier *it);
+  void Update(ImageSubresourceRange range, const ImageSubresourceState &dst,
+              FrameRefCompFunc compose = KeepOldFrameRef);
+  void Merge(const ImageState &other, FrameRefCompFunc compose = KeepOldFrameRef);
+  void MergeCaptureBeginState(const ImageState &initialState);
+  static void Merge(std::map<ResourceId, ImageState> &states,
+                    const std::map<ResourceId, ImageState> &dstStates,
+                    FrameRefCompFunc compose = KeepOldFrameRef);
+  void DiscardContents(const ImageSubresourceRange &range);
+  inline void DiscardContents() { DiscardContents(GetImageInfo().FullRange()); }
+  inline void RecordUse(const ImageSubresourceRange &range, FrameRefType refType,
+                        uint32_t queueFamilyIndex)
+  {
+    Update(range, ImageSubresourceState(queueFamilyIndex, UNKNOWN_PREV_IMG_LAYOUT, refType),
+           ComposeFrameRefs);
+  }
+  void RecordQueueFamilyRelease(const VkImageMemoryBarrier &barrier);
+  void RecordQueueFamilyAcquire(const VkImageMemoryBarrier &barrier);
+  void RecordBarrier(VkImageMemoryBarrier barrier, uint32_t queueFamilyIndex);
+  bool CloseTransfers(uint32_t batchIndex, VkAccessFlags dstAccessMask,
+                      ImageBarrierSequence *barriers, ImageTransitionInfo info);
+  bool RestoreTransfers(uint32_t batchIndex, const rdcarray<VkImageMemoryBarrier> &transfers,
+                        VkAccessFlags srcAccessMask, ImageBarrierSequence *barriers,
+                        ImageTransitionInfo info);
+  void ResetToOldState(ImageBarrierSequence *barriers, ImageTransitionInfo info);
+  void Transition(const ImageState &dstState, VkAccessFlags srcAccessMask,
+                  VkAccessFlags dstAccessMask, ImageBarrierSequence *barriers,
+                  ImageTransitionInfo info);
+  void Transition(uint32_t queueFamilyIndex, VkImageLayout layout, VkAccessFlags srcAccessMask,
+                  VkAccessFlags dstAccessMask, ImageBarrierSequence *barriers,
+                  ImageTransitionInfo info);
+
+  // Transitions the image state to `dstState` (via `preBarriers`) and back to the current state
+  // (via `postBarriers`).
+  // It is not always possible to return exactly to the current state, e.g. if the image is
+  // VK_IMAGE_LAYOUT_PREINITIALIZED, it will be returned to VK_IMAGE_LAYOUT_GENERAL instead.
+  void TempTransition(const ImageState &dstState, VkAccessFlags preSrcAccessMask,
+                      VkAccessFlags preDstAccessMask, VkAccessFlags postSrcAccessmask,
+                      VkAccessFlags postDstAccessMask, ImageBarrierSequence *setupBarriers,
+                      ImageBarrierSequence *cleanupBarriers, ImageTransitionInfo info) const;
+  void TempTransition(uint32_t queueFamilyIndex, VkImageLayout layout, VkAccessFlags accessMask,
+                      ImageBarrierSequence *setupBarriers, ImageBarrierSequence *cleanupBarriers,
+                      ImageTransitionInfo info) const;
+
+  void InlineTransition(VkCommandBuffer cmd, uint32_t queueFamilyIndex, const ImageState &dstState,
+                        VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
+                        ImageTransitionInfo info);
+  void InlineTransition(VkCommandBuffer cmd, uint32_t queueFamilyIndex, VkImageLayout layout,
+                        VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
+                        ImageTransitionInfo info);
+
+  InitReqType MaxInitReq(const ImageSubresourceRange &range, InitPolicy policy,
+                         bool initialized) const;
+
+  void BeginCapture();
+};
 
 struct ImgRefs
 {

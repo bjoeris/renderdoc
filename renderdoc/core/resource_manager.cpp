@@ -125,6 +125,11 @@ FrameRefType ComposeFrameRefsDisjoint(FrameRefType x, FrameRefType y)
     return RDCMAX(x, y);
 }
 
+FrameRefType KeepOldFrameRef(FrameRefType first, FrameRefType second)
+{
+  return first;
+}
+
 bool IncludesRead(FrameRefType refType)
 {
   switch(refType)
