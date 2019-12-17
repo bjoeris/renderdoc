@@ -587,8 +587,9 @@ private:
 
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
     std::map<ResourceId, ImageState> imageStates;
-#endif
+#else
     rdcarray<rdcpair<ResourceId, ImageRegionState>> imgbarriers;
+#endif
 
     ResourceId pushDescriptorID[2][64];
 
@@ -780,11 +781,12 @@ private:
     return ImageTransitionInfo(m_State);
   }
 
-#endif
+#else
   // used both on capture and replay side to track image layouts. Only locked
   // in capture
   std::map<ResourceId, ImageLayouts> m_ImageLayouts;
   Threading::CriticalSection m_ImageLayoutsLock;
+#endif
 
   // find swapchain for an image
   std::map<RENDERDOC_WindowHandle, VkSwapchainKHR> m_SwapLookup;
@@ -951,10 +953,12 @@ private:
                                                       int32_t messageCode, const char *pLayerPrefix,
                                                       const char *pMessage, void *pUserData);
   void AddFrameTerminator(uint64_t queueMarkerTag);
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
   void ImageInitializationBarriers(ResourceId id, WrappedVkRes *live, InitPolicy policy,
                                    bool initialized, const ImgRefs *imgRefs,
                                    rdcarray<VkImageMemoryBarrier> &setupBarriers,
                                    rdcarray<VkImageMemoryBarrier> &cleanupBarriers) const;
+#endif
   void SubmitExtQBarriers(const std::map<uint32_t, rdcarray<VkImageMemoryBarrier>> &extQBarriers);
 
 public:

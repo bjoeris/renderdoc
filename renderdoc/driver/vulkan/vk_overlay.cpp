@@ -516,8 +516,14 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
     vkr = m_pDriver->vkCreateImageView(m_Device, &viewInfo, NULL, &m_Overlay.ImageView);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
-    // need to update image layout into valid state
+// need to update image layout into valid state
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+    m_pDriver->FindImageState(GetResID(m_Overlay.Image))
+        ->InlineTransition(
+            cmd, m_pDriver->m_QueueFamilyIdx, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, m_pDriver->GetImageTransitionInfo());
+#else
     VkImageMemoryBarrier barrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         NULL,
@@ -535,6 +541,7 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
         VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     DoPipelineBarrier(cmd, 1, &barrier);
+#endif
 
     VkAttachmentDescription colDesc = {
         0,
@@ -1290,8 +1297,21 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
       attDescs[1].format = depthImageInfo.format;
       attDescs[0].samples = attDescs[1].samples = iminfo.samples;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      {
+        LockedConstImageStateRef imState = m_pDriver->FindConstImageState(depthIm);
+        if(imState)
+        {
+          // find the state that overlaps the view's subresource range start. We assume all
+          // subresources are correctly in the same state (as they should be) so we just need to
+          // find the first match.
+          auto it = imState->subresourceStates.RangeBegin(depthViewInfo.range);
+          if(it != imState->subresourceStates.end())
+            attDescs[1].initialLayout = attDescs[1].finalLayout = it->state().newLayout;
+        }
+      }
+#else
       rdcarray<ImageRegionState> &depthStates = m_pDriver->m_ImageLayouts[depthIm].subresourceStates;
-
       for(ImageRegionState &ds : depthStates)
       {
         // find the state that overlaps the view's subresource range start. We assume all
@@ -1307,6 +1327,7 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
           break;
         }
       }
+#endif
 
       VkAttachmentReference colRef = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
       VkAttachmentReference dsRef = {1, attDescs[1].initialLayout};
@@ -2074,9 +2095,22 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
         attDescs[1].format = depthImageInfo.format;
         attDescs[0].samples = attDescs[1].samples = iminfo.samples;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+        {
+          LockedConstImageStateRef imState = m_pDriver->FindConstImageState(depthIm);
+          if(imState)
+          {
+            // find the state that overlaps the view's subresource range start. We assume all
+            // subresources are correctly in the same state (as they should be) so we just need to
+            // find the first match.
+            auto it = imState->subresourceStates.RangeBegin(depthViewInfo.range);
+            if(it != imState->subresourceStates.end())
+              attDescs[1].initialLayout = attDescs[1].finalLayout = it->state().newLayout;
+          }
+        }
+#else
         rdcarray<ImageRegionState> &depthStates =
             m_pDriver->m_ImageLayouts[depthIm].subresourceStates;
-
         for(ImageRegionState &ds : depthStates)
         {
           // find the state that overlaps the view's subresource range start. We assume all
@@ -2092,6 +2126,7 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
             break;
           }
         }
+#endif
 
         VkAttachmentReference colRef = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
         VkAttachmentReference dsRef = {1, attDescs[1].initialLayout};

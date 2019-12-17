@@ -280,11 +280,15 @@ public:
   template <typename SerialiserType>
   bool Serialise_DeviceMemoryRefs(SerialiserType &ser, rdcarray<MemRefInterval> &data);
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
   template <typename SerialiserType>
   bool Serialise_ImageRefs(SerialiserType &ser, rdcarray<ImgRefsPair> &data);
+#endif
 
   void InsertDeviceMemoryRefs(WriteSerialiser &ser);
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
   void InsertImageRefs(WriteSerialiser &ser);
+#endif
 
   ResourceId GetID(WrappedVkRes *res)
   {
@@ -434,11 +438,15 @@ public:
   void MarkMemoryFrameReferenced(ResourceId mem, VkDeviceSize start, VkDeviceSize end,
                                  FrameRefType refType);
   void AddMemoryFrameRefs(ResourceId mem);
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
   void AddImageFrameRefs(ResourceId img, const ImageInfo &imageInfo);
+#endif
 
   void MergeReferencedMemory(std::map<ResourceId, MemRefs> &memRefs);
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
   void MergeReferencedImages(std::map<ResourceId, ImgRefs> &imgRefs);
   void ClearReferencedImages();
+#endif
   void ClearReferencedMemory();
   MemRefs *FindMemRefs(ResourceId mem);
   ImgRefs *FindImgRefs(ResourceId img);
@@ -472,6 +480,8 @@ private:
 
   WrappedVulkan *m_Core;
   std::map<ResourceId, MemRefs> m_MemFrameRefs;
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
   std::map<ResourceId, ImgRefs> m_ImgFrameRefs;
+#endif
   InitPolicy m_InitPolicy = eInitPolicy_CopyAll;
 };

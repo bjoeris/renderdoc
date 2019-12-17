@@ -407,7 +407,7 @@ bool WrappedVulkan::Serialise_vkCreateCommandPool(SerialiserType &ser, VkDevice 
     CreateInfo.queueFamilyIndex = m_QueueRemapping[CreateInfo.queueFamilyIndex][0].family;
 
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
-    m_commandQueueFamilies[CmdPool] = CreateInfo.queueFamilyIndex;
+    InsertCommandQueueFamily(CmdPool, CreateInfo.queueFamilyIndex);
 #endif
 
     VkResult ret = ObjDisp(device)->CreateCommandPool(Unwrap(device), &CreateInfo, NULL, &pool);
@@ -422,7 +422,7 @@ bool WrappedVulkan::Serialise_vkCreateCommandPool(SerialiserType &ser, VkDevice 
       ResourceId live = GetResourceManager()->WrapResource(Unwrap(device), pool);
       GetResourceManager()->AddLiveResource(CmdPool, pool);
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
-      m_commandQueueFamilies[live] = CreateInfo.queueFamilyIndex;
+      InsertCommandQueueFamily(live, CreateInfo.queueFamilyIndex);
 #endif
     }
 
@@ -518,16 +518,19 @@ bool WrappedVulkan::Serialise_vkAllocateCommandBuffers(SerialiserType &ser, VkDe
     {
       ResourceId live = GetResourceManager()->WrapResource(Unwrap(device), cmd);
       GetResourceManager()->AddLiveResource(CommandBuffer, cmd);
-
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
-      m_commandQueueFamilies[live] = m_commandQueueFamilies[GetResID(AllocateInfo.commandPool)];
+      auto cmdQueueFamilyIt = m_commandQueueFamilies.find(GetResID(AllocateInfo.commandPool));
+      if(cmdQueueFamilyIt == m_commandQueueFamilies.end())
+      {
+        RDCERR("Missing queue family for %s", ToStr(GetResID(AllocateInfo.commandPool)).c_str());
+      }
+      else
+      {
+        InsertCommandQueueFamily(CommandBuffer, cmdQueueFamilyIt->second);
+        InsertCommandQueueFamily(live, cmdQueueFamilyIt->second);
+      }
 #endif
     }
-
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
-    m_commandQueueFamilies[CommandBuffer] =
-        m_commandQueueFamilies[GetResID(AllocateInfo.commandPool)];
-#endif
 
     AddResource(CommandBuffer, ResourceType::CommandBuffer, "Command Buffer");
     DerivedResource(device, CommandBuffer);
@@ -656,6 +659,18 @@ bool WrappedVulkan::Serialise_vkBeginCommandBuffer(SerialiserType &ser, VkComman
 
   if(IsReplayingAndReading())
   {
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+    auto cmdQueueFamilyIt = m_commandQueueFamilies.find(CommandBuffer);
+    if(cmdQueueFamilyIt == m_commandQueueFamilies.end())
+    {
+      RDCERR("Unknown queue family for %s", ToStr(CommandBuffer).c_str());
+    }
+    else
+    {
+      InsertCommandQueueFamily(BakedCommandBuffer, cmdQueueFamilyIt->second);
+    }
+#endif
+
     m_LastCmdBufferID = CommandBuffer;
 
     // when loading, allocate a new resource ID for each push descriptor slot in this command buffer
@@ -786,6 +801,9 @@ bool WrappedVulkan::Serialise_vkBeginCommandBuffer(SerialiserType &ser, VkComman
         // there's no issue with clashes here.
         m_RerecordCmds[BakedCommandBuffer] = cmd;
         m_RerecordCmds[m_LastCmdBufferID] = cmd;
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+        InsertCommandQueueFamily(GetResID(cmd), FindCommandQueueFamily(m_LastCmdBufferID));
+#endif
 
         m_RerecordCmdList.push_back({AllocateInfo.commandPool, cmd});
 
@@ -880,6 +898,10 @@ bool WrappedVulkan::Serialise_vkBeginCommandBuffer(SerialiserType &ser, VkComman
       }
 
       ObjDisp(device)->BeginCommandBuffer(Unwrap(cmd), &unwrappedBeginInfo);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      InsertCommandQueueFamily(GetResourceManager()->GetLiveID(BakedCommandBuffer),
+                               FindCommandQueueFamily(BakedCommandBuffer));
+#endif
     }
   }
 
@@ -1008,7 +1030,11 @@ bool WrappedVulkan::Serialise_vkEndCommandBuffer(SerialiserType &ser, VkCommandB
           // subpass
           uint32_t &sub = m_BakedCmdBufferInfo[m_LastCmdBufferID].state.subpass;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+          std::map<ResourceId, ImageState> renderPassEndStates;
+#else
           rdcarray<rdcpair<ResourceId, ImageRegionState> > imgbarriers;
+#endif
 
           for(sub = m_RenderState.subpass; sub < numSubpasses - 1; sub++)
           {
@@ -1016,19 +1042,57 @@ bool WrappedVulkan::Serialise_vkEndCommandBuffer(SerialiserType &ser, VkCommandB
 
             rdcarray<VkImageMemoryBarrier> subpassBarriers = GetImplicitRenderPassBarriers();
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+            GetResourceManager()->RecordBarriers(
+                renderPassEndStates, FindCommandQueueFamily(m_LastCmdBufferID),
+                (uint32_t)subpassBarriers.size(), subpassBarriers.data());
+#else
             GetResourceManager()->RecordBarriers(
                 imgbarriers, m_ImageLayouts, (uint32_t)subpassBarriers.size(), &subpassBarriers[0]);
+#endif
           }
 
           rdcarray<VkImageMemoryBarrier> finalBarriers = GetImplicitRenderPassBarriers(~0U);
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+          GetResourceManager()->RecordBarriers(renderPassEndStates,
+                                               FindCommandQueueFamily(m_LastCmdBufferID),
+                                               (uint32_t)finalBarriers.size(), finalBarriers.data());
+#else
           GetResourceManager()->RecordBarriers(imgbarriers, m_ImageLayouts,
                                                (uint32_t)finalBarriers.size(), &finalBarriers[0]);
+#endif
 
           ObjDisp(commandBuffer)->CmdEndRenderPass(Unwrap(commandBuffer));
 
-          // undo any implicit transitions we just went through, so that we can pretend that the
-          // image stayed in the same layout as it was when we stopped partially replaying.
+// undo any implicit transitions we just went through, so that we can pretend that the
+// image stayed in the same layout as it was when we stopped partially replaying.
+
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+          for(auto it = renderPassEndStates.begin(); it != renderPassEndStates.end(); ++it)
+          {
+            ResourceId id = it->first;
+            ImageState &endState = it->second;
+            LockedConstImageStateRef current = FindConstImageState(id);
+            if(!current)
+            {
+              RDCERR("Unknown image %s", ToStr(id).c_str());
+            }
+            else
+            {
+              ImageBarrierSequence barriers;
+              endState.Transition(*current, VK_ACCESS_ALL_WRITE_BITS, VK_ACCESS_ALL_READ_BITS,
+                                  &barriers, GetImageTransitionInfo());
+              InlineCleanupImageBarriers(commandBuffer, &barriers);
+              if(!barriers.empty())
+              {
+                // This should not happen, because the cleanup barriers are just image layout
+                // transitions, no queue family transitions
+                RDCERR("Partial RenderPass replay cleanup barriers could not all be inlined");
+              }
+            }
+          }
+#else
           rdcarray<VkImageMemoryBarrier> revertBarriers;
 
           for(auto it = imgbarriers.begin(); it != imgbarriers.end(); ++it)
@@ -1058,6 +1122,7 @@ bool WrappedVulkan::Serialise_vkEndCommandBuffer(SerialiserType &ser, VkCommandB
 
           if(!revertBarriers.empty())
             DoPipelineBarrier(commandBuffer, (uint32_t)revertBarriers.size(), revertBarriers.data());
+#endif
         }
 
         // also finish any nested markers we truncated and didn't finish
@@ -1255,8 +1320,14 @@ bool WrappedVulkan::Serialise_vkCmdBeginRenderPass(SerialiserType &ser, VkComman
         rdcarray<VkImageMemoryBarrier> imgBarriers = GetImplicitRenderPassBarriers();
 
         ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+        GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                             FindCommandQueueFamily(m_LastCmdBufferID),
+                                             (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
         GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                              (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
       }
     }
     else
@@ -1297,8 +1368,14 @@ bool WrappedVulkan::Serialise_vkCmdBeginRenderPass(SerialiserType &ser, VkComman
       rdcarray<VkImageMemoryBarrier> imgBarriers = GetImplicitRenderPassBarriers();
 
       ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                           FindCommandQueueFamily(m_LastCmdBufferID),
+                                           (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
       GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                            (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
 
       AddEvent();
       DrawcallDescription draw;
@@ -1428,8 +1505,14 @@ bool WrappedVulkan::Serialise_vkCmdNextSubpass(SerialiserType &ser, VkCommandBuf
         rdcarray<VkImageMemoryBarrier> imgBarriers = GetImplicitRenderPassBarriers();
 
         ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+        GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                             FindCommandQueueFamily(m_LastCmdBufferID),
+                                             (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
         GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                              (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
       }
     }
     else
@@ -1444,8 +1527,14 @@ bool WrappedVulkan::Serialise_vkCmdNextSubpass(SerialiserType &ser, VkCommandBuf
       rdcarray<VkImageMemoryBarrier> imgBarriers = GetImplicitRenderPassBarriers();
 
       ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                           FindCommandQueueFamily(m_LastCmdBufferID),
+                                           (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
       GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                            (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
 
       AddEvent();
       DrawcallDescription draw;
@@ -1513,8 +1602,14 @@ bool WrappedVulkan::Serialise_vkCmdEndRenderPass(SerialiserType &ser, VkCommandB
         ObjDisp(commandBuffer)->CmdEndRenderPass(Unwrap(commandBuffer));
 
         ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+        GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                             FindCommandQueueFamily(m_LastCmdBufferID),
+                                             (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
         GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                              (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
       }
     }
     else
@@ -1531,8 +1626,14 @@ bool WrappedVulkan::Serialise_vkCmdEndRenderPass(SerialiserType &ser, VkCommandB
       rdcarray<VkImageMemoryBarrier> imgBarriers = GetImplicitRenderPassBarriers(~0U);
 
       ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                           FindCommandQueueFamily(m_LastCmdBufferID),
+                                           (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
       GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                            (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
 
       AddImplicitResolveResourceUsage(~0U);
 
@@ -1676,8 +1777,14 @@ bool WrappedVulkan::Serialise_vkCmdBeginRenderPass2KHR(SerialiserType &ser,
         rdcarray<VkImageMemoryBarrier> imgBarriers = GetImplicitRenderPassBarriers();
 
         ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+        GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                             FindCommandQueueFamily(m_LastCmdBufferID),
+                                             (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
         GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                              (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
       }
     }
     else
@@ -1719,8 +1826,14 @@ bool WrappedVulkan::Serialise_vkCmdBeginRenderPass2KHR(SerialiserType &ser,
       rdcarray<VkImageMemoryBarrier> imgBarriers = GetImplicitRenderPassBarriers();
 
       ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                           FindCommandQueueFamily(m_LastCmdBufferID),
+                                           (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
       GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                            (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
 
       AddEvent();
       DrawcallDescription draw;
@@ -1869,8 +1982,14 @@ bool WrappedVulkan::Serialise_vkCmdNextSubpass2KHR(SerialiserType &ser, VkComman
         rdcarray<VkImageMemoryBarrier> imgBarriers = GetImplicitRenderPassBarriers();
 
         ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+        GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                             FindCommandQueueFamily(m_LastCmdBufferID),
+                                             (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
         GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                              (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
       }
     }
     else
@@ -1886,8 +2005,14 @@ bool WrappedVulkan::Serialise_vkCmdNextSubpass2KHR(SerialiserType &ser, VkComman
       rdcarray<VkImageMemoryBarrier> imgBarriers = GetImplicitRenderPassBarriers();
 
       ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                           FindCommandQueueFamily(m_LastCmdBufferID),
+                                           (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
       GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                            (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
 
       AddEvent();
       DrawcallDescription draw;
@@ -1977,8 +2102,14 @@ bool WrappedVulkan::Serialise_vkCmdEndRenderPass2KHR(SerialiserType &ser,
         ObjDisp(commandBuffer)->CmdEndRenderPass2KHR(Unwrap(commandBuffer), &unwrappedEndInfo);
 
         ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+        GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                             FindCommandQueueFamily(m_LastCmdBufferID),
+                                             (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
         GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                              (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
       }
     }
     else
@@ -1988,8 +2119,14 @@ bool WrappedVulkan::Serialise_vkCmdEndRenderPass2KHR(SerialiserType &ser,
       rdcarray<VkImageMemoryBarrier> imgBarriers = GetImplicitRenderPassBarriers(~0U);
 
       ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                           FindCommandQueueFamily(m_LastCmdBufferID),
+                                           (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
       GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                            (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
 
       AddEvent();
       DrawcallDescription draw;
@@ -2814,14 +2951,35 @@ bool WrappedVulkan::Serialise_vkCmdPipelineBarrier(
     if(commandBuffer != VK_NULL_HANDLE)
     {
       ResourceId cmd = GetResID(commandBuffer);
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
+                                           FindCommandQueueFamily(m_LastCmdBufferID),
+                                           (uint32_t)imgBarriers.size(), imgBarriers.data());
+#else
       GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
                                            (uint32_t)imgBarriers.size(), imgBarriers.data());
+#endif
 
       // now sanitise layouts before passing to vulkan
       for(VkImageMemoryBarrier &barrier : imgBarriers)
       {
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+        if(!IsLoading(m_State) && barrier.oldLayout == VK_IMAGE_LAYOUT_PREINITIALIZED)
+        {
+          // This is a transition from PRENITIALIZED, but we've already done this barrier once (when
+          // loading); Since we couldn't transition back to PREINITIALIZED, we instead left the
+          // image in GENERAL.
+          barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+        }
+        else
+        {
+          SanitiseReplayImageLayout(barrier.oldLayout);
+        }
+        SanitiseReplayImageLayout(barrier.newLayout);
+#else
         SanitiseOldImageLayout(barrier.oldLayout);
         SanitiseNewImageLayout(barrier.newLayout);
+#endif
       }
 
       ObjDisp(commandBuffer)
@@ -3231,9 +3389,14 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
       // merge barriers into parent command buffer
       for(uint32_t i = 0; i < commandBufferCount; i++)
       {
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+        ImageState::Merge(m_BakedCmdBufferInfo[GetResID(commandBuffer)].imageStates,
+                          m_BakedCmdBufferInfo[GetResID(pCommandBuffers[i])].imageStates);
+#else
         GetResourceManager()->MergeBarriers(
             m_BakedCmdBufferInfo[GetResID(commandBuffer)].imgbarriers,
             m_BakedCmdBufferInfo[GetResID(pCommandBuffers[i])].imgbarriers);
+#endif
       }
 
       // append deferred indirect copies
@@ -3356,8 +3519,10 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
 
         BakedCmdBufferInfo &parentCmdBufInfo = m_BakedCmdBufferInfo[m_LastCmdBufferID];
 
-        // if we're replaying a range but not from the start, we are guaranteed to only be replaying
-        // one of our executed command buffers and doing it to an outside command buffer. The outer
+        // if we're replaying a range but not from the start, we are guaranteed to only be
+        // replaying
+        // one of our executed command buffers and doing it to an outside command buffer. The
+        // outer
         // loop will be doing SetOffset() to jump to each event, and any time we land here is just
         // for
         // the markers we've added, which have this file offset, so just skip all of our work.
@@ -3371,7 +3536,8 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
         uint32_t startEID = parentCmdBufInfo.curEventID + m_Partial[Primary].baseEvent;
 
         // if we're in the re-record range and this command buffer isn't partial, we execute all
-        // command buffers because m_Partial[Primary].baseEvent above is only valid for the partial
+        // command buffers because m_Partial[Primary].baseEvent above is only valid for the
+        // partial
         // command buffer
         if(m_Partial[Primary].partialParent != m_LastCmdBufferID)
         {
@@ -3447,9 +3613,14 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
 #endif
               rerecordedCmds.push_back(Unwrap(cmd));
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+              ImageState::Merge(m_BakedCmdBufferInfo[GetResID(commandBuffer)].imageStates,
+                                m_BakedCmdBufferInfo[rerecord].imageStates);
+#else
               GetResourceManager()->MergeBarriers(
                   m_BakedCmdBufferInfo[GetResID(commandBuffer)].imgbarriers,
                   m_BakedCmdBufferInfo[rerecord].imgbarriers);
+#endif
             }
             else
             {

@@ -4294,8 +4294,7 @@ void ImageState::Transition(const ImageState &dstState, VkAccessFlags srcAccessM
         // transfer is necessary
         srcQueueFamilyIndex = dstQueueFamilyIndex;
 
-      if(newLayout == VK_IMAGE_LAYOUT_PREINITIALIZED &&
-         srcSub.newLayout != VK_IMAGE_LAYOUT_PREINITIALIZED)
+      if(newLayout == VK_IMAGE_LAYOUT_PREINITIALIZED && oldLayout != VK_IMAGE_LAYOUT_PREINITIALIZED)
       {
         // Transitioning to PREINITIALIZED, which is invalid. This happens when we are resetting to
         // an earlier image state.
@@ -4310,18 +4309,6 @@ void ImageState::Transition(const ImageState &dstState, VkAccessFlags srcAccessM
         // Get rid of PRESENT layouts
         SanitiseReplayImageLayout(oldLayout);
         SanitiseReplayImageLayout(newLayout);
-
-        if(oldLayout == VK_IMAGE_LAYOUT_PREINITIALIZED &&
-           newLayout != VK_IMAGE_LAYOUT_PREINITIALIZED && !IsLoading(info.capState))
-        {
-          // Transitioning away from PREINITIALIZED, but we aren't loading, so we've already
-          // transitioned out of PREINITIALIZED before. We couldn't transition back into
-          // PREINITIALIZED, so instead left the image in GENERAL, and ensured it was on
-          // firstQueueFamilyIndex (see above).
-          oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-          srcQueueFamilyIndex = srcSub.oldQueueFamilyIndex;
-          RDCASSERT(srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
-        }
       }
 
       uint32_t submitQueueFamilyIndex = (srcQueueFamilyIndex != VK_QUEUE_FAMILY_IGNORED)

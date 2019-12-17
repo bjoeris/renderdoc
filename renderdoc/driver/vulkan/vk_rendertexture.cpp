@@ -157,17 +157,29 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
   const bool f32render = (flags & eTexDisplay_32Render) != 0;
 
   VkDevice dev = m_pDriver->GetDev();
-  VkCommandBuffer cmd = m_pDriver->GetNextCmd();
   const VkDevDispatchTable *vt = ObjDisp(dev);
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+  LockedImageStateRef state = m_pDriver->FindImageState(cfg.resourceId);
+  if(!state)
+  {
+    RDCWARN("Could not find image info for image %llu", cfg.resourceId);
+    return false;
+  }
+  if(!state->isMemoryBound)
+    return false;
+  const ImageInfo &imageInfo = state->GetImageInfo();
+#else
   ImageLayouts &layouts = m_pDriver->m_ImageLayouts[cfg.resourceId];
+  if(!layouts.isMemoryBound)
+    return false;
+  const ImageInfo &imageInfo = layouts.imageInfo;
+#endif
+  VkCommandBuffer cmd = m_pDriver->GetNextCmd();
+
   VulkanCreationInfo::Image &iminfo = m_pDriver->m_CreationInfo.m_Image[cfg.resourceId];
   TextureDisplayViews &texviews = m_TexRender.TextureViews[cfg.resourceId];
   VkImage liveIm = m_pDriver->GetResourceManager()->GetCurrentHandle<VkImage>(cfg.resourceId);
-  const ImageInfo &imageInfo = layouts.imageInfo;
-
-  if(!layouts.isMemoryBound)
-    return false;
 
   CreateTexImageView(liveIm, iminfo, cfg.typeCast, texviews);
 
@@ -477,6 +489,19 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
 
   vt->UpdateDescriptorSets(Unwrap(dev), (uint32_t)writeSets.size(), &writeSets[0], 0, NULL);
 
+  VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
+                                        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+
+  vt->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
+
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+  ImageBarrierSequence setupBarriers, cleanupBarriers;
+  state->TempTransition(m_pDriver->GetQueueFamilyIndex(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        VK_ACCESS_SHADER_READ_BIT, &setupBarriers, &cleanupBarriers,
+                        m_pDriver->GetImageTransitionInfo());
+  m_pDriver->InlineSetupImageBarriers(cmd, &setupBarriers);
+  m_pDriver->SubmitAndFlushImageStateBarriers(&setupBarriers);
+#else
   VkImageMemoryBarrier srcimBarrier = {
       VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
       NULL,
@@ -494,11 +519,6 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
   srcimBarrier.srcAccessMask = VK_ACCESS_ALL_WRITE_BITS;
   // before we go reading
   srcimBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-  VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
-                                        VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-
-  vt->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
 
   VkCommandBuffer extQCmd = VK_NULL_HANDLE;
   VkResult vkr = VK_SUCCESS;
@@ -535,7 +555,7 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
 
   srcimBarrier.oldLayout = srcimBarrier.newLayout;
   srcimBarrier.srcAccessMask = srcimBarrier.dstAccessMask;
-
+#endif
   {
     vt->CmdBeginRenderPass(Unwrap(cmd), &rpbegin, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -605,6 +625,22 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
     vt->CmdEndRenderPass(Unwrap(cmd));
   }
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+  m_pDriver->InlineCleanupImageBarriers(cmd, &cleanupBarriers);
+  vt->EndCommandBuffer(Unwrap(cmd));
+  if(!cleanupBarriers.empty())
+  {
+    m_pDriver->SubmitCmds();
+    m_pDriver->FlushQ();
+    m_pDriver->SubmitAndFlushImageStateBarriers(&cleanupBarriers);
+  }
+#if ENABLED(SINGLE_FLUSH_VALIDATE)
+  else
+  {
+    m_pDriver->SubmitCmds();
+  }
+#endif
+#else
   std::swap(srcimBarrier.srcQueueFamilyIndex, srcimBarrier.dstQueueFamilyIndex);
 
   if(extQCmd != VK_NULL_HANDLE)
@@ -643,6 +679,7 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
 
 #if ENABLED(SINGLE_FLUSH_VALIDATE)
   m_pDriver->SubmitCmds();
+#endif
 #endif
 
   return true;

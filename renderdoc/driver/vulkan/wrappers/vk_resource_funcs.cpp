@@ -1007,11 +1007,28 @@ bool WrappedVulkan::Serialise_vkBindImageMemory(SerialiserType &ser, VkDevice de
 
     ObjDisp(device)->BindImageMemory(Unwrap(device), Unwrap(image), Unwrap(memory), memoryOffset);
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+    {
+      LockedImageStateRef state = FindImageState(GetResID(image));
+      if(!state)
+      {
+        RDCERR("Binding memory for unknown image %s", ToStr(GetResID(image)).c_str());
+      }
+      else
+      {
+        state->isMemoryBound = true;
+        state->boundMemory = GetResID(memory);
+        state->boundMemoryOffset = memoryOffset;
+        state->boundMemorySize = mrq.size;
+      }
+    }
+#else
     ImageLayouts &layout = m_ImageLayouts[GetResID(image)];
     layout.isMemoryBound = true;
     layout.boundMemory = GetResID(memory);
     layout.boundMemoryOffset = memoryOffset;
     layout.boundMemorySize = mrq.size;
+#endif
 
     GetResourceDesc(memOrigId).derivedResources.push_back(resOrigId);
     GetResourceDesc(resOrigId).parentResources.push_back(memOrigId);
@@ -1076,7 +1093,17 @@ VkResult WrappedVulkan::vkBindImageMemory(VkDevice device, VkImage image, VkDevi
   }
   else
   {
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+    {
+      LockedImageStateRef state = FindImageState(GetResID(image));
+      if(!state)
+        RDCERR("Binding memory to unknown image %s", ToStr(GetResID(image)).c_str());
+      else
+        state->isMemoryBound = true;
+    }
+#else
     m_ImageLayouts[GetResID(image)].isMemoryBound = true;
+#endif
   }
 
   return ret;
@@ -1556,6 +1583,16 @@ bool WrappedVulkan::Serialise_vkCreateImage(SerialiserType &ser, VkDevice device
 
       m_CreationInfo.m_Image[live].Init(GetResourceManager(), m_CreationInfo, &CreateInfo);
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      bool inserted = false;
+      auto state = InsertImageState(Unwrap(img), live, CreateInfo, &inserted);
+      if(!inserted)
+      {
+        // Image state already existed.
+        state->handle = Unwrap(img);
+        *state = state->InitialState();
+      }
+#else
       VkImageSubresourceRange range;
       range.baseMipLevel = range.baseArrayLayer = 0;
       range.levelCount = CreateInfo.mipLevels;
@@ -1578,6 +1615,7 @@ bool WrappedVulkan::Serialise_vkCreateImage(SerialiserType &ser, VkDevice device
 
       layouts.subresourceStates.push_back(ImageRegionState(
           VK_QUEUE_FAMILY_IGNORED, range, UNKNOWN_PREV_IMG_LAYOUT, CreateInfo.initialLayout));
+#endif
     }
 
     const char *prefix = "Image";
@@ -2165,11 +2203,29 @@ bool WrappedVulkan::Serialise_vkBindImageMemory2(SerialiserType &ser, VkDevice d
       if(!ok)
         return false;
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+      {
+        ResourceId id = GetResID(bindInfo.image);
+        LockedImageStateRef state = FindImageState(id);
+        if(!state)
+        {
+          RDCERR("Binding memory for unknown image %s", ToStr(id).c_str());
+        }
+        else
+        {
+          state->isMemoryBound = true;
+          state->boundMemory = id;
+          state->boundMemoryOffset = bindInfo.memoryOffset;
+          state->boundMemorySize = mrq.size;
+        }
+      }
+#else
       ImageLayouts &imageLayouts = m_ImageLayouts[GetResID(bindInfo.image)];
       imageLayouts.isMemoryBound = true;
       imageLayouts.boundMemory = GetResID(bindInfo.memory);
       imageLayouts.boundMemoryOffset = bindInfo.memoryOffset;
       imageLayouts.boundMemorySize = mrq.size;
+#endif
 
       GetResourceDesc(memOrigId).derivedResources.push_back(resOrigId);
       GetResourceDesc(resOrigId).parentResources.push_back(memOrigId);
@@ -2246,8 +2302,19 @@ VkResult WrappedVulkan::vkBindImageMemory2(VkDevice device, uint32_t bindInfoCou
   }
   else
   {
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+    for(uint32_t i = 0; i < bindInfoCount; i++)
+    {
+      LockedImageStateRef state = FindImageState(GetResID(pBindInfos[i].image));
+      if(!state)
+        state->isMemoryBound = true;
+      else
+        RDCERR("Binding memory to unknown image %s", ToStr(GetResID(pBindInfos[i].image)).c_str());
+    }
+#else
     for(uint32_t i = 0; i < bindInfoCount; i++)
       m_ImageLayouts[GetResID(pBindInfos[i].image)].isMemoryBound = true;
+#endif
   }
 
   return ret;

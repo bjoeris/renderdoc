@@ -393,6 +393,7 @@ bool VulkanResourceManager::DeserialiseImageRefs2(ReadSerialiser &ser,
 }
 #endif
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
 template <typename SerialiserType>
 void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
                                                  std::map<ResourceId, ImageLayouts> &states,
@@ -561,6 +562,7 @@ template void VulkanResourceManager::SerialiseImageStates(ReadSerialiser &ser,
 template void VulkanResourceManager::SerialiseImageStates(WriteSerialiser &ser,
                                                           std::map<ResourceId, ImageLayouts> &states,
                                                           rdcarray<VkImageMemoryBarrier> &barriers);
+#endif
 
 template <class SerialiserType>
 void DoSerialise(SerialiserType &ser, MemRefInterval &el)
@@ -658,6 +660,7 @@ template bool VulkanResourceManager::Serialise_DeviceMemoryRefs(ReadSerialiser &
 template bool VulkanResourceManager::Serialise_DeviceMemoryRefs(WriteSerialiser &ser,
                                                                 rdcarray<MemRefInterval> &data);
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
 template <typename SerialiserType>
 bool VulkanResourceManager::Serialise_ImageRefs(SerialiserType &ser, rdcarray<ImgRefsPair> &data)
 {
@@ -679,6 +682,7 @@ template bool VulkanResourceManager::Serialise_ImageRefs(ReadSerialiser &ser,
                                                          rdcarray<ImgRefsPair> &imageRefs);
 template bool VulkanResourceManager::Serialise_ImageRefs(WriteSerialiser &ser,
                                                          rdcarray<ImgRefsPair> &imageRefs);
+#endif
 
 void VulkanResourceManager::InsertDeviceMemoryRefs(WriteSerialiser &ser)
 {
@@ -700,6 +704,7 @@ void VulkanResourceManager::InsertDeviceMemoryRefs(WriteSerialiser &ser)
   }
 }
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
 void VulkanResourceManager::InsertImageRefs(WriteSerialiser &ser)
 {
   rdcarray<ImgRefsPair> data;
@@ -717,6 +722,7 @@ void VulkanResourceManager::InsertImageRefs(WriteSerialiser &ser)
     Serialise_ImageRefs(ser, data);
   }
 }
+#endif
 
 void VulkanResourceManager::MarkSparseMapReferenced(ResourceInfo *sparse)
 {
@@ -1019,6 +1025,7 @@ void VulkanResourceManager::AddMemoryFrameRefs(ResourceId mem)
   m_MemFrameRefs.insert({mem, MemRefs()});
 }
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
 void VulkanResourceManager::AddImageFrameRefs(ResourceId img, const ImageInfo &imageInfo)
 {
   m_ImgFrameRefs.insert({img, ImgRefs(imageInfo)});
@@ -1035,6 +1042,7 @@ void VulkanResourceManager::MergeReferencedImages(std::map<ResourceId, ImgRefs> 
       i->second.Merge(j->second);
   }
 }
+#endif
 
 void VulkanResourceManager::MergeReferencedMemory(std::map<ResourceId, MemRefs> &memRefs)
 {
@@ -1050,10 +1058,12 @@ void VulkanResourceManager::MergeReferencedMemory(std::map<ResourceId, MemRefs> 
   }
 }
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
 void VulkanResourceManager::ClearReferencedImages()
 {
   m_ImgFrameRefs.clear();
 }
+#endif
 
 void VulkanResourceManager::ClearReferencedMemory()
 {
@@ -1071,6 +1081,7 @@ MemRefs *VulkanResourceManager::FindMemRefs(ResourceId mem)
     return NULL;
 }
 
+#if DISABLED(RDOC_NEW_IMAGE_STATE)
 ImgRefs *VulkanResourceManager::FindImgRefs(ResourceId img)
 {
   auto it = m_ImgFrameRefs.find(img);
@@ -1079,6 +1090,7 @@ ImgRefs *VulkanResourceManager::FindImgRefs(ResourceId img)
   else
     return NULL;
 }
+#endif
 
 bool VulkanResourceManager::Prepare_InitialState(WrappedVkRes *res)
 {
