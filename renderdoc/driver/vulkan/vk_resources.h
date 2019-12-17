@@ -1254,6 +1254,8 @@ struct ImageSubresourceRange
   }
 };
 
+DECLARE_REFLECTION_STRUCT(ImageSubresourceRange);
+
 struct ImageSubresourceState
 {
   uint32_t oldQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -1290,6 +1292,18 @@ struct ImageSubresourceState
   bool Update(const ImageSubresourceState &other, ImageSubresourceState &result,
               FrameRefCompFunc compose) const;
 };
+
+DECLARE_REFLECTION_STRUCT(ImageSubresourceState);
+
+struct TaggedImageSubresourceState
+{
+  ImageSubresourceRange range;
+  ImageSubresourceState state;
+};
+
+DECLARE_REFLECTION_STRUCT(TaggedImageSubresourceState);
+
+struct ImgRefs;
 
 class ImageSubresourceMap
 {
@@ -1340,6 +1354,12 @@ public:
     for(auto it = ImageAspectFlagIter::begin(m_aspectMask); it != ImageAspectFlagIter::end(); ++it)
       ++m_aspectCount;
   }
+
+  void ToArray(rdcarray<TaggedImageSubresourceState> &arr);
+
+  void FromArray(const rdcarray<TaggedImageSubresourceState> &arr);
+
+  void FromImgRefs(const ImgRefs &imgRefs);
 
   inline ImageSubresourceState &SubresourceValue(uint32_t aspectIndex, uint32_t level,
                                                  uint32_t layer, uint32_t slice)
@@ -1415,6 +1435,7 @@ public:
     inline const ImageSubresourceRange &range() const { return m_range; }
     inline State &state() { return *m_state; }
     inline const State &state() const { return *m_state; }
+    operator TaggedImageSubresourceState() const { return {range(), state()}; }
     SubresourcePairRefTemplate &operator=(const SubresourcePairRefTemplate &other) = delete;
 
   protected:
@@ -1570,6 +1591,16 @@ struct ImageState
 
   void BeginCapture();
 };
+
+DECLARE_REFLECTION_STRUCT(ImageState);
+
+struct TaggedImageState
+{
+  ResourceId id;
+  ImageState state;
+};
+
+DECLARE_REFLECTION_STRUCT(TaggedImageState);
 
 struct ImgRefs
 {

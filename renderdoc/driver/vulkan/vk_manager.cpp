@@ -245,6 +245,154 @@ void VulkanResourceManager::MergeBarriers(rdcarray<rdcpair<ResourceId, ImageRegi
   TRDBG("Post-merge, there are %u states", (uint32_t)dststates.size());
 }
 
+#if ENABLED(RDOC_NEW_IMAGE_STATE)
+template <typename SerialiserType>
+void VulkanResourceManager::SerialiseImageStates2(SerialiserType &ser,
+                                                  std::map<ResourceId, LockingImageState> &states)
+{
+  SERIALISE_ELEMENT_LOCAL(NumImages, (uint32_t)states.size());
+
+  auto srcit = states.begin();
+
+  std::set<ResourceId> updatedState;
+
+  for(uint32_t i = 0; i < NumImages; i++)
+  {
+    SERIALISE_ELEMENT_LOCAL(Image, (ResourceId)(srcit->first)).TypedAs("VkImage"_lit);
+    if(ser.IsWriting())
+    {
+      LockedImageStateRef lockedState = srcit->second.LockWrite();
+      ::ImageState &ImageState = *lockedState;
+      SERIALISE_ELEMENT(ImageState);
+      ++srcit;
+    }
+    else
+    {
+      ImageState imageState;
+
+      if(ser.VersionLess(0x11))
+      {
+        ImageLayouts imageLayouts;
+        {
+          ImageLayouts &ImageState = imageLayouts;
+          SERIALISE_ELEMENT(ImageState);
+        }
+        if(IsReplayingAndReading())
+        {
+          imageState = ImageState(VK_NULL_HANDLE, imageLayouts.imageInfo);
+
+          rdcarray<TaggedImageSubresourceState> subresourceStates;
+          subresourceStates.reserve(imageLayouts.subresourceStates.size());
+
+          for(ImageRegionState &st : imageLayouts.subresourceStates)
+          {
+            TaggedImageSubresourceState p;
+            p.range = st.subresourceRange;
+            p.state.oldQueueFamilyIndex = st.dstQueueFamilyIndex;
+            p.state.newQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            p.state.oldLayout = st.newLayout;
+            p.state.newLayout = imageState.GetImageInfo().initialLayout;
+            p.state.refType = eFrameRef_Maximum;
+            subresourceStates.push_back(p);
+          }
+
+          imageState.subresourceStates.FromArray(subresourceStates);
+        }
+      }
+      else
+      {
+        {
+          ::ImageState &ImageState = imageState;
+          SERIALISE_ELEMENT(ImageState);
+        }
+        if(IsReplayingAndReading())
+        {
+          imageState.newQueueFamilyTransfers.clear();
+          for(auto it = imageState.subresourceStates.begin();
+              it != imageState.subresourceStates.end(); ++it)
+          {
+            // Set the current image state (`newLayout`, `newQueueFamilyIndex`, `refType`) to the
+            // initial image state, so that calling `ResetToOldState` will move the image from the
+            // initial state to the state it was in at the beginning of the capture.
+            ImageSubresourceState &state = it->state();
+            state.newLayout = imageState.GetImageInfo().initialLayout;
+            state.newQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+          }
+        }
+      }
+      if(HasLiveResource(Image))
+      {
+        ResourceId liveid = GetLiveID(Image);
+        if(liveid != ResourceId())
+        {
+          if(IsLoading(m_State))
+          {
+            auto stit = states.find(liveid);
+            if(stit == states.end())
+              states.insert({liveid, LockingImageState(imageState)});
+            else
+              stit->second.LockWrite()->MergeCaptureBeginState(imageState);
+          }
+          else if(IsActiveReplaying(m_State))
+          {
+            auto current = states.find(liveid)->second.LockRead();
+            auto stit = states.find(liveid);
+            for(auto subit = imageState.subresourceStates.begin();
+                subit != imageState.subresourceStates.end(); ++subit)
+            {
+              uint32_t aspectIndex = 0;
+              for(auto it = ImageAspectFlagIter::begin(imageState.GetImageInfo().Aspects());
+                  it != ImageAspectFlagIter::end() && ((*it) & subit->range().aspectMask) == 0;
+                  ++it, ++aspectIndex)
+              {
+              }
+              auto currentSub = current->subresourceStates.SubresourceValue(
+                  aspectIndex, subit->range().baseMipLevel, subit->range().baseArrayLayer,
+                  subit->range().baseDepthSlice);
+              RDCASSERT(currentSub.refType == subit->state().refType);
+              RDCASSERT(currentSub.oldLayout == subit->state().oldLayout);
+              RDCASSERT(currentSub.oldQueueFamilyIndex == subit->state().oldQueueFamilyIndex);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+template void VulkanResourceManager::SerialiseImageStates2(
+    WriteSerialiser &ser, std::map<ResourceId, LockingImageState> &states);
+template void VulkanResourceManager::SerialiseImageStates2(
+    ReadSerialiser &ser, std::map<ResourceId, LockingImageState> &states);
+
+bool VulkanResourceManager::DeserialiseImageRefs2(ReadSerialiser &ser,
+                                                  std::map<ResourceId, LockingImageState> &states)
+{
+  rdcarray<ImgRefsPair> data;
+  SERIALISE_ELEMENT(data);
+
+  SERIALISE_CHECK_READ_ERRORS();
+
+  for(auto it = data.begin(); it != data.end(); ++it)
+  {
+    ResourceId liveid = GetLiveID(it->image);
+    if(liveid == ResourceId())
+      continue;
+
+    auto stit = states.find(liveid);
+    if(stit == states.end())
+    {
+      RDCWARN("Found ImgRefs for unknown image");
+    }
+    else
+    {
+      LockedImageStateRef imst = stit->second.LockWrite();
+      imst->subresourceStates.FromImgRefs(it->imgRefs);
+    }
+  }
+  return true;
+}
+#endif
+
 template <typename SerialiserType>
 void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
                                                  std::map<ResourceId, ImageLayouts> &states,

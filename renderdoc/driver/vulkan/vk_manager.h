@@ -265,6 +265,10 @@ public:
                      std::map<ResourceId, ImageLayouts> &layouts);
 
   template <typename SerialiserType>
+  void SerialiseImageStates2(SerialiserType &ser, std::map<ResourceId, LockingImageState> &states);
+  bool DeserialiseImageRefs2(ReadSerialiser &ser, std::map<ResourceId, LockingImageState> &states);
+
+  template <typename SerialiserType>
   void SerialiseImageStates(SerialiserType &ser, std::map<ResourceId, ImageLayouts> &states,
                             rdcarray<VkImageMemoryBarrier> &barriers);
 
