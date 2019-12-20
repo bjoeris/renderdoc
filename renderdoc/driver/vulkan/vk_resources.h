@@ -1513,8 +1513,9 @@ using ImageBarrierSequence = BarrierSequence<VkImageMemoryBarrier>;
 struct ImageTransitionInfo
 {
   CaptureState capState;
-  inline ImageTransitionInfo(CaptureState capState)
-      : capState(capState)
+  bool separateDepthStencilLayouts;
+  inline ImageTransitionInfo(CaptureState capState, bool separateDepthStencilLayouts)
+      : capState(capState), separateDepthStencilLayouts(separateDepthStencilLayouts)
   {
   }
   inline FrameRefCompFunc GetFrameRefCompFunc()

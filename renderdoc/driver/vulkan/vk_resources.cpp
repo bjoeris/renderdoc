@@ -4216,7 +4216,8 @@ void ImageState::ResetToOldState(ImageBarrierSequence *barriers, ImageTransition
     }
 
     if((GetImageInfo().Aspects() & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) ==
-           (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
+           (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) &&
+       !info.separateDepthStencilLayouts)
     {
       // This is a subresource of a depth and stencil image, and
       // VK_KHR_separate_depth_stencil_layouts is not enabled, so the barrier needs to include both
@@ -4354,7 +4355,8 @@ void ImageState::Transition(const ImageState &dstState, VkAccessFlags srcAccessM
 
       VkImageAspectFlags aspectMask = srcRng.aspectMask & dstRng.aspectMask;
       if((GetImageInfo().Aspects() & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) ==
-             (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
+             (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) &&
+         !info.separateDepthStencilLayouts)
       {
         // This is a subresource of a depth and stencil image, and
         // VK_KHR_separate_depth_stencil_layouts is not enabled, so the barrier needs to include
