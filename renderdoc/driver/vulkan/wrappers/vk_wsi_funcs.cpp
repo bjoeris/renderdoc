@@ -441,29 +441,10 @@ bool WrappedVulkan::Serialise_vkCreateSwapchainKHR(SerialiserType &ser, VkDevice
 
       m_CreationInfo.m_Names[liveId] = StringFormat::Fmt("Presentable Image %u", i);
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
       {
         LockedImageStateRef state = InsertImageState(Unwrap(im), liveId, ImageInfo(swapinfo.imageInfo));
         state->isMemoryBound = true;
       }
-#else
-      VkImageSubresourceRange range;
-      range.baseMipLevel = range.baseArrayLayer = 0;
-      range.levelCount = 1;
-      range.layerCount = CreateInfo.imageArrayLayers;
-      range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-      ImageLayouts &layouts = m_ImageLayouts[liveId];
-
-      layouts.imageInfo = swapinfo.imageInfo;
-
-      layouts.isMemoryBound = true;
-      layouts.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-      layouts.subresourceStates.clear();
-      layouts.subresourceStates.push_back(ImageRegionState(
-          VK_QUEUE_FAMILY_IGNORED, range, UNKNOWN_PREV_IMG_LAYOUT, VK_IMAGE_LAYOUT_UNDEFINED));
-#endif
     }
   }
 
@@ -597,26 +578,11 @@ void WrappedVulkan::WrapAndProcessCreatedSwapchain(VkDevice device,
         range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
 // fill out image info so we track resource state barriers
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
         {
           LockedImageStateRef state =
               InsertImageState(Unwrap(images[i]), imid, GetRecord(images[i])->resInfo->imageInfo);
           state->isMemoryBound = true;
         }
-#else
-        ImageLayouts *layout = NULL;
-        {
-          SCOPED_LOCK(m_ImageLayoutsLock);
-          layout = &m_ImageLayouts[imid];
-        }
-        layout->imageInfo = GetRecord(images[i])->resInfo->imageInfo;
-        layout->isMemoryBound = true;
-        layout->initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-        layout->subresourceStates.clear();
-        layout->subresourceStates.push_back(ImageRegionState(
-            VK_QUEUE_FAMILY_IGNORED, range, UNKNOWN_PREV_IMG_LAYOUT, VK_IMAGE_LAYOUT_UNDEFINED));
-#endif
 
         {
           VkImageViewCreateInfo info = {

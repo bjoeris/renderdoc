@@ -1007,7 +1007,6 @@ bool WrappedVulkan::Serialise_vkBindImageMemory(SerialiserType &ser, VkDevice de
 
     ObjDisp(device)->BindImageMemory(Unwrap(device), Unwrap(image), Unwrap(memory), memoryOffset);
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     {
       LockedImageStateRef state = FindImageState(GetResID(image));
       if(!state)
@@ -1022,13 +1021,6 @@ bool WrappedVulkan::Serialise_vkBindImageMemory(SerialiserType &ser, VkDevice de
         state->boundMemorySize = mrq.size;
       }
     }
-#else
-    ImageLayouts &layout = m_ImageLayouts[GetResID(image)];
-    layout.isMemoryBound = true;
-    layout.boundMemory = GetResID(memory);
-    layout.boundMemoryOffset = memoryOffset;
-    layout.boundMemorySize = mrq.size;
-#endif
 
     GetResourceDesc(memOrigId).derivedResources.push_back(resOrigId);
     GetResourceDesc(resOrigId).parentResources.push_back(memOrigId);
@@ -1062,7 +1054,6 @@ VkResult WrappedVulkan::vkBindImageMemory(VkDevice device, VkImage image, VkDevi
       chunk = scope.Get();
     }
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     {
       LockedImageStateRef state = FindImageState(GetResID(image));
       if(!state)
@@ -1070,14 +1061,6 @@ VkResult WrappedVulkan::vkBindImageMemory(VkDevice device, VkImage image, VkDevi
       else
         state->isMemoryBound = true;
     }
-#else
-    ImageLayouts *layout = NULL;
-    {
-      SCOPED_LOCK(m_ImageLayoutsLock);
-      layout = &m_ImageLayouts[GetResID(image)];
-    }
-    layout->isMemoryBound = true;
-#endif
 
     // memory object bindings are immutable and must happen before creation or use,
     // so this can always go into the record, even if a resource is created and bound
@@ -1093,7 +1076,6 @@ VkResult WrappedVulkan::vkBindImageMemory(VkDevice device, VkImage image, VkDevi
   }
   else
   {
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     {
       LockedImageStateRef state = FindImageState(GetResID(image));
       if(!state)
@@ -1101,9 +1083,6 @@ VkResult WrappedVulkan::vkBindImageMemory(VkDevice device, VkImage image, VkDevi
       else
         state->isMemoryBound = true;
     }
-#else
-    m_ImageLayouts[GetResID(image)].isMemoryBound = true;
-#endif
   }
 
   return ret;
@@ -1583,7 +1562,6 @@ bool WrappedVulkan::Serialise_vkCreateImage(SerialiserType &ser, VkDevice device
 
       m_CreationInfo.m_Image[live].Init(GetResourceManager(), m_CreationInfo, &CreateInfo);
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
       bool inserted = false;
       auto state = InsertImageState(Unwrap(img), live, CreateInfo, &inserted);
       if(!inserted)
@@ -1592,30 +1570,6 @@ bool WrappedVulkan::Serialise_vkCreateImage(SerialiserType &ser, VkDevice device
         state->handle = Unwrap(img);
         *state = state->InitialState();
       }
-#else
-      VkImageSubresourceRange range;
-      range.baseMipLevel = range.baseArrayLayer = 0;
-      range.levelCount = CreateInfo.mipLevels;
-      range.layerCount = CreateInfo.arrayLayers;
-
-      ImageLayouts &layouts = m_ImageLayouts[live];
-      layouts.imageInfo = ImageInfo(CreateInfo);
-
-      layouts.subresourceStates.clear();
-
-      layouts.initialLayout = CreateInfo.initialLayout;
-
-      range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      if(IsDepthOnlyFormat(CreateInfo.format))
-        range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-      else if(IsStencilOnlyFormat(CreateInfo.format))
-        range.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
-      else if(IsDepthOrStencilFormat(CreateInfo.format))
-        range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-
-      layouts.subresourceStates.push_back(ImageRegionState(
-          VK_QUEUE_FAMILY_IGNORED, range, UNKNOWN_PREV_IMG_LAYOUT, CreateInfo.initialLayout));
-#endif
     }
 
     const char *prefix = "Image";
@@ -1888,59 +1842,8 @@ VkResult WrappedVulkan::vkCreateImage(VkDevice device, const VkImageCreateInfo *
 
       m_CreationInfo.m_Image[id].Init(GetResourceManager(), m_CreationInfo, pCreateInfo);
     }
-    bool useNewImageState = false;
-    if(IsCaptureMode(m_State))
-    {
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
-      useNewImageState = true;
-#else
-      useNewImageState = false;
-#endif
-    }
-    else
-    {
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
-      useNewImageState = true;
-#else
-      useNewImageState = false;
-#endif
-    }
-    if(useNewImageState)
-    {
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
-      InsertImageState(Unwrap(*pImage), id, ImageInfo(*pCreateInfo));
-#endif
-    }
-    else
-    {
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-      VkImageSubresourceRange range;
-      range.baseMipLevel = range.baseArrayLayer = 0;
-      range.levelCount = pCreateInfo->mipLevels;
-      range.layerCount = pCreateInfo->arrayLayers;
 
-      ImageLayouts *layout = NULL;
-      {
-        SCOPED_LOCK(m_ImageLayoutsLock);
-        layout = &m_ImageLayouts[id];
-      }
-      layout->imageInfo = ImageInfo(*pCreateInfo);
-
-      layout->initialLayout = pCreateInfo->initialLayout;
-      layout->subresourceStates.clear();
-
-      range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      if(IsDepthOnlyFormat(pCreateInfo->format))
-        range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-      else if(IsStencilOnlyFormat(pCreateInfo->format))
-        range.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
-      else if(IsDepthOrStencilFormat(pCreateInfo->format))
-        range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-
-      layout->subresourceStates.push_back(ImageRegionState(
-          VK_QUEUE_FAMILY_IGNORED, range, UNKNOWN_PREV_IMG_LAYOUT, pCreateInfo->initialLayout));
-#endif
-    }
+    InsertImageState(Unwrap(*pImage), id, ImageInfo(*pCreateInfo));
   }
 
   return ret;
@@ -2203,7 +2106,6 @@ bool WrappedVulkan::Serialise_vkBindImageMemory2(SerialiserType &ser, VkDevice d
       if(!ok)
         return false;
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
       {
         ResourceId id = GetResID(bindInfo.image);
         LockedImageStateRef state = FindImageState(id);
@@ -2219,13 +2121,6 @@ bool WrappedVulkan::Serialise_vkBindImageMemory2(SerialiserType &ser, VkDevice d
           state->boundMemorySize = mrq.size;
         }
       }
-#else
-      ImageLayouts &imageLayouts = m_ImageLayouts[GetResID(bindInfo.image)];
-      imageLayouts.isMemoryBound = true;
-      imageLayouts.boundMemory = GetResID(bindInfo.memory);
-      imageLayouts.boundMemoryOffset = bindInfo.memoryOffset;
-      imageLayouts.boundMemorySize = mrq.size;
-#endif
 
       GetResourceDesc(memOrigId).derivedResources.push_back(resOrigId);
       GetResourceDesc(resOrigId).parentResources.push_back(memOrigId);
@@ -2268,7 +2163,6 @@ VkResult WrappedVulkan::vkBindImageMemory2(VkDevice device, uint32_t bindInfoCou
         chunk = scope.Get();
       }
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
       {
         ResourceId id = imgrecord->GetResourceID();
         LockedImageStateRef state = FindImageState(id);
@@ -2277,15 +2171,6 @@ VkResult WrappedVulkan::vkBindImageMemory2(VkDevice device, uint32_t bindInfoCou
         else
           state->isMemoryBound = true;
       }
-#else
-      ImageLayouts *layout = NULL;
-      {
-        SCOPED_LOCK(m_ImageLayoutsLock);
-        layout = &m_ImageLayouts[imgrecord->GetResourceID()];
-      }
-
-      layout->isMemoryBound = true;
-#endif
 
       // memory object bindings are immutable and must happen before creation or use,
       // so this can always go into the record, even if a resource is created and bound
@@ -2302,7 +2187,6 @@ VkResult WrappedVulkan::vkBindImageMemory2(VkDevice device, uint32_t bindInfoCou
   }
   else
   {
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     for(uint32_t i = 0; i < bindInfoCount; i++)
     {
       LockedImageStateRef state = FindImageState(GetResID(pBindInfos[i].image));
@@ -2311,10 +2195,6 @@ VkResult WrappedVulkan::vkBindImageMemory2(VkDevice device, uint32_t bindInfoCou
       else
         RDCERR("Binding memory to unknown image %s", ToStr(GetResID(pBindInfos[i].image)).c_str());
     }
-#else
-    for(uint32_t i = 0; i < bindInfoCount; i++)
-      m_ImageLayouts[GetResID(pBindInfos[i].image)].isMemoryBound = true;
-#endif
   }
 
   return ret;

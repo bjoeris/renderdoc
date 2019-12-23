@@ -53,11 +53,7 @@ struct VkInitParams
   uint64_t GetSerialiseSize();
 
 // check if a frame capture section version is supported
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   static const uint64_t CurrentVersion = 0x11;
-#else
-  static const uint64_t CurrentVersion = 0x10;
-#endif
   static bool IsSupportedVersion(uint64_t ver);
 };
 
@@ -429,10 +425,8 @@ private:
   rdcarray<uint32_t> m_QueueFamilyCounts;
   rdcarray<uint32_t> m_QueueFamilyIndices;
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   ImageBarrierSequence m_setupImageBarriers;
   ImageBarrierSequence m_cleanupImageBarriers;
-#endif
 
   // a small amount of helper code during capture for handling resources on different queues in init
   // states
@@ -585,11 +579,7 @@ private:
       uint32_t subpass = 0;
     } state;
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     std::map<ResourceId, ImageState> imageStates;
-#else
-    rdcarray<rdcpair<ResourceId, ImageRegionState>> imgbarriers;
-#endif
 
     ResourceId pushDescriptorID[2][64];
 
@@ -767,7 +757,6 @@ private:
     m_ForcedReferences.push_back(record);
   }
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   // used on replay side to track the queue family of command buffers and pools
   std::map<ResourceId, uint32_t> m_commandQueueFamilies;
 
@@ -781,13 +770,6 @@ private:
   {
     return ImageTransitionInfo(m_State, m_QueueFamilyIdx, m_SeparateDepthStencilLayouts);
   }
-
-#else
-  // used both on capture and replay side to track image layouts. Only locked
-  // in capture
-  std::map<ResourceId, ImageLayouts> m_ImageLayouts;
-  Threading::CriticalSection m_ImageLayoutsLock;
-#endif
 
   // find swapchain for an image
   std::map<RENDERDOC_WindowHandle, VkSwapchainKHR> m_SwapLookup;
@@ -954,12 +936,6 @@ private:
                                                       int32_t messageCode, const char *pLayerPrefix,
                                                       const char *pMessage, void *pUserData);
   void AddFrameTerminator(uint64_t queueMarkerTag);
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-  void ImageInitializationBarriers(ResourceId id, WrappedVkRes *live, InitPolicy policy,
-                                   bool initialized, const ImgRefs *imgRefs,
-                                   rdcarray<VkImageMemoryBarrier> &setupBarriers,
-                                   rdcarray<VkImageMemoryBarrier> &cleanupBarriers) const;
-#endif
   void SubmitExtQBarriers(const std::map<uint32_t, rdcarray<VkImageMemoryBarrier>> &extQBarriers);
 
 public:
@@ -1070,7 +1046,6 @@ public:
     return m_PhysicalDeviceData.performanceQueryFeatures;
   }
   VkDriverInfo GetDriverInfo() { return m_PhysicalDeviceData.driverInfo; }
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   uint32_t FindCommandQueueFamily(ResourceId cmdId);
   void InsertCommandQueueFamily(ResourceId cmdId, uint32_t queueFamilyIndex);
   LockedImageStateRef FindImageState(ResourceId id);
@@ -1080,7 +1055,6 @@ public:
   bool EraseImageState(ResourceId id);
   void UpdateImageStates(const std::map<ResourceId, ImageState> &dstStates,
                          FrameRefCompFunc compose = KeepOldFrameRef);
-#endif
 
   // Device initialization
 

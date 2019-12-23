@@ -841,14 +841,9 @@ bool WrappedVulkan::Serialise_vkCmdWaitEvents(
     }
 
     ResourceId cmd = GetResID(commandBuffer);
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imageStates,
                                          m_commandQueueFamilies[cmd], (uint32_t)imgBarriers.size(),
                                          &imgBarriers[0]);
-#else
-    GetResourceManager()->RecordBarriers(m_BakedCmdBufferInfo[cmd].imgbarriers, m_ImageLayouts,
-                                         (uint32_t)imgBarriers.size(), &imgBarriers[0]);
-#endif
 
     if(commandBuffer != VK_NULL_HANDLE)
     {
@@ -923,18 +918,9 @@ void WrappedVulkan::vkCmdWaitEvents(VkCommandBuffer commandBuffer, uint32_t even
 
     if(imageMemoryBarrierCount > 0)
     {
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
       GetResourceManager()->RecordBarriers(record->cmdInfo->imageStates,
                                            record->pool->queueFamilyIndex, imageMemoryBarrierCount,
                                            pImageMemoryBarriers);
-#else
-      {
-        SCOPED_LOCK(m_ImageLayoutsLock);
-        GetResourceManager()->RecordBarriers(GetRecord(commandBuffer)->cmdInfo->imgbarriers,
-                                             m_ImageLayouts, imageMemoryBarrierCount,
-                                             pImageMemoryBarriers);
-      }
-#endif
     }
 
     record->AddChunk(scope.Get());

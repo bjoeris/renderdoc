@@ -135,8 +135,6 @@
 #define RDOC_WAYLAND OPTION_OFF
 #endif
 
-#define RDOC_NEW_IMAGE_STATE OPTION_OFF
-
 /////////////////////////////////////////////////
 // Global constants
 enum

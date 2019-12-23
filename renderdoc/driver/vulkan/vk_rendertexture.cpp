@@ -159,7 +159,6 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
   VkDevice dev = m_pDriver->GetDev();
   const VkDevDispatchTable *vt = ObjDisp(dev);
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   LockedImageStateRef state = m_pDriver->FindImageState(cfg.resourceId);
   if(!state)
   {
@@ -169,12 +168,6 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
   if(!state->isMemoryBound)
     return false;
   const ImageInfo &imageInfo = state->GetImageInfo();
-#else
-  ImageLayouts &layouts = m_pDriver->m_ImageLayouts[cfg.resourceId];
-  if(!layouts.isMemoryBound)
-    return false;
-  const ImageInfo &imageInfo = layouts.imageInfo;
-#endif
   VkCommandBuffer cmd = m_pDriver->GetNextCmd();
 
   VulkanCreationInfo::Image &iminfo = m_pDriver->m_CreationInfo.m_Image[cfg.resourceId];
@@ -494,68 +487,12 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
 
   vt->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   ImageBarrierSequence setupBarriers, cleanupBarriers;
   state->TempTransition(m_pDriver->GetQueueFamilyIndex(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                         VK_ACCESS_SHADER_READ_BIT, setupBarriers, cleanupBarriers,
                         m_pDriver->GetImageTransitionInfo());
   m_pDriver->InlineSetupImageBarriers(cmd, setupBarriers);
   m_pDriver->SubmitAndFlushImageStateBarriers(setupBarriers);
-#else
-  VkImageMemoryBarrier srcimBarrier = {
-      VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      NULL,
-      0,
-      0,
-      VK_IMAGE_LAYOUT_UNDEFINED,
-      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-      layouts.queueFamilyIndex,
-      m_pDriver->GetQueueFamilyIndex(),
-      Unwrap(liveIm),
-      {0, 0, 1, 0, 1}    // will be overwritten by subresourceRange
-  };
-
-  // ensure all previous writes have completed
-  srcimBarrier.srcAccessMask = VK_ACCESS_ALL_WRITE_BITS;
-  // before we go reading
-  srcimBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-  VkCommandBuffer extQCmd = VK_NULL_HANDLE;
-  VkResult vkr = VK_SUCCESS;
-
-  if(srcimBarrier.srcQueueFamilyIndex != srcimBarrier.dstQueueFamilyIndex)
-  {
-    extQCmd = m_pDriver->GetExtQueueCmd(srcimBarrier.srcQueueFamilyIndex);
-
-    vkr = ObjDisp(extQCmd)->BeginCommandBuffer(Unwrap(extQCmd), &beginInfo);
-    RDCASSERTEQUAL(vkr, VK_SUCCESS);
-  }
-
-  for(size_t si = 0; si < layouts.subresourceStates.size(); si++)
-  {
-    srcimBarrier.subresourceRange = layouts.subresourceStates[si].subresourceRange;
-    srcimBarrier.oldLayout = layouts.subresourceStates[si].newLayout;
-    srcimBarrier.srcAccessMask = VK_ACCESS_ALL_WRITE_BITS | MakeAccessMask(srcimBarrier.oldLayout);
-
-    SanitiseOldImageLayout(srcimBarrier.oldLayout);
-
-    DoPipelineBarrier(cmd, 1, &srcimBarrier);
-
-    if(extQCmd != VK_NULL_HANDLE)
-      DoPipelineBarrier(extQCmd, 1, &srcimBarrier);
-  }
-
-  if(extQCmd != VK_NULL_HANDLE)
-  {
-    vkr = ObjDisp(extQCmd)->EndCommandBuffer(Unwrap(extQCmd));
-    RDCASSERTEQUAL(vkr, VK_SUCCESS);
-
-    m_pDriver->SubmitAndFlushExtQueue(layouts.queueFamilyIndex);
-  }
-
-  srcimBarrier.oldLayout = srcimBarrier.newLayout;
-  srcimBarrier.srcAccessMask = srcimBarrier.dstAccessMask;
-#endif
   {
     vt->CmdBeginRenderPass(Unwrap(cmd), &rpbegin, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -625,7 +562,6 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
     vt->CmdEndRenderPass(Unwrap(cmd));
   }
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   m_pDriver->InlineCleanupImageBarriers(cmd, cleanupBarriers);
   vt->EndCommandBuffer(Unwrap(cmd));
   if(!cleanupBarriers.empty())
@@ -639,47 +575,6 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
   {
     m_pDriver->SubmitCmds();
   }
-#endif
-#else
-  std::swap(srcimBarrier.srcQueueFamilyIndex, srcimBarrier.dstQueueFamilyIndex);
-
-  if(extQCmd != VK_NULL_HANDLE)
-  {
-    vkr = ObjDisp(extQCmd)->BeginCommandBuffer(Unwrap(extQCmd), &beginInfo);
-    RDCASSERTEQUAL(vkr, VK_SUCCESS);
-  }
-
-  for(size_t si = 0; si < layouts.subresourceStates.size(); si++)
-  {
-    srcimBarrier.subresourceRange = layouts.subresourceStates[si].subresourceRange;
-    srcimBarrier.newLayout = layouts.subresourceStates[si].newLayout;
-    srcimBarrier.dstAccessMask = MakeAccessMask(srcimBarrier.newLayout);
-
-    SanitiseNewImageLayout(srcimBarrier.newLayout);
-
-    DoPipelineBarrier(cmd, 1, &srcimBarrier);
-
-    if(extQCmd != VK_NULL_HANDLE)
-      DoPipelineBarrier(extQCmd, 1, &srcimBarrier);
-  }
-
-  vt->EndCommandBuffer(Unwrap(cmd));
-
-  if(extQCmd != VK_NULL_HANDLE)
-  {
-    // ensure work is completed before we pass ownership back to original queue
-    m_pDriver->SubmitCmds();
-    m_pDriver->FlushQ();
-
-    vkr = ObjDisp(extQCmd)->EndCommandBuffer(Unwrap(extQCmd));
-    RDCASSERTEQUAL(vkr, VK_SUCCESS);
-
-    m_pDriver->SubmitAndFlushExtQueue(layouts.queueFamilyIndex);
-  }
-
-#if ENABLED(SINGLE_FLUSH_VALIDATE)
-  m_pDriver->SubmitCmds();
-#endif
 #endif
 
   return true;

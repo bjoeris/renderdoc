@@ -518,30 +518,10 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
 
 // need to update image layout into valid state
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     m_pDriver->FindImageState(GetResID(m_Overlay.Image))
         ->InlineTransition(
             cmd, m_pDriver->m_QueueFamilyIdx, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0,
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, m_pDriver->GetImageTransitionInfo());
-#else
-    VkImageMemoryBarrier barrier = {
-        VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        NULL,
-        0,
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        VK_QUEUE_FAMILY_IGNORED,
-        VK_QUEUE_FAMILY_IGNORED,
-        Unwrap(m_Overlay.Image),
-        {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
-    };
-
-    m_pDriver->m_ImageLayouts[GetResID(m_Overlay.Image)].subresourceStates[0].newLayout =
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    DoPipelineBarrier(cmd, 1, &barrier);
-#endif
 
     VkAttachmentDescription colDesc = {
         0,
@@ -1297,7 +1277,6 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
       attDescs[1].format = depthImageInfo.format;
       attDescs[0].samples = attDescs[1].samples = iminfo.samples;
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
       {
         LockedConstImageStateRef imState = m_pDriver->FindConstImageState(depthIm);
         if(imState)
@@ -1310,24 +1289,6 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
             attDescs[1].initialLayout = attDescs[1].finalLayout = it->state().newLayout;
         }
       }
-#else
-      rdcarray<ImageRegionState> &depthStates = m_pDriver->m_ImageLayouts[depthIm].subresourceStates;
-      for(ImageRegionState &ds : depthStates)
-      {
-        // find the state that overlaps the view's subresource range start. We assume all
-        // subresources are correctly in the same state (as they should be) so we just need to find
-        // the first match.
-        if(ds.subresourceRange.baseArrayLayer <= depthViewInfo.range.baseArrayLayer &&
-           ds.subresourceRange.baseArrayLayer + 1 > depthViewInfo.range.baseArrayLayer &&
-           ds.subresourceRange.baseMipLevel <= depthViewInfo.range.baseMipLevel &&
-           ds.subresourceRange.baseMipLevel + ds.subresourceRange.levelCount + 1 >
-               depthViewInfo.range.baseMipLevel)
-        {
-          attDescs[1].initialLayout = attDescs[1].finalLayout = ds.newLayout;
-          break;
-        }
-      }
-#endif
 
       VkAttachmentReference colRef = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
       VkAttachmentReference dsRef = {1, attDescs[1].initialLayout};
@@ -2095,7 +2056,6 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
         attDescs[1].format = depthImageInfo.format;
         attDescs[0].samples = attDescs[1].samples = iminfo.samples;
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
         {
           LockedConstImageStateRef imState = m_pDriver->FindConstImageState(depthIm);
           if(imState)
@@ -2108,25 +2068,6 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
               attDescs[1].initialLayout = attDescs[1].finalLayout = it->state().newLayout;
           }
         }
-#else
-        rdcarray<ImageRegionState> &depthStates =
-            m_pDriver->m_ImageLayouts[depthIm].subresourceStates;
-        for(ImageRegionState &ds : depthStates)
-        {
-          // find the state that overlaps the view's subresource range start. We assume all
-          // subresources are correctly in the same state (as they should be) so we just need to
-          // find the first match.
-          if(ds.subresourceRange.baseArrayLayer <= depthViewInfo.range.baseArrayLayer &&
-             ds.subresourceRange.baseArrayLayer + 1 > depthViewInfo.range.baseArrayLayer &&
-             ds.subresourceRange.baseMipLevel <= depthViewInfo.range.baseMipLevel &&
-             ds.subresourceRange.baseMipLevel + ds.subresourceRange.levelCount + 1 >
-                 depthViewInfo.range.baseMipLevel)
-          {
-            attDescs[1].initialLayout = attDescs[1].finalLayout = ds.newLayout;
-            break;
-          }
-        }
-#endif
 
         VkAttachmentReference colRef = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
         VkAttachmentReference dsRef = {1, attDescs[1].initialLayout};

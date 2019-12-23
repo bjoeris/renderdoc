@@ -4728,15 +4728,10 @@ void VkResourceRecord::MarkImageFrameReferenced(VkResourceRecord *img, const Ima
   if(img->resInfo && img->resInfo->IsSparse())
     cmdInfo->sparse.insert(img->resInfo);
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   ImageSubresourceRange range2(range);
 
   FrameRefType maxRef = MarkImageReferenced(cmdInfo->imageStates, id, img->resInfo->imageInfo,
                                             range2, pool->queueFamilyIndex, refType);
-#else
-  FrameRefType maxRef =
-      MarkImageReferenced(cmdInfo->imgFrameRefs, id, img->resInfo->imageInfo, range, refType);
-#endif
 
   // maintain the reference type of the image itself as the maximum reference type of any
   // subresource
@@ -4758,7 +4753,6 @@ void VkResourceRecord::MarkImageViewFrameReferenced(VkResourceRecord *view, cons
   if(refType != eFrameRef_Read && refType != eFrameRef_None)
     cmdInfo->dirtied.insert(img);
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   ImageSubresourceRange imgRange;
   imgRange.aspectMask = view->viewRange.aspectMask;
 
@@ -4786,19 +4780,6 @@ void VkResourceRecord::MarkImageViewFrameReferenced(VkResourceRecord *view, cons
 
   FrameRefType maxRef = MarkImageReferenced(cmdInfo->imageStates, img, view->resInfo->imageInfo,
                                             imgRange, pool->queueFamilyIndex, refType);
-#else
-  ImageRange imgRange;
-  imgRange.aspectMask = view->viewRange.aspectMask;
-  imgRange.baseMipLevel = view->viewRange.baseMipLevel + range.baseMipLevel;
-  imgRange.levelCount = range.levelCount;
-  imgRange.baseArrayLayer = view->viewRange.baseArrayLayer + range.baseArrayLayer;
-  imgRange.layerCount = range.layerCount;
-  imgRange.offset = range.offset;
-  imgRange.extent = range.extent;
-  imgRange.viewType = view->viewRange.viewType();
-  FrameRefType maxRef =
-      MarkImageReferenced(cmdInfo->imgFrameRefs, img, view->resInfo->imageInfo, imgRange, refType);
-#endif
 
   // maintain the reference type of the image itself as the maximum reference type of any
   // subresource

@@ -1431,11 +1431,9 @@ bool WrappedVulkan::Serialise_vkCreateDevice(SerialiserType &ser, VkPhysicalDevi
          !strcmp(createInfo.ppEnabledExtensionNames[i], VK_EXT_DISPLAY_CONTROL_EXTENSION_NAME))
         continue;
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
       if(!strcmp(createInfo.ppEnabledExtensionNames[i],
                  VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME))
         m_SeparateDepthStencilLayouts = true;
-#endif
 
       Extensions.push_back(createInfo.ppEnabledExtensionNames[i]);
     }
@@ -2755,11 +2753,9 @@ VkResult WrappedVulkan::vkCreateDevice(VkPhysicalDevice physicalDevice,
 
       return VK_ERROR_EXTENSION_NOT_PRESENT;
     }
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     if(!strcmp(createInfo.ppEnabledExtensionNames[i],
                VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME))
       m_SeparateDepthStencilLayouts = true;
-#endif
   }
 
   rdcarray<const char *> Extensions(createInfo.ppEnabledExtensionNames,

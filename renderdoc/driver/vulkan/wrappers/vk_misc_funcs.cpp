@@ -169,14 +169,7 @@ void WrappedVulkan::vkDestroyImage(VkDevice device, VkImage obj,
   if(obj == VK_NULL_HANDLE)
     return;
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   EraseImageState(GetResID(obj));
-#else
-  {
-    SCOPED_LOCK(m_ImageLayoutsLock);
-    m_ImageLayouts.erase(GetResID(obj));
-  }
-#endif
 
   VkImage unwrappedObj = Unwrap(obj);
   GetResourceManager()->ReleaseWrappedResource(obj, true);
@@ -699,7 +692,6 @@ VkResult WrappedVulkan::vkCreateFramebuffer(VkDevice device,
           record->imageAttachments[i].barrier.image =
               GetResourceManager()->GetCurrentHandle<VkImage>(attRecord->baseResource);
           record->imageAttachments[i].barrier.subresourceRange = attRecord->viewRange;
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
           {
             auto state = FindImageState(attRecord->GetResourceID());
             if(state && state->GetImageInfo().extent.depth > 1)
@@ -708,19 +700,6 @@ VkResult WrappedVulkan::vkCreateFramebuffer(VkDevice device,
               record->imageAttachments[i].barrier.subresourceRange.layerCount = 0;
             }
           }
-#else
-          ImageLayouts *layout = NULL;
-          {
-            SCOPED_LOCK(m_ImageLayoutsLock);
-            layout = &m_ImageLayouts[attRecord->GetResourceID()];
-          }
-
-          if(layout->imageInfo.extent.depth > 1)
-          {
-            record->imageAttachments[i].barrier.subresourceRange.baseArrayLayer = 0;
-            record->imageAttachments[i].barrier.subresourceRange.layerCount = 1;
-          }
-#endif
         }
       }
     }

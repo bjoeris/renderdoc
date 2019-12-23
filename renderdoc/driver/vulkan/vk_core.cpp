@@ -1510,110 +1510,9 @@ void WrappedVulkan::FirstFrame()
 template <typename SerialiserType>
 bool WrappedVulkan::Serialise_BeginCaptureFrame(SerialiserType &ser)
 {
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   SCOPED_LOCK(m_ImageStatesLock);
   GetResourceManager()->SerialiseImageStates2(ser, m_ImageStates);
   SERIALISE_CHECK_READ_ERRORS();
-#else
-  rdcarray<VkImageMemoryBarrier> imgBarriers;
-
-  {
-    SCOPED_LOCK(m_ImageLayoutsLock);    // not needed on replay, but harmless also
-    GetResourceManager()->SerialiseImageStates(ser, m_ImageLayouts, imgBarriers);
-  }
-
-  SERIALISE_CHECK_READ_ERRORS();
-
-  if(IsReplayingAndReading())
-  {
-    VkPipelineStageFlags src_stages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-    VkPipelineStageFlags dest_stages = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-
-    if(IsLoading(m_State))
-    {
-      // for the first load, promote any PREINITIALIZED images to GENERAL here since we treat
-      // PREINIT as if it was GENERAL.
-      for(auto it = m_ImageLayouts.begin(); it != m_ImageLayouts.end(); ++it)
-      {
-        if(!it->second.isMemoryBound)
-          continue;
-
-        for(auto stit = it->second.subresourceStates.begin();
-            stit != it->second.subresourceStates.end(); ++stit)
-        {
-          if(stit->newLayout == VK_IMAGE_LAYOUT_PREINITIALIZED &&
-             GetResourceManager()->HasCurrentResource(it->first))
-          {
-            VkImage img = GetResourceManager()->GetCurrentHandle<VkImage>(it->first);
-
-            {
-              VkImageMemoryBarrier barrier = {};
-
-              barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-              barrier.oldLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-              barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-              barrier.srcQueueFamilyIndex = m_QueueFamilyIdx;
-              barrier.dstQueueFamilyIndex = m_QueueFamilyIdx;
-              barrier.image = Unwrap(img);
-              barrier.subresourceRange = stit->subresourceRange;
-
-              imgBarriers.push_back(barrier);
-            }
-          }
-        }
-      }
-    }
-
-    if(!imgBarriers.empty())
-    {
-      VkMarkerRegion region("Frame-start barriers");
-
-      for(size_t i = 0; i < imgBarriers.size(); i++)
-      {
-        // sanitise the layouts before passing to Vulkan
-        if(!IsLoading(m_State))
-          SanitiseOldImageLayout(imgBarriers[i].oldLayout);
-        SanitiseNewImageLayout(imgBarriers[i].newLayout);
-
-        imgBarriers[i].srcAccessMask = MakeAccessMask(imgBarriers[i].oldLayout);
-        imgBarriers[i].dstAccessMask = MakeAccessMask(imgBarriers[i].newLayout);
-      }
-
-      VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
-                                            VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-
-#if ENABLED(SINGLE_FLUSH_VALIDATE)
-      for(size_t i = 0; i < imgBarriers.size(); i++)
-      {
-        VkCommandBuffer cmd = GetNextCmd();
-
-        VkResult vkr = ObjDisp(cmd)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
-
-        ObjDisp(cmd)->CmdPipelineBarrier(Unwrap(cmd), src_stages, dest_stages, false, 0, NULL, 0,
-                                         NULL, 1, &imgBarriers[i]);
-
-        vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
-        RDCASSERTEQUAL(vkr, VK_SUCCESS);
-
-        SubmitCmds();
-      }
-#else
-      VkCommandBuffer cmd = GetNextCmd();
-
-      VkResult vkr = ObjDisp(cmd)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
-
-      ObjDisp(cmd)->CmdPipelineBarrier(Unwrap(cmd), src_stages, dest_stages, false, 0, NULL, 0,
-                                       NULL, (uint32_t)imgBarriers.size(), &imgBarriers[0]);
-
-      vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
-      RDCASSERTEQUAL(vkr, VK_SUCCESS);
-
-      SubmitCmds();
-#endif
-    }
-    // don't need to flush here
-  }
-#endif
 
   return true;
 }
@@ -1674,16 +1573,13 @@ void WrappedVulkan::StartFrameCapture(void *dev, void *wnd)
     }
 
     GetResourceManager()->PrepareInitialContents();
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
     SubmitCmds();
     FlushQ();
     SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
-#endif
 
     RDCDEBUG("Attempting capture");
     m_FrameCaptureRecord->DeleteChunks();
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     {
       SCOPED_LOCK(m_ImageStatesLock);
       for(auto it = m_ImageStates.begin(); it != m_ImageStates.end(); ++it)
@@ -1691,20 +1587,6 @@ void WrappedVulkan::StartFrameCapture(void *dev, void *wnd)
         it->second.LockWrite()->BeginCapture();
       }
     }
-#endif
-
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-    {
-      CACHE_THREAD_SERIALISER();
-      SCOPED_SERIALISE_CHUNK(SystemChunk::CaptureBegin);
-
-      Serialise_BeginCaptureFrame(ser);
-
-      // need to hold onto this as it must come right after the capture chunk,
-      // before any command buffers
-      m_HeaderChunk = scope.Get();
-    }
-#endif
 
     m_State = CaptureState::ActiveCapturing;
   }
@@ -2057,9 +1939,6 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
 
     GetResourceManager()->Serialise_InitialContentsNeeded(ser);
     GetResourceManager()->InsertDeviceMemoryRefs(ser);
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-    GetResourceManager()->InsertImageRefs(ser);
-#endif
 
     {
       SCOPED_SERIALISE_CHUNK(SystemChunk::CaptureScope, 16);
@@ -2067,7 +1946,6 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
       Serialise_CaptureScope(ser);
     }
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     {
       WriteSerialiser &captureBeginSer = GetThreadSerialiser();
       ScopedChunk scope(captureBeginSer, SystemChunk::CaptureBegin);
@@ -2076,7 +1954,6 @@ bool WrappedVulkan::EndFrameCapture(void *dev, void *wnd)
 
       m_HeaderChunk = scope.Get();
     }
-#endif
     m_HeaderChunk->Write(ser);
 
     // don't need to lock access to m_CmdBufferRecords as we are no longer
@@ -2465,15 +2342,10 @@ ReplayStatus WrappedVulkan::ContextReplayLog(CaptureState readType, uint32_t sta
 
     ApplyInitialContents();
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
     SubmitCmds();
     FlushQ();
     SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
-#else
-    SubmitCmds();
-    FlushQ();
-#endif
 
     SetDebugMessageSink(sink);
   }
@@ -2690,7 +2562,6 @@ void WrappedVulkan::ApplyInitialContents()
   // actually apply the initial contents here
   GetResourceManager()->ApplyInitialContents();
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   for(auto it = m_ImageStates.begin(); it != m_ImageStates.end(); ++it)
   {
     if(GetResourceManager()->HasCurrentResource(it->first))
@@ -2703,7 +2574,6 @@ void WrappedVulkan::ApplyInitialContents()
       --it;
     }
   }
-#endif
 
   // likewise again to make sure the initial states are all applied
   cmd = GetNextCmd();
@@ -3080,13 +2950,8 @@ bool WrappedVulkan::ProcessChunk(ReadSerialiser &ser, VulkanChunk chunk)
     case VulkanChunk::vkCmdSetLineStippleEXT:
       return Serialise_vkCmdSetLineStippleEXT(ser, VK_NULL_HANDLE, 0, 0);
     case VulkanChunk::ImageRefs: {
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
       SCOPED_LOCK(m_ImageStatesLock);
       return GetResourceManager()->DeserialiseImageRefs2(ser, m_ImageStates);
-#else
-      rdcarray<ImgRefsPair> data;
-      return GetResourceManager()->Serialise_ImageRefs(ser, data);
-#endif
     }
     case VulkanChunk::vkGetSemaphoreCounterValueKHR:
       return Serialise_vkGetSemaphoreCounterValueKHR(ser, VK_NULL_HANDLE, VK_NULL_HANDLE, NULL);
@@ -3219,15 +3084,10 @@ void WrappedVulkan::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
     ApplyInitialContents();
     VkMarkerRegion::End();
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
     SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
     SubmitCmds();
     FlushQ();
     SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
-#else
-    SubmitCmds();
-    FlushQ();
-#endif
   }
 
   m_State = CaptureState::ActiveReplaying;
@@ -4150,7 +4010,6 @@ const DrawcallDescription *WrappedVulkan::GetDrawcall(uint32_t eventId)
   return m_Drawcalls[eventId];
 }
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
 uint32_t WrappedVulkan::FindCommandQueueFamily(ResourceId cmdId)
 {
   auto it = m_commandQueueFamilies.find(cmdId);
@@ -4245,7 +4104,6 @@ void WrappedVulkan::UpdateImageStates(const std::map<ResourceId, ImageState> &ds
     ++it;
   }
 }
-#endif
 
 #if ENABLED(ENABLE_UNIT_TESTS)
 

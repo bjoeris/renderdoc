@@ -3770,7 +3770,6 @@ void DoSerialise(SerialiserType &ser, ImageSubresourceRange &el)
   SERIALISE_MEMBER(levelCount);
   SERIALISE_MEMBER(baseArrayLayer);
   SERIALISE_MEMBER(layerCount);
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   if(ser.VersionAtLeast(0x11))
   {
     SERIALISE_MEMBER(baseDepthSlice);
@@ -3781,13 +3780,6 @@ void DoSerialise(SerialiserType &ser, ImageSubresourceRange &el)
     el.baseDepthSlice = 0u;
     el.sliceCount = VK_REMAINING_ARRAY_LAYERS;
   }
-#else
-  if(ser.IsReading())
-  {
-    el.baseDepthSlice = 0u;
-    el.sliceCount = VK_REMAINING_ARRAY_LAYERS;
-  }
-#endif
 }
 
 template <class SerialiserType>
@@ -3841,13 +3833,11 @@ void DoSerialise(SerialiserType &ser, ImageInfo &el)
   SERIALISE_MEMBER(sampleCount);
   SERIALISE_MEMBER(extent);
   SERIALISE_MEMBER(format);
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   if(ser.VersionAtLeast(0x11))
   {
     SERIALISE_MEMBER(initialLayout);
     SERIALISE_MEMBER(sharingMode);
   }
-#endif
 }
 
 template <typename SerialiserType>

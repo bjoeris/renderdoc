@@ -245,7 +245,6 @@ void VulkanResourceManager::MergeBarriers(rdcarray<rdcpair<ResourceId, ImageRegi
   TRDBG("Post-merge, there are %u states", (uint32_t)dststates.size());
 }
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
 template <typename SerialiserType>
 void VulkanResourceManager::SerialiseImageStates2(SerialiserType &ser,
                                                   std::map<ResourceId, LockingImageState> &states)
@@ -393,178 +392,6 @@ bool VulkanResourceManager::DeserialiseImageRefs2(ReadSerialiser &ser,
   }
   return true;
 }
-#endif
-
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-template <typename SerialiserType>
-void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
-                                                 std::map<ResourceId, ImageLayouts> &states,
-                                                 rdcarray<VkImageMemoryBarrier> &barriers)
-{
-  SERIALISE_ELEMENT_LOCAL(NumImages, (uint32_t)states.size());
-
-  auto srcit = states.begin();
-
-  rdcarray<rdcpair<ResourceId, ImageRegionState>> vec;
-
-  std::set<ResourceId> updatedState;
-
-  for(uint32_t i = 0; i < NumImages; i++)
-  {
-    SERIALISE_ELEMENT_LOCAL(Image, (ResourceId)(srcit->first)).TypedAs("VkImage"_lit);
-    SERIALISE_ELEMENT_LOCAL(ImageState, (ImageLayouts)(srcit->second));
-
-    ResourceId liveid;
-    if(IsReplayingAndReading() && HasLiveResource(Image))
-      liveid = GetLiveID(Image);
-
-    if(IsReplayingAndReading() && liveid != ResourceId())
-    {
-      updatedState.insert(liveid);
-
-      for(ImageRegionState &state : ImageState.subresourceStates)
-      {
-        VkImageMemoryBarrier t;
-        t.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        t.pNext = NULL;
-        // these access masks aren't used, we need to apply a global memory barrier
-        // to memory each time we restart log replaying. These barriers are just
-        // to get images into the right layout
-        t.srcAccessMask = 0;
-        t.dstAccessMask = 0;
-        t.srcQueueFamilyIndex = ImageState.queueFamilyIndex;
-        t.dstQueueFamilyIndex = ImageState.queueFamilyIndex;
-        m_Core->RemapQueueFamilyIndices(t.srcQueueFamilyIndex, t.dstQueueFamilyIndex);
-        if(t.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-          t.dstQueueFamilyIndex = t.srcQueueFamilyIndex = m_Core->GetQueueFamilyIndex();
-        state.dstQueueFamilyIndex = t.dstQueueFamilyIndex;
-        t.image = Unwrap(GetCurrentHandle<VkImage>(liveid));
-
-        t.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        t.newLayout = state.newLayout;
-
-        t.subresourceRange = state.subresourceRange;
-
-        auto stit = states.find(liveid);
-
-        if(stit == states.end() || stit->second.isMemoryBound)
-        {
-          barriers.push_back(t);
-          vec.push_back(make_rdcpair(liveid, state));
-        }
-      }
-    }
-
-    if(ser.IsWriting())
-      srcit++;
-  }
-
-  // on replay, any images from the capture which didn't get touched above were created mid-frame so
-  // we reset them to their initialLayout.
-  if(IsReplayingAndReading())
-  {
-    for(auto it = states.begin(); it != states.end(); ++it)
-    {
-      ResourceId liveid = it->first;
-
-      if(GetOriginalID(liveid) != liveid && updatedState.find(liveid) == updatedState.end())
-      {
-        for(ImageRegionState &state : it->second.subresourceStates)
-        {
-          VkImageMemoryBarrier t = {};
-          t.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-          t.srcQueueFamilyIndex = it->second.queueFamilyIndex;
-          t.dstQueueFamilyIndex = it->second.queueFamilyIndex;
-          m_Core->RemapQueueFamilyIndices(t.srcQueueFamilyIndex, t.dstQueueFamilyIndex);
-          if(t.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-            t.dstQueueFamilyIndex = t.srcQueueFamilyIndex = m_Core->GetQueueFamilyIndex();
-          state.dstQueueFamilyIndex = t.dstQueueFamilyIndex;
-          t.image = Unwrap(GetCurrentHandle<VkImage>(liveid));
-
-          t.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-          if(it->second.initialLayout == VK_IMAGE_LAYOUT_PREINITIALIZED)
-            t.oldLayout = state.newLayout;
-          state.newLayout = t.newLayout = it->second.initialLayout;
-
-          t.subresourceRange = state.subresourceRange;
-
-          auto stit = states.find(liveid);
-
-          if(stit == states.end() || stit->second.isMemoryBound)
-          {
-            barriers.push_back(t);
-            vec.push_back(make_rdcpair(liveid, state));
-          }
-        }
-      }
-    }
-  }
-
-  // we don't have to specify a queue here because all of the images have a specific queue above
-  ApplyBarriers(VK_QUEUE_FAMILY_IGNORED, vec, states);
-
-  for(size_t i = 0; i < vec.size(); i++)
-  {
-    if(barriers[i].oldLayout == VK_IMAGE_LAYOUT_UNDEFINED)
-      barriers[i].oldLayout = vec[i].second.oldLayout;
-  }
-
-  // erase any do-nothing barriers
-  for(size_t i = 0; i < barriers.size();)
-  {
-    VkImageMemoryBarrier &b = barriers[i];
-
-    if(b.oldLayout == UNKNOWN_PREV_IMG_LAYOUT)
-      b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    if(b.oldLayout == b.newLayout)
-      barriers.erase(i);
-    else
-      i++;
-  }
-
-  // try to merge images that have been split up by subresource but are now all in the same state
-  // again.
-  for(auto it = states.begin(); it != states.end(); ++it)
-  {
-    ImageLayouts &layouts = it->second;
-    const ImageInfo &imageInfo = layouts.imageInfo;
-
-    if(layouts.subresourceStates.size() > 1 &&
-       layouts.subresourceStates.size() == size_t(imageInfo.layerCount * imageInfo.levelCount))
-    {
-      VkImageLayout layout = layouts.subresourceStates[0].newLayout;
-
-      bool allIdentical = true;
-
-      for(size_t i = 0; i < layouts.subresourceStates.size(); i++)
-      {
-        if(layouts.subresourceStates[i].newLayout != layout)
-        {
-          allIdentical = false;
-          break;
-        }
-      }
-
-      if(allIdentical)
-      {
-        layouts.subresourceStates.erase(1, ~0U);
-        layouts.subresourceStates[0].subresourceRange.baseArrayLayer = 0;
-        layouts.subresourceStates[0].subresourceRange.baseMipLevel = 0;
-        layouts.subresourceStates[0].subresourceRange.layerCount = imageInfo.layerCount;
-        layouts.subresourceStates[0].subresourceRange.levelCount = imageInfo.levelCount;
-      }
-    }
-  }
-}
-
-template void VulkanResourceManager::SerialiseImageStates(ReadSerialiser &ser,
-                                                          std::map<ResourceId, ImageLayouts> &states,
-                                                          rdcarray<VkImageMemoryBarrier> &barriers);
-template void VulkanResourceManager::SerialiseImageStates(WriteSerialiser &ser,
-                                                          std::map<ResourceId, ImageLayouts> &states,
-                                                          rdcarray<VkImageMemoryBarrier> &barriers);
-#endif
 
 template <class SerialiserType>
 void DoSerialise(SerialiserType &ser, MemRefInterval &el)
@@ -662,30 +489,6 @@ template bool VulkanResourceManager::Serialise_DeviceMemoryRefs(ReadSerialiser &
 template bool VulkanResourceManager::Serialise_DeviceMemoryRefs(WriteSerialiser &ser,
                                                                 rdcarray<MemRefInterval> &data);
 
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-template <typename SerialiserType>
-bool VulkanResourceManager::Serialise_ImageRefs(SerialiserType &ser, rdcarray<ImgRefsPair> &data)
-{
-  SERIALISE_ELEMENT(data);
-
-  SERIALISE_CHECK_READ_ERRORS();
-
-  if(IsReplayingAndReading())
-  {
-    // unpack data into m_ImgFrameRefs
-    for(auto it = data.begin(); it != data.end(); it++)
-      m_ImgFrameRefs.insert({it->image, it->imgRefs});
-  }
-
-  return true;
-}
-
-template bool VulkanResourceManager::Serialise_ImageRefs(ReadSerialiser &ser,
-                                                         rdcarray<ImgRefsPair> &imageRefs);
-template bool VulkanResourceManager::Serialise_ImageRefs(WriteSerialiser &ser,
-                                                         rdcarray<ImgRefsPair> &imageRefs);
-#endif
-
 void VulkanResourceManager::InsertDeviceMemoryRefs(WriteSerialiser &ser)
 {
   rdcarray<MemRefInterval> data;
@@ -705,26 +508,6 @@ void VulkanResourceManager::InsertDeviceMemoryRefs(WriteSerialiser &ser)
     Serialise_DeviceMemoryRefs(ser, data);
   }
 }
-
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-void VulkanResourceManager::InsertImageRefs(WriteSerialiser &ser)
-{
-  rdcarray<ImgRefsPair> data;
-  data.reserve(m_ImgFrameRefs.size());
-  size_t sizeEstimate = 32;
-
-  for(auto it = m_ImgFrameRefs.begin(); it != m_ImgFrameRefs.end(); it++)
-  {
-    data.push_back({it->first, it->second});
-    sizeEstimate += sizeof(ImgRefsPair) + sizeof(FrameRefType) * it->second.rangeRefs.size();
-  }
-
-  {
-    SCOPED_SERIALISE_CHUNK(VulkanChunk::ImageRefs, sizeEstimate);
-    Serialise_ImageRefs(ser, data);
-  }
-}
-#endif
 
 void VulkanResourceManager::MarkSparseMapReferenced(ResourceInfo *sparse)
 {
@@ -948,7 +731,6 @@ void VulkanResourceManager::ApplyBarriers(uint32_t queueFamilyIndex,
   }
 }
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
 void VulkanResourceManager::RecordBarriers(std::map<ResourceId, ImageState> &states,
                                            uint32_t queueFamilyIndex, uint32_t numBarriers,
                                            const VkImageMemoryBarrier *barriers)
@@ -985,7 +767,6 @@ void VulkanResourceManager::RecordBarriers(std::map<ResourceId, ImageState> &sta
 
   TRDBG("Post-record, there are %u states", (uint32_t)states.size());
 }
-#endif
 
 ResourceId VulkanResourceManager::GetFirstIDForHandle(uint64_t handle)
 {
@@ -1027,25 +808,6 @@ void VulkanResourceManager::AddMemoryFrameRefs(ResourceId mem)
   m_MemFrameRefs.insert({mem, MemRefs()});
 }
 
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-void VulkanResourceManager::AddImageFrameRefs(ResourceId img, const ImageInfo &imageInfo)
-{
-  m_ImgFrameRefs.insert({img, ImgRefs(imageInfo)});
-}
-
-void VulkanResourceManager::MergeReferencedImages(std::map<ResourceId, ImgRefs> &imgRefs)
-{
-  for(auto j = imgRefs.begin(); j != imgRefs.end(); j++)
-  {
-    auto i = m_ImgFrameRefs.find(j->first);
-    if(i == m_ImgFrameRefs.end())
-      m_ImgFrameRefs.insert(*j);
-    else
-      i->second.Merge(j->second);
-  }
-}
-#endif
-
 void VulkanResourceManager::MergeReferencedMemory(std::map<ResourceId, MemRefs> &memRefs)
 {
   SCOPED_LOCK(m_Lock);
@@ -1059,13 +821,6 @@ void VulkanResourceManager::MergeReferencedMemory(std::map<ResourceId, MemRefs> 
       i->second.Merge(j->second);
   }
 }
-
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-void VulkanResourceManager::ClearReferencedImages()
-{
-  m_ImgFrameRefs.clear();
-}
-#endif
 
 void VulkanResourceManager::ClearReferencedMemory()
 {
@@ -1082,17 +837,6 @@ MemRefs *VulkanResourceManager::FindMemRefs(ResourceId mem)
   else
     return NULL;
 }
-
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-ImgRefs *VulkanResourceManager::FindImgRefs(ResourceId img)
-{
-  auto it = m_ImgFrameRefs.find(img);
-  if(it != m_ImgFrameRefs.end())
-    return &it->second;
-  else
-    return NULL;
-}
-#endif
 
 bool VulkanResourceManager::Prepare_InitialState(WrappedVkRes *res)
 {

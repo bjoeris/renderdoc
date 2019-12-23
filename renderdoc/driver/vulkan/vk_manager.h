@@ -264,14 +264,12 @@ public:
                      rdcarray<rdcpair<ResourceId, ImageRegionState> > &states,
                      std::map<ResourceId, ImageLayouts> &layouts);
 
-#if ENABLED(RDOC_NEW_IMAGE_STATE)
   void RecordBarriers(std::map<ResourceId, ImageState> &states, uint32_t queueFamilyIndex,
                       uint32_t numBarriers, const VkImageMemoryBarrier *barriers);
 
   template <typename SerialiserType>
   void SerialiseImageStates2(SerialiserType &ser, std::map<ResourceId, LockingImageState> &states);
   bool DeserialiseImageRefs2(ReadSerialiser &ser, std::map<ResourceId, LockingImageState> &states);
-#endif
 
   template <typename SerialiserType>
   void SerialiseImageStates(SerialiserType &ser, std::map<ResourceId, ImageLayouts> &states,
@@ -280,15 +278,7 @@ public:
   template <typename SerialiserType>
   bool Serialise_DeviceMemoryRefs(SerialiserType &ser, rdcarray<MemRefInterval> &data);
 
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-  template <typename SerialiserType>
-  bool Serialise_ImageRefs(SerialiserType &ser, rdcarray<ImgRefsPair> &data);
-#endif
-
   void InsertDeviceMemoryRefs(WriteSerialiser &ser);
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-  void InsertImageRefs(WriteSerialiser &ser);
-#endif
 
   ResourceId GetID(WrappedVkRes *res)
   {
@@ -438,15 +428,8 @@ public:
   void MarkMemoryFrameReferenced(ResourceId mem, VkDeviceSize start, VkDeviceSize end,
                                  FrameRefType refType);
   void AddMemoryFrameRefs(ResourceId mem);
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-  void AddImageFrameRefs(ResourceId img, const ImageInfo &imageInfo);
-#endif
 
   void MergeReferencedMemory(std::map<ResourceId, MemRefs> &memRefs);
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-  void MergeReferencedImages(std::map<ResourceId, ImgRefs> &imgRefs);
-  void ClearReferencedImages();
-#endif
   void ClearReferencedMemory();
   MemRefs *FindMemRefs(ResourceId mem);
   ImgRefs *FindImgRefs(ResourceId img);
@@ -480,8 +463,5 @@ private:
 
   WrappedVulkan *m_Core;
   std::map<ResourceId, MemRefs> m_MemFrameRefs;
-#if DISABLED(RDOC_NEW_IMAGE_STATE)
-  std::map<ResourceId, ImgRefs> m_ImgFrameRefs;
-#endif
   InitPolicy m_InitPolicy = eInitPolicy_CopyAll;
 };
