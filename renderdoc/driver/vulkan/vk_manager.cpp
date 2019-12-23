@@ -351,7 +351,8 @@ void VulkanResourceManager::SerialiseImageStates2(SerialiserType &ser,
                   subit->range().baseDepthSlice);
               RDCASSERT(currentSub.refType == subit->state().refType);
               RDCASSERT(currentSub.oldLayout == subit->state().oldLayout);
-              RDCASSERT(currentSub.oldQueueFamilyIndex == subit->state().oldQueueFamilyIndex);
+              RDCASSERT(currentSub.oldQueueFamilyIndex == subit->state().oldQueueFamilyIndex ||
+                        subit->state().oldQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED);
             }
           }
         }
