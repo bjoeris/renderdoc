@@ -268,7 +268,6 @@ bool WrappedVulkan::Serialise_vkQueueSubmit(SerialiserType &ser, VkQueue queue, 
 
           BakedCmdBufferInfo &cmdBufInfo = m_BakedCmdBufferInfo[cmd];
 
-          // ImageState::Merge(m_ImageStates, m_BakedCmdBufferInfo[liveCmd].imageStates, false);
           UpdateImageStates(m_BakedCmdBufferInfo[liveCmd].imageStates);
 
           rdcstr name = StringFormat::Fmt("=> %s[%u]: vkBeginCommandBuffer(%s)", basename.c_str(),
