@@ -1354,7 +1354,6 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
       RDCWARN("No image state found for image %s", ToStr(id).c_str());
       return;
     }
-    // TODO: set `initialized`
     ResourceId boundMemory = state->boundMemory;
     VkDeviceSize boundMemoryOffset = state->boundMemoryOffset;
     VkDeviceSize boundMemorySize = state->boundMemorySize;
