@@ -697,7 +697,7 @@ VkResult WrappedVulkan::vkCreateFramebuffer(VkDevice device,
             if(state && state->GetImageInfo().extent.depth > 1)
             {
               record->imageAttachments[i].barrier.subresourceRange.baseArrayLayer = 0;
-              record->imageAttachments[i].barrier.subresourceRange.layerCount = 0;
+              record->imageAttachments[i].barrier.subresourceRange.layerCount = 1;
             }
           }
         }
