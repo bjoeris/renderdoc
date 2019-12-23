@@ -288,6 +288,7 @@ void VulkanResourceManager::SerialiseImageStates2(SerialiserType &ser,
           {
             TaggedImageSubresourceState p;
             p.range = st.subresourceRange;
+            p.range.sliceCount = imageLayouts.imageInfo.extent.depth;
             p.state.oldQueueFamilyIndex = st.dstQueueFamilyIndex;
             p.state.newQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             p.state.oldLayout = st.newLayout;
