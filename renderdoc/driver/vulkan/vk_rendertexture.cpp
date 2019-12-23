@@ -497,10 +497,10 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
   ImageBarrierSequence setupBarriers, cleanupBarriers;
   state->TempTransition(m_pDriver->GetQueueFamilyIndex(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        VK_ACCESS_SHADER_READ_BIT, &setupBarriers, &cleanupBarriers,
+                        VK_ACCESS_SHADER_READ_BIT, setupBarriers, cleanupBarriers,
                         m_pDriver->GetImageTransitionInfo());
-  m_pDriver->InlineSetupImageBarriers(cmd, &setupBarriers);
-  m_pDriver->SubmitAndFlushImageStateBarriers(&setupBarriers);
+  m_pDriver->InlineSetupImageBarriers(cmd, setupBarriers);
+  m_pDriver->SubmitAndFlushImageStateBarriers(setupBarriers);
 #else
   VkImageMemoryBarrier srcimBarrier = {
       VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -626,13 +626,13 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
   }
 
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
-  m_pDriver->InlineCleanupImageBarriers(cmd, &cleanupBarriers);
+  m_pDriver->InlineCleanupImageBarriers(cmd, cleanupBarriers);
   vt->EndCommandBuffer(Unwrap(cmd));
   if(!cleanupBarriers.empty())
   {
     m_pDriver->SubmitCmds();
     m_pDriver->FlushQ();
-    m_pDriver->SubmitAndFlushImageStateBarriers(&cleanupBarriers);
+    m_pDriver->SubmitAndFlushImageStateBarriers(cleanupBarriers);
   }
 #if ENABLED(SINGLE_FLUSH_VALIDATE)
   else

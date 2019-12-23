@@ -4093,7 +4093,7 @@ void ImageState::RecordBarrier(VkImageMemoryBarrier barrier, uint32_t queueFamil
 }
 
 bool ImageState::CloseTransfers(uint32_t batchIndex, VkAccessFlags dstAccessMask,
-                                ImageBarrierSequence *barriers, ImageTransitionInfo info)
+                                ImageBarrierSequence &barriers, ImageTransitionInfo info)
 {
   if(newQueueFamilyTransfers.empty())
     return false;
@@ -4103,7 +4103,7 @@ bool ImageState::CloseTransfers(uint32_t batchIndex, VkAccessFlags dstAccessMask
 
     it->dstAccessMask = dstAccessMask;
     it->image = handle;
-    barriers->Add(batchIndex, it->dstQueueFamilyIndex, *it);
+    barriers.Add(batchIndex, it->dstQueueFamilyIndex, *it);
   }
   newQueueFamilyTransfers.clear();
   return true;
@@ -4111,7 +4111,7 @@ bool ImageState::CloseTransfers(uint32_t batchIndex, VkAccessFlags dstAccessMask
 
 bool ImageState::RestoreTransfers(uint32_t batchIndex,
                                   const rdcarray<VkImageMemoryBarrier> &transfers,
-                                  VkAccessFlags srcAccessMask, ImageBarrierSequence *barriers,
+                                  VkAccessFlags srcAccessMask, ImageBarrierSequence &barriers,
                                   ImageTransitionInfo info)
 {
   // TODO: figure out why `transfers` has duplicate entries
@@ -4122,13 +4122,13 @@ bool ImageState::RestoreTransfers(uint32_t batchIndex,
     VkImageMemoryBarrier barrier = *it;
     barrier.srcAccessMask = srcAccessMask;
     barrier.image = handle;
-    barriers->Add(batchIndex, barrier.srcQueueFamilyIndex, barrier);
+    barriers.Add(batchIndex, barrier.srcQueueFamilyIndex, barrier);
     RecordQueueFamilyRelease(barrier);
   }
   return true;
 }
 
-void ImageState::ResetToOldState(ImageBarrierSequence *barriers, ImageTransitionInfo info)
+void ImageState::ResetToOldState(ImageBarrierSequence &barriers, ImageTransitionInfo info)
 {
   VkAccessFlags srcAccessMask = VK_ACCESS_ALL_WRITE_BITS;
   VkAccessFlags dstAccessMask = VK_ACCESS_ALL_READ_BITS;
@@ -4241,12 +4241,12 @@ void ImageState::ResetToOldState(ImageBarrierSequence *barriers, ImageTransition
         /* image = */ handle,
         /* subresourceRange = */ subRange,
     };
-    barriers->Add(MAIN_BATCH_INDEX, submitQueueFamilyIndex, barrier);
+    barriers.Add(MAIN_BATCH_INDEX, submitQueueFamilyIndex, barrier);
 
     // acquire the subresource in the dstQueueFamily, if necessary
     if(barrier.srcQueueFamilyIndex != barrier.dstQueueFamilyIndex)
     {
-      barriers->Add(ACQUIRE_BATCH_INDEX, barrier.dstQueueFamilyIndex, barrier);
+      barriers.Add(ACQUIRE_BATCH_INDEX, barrier.dstQueueFamilyIndex, barrier);
     }
   }
   RestoreTransfers(RESTORE_TRANSFERS_BATCH_INDEX, oldQueueFamilyTransfers, srcAccessMask, barriers,
@@ -4254,7 +4254,7 @@ void ImageState::ResetToOldState(ImageBarrierSequence *barriers, ImageTransition
 }
 
 void ImageState::Transition(const ImageState &dstState, VkAccessFlags srcAccessMask,
-                            VkAccessFlags dstAccessMask, ImageBarrierSequence *barriers,
+                            VkAccessFlags dstAccessMask, ImageBarrierSequence &barriers,
                             ImageTransitionInfo info)
 {
   const uint32_t CLOSE_TRANSFERS_BATCH_INDEX = 0;
@@ -4392,12 +4392,12 @@ void ImageState::Transition(const ImageState &dstState, VkAccessFlags srcAccessM
               /* layerCount = */ endArrayLayer - baseArrayLayer,
           },
       };
-      barriers->Add(MAIN_BATCH_INDEX, submitQueueFamilyIndex, barrier);
+      barriers.Add(MAIN_BATCH_INDEX, submitQueueFamilyIndex, barrier);
 
       // acquire the subresource in the dstQueueFamily, if necessary
       if(barrier.srcQueueFamilyIndex != barrier.dstQueueFamilyIndex)
       {
-        barriers->Add(ACQUIRE_BATCH_INDEX, barrier.dstQueueFamilyIndex, barrier);
+        barriers.Add(ACQUIRE_BATCH_INDEX, barrier.dstQueueFamilyIndex, barrier);
       }
     }
   }
@@ -4407,7 +4407,7 @@ void ImageState::Transition(const ImageState &dstState, VkAccessFlags srcAccessM
 
 void ImageState::Transition(uint32_t queueFamilyIndex, VkImageLayout layout,
                             VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask,
-                            ImageBarrierSequence *barriers, ImageTransitionInfo info)
+                            ImageBarrierSequence &barriers, ImageTransitionInfo info)
 {
   Transition(UniformState(ImageSubresourceState(queueFamilyIndex, layout)), srcAccessMask,
              dstAccessMask, barriers, info);
@@ -4415,8 +4415,8 @@ void ImageState::Transition(uint32_t queueFamilyIndex, VkImageLayout layout,
 
 void ImageState::TempTransition(const ImageState &dstState, VkAccessFlags preSrcAccessMask,
                                 VkAccessFlags preDstAccessMask, VkAccessFlags postSrcAccessmask,
-                                VkAccessFlags postDstAccessMask, ImageBarrierSequence *setupBarriers,
-                                ImageBarrierSequence *cleanupBarriers, ImageTransitionInfo info) const
+                                VkAccessFlags postDstAccessMask, ImageBarrierSequence &setupBarriers,
+                                ImageBarrierSequence &cleanupBarriers, ImageTransitionInfo info) const
 {
   ImageState temp(*this);
   temp.Transition(dstState, preSrcAccessMask, preDstAccessMask, setupBarriers, info);
@@ -4424,8 +4424,8 @@ void ImageState::TempTransition(const ImageState &dstState, VkAccessFlags preSrc
 }
 
 void ImageState::TempTransition(uint32_t queueFamilyIndex, VkImageLayout layout,
-                                VkAccessFlags accessMask, ImageBarrierSequence *setupBarriers,
-                                ImageBarrierSequence *cleanupBarriers, ImageTransitionInfo info) const
+                                VkAccessFlags accessMask, ImageBarrierSequence &setupBarriers,
+                                ImageBarrierSequence &cleanupBarriers, ImageTransitionInfo info) const
 {
   TempTransition(UniformState(ImageSubresourceState(queueFamilyIndex, layout)),
                  VK_ACCESS_ALL_WRITE_BITS, accessMask, accessMask, VK_ACCESS_ALL_READ_BITS,
@@ -4437,7 +4437,7 @@ void ImageState::InlineTransition(VkCommandBuffer cmd, uint32_t queueFamilyIndex
                                   VkAccessFlags dstAccessMask, ImageTransitionInfo info)
 {
   ImageBarrierSequence barriers;
-  Transition(dstState, srcAccessMask, dstAccessMask, &barriers, info);
+  Transition(dstState, srcAccessMask, dstAccessMask, barriers, info);
   if(barriers.empty())
     return;
   rdcarray<VkImageMemoryBarrier> barriersArray;

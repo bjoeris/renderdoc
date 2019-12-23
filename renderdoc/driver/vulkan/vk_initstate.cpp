@@ -327,9 +327,9 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
     ImageBarrierSequence setupBarriers, cleanupBarriers;
     state->TempTransition(m_QueueFamilyIdx, newLayout,
-                          VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_READ_BIT, &setupBarriers,
-                          &cleanupBarriers, GetImageTransitionInfo());
-    InlineSetupImageBarriers(cmd, &setupBarriers);
+                          VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_SHADER_READ_BIT, setupBarriers,
+                          cleanupBarriers, GetImageTransitionInfo());
+    InlineSetupImageBarriers(cmd, setupBarriers);
     m_setupImageBarriers.Merge(setupBarriers);
 #else
     VkImageMemoryBarrier srcimBarrier = {
@@ -491,16 +491,16 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
                  readbackmem.size, imageInfo.extent, imageInfo.format, numLayers,
                  imageInfo.levelCount);
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
-    InlineCleanupImageBarriers(cmd, &cleanupBarriers);
+    InlineCleanupImageBarriers(cmd, cleanupBarriers);
     m_cleanupImageBarriers.Merge(cleanupBarriers);
 
     vkr = ObjDisp(d)->EndCommandBuffer(Unwrap(cmd));
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
-    SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
     SubmitCmds();
     FlushQ();
-    SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
 #else
     // transfer back to whatever it was
     srcimBarrier.oldLayout = srcimBarrier.newLayout;
@@ -1669,8 +1669,8 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
         ImageBarrierSequence setupBarriers;    // , cleanupBarriers;
         state->DiscardContents();
         state->Transition(m_QueueFamilyIdx, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
-                          VK_ACCESS_TRANSFER_WRITE_BIT, &setupBarriers, GetImageTransitionInfo());
-        InlineSetupImageBarriers(cmd, &setupBarriers);
+                          VK_ACCESS_TRANSFER_WRITE_BIT, setupBarriers, GetImageTransitionInfo());
+        InlineSetupImageBarriers(cmd, setupBarriers);
         m_setupImageBarriers.Merge(setupBarriers);
 #else
         VkImageMemoryBarrier barrier = {
@@ -1734,10 +1734,10 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
         vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
         RDCASSERTEQUAL(vkr, VK_SUCCESS);
 #if ENABLED(SINGLE_FLUSH_VALIDATE)
-        SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+        SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
         SubmitCmds();
         FlushQ();
-        SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+        SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
 #endif
 #else
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -1799,8 +1799,8 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
         ImageBarrierSequence setupBarriers;    // , cleanupBarriers;
         state->DiscardContents();
         state->Transition(m_QueueFamilyIdx, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
-                          VK_ACCESS_TRANSFER_WRITE_BIT, &setupBarriers, GetImageTransitionInfo());
-        InlineSetupImageBarriers(cmd, &setupBarriers);
+                          VK_ACCESS_TRANSFER_WRITE_BIT, setupBarriers, GetImageTransitionInfo());
+        InlineSetupImageBarriers(cmd, setupBarriers);
         m_setupImageBarriers.Merge(setupBarriers);
 #else
         VkImageMemoryBarrier barrier = {
@@ -1864,10 +1864,10 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
         vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
         RDCASSERTEQUAL(vkr, VK_SUCCESS);
 #if ENABLED(SINGLE_FLUSH_VALIDATE)
-        SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+        SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
         SubmitCmds();
         FlushQ();
-        SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+        SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
 #endif
 #else
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -1950,8 +1950,8 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
       state->DiscardContents();
       state->Transition(m_QueueFamilyIdx, VK_IMAGE_LAYOUT_GENERAL, 0,
                         VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                        &setupBarriers, GetImageTransitionInfo());
-      InlineSetupImageBarriers(cmd, &setupBarriers);
+                        setupBarriers, GetImageTransitionInfo());
+      InlineSetupImageBarriers(cmd, setupBarriers);
       m_setupImageBarriers.Merge(setupBarriers);
 #else
       VkImageMemoryBarrier barrier = {
@@ -2020,10 +2020,10 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
       vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
       RDCASSERTEQUAL(vkr, VK_SUCCESS);
 #if ENABLED(SINGLE_FLUSH_VALIDATE)
-      SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+      SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
       SubmitCmds();
       FlushQ();
-      SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+      SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
 #endif
 #else
       barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -2147,8 +2147,8 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
     ImageBarrierSequence setupBarriers;
     state->Transition(m_QueueFamilyIdx, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
-                      VK_ACCESS_TRANSFER_WRITE_BIT, &setupBarriers, GetImageTransitionInfo());
-    InlineSetupImageBarriers(cmd, &setupBarriers);
+                      VK_ACCESS_TRANSFER_WRITE_BIT, setupBarriers, GetImageTransitionInfo());
+    InlineSetupImageBarriers(cmd, setupBarriers);
     m_setupImageBarriers.Merge(setupBarriers);
 #else
     rdcarray<VkImageMemoryBarrier> setupBarriers, cleanupBarriers;
@@ -2334,10 +2334,10 @@ void WrappedVulkan::Apply_InitialState(WrappedVkRes *live, const VkInitialConten
     vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 #if ENABLED(SINGLE_FLUSH_VALIDATE)
-    SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
     SubmitCmds();
     FlushQ();
-    SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
 #endif
 #else
     DoPipelineBarrier(cmd, (uint32_t)cleanupBarriers.size(), cleanupBarriers.data());

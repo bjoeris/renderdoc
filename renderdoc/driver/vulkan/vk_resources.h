@@ -1573,16 +1573,16 @@ struct ImageState
   void RecordQueueFamilyAcquire(const VkImageMemoryBarrier &barrier);
   void RecordBarrier(VkImageMemoryBarrier barrier, uint32_t queueFamilyIndex);
   bool CloseTransfers(uint32_t batchIndex, VkAccessFlags dstAccessMask,
-                      ImageBarrierSequence *barriers, ImageTransitionInfo info);
+                      ImageBarrierSequence &barriers, ImageTransitionInfo info);
   bool RestoreTransfers(uint32_t batchIndex, const rdcarray<VkImageMemoryBarrier> &transfers,
-                        VkAccessFlags srcAccessMask, ImageBarrierSequence *barriers,
+                        VkAccessFlags srcAccessMask, ImageBarrierSequence &barriers,
                         ImageTransitionInfo info);
-  void ResetToOldState(ImageBarrierSequence *barriers, ImageTransitionInfo info);
+  void ResetToOldState(ImageBarrierSequence &barriers, ImageTransitionInfo info);
   void Transition(const ImageState &dstState, VkAccessFlags srcAccessMask,
-                  VkAccessFlags dstAccessMask, ImageBarrierSequence *barriers,
+                  VkAccessFlags dstAccessMask, ImageBarrierSequence &barriers,
                   ImageTransitionInfo info);
   void Transition(uint32_t queueFamilyIndex, VkImageLayout layout, VkAccessFlags srcAccessMask,
-                  VkAccessFlags dstAccessMask, ImageBarrierSequence *barriers,
+                  VkAccessFlags dstAccessMask, ImageBarrierSequence &barriers,
                   ImageTransitionInfo info);
 
   // Transitions the image state to `dstState` (via `preBarriers`) and back to the current state
@@ -1591,10 +1591,10 @@ struct ImageState
   // VK_IMAGE_LAYOUT_PREINITIALIZED, it will be returned to VK_IMAGE_LAYOUT_GENERAL instead.
   void TempTransition(const ImageState &dstState, VkAccessFlags preSrcAccessMask,
                       VkAccessFlags preDstAccessMask, VkAccessFlags postSrcAccessmask,
-                      VkAccessFlags postDstAccessMask, ImageBarrierSequence *setupBarriers,
-                      ImageBarrierSequence *cleanupBarriers, ImageTransitionInfo info) const;
+                      VkAccessFlags postDstAccessMask, ImageBarrierSequence &setupBarriers,
+                      ImageBarrierSequence &cleanupBarriers, ImageTransitionInfo info) const;
   void TempTransition(uint32_t queueFamilyIndex, VkImageLayout layout, VkAccessFlags accessMask,
-                      ImageBarrierSequence *setupBarriers, ImageBarrierSequence *cleanupBarriers,
+                      ImageBarrierSequence &setupBarriers, ImageBarrierSequence &cleanupBarriers,
                       ImageTransitionInfo info) const;
 
   void InlineTransition(VkCommandBuffer cmd, uint32_t queueFamilyIndex, const ImageState &dstState,

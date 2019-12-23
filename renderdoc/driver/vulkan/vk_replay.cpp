@@ -2389,10 +2389,10 @@ bool VulkanReplay::GetMinMax(ResourceId texid, const Subresource &sub, CompType 
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
   ImageBarrierSequence setupBarriers, cleanupBarriers;
   state->TempTransition(m_pDriver->m_QueueFamilyIdx, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        VK_ACCESS_SHADER_READ_BIT, &setupBarriers, &cleanupBarriers,
+                        VK_ACCESS_SHADER_READ_BIT, setupBarriers, cleanupBarriers,
                         m_pDriver->GetImageTransitionInfo());
-  m_pDriver->InlineSetupImageBarriers(cmd, &setupBarriers);
-  m_pDriver->SubmitAndFlushImageStateBarriers(&setupBarriers);
+  m_pDriver->InlineSetupImageBarriers(cmd, setupBarriers);
+  m_pDriver->SubmitAndFlushImageStateBarriers(setupBarriers);
 #else
   VkImageMemoryBarrier srcimBarrier = {
       VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -2439,13 +2439,13 @@ bool VulkanReplay::GetMinMax(ResourceId texid, const Subresource &sub, CompType 
   vt->CmdDispatch(Unwrap(cmd), blocksX, blocksY, 1);
 
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
-  m_pDriver->InlineCleanupImageBarriers(cmd, &cleanupBarriers);
+  m_pDriver->InlineCleanupImageBarriers(cmd, cleanupBarriers);
   if(!cleanupBarriers.empty())
   {
     vt->EndCommandBuffer(Unwrap(cmd));
     m_pDriver->SubmitCmds();
     m_pDriver->FlushQ();
-    m_pDriver->SubmitAndFlushImageStateBarriers(&cleanupBarriers);
+    m_pDriver->SubmitAndFlushImageStateBarriers(cleanupBarriers);
     cmd = m_pDriver->GetNextCmd();
     vt->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
   }
@@ -2753,10 +2753,10 @@ bool VulkanReplay::GetHistogram(ResourceId texid, const Subresource &sub, CompTy
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
   ImageBarrierSequence setupBarriers, cleanupBarriers;
   state->TempTransition(m_pDriver->m_QueueFamilyIdx, VK_IMAGE_LAYOUT_GENERAL,
-                        VK_ACCESS_SHADER_READ_BIT, &setupBarriers, &cleanupBarriers,
+                        VK_ACCESS_SHADER_READ_BIT, setupBarriers, cleanupBarriers,
                         m_pDriver->GetImageTransitionInfo());
-  m_pDriver->InlineSetupImageBarriers(cmd, &setupBarriers);
-  m_pDriver->SubmitAndFlushImageStateBarriers(&setupBarriers);
+  m_pDriver->InlineSetupImageBarriers(cmd, setupBarriers);
+  m_pDriver->SubmitAndFlushImageStateBarriers(setupBarriers);
 #else
   VkImageMemoryBarrier srcimBarrier = {
       VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -2806,13 +2806,13 @@ bool VulkanReplay::GetHistogram(ResourceId texid, const Subresource &sub, CompTy
   vt->CmdDispatch(Unwrap(cmd), blocksX, blocksY, 1);
 
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
-  m_pDriver->InlineCleanupImageBarriers(cmd, &cleanupBarriers);
+  m_pDriver->InlineCleanupImageBarriers(cmd, cleanupBarriers);
   if(!cleanupBarriers.empty())
   {
     vt->EndCommandBuffer(Unwrap(cmd));
     m_pDriver->SubmitCmds();
     m_pDriver->FlushQ();
-    m_pDriver->SubmitAndFlushImageStateBarriers(&cleanupBarriers);
+    m_pDriver->SubmitAndFlushImageStateBarriers(cleanupBarriers);
     cmd = m_pDriver->GetNextCmd();
     vt->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
   }
@@ -3319,10 +3319,10 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
         VK_ACCESS_TRANSFER_WRITE_BIT, m_pDriver->GetImageTransitionInfo());
     ImageBarrierSequence setupBarriers, cleanupBarriers;
     srcImageState->TempTransition(m_pDriver->m_QueueFamilyIdx, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                  VK_ACCESS_TRANSFER_READ_BIT, &setupBarriers, &cleanupBarriers,
+                                  VK_ACCESS_TRANSFER_READ_BIT, setupBarriers, cleanupBarriers,
                                   m_pDriver->GetImageTransitionInfo());
-    m_pDriver->InlineSetupImageBarriers(cmd, &setupBarriers);
-    m_pDriver->SubmitAndFlushImageStateBarriers(&setupBarriers);
+    m_pDriver->InlineSetupImageBarriers(cmd, setupBarriers);
+    m_pDriver->SubmitAndFlushImageStateBarriers(setupBarriers);
 #else
     VkImageMemoryBarrier srcimBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -3400,7 +3400,7 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
                                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,
                                    VK_ACCESS_TRANSFER_READ_BIT, m_pDriver->GetImageTransitionInfo());
 
-    m_pDriver->InlineCleanupImageBarriers(cmd, &cleanupBarriers);
+    m_pDriver->InlineCleanupImageBarriers(cmd, cleanupBarriers);
 
     if(!cleanupBarriers.empty())
     {
@@ -3411,7 +3411,7 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
       m_pDriver->SubmitCmds();
       m_pDriver->FlushQ();
 
-      m_pDriver->SubmitAndFlushImageStateBarriers(&cleanupBarriers);
+      m_pDriver->SubmitAndFlushImageStateBarriers(cleanupBarriers);
 
       // fetch a new command buffer for remaining work
       cmd = m_pDriver->GetNextCmd();
@@ -3522,10 +3522,10 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
     ImageBarrierSequence setupBarriers, cleanupBarriers;
     srcImageState->TempTransition(m_pDriver->m_QueueFamilyIdx,
                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                  VK_ACCESS_SHADER_READ_BIT, &setupBarriers, &cleanupBarriers,
+                                  VK_ACCESS_SHADER_READ_BIT, setupBarriers, cleanupBarriers,
                                   m_pDriver->GetImageTransitionInfo());
-    m_pDriver->InlineSetupImageBarriers(cmd, &setupBarriers);
-    m_pDriver->SubmitAndFlushImageStateBarriers(&setupBarriers);
+    m_pDriver->InlineSetupImageBarriers(cmd, setupBarriers);
+    m_pDriver->SubmitAndFlushImageStateBarriers(setupBarriers);
 #else
     VkImageMemoryBarrier srcimBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -3613,7 +3613,7 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
                                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT,
                                    VK_ACCESS_TRANSFER_READ_BIT, m_pDriver->GetImageTransitionInfo());
 
-    m_pDriver->InlineCleanupImageBarriers(cmd, &cleanupBarriers);
+    m_pDriver->InlineCleanupImageBarriers(cmd, cleanupBarriers);
 
     if(!cleanupBarriers.empty())
     {
@@ -3624,7 +3624,7 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
       m_pDriver->SubmitCmds();
       m_pDriver->FlushQ();
 
-      m_pDriver->SubmitAndFlushImageStateBarriers(&cleanupBarriers);
+      m_pDriver->SubmitAndFlushImageStateBarriers(cleanupBarriers);
 
       // fetch a new command buffer for remaining work
       cmd = m_pDriver->GetNextCmd();
@@ -3720,10 +3720,10 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
     ImageBarrierSequence setupBarriers;
     srcImageState->TempTransition(m_pDriver->m_QueueFamilyIdx, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                  VK_ACCESS_TRANSFER_READ_BIT, &setupBarriers, &cleanupBarriers,
+                                  VK_ACCESS_TRANSFER_READ_BIT, setupBarriers, cleanupBarriers,
                                   m_pDriver->GetImageTransitionInfo());
-    m_pDriver->InlineSetupImageBarriers(cmd, &setupBarriers);
-    m_pDriver->SubmitAndFlushImageStateBarriers(&setupBarriers);
+    m_pDriver->InlineSetupImageBarriers(cmd, setupBarriers);
+    m_pDriver->SubmitAndFlushImageStateBarriers(setupBarriers);
 #else
     // ensure all previous writes have completed
     srcimBarrier.srcAccessMask = VK_ACCESS_ALL_WRITE_BITS;
@@ -3877,7 +3877,7 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
   if(tmpImage == VK_NULL_HANDLE)
   {
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
-    m_pDriver->InlineCleanupImageBarriers(cmd, &cleanupBarriers);
+    m_pDriver->InlineCleanupImageBarriers(cmd, cleanupBarriers);
 
     if(!cleanupBarriers.empty())
     {
@@ -3888,7 +3888,7 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
       m_pDriver->SubmitCmds();
       m_pDriver->FlushQ();
 
-      m_pDriver->SubmitAndFlushImageStateBarriers(&cleanupBarriers);
+      m_pDriver->SubmitAndFlushImageStateBarriers(cleanupBarriers);
 
       // fetch a new command buffer for remaining work
       cmd = m_pDriver->GetNextCmd();

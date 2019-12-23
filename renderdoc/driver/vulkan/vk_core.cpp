@@ -405,9 +405,9 @@ void WrappedVulkan::SubmitAndFlushExtQueue(uint32_t queueFamilyIdx)
   ObjDisp(q)->QueueWaitIdle(Unwrap(q));
 }
 
-void WrappedVulkan::SubmitAndFlushImageStateBarriers(ImageBarrierSequence *barriers)
+void WrappedVulkan::SubmitAndFlushImageStateBarriers(ImageBarrierSequence &barriers)
 {
-  if(barriers->empty())
+  if(barriers.empty())
     return;
 
   VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
@@ -416,9 +416,9 @@ void WrappedVulkan::SubmitAndFlushImageStateBarriers(ImageBarrierSequence *barri
   rdcarray<VkFence> submittedFences;
   rdcarray<rdcarray<VkImageMemoryBarrier>> batch;
   VkResult vkr;
-  for(uint32_t batchIndex = 0; !barriers->empty(); ++batchIndex)
+  for(uint32_t batchIndex = 0; !barriers.empty(); ++batchIndex)
   {
-    barriers->ExtractBatch(batchIndex, batch);
+    barriers.ExtractBatch(batchIndex, batch);
     for(uint32_t queueFamilyIndex = 0; queueFamilyIndex < batch.size(); ++queueFamilyIndex)
     {
       rdcarray<VkImageMemoryBarrier> &queueBatch = batch[queueFamilyIndex];
@@ -503,18 +503,18 @@ void WrappedVulkan::SubmitAndFlushImageStateBarriers(ImageBarrierSequence *barri
     ObjDisp(m_Device)->DestroyFence(Unwrap(m_Device), *it, NULL);
 }
 
-void WrappedVulkan::InlineSetupImageBarriers(VkCommandBuffer cmd, ImageBarrierSequence *barriers)
+void WrappedVulkan::InlineSetupImageBarriers(VkCommandBuffer cmd, ImageBarrierSequence &barriers)
 {
   rdcarray<VkImageMemoryBarrier> batch;
-  barriers->ExtractLastBatchForQueue(m_QueueFamilyIdx, batch);
+  barriers.ExtractLastBatchForQueue(m_QueueFamilyIdx, batch);
   if(!batch.empty())
     DoPipelineBarrier(cmd, (uint32_t)batch.size(), batch.data());
 }
 
-void WrappedVulkan::InlineCleanupImageBarriers(VkCommandBuffer cmd, ImageBarrierSequence *barriers)
+void WrappedVulkan::InlineCleanupImageBarriers(VkCommandBuffer cmd, ImageBarrierSequence &barriers)
 {
   rdcarray<VkImageMemoryBarrier> batch;
-  barriers->ExtractFirstBatchForQueue(m_QueueFamilyIdx, batch);
+  barriers.ExtractFirstBatchForQueue(m_QueueFamilyIdx, batch);
   if(!batch.empty())
     DoPipelineBarrier(cmd, (uint32_t)batch.size(), batch.data());
 }
@@ -1675,10 +1675,10 @@ void WrappedVulkan::StartFrameCapture(void *dev, void *wnd)
 
     GetResourceManager()->PrepareInitialContents();
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
-    SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
     SubmitCmds();
     FlushQ();
-    SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
 #endif
 
     RDCDEBUG("Attempting capture");
@@ -2466,10 +2466,10 @@ ReplayStatus WrappedVulkan::ContextReplayLog(CaptureState readType, uint32_t sta
     ApplyInitialContents();
 
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
-    SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
     SubmitCmds();
     FlushQ();
-    SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
 #else
     SubmitCmds();
     FlushQ();
@@ -2695,7 +2695,7 @@ void WrappedVulkan::ApplyInitialContents()
   {
     if(GetResourceManager()->HasCurrentResource(it->first))
     {
-      it->second.LockWrite()->ResetToOldState(&m_cleanupImageBarriers, GetImageTransitionInfo());
+      it->second.LockWrite()->ResetToOldState(m_cleanupImageBarriers, GetImageTransitionInfo());
     }
     else
     {
@@ -2717,10 +2717,10 @@ void WrappedVulkan::ApplyInitialContents()
   RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
 #if ENABLED(SINGLE_FLUSH_VALIDATE)
-  SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+  SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
   SubmitCmds();
   FlushQ();
-  SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+  SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
 #endif
 }
 
@@ -3220,10 +3220,10 @@ void WrappedVulkan::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
     VkMarkerRegion::End();
 
 #if ENABLED(RDOC_NEW_IMAGE_STATE)
-    SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
     SubmitCmds();
     FlushQ();
-    SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
 #else
     SubmitCmds();
     FlushQ();
@@ -3352,10 +3352,10 @@ void WrappedVulkan::ReplayLog(uint32_t startEventID, uint32_t endEventID, Replay
     }
 
 #if ENABLED(SINGLE_FLUSH_VALIDATE)
-    SubmitAndFlushImageStateBarriers(&m_setupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_setupImageBarriers);
     SubmitCmds();
     FlushQ();
-    SubmitAndFlushImageStateBarriers(&m_cleanupImageBarriers);
+    SubmitAndFlushImageStateBarriers(m_cleanupImageBarriers);
 #endif
   }
 

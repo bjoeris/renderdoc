@@ -1082,8 +1082,8 @@ bool WrappedVulkan::Serialise_vkEndCommandBuffer(SerialiserType &ser, VkCommandB
             {
               ImageBarrierSequence barriers;
               endState.Transition(*current, VK_ACCESS_ALL_WRITE_BITS, VK_ACCESS_ALL_READ_BITS,
-                                  &barriers, GetImageTransitionInfo());
-              InlineCleanupImageBarriers(commandBuffer, &barriers);
+                                  barriers, GetImageTransitionInfo());
+              InlineCleanupImageBarriers(commandBuffer, barriers);
               if(!barriers.empty())
               {
                 // This should not happen, because the cleanup barriers are just image layout
