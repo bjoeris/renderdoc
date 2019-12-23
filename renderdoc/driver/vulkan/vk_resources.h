@@ -1513,9 +1513,10 @@ using ImageBarrierSequence = BarrierSequence<VkImageMemoryBarrier>;
 struct ImageTransitionInfo
 {
   CaptureState capState;
+  uint32_t defaultQueueFamilyIndex;
   bool separateDepthStencilLayouts;
-  inline ImageTransitionInfo(CaptureState capState, bool separateDepthStencilLayouts)
-      : capState(capState), separateDepthStencilLayouts(separateDepthStencilLayouts)
+  inline ImageTransitionInfo(CaptureState capState, uint32_t defaultQueueFamilyIndex, bool separateDepthStencilLayouts)
+      : capState(capState), defaultQueueFamilyIndex(defaultQueueFamilyIndex), separateDepthStencilLayouts(separateDepthStencilLayouts)
   {
   }
   inline FrameRefCompFunc GetFrameRefCompFunc()

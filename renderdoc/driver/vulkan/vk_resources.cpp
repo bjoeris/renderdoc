@@ -4201,8 +4201,8 @@ void ImageState::ResetToOldState(ImageBarrierSequence *barriers, ImageTransition
 
     if(submitQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
     {
-      RDCERR("ResetToOldState: ignoring barrier submitted to VK_QUEUE_FAMILY_IGNORED");
-      submitQueueFamilyIndex = 0;
+      RDCWARN("ResetToOldState: barrier submitted to VK_QUEUE_FAMILY_IGNORED; defaulting to queue family %u", info.defaultQueueFamilyIndex);
+      submitQueueFamilyIndex = info.defaultQueueFamilyIndex;
     }
     subIt->state().newQueueFamilyIndex = subIt->state().oldQueueFamilyIndex;
 

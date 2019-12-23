@@ -779,7 +779,7 @@ private:
   bool m_SeparateDepthStencilLayouts = false;
   inline ImageTransitionInfo GetImageTransitionInfo() const
   {
-    return ImageTransitionInfo(m_State, m_SeparateDepthStencilLayouts);
+    return ImageTransitionInfo(m_State, m_QueueFamilyIdx, m_SeparateDepthStencilLayouts);
   }
 
 #else
