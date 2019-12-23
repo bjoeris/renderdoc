@@ -1244,7 +1244,6 @@ struct ImageSubresourceRange
       {
         RDCERR("Invalid aspect mask (%s) in image with aspects (%s)", ToStr(aspectMask).c_str(),
                ToStr(info.Aspects()).c_str());
-        RDCDUMP();
       }
       aspectMask &= ~info.Aspects();
     }

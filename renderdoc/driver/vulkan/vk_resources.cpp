@@ -3544,7 +3544,6 @@ bool ValidateLevelRange(uint32_t &baseMipLevel, uint32_t &levelCount, uint32_t i
   if(baseMipLevel > imageLevelCount)
   {
     RDCWARN("baseMipLevel (%u) is greater than image levelCount (%u)", baseMipLevel, imageLevelCount);
-    RDCDUMP();
     baseMipLevel = imageLevelCount;
     res = false;
   }
@@ -3556,7 +3555,6 @@ bool ValidateLevelRange(uint32_t &baseMipLevel, uint32_t &levelCount, uint32_t i
   {
     RDCWARN("baseMipLevel (%u) + levelCount (%u) is greater than the image levelCount (%u)",
             baseMipLevel, levelCount, imageLevelCount);
-    RDCDUMP();
     levelCount = imageLevelCount - baseMipLevel;
     res = false;
   }
@@ -3570,7 +3568,6 @@ bool ValidateLayerRange(uint32_t &baseArrayLayer, uint32_t &layerCount, uint32_t
   {
     RDCWARN("baseArrayLayer (%u) is greater than image layerCount (%u)", baseArrayLayer,
             imageLayerCount);
-    RDCDUMP();
     baseArrayLayer = imageLayerCount;
     res = false;
   }
@@ -3582,7 +3579,6 @@ bool ValidateLayerRange(uint32_t &baseArrayLayer, uint32_t &layerCount, uint32_t
   {
     RDCWARN("baseArrayLayer (%u) + layerCount (%u) is greater than the image layerCount (%u)",
             baseArrayLayer, layerCount, imageLayerCount);
-    RDCDUMP();
     layerCount = imageLayerCount - baseArrayLayer;
     res = false;
   }
@@ -3595,7 +3591,6 @@ bool ValidateSliceRange(uint32_t &baseSlice, uint32_t &sliceCount, uint32_t imag
   if(baseSlice > imageSliceCount)
   {
     RDCWARN("baseSlice (%u) is greater than image sliceCount (%u)", baseSlice, imageSliceCount);
-    RDCDUMP();
     baseSlice = imageSliceCount;
     res = false;
   }
@@ -3607,7 +3602,6 @@ bool ValidateSliceRange(uint32_t &baseSlice, uint32_t &sliceCount, uint32_t imag
   {
     RDCWARN("baseSlice (%u) + sliceCount (%u) is greater than the image sliceCount (%u)", baseSlice,
             sliceCount, imageSliceCount);
-    RDCDUMP();
     sliceCount = imageSliceCount - baseSlice;
     res = false;
   }
@@ -4321,7 +4315,6 @@ void ImageState::Transition(const ImageState &dstState, VkAccessFlags srcAccessM
       {
         RDCERR("Ignoring state transition submitted to invalid queue family %u",
                submitQueueFamilyIndex);
-        RDCDUMP();
         continue;
       }
       if(GetImageInfo().sharingMode == VK_SHARING_MODE_CONCURRENT)
