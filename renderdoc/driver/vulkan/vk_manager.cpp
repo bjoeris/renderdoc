@@ -329,9 +329,16 @@ void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
           {
             auto stit = states.find(liveid);
             if(stit == states.end())
+            {
+              imageState.subresourceStates.Unsplit();
               states.insert({liveid, LockingImageState(imageState)});
+            }
             else
-              stit->second.LockWrite()->MergeCaptureBeginState(imageState);
+            {
+              auto st = stit->second.LockWrite();
+              st->MergeCaptureBeginState(imageState);
+              st->subresourceStates.Unsplit();
+            }
           }
           else if(IsActiveReplaying(m_State))
           {
