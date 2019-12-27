@@ -3360,12 +3360,9 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
 
         BakedCmdBufferInfo &parentCmdBufInfo = m_BakedCmdBufferInfo[m_LastCmdBufferID];
 
-        // if we're replaying a range but not from the start, we are guaranteed to only be
-        // replaying
-        // one of our executed command buffers and doing it to an outside command buffer. The
-        // outer
-        // loop will be doing SetOffset() to jump to each event, and any time we land here is just
-        // for
+        // if we're replaying a range but not from the start, we are guaranteed to only be replaying
+        // one of our executed command buffers and doing it to an outside command buffer. The outer
+        // loop will be doing SetOffset() to jump to each event, and any time we land here is just for
         // the markers we've added, which have this file offset, so just skip all of our work.
         if(m_FirstEventID > 1 && m_FirstEventID + 1 < m_LastEventID)
           return true;
@@ -3377,8 +3374,7 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
         uint32_t startEID = parentCmdBufInfo.curEventID + m_Partial[Primary].baseEvent;
 
         // if we're in the re-record range and this command buffer isn't partial, we execute all
-        // command buffers because m_Partial[Primary].baseEvent above is only valid for the
-        // partial
+        // command buffers because m_Partial[Primary].baseEvent above is only valid for the partial
         // command buffer
         if(m_Partial[Primary].partialParent != m_LastCmdBufferID)
         {
