@@ -3277,17 +3277,29 @@ typename ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>
   }
   m_value.m_range.baseMipLevel = m_level = m_range.baseMipLevel;
 
-  ++m_aspectIndex;
-  if(AreAspectsSplit(m_splitFlags) && m_aspectIndex < m_aspectCount)
+  if(AreAspectsSplit(m_splitFlags))
   {
     auto aspectIt =
         ImageAspectFlagIter(m_map->m_aspectMask, (VkImageAspectFlagBits)m_value.m_range.aspectMask);
-    ++aspectIt;
-    m_value.m_range.aspectMask = *aspectIt;
-    return *this;
+    while(true)
+    {
+      ++m_aspectIndex;
+      ++aspectIt;
+      if(aspectIt == ImageAspectFlagIter::end())
+      {
+        break;
+      }
+      else if(m_range.aspectMask & *aspectIt)
+      {
+        m_value.m_range.aspectMask = *aspectIt;
+        return *this;
+      }
+    }
   }
 
-  m_aspectIndex = m_aspectCount;
+  // iterator is at the end.
+  // make `m_aspectIndex` out of range to mark this.
+  m_aspectIndex = m_map->m_aspectCount;
   return *this;
 }
 template
@@ -3773,10 +3785,6 @@ ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>::SubresourceRangeIt
       m_slice(range.baseDepthSlice)
 {
   m_range.Validate(m_map->GetImageInfo());
-  m_aspectCount = 0;
-  for(auto aspectIt = ImageAspectFlagIter::begin(range.aspectMask);
-      aspectIt != ImageAspectFlagIter::end(); ++aspectIt)
-    ++m_aspectCount;
   m_splitFlags = (uint16_t)ImageSubresourceMap::FlagBits::IsUninitialized;
   FixSubRange();
 }
@@ -4350,7 +4358,10 @@ void ImageState::ResetToOldState(ImageBarrierSequence &barriers, ImageTransition
 
     if(submitQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
     {
-      RDCWARN("ResetToOldState: barrier submitted to VK_QUEUE_FAMILY_IGNORED; defaulting to queue family %u", info.defaultQueueFamilyIndex);
+      RDCWARN(
+          "ResetToOldState: barrier submitted to VK_QUEUE_FAMILY_IGNORED; defaulting to queue "
+          "family %u",
+          info.defaultQueueFamilyIndex);
       submitQueueFamilyIndex = info.defaultQueueFamilyIndex;
     }
     subIt->state().newQueueFamilyIndex = subIt->state().oldQueueFamilyIndex;

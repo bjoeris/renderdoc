@@ -1422,7 +1422,6 @@ public:
     Map *m_map = NULL;
     uint16_t m_splitFlags = 0u;
     ImageSubresourceRange m_range = {};
-    uint32_t m_aspectCount = 0u;
     uint32_t m_aspectIndex = 0u;
     uint32_t m_level = 0u;
     uint32_t m_layer = 0u;
@@ -1432,7 +1431,8 @@ public:
     SubresourceRangeIterTemplate(Map &map, const ImageSubresourceRange &range);
     inline bool IsValid() const
     {
-      return m_aspectIndex < m_aspectCount && m_level < m_range.baseMipLevel + m_range.levelCount &&
+      return m_map && m_aspectIndex < m_map->m_aspectCount &&
+             m_level < m_range.baseMipLevel + m_range.levelCount &&
              m_layer < m_range.baseArrayLayer + m_range.layerCount &&
              m_slice < m_range.baseDepthSlice + m_range.sliceCount;
     }
