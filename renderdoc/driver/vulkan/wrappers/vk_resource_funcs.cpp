@@ -2116,7 +2116,7 @@ bool WrappedVulkan::Serialise_vkBindImageMemory2(SerialiserType &ser, VkDevice d
         else
         {
           state->isMemoryBound = true;
-          state->boundMemory = id;
+          state->boundMemory = GetResID(bindInfo.memory);
           state->boundMemoryOffset = bindInfo.memoryOffset;
           state->boundMemorySize = mrq.size;
         }
