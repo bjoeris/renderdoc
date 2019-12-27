@@ -107,6 +107,17 @@ bool WrappedVulkan::Prepare_InitialState(WrappedVkRes *res)
     if(!state || !state->isMemoryBound)
       return true;
 
+    for(auto it = state->subresourceStates.begin(); it != state->subresourceStates.end(); ++it)
+    {
+      if(it->state().newQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT ||
+         it->state().newQueueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL)
+      {
+        // This image has a subresource owned by an external/foreign queue family, so we can't fetch
+        // the initial contents.
+        return true;
+      }
+    }
+
     VkDevice d = GetDev();
     // INITSTATEBATCH
     VkCommandBuffer cmd = GetNextCmd();
