@@ -1294,13 +1294,13 @@ struct ImageSubresourceState
 
 DECLARE_REFLECTION_STRUCT(ImageSubresourceState);
 
-struct TaggedImageSubresourceState
+struct ImageSubresourceStateForRange
 {
   ImageSubresourceRange range;
   ImageSubresourceState state;
 };
 
-DECLARE_REFLECTION_STRUCT(TaggedImageSubresourceState);
+DECLARE_REFLECTION_STRUCT(ImageSubresourceStateForRange);
 
 struct ImgRefs;
 
@@ -1308,9 +1308,19 @@ class ImageSubresourceMap
 {
   friend class SubresourceRangeIterator;
 
-  rdcarray<ImageSubresourceState> m_values;
-  VkImageAspectFlags m_aspectMask = 0u;
   ImageInfo m_imageInfo;
+
+  // The states of the subresources, without explicit ranges.
+  // The ranges associated with each state are determined by the index in
+  // `m_values` and the `*Split` flags in `m_flags`.
+  rdcarray<ImageSubresourceState> m_values;
+
+  // All aspects of the image. This is computed from `m_imageInfo.format`
+  VkImageAspectFlags m_aspectMask = 0u;
+
+  // The bit count of `m_aspectMask`
+  uint16_t m_aspectCount = 0;
+
   enum class FlagBits : uint16_t
   {
     AreAspectsSplit = 0x1,
@@ -1320,7 +1330,7 @@ class ImageSubresourceMap
     IsUninitialized = 0x8000,
   };
   uint16_t m_flags = 0;
-  uint16_t m_aspectCount = 0;
+
   inline static bool AreAspectsSplit(uint16_t flags)
   {
     return (flags & (uint16_t)FlagBits::AreAspectsSplit) != 0;
@@ -1354,9 +1364,9 @@ public:
       ++m_aspectCount;
   }
 
-  void ToArray(rdcarray<TaggedImageSubresourceState> &arr);
+  void ToArray(rdcarray<ImageSubresourceStateForRange> &arr);
 
-  void FromArray(const rdcarray<TaggedImageSubresourceState> &arr);
+  void FromArray(const rdcarray<ImageSubresourceStateForRange> &arr);
 
   void FromImgRefs(const ImgRefs &imgRefs);
 
@@ -1434,7 +1444,7 @@ public:
     inline const ImageSubresourceRange &range() const { return m_range; }
     inline State &state() { return *m_state; }
     inline const State &state() const { return *m_state; }
-    operator TaggedImageSubresourceState() const { return {range(), state()}; }
+    operator ImageSubresourceStateForRange() const { return {range(), state()}; }
     SubresourcePairRefTemplate &operator=(const SubresourcePairRefTemplate &other) = delete;
 
   protected:

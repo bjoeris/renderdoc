@@ -1511,7 +1511,7 @@ template <typename SerialiserType>
 bool WrappedVulkan::Serialise_BeginCaptureFrame(SerialiserType &ser)
 {
   SCOPED_LOCK(m_ImageStatesLock);
-  GetResourceManager()->SerialiseImageStates2(ser, m_ImageStates);
+  GetResourceManager()->SerialiseImageStates(ser, m_ImageStates);
   SERIALISE_CHECK_READ_ERRORS();
 
   return true;
@@ -2951,7 +2951,7 @@ bool WrappedVulkan::ProcessChunk(ReadSerialiser &ser, VulkanChunk chunk)
       return Serialise_vkCmdSetLineStippleEXT(ser, VK_NULL_HANDLE, 0, 0);
     case VulkanChunk::ImageRefs: {
       SCOPED_LOCK(m_ImageStatesLock);
-      return GetResourceManager()->DeserialiseImageRefs2(ser, m_ImageStates);
+      return GetResourceManager()->Serialise_ImageRefs(ser, m_ImageStates);
     }
     case VulkanChunk::vkGetSemaphoreCounterValueKHR:
       return Serialise_vkGetSemaphoreCounterValueKHR(ser, VK_NULL_HANDLE, VK_NULL_HANDLE, NULL);

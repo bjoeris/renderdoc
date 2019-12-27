@@ -3782,39 +3782,34 @@ void DoSerialise(SerialiserType &ser, ImageSubresourceRange &el)
   }
 }
 
-template <class SerialiserType>
-void DoSerialise(SerialiserType &ser, TaggedImageSubresourceState &el)
+template <typename SerialiserType>
+void DoSerialise(SerialiserType &ser, ImageSubresourceState &el)
 {
-  uint32_t &newQueueFamilyIndex = el.state.newQueueFamilyIndex;
-  SERIALISE_ELEMENT(newQueueFamilyIndex);
+  SERIALISE_MEMBER(oldQueueFamilyIndex);
+  SERIALISE_MEMBER(newQueueFamilyIndex);
+  SERIALISE_MEMBER(oldLayout);
+  SERIALISE_MEMBER(newLayout);
+  SERIALISE_MEMBER(refType);
+}
 
-  uint32_t &oldQueueFamilyIndex = el.state.oldQueueFamilyIndex;
-  SERIALISE_ELEMENT(oldQueueFamilyIndex);
-
-  ImageSubresourceRange &subresourceRange = el.range;
-  SERIALISE_ELEMENT(subresourceRange);
-
-  VkImageLayout &oldLayout = el.state.oldLayout;
-  SERIALISE_ELEMENT(oldLayout);
-
-  VkImageLayout &newLayout = el.state.newLayout;
-  SERIALISE_ELEMENT(newLayout);
-
-  FrameRefType &refType = el.state.refType;
-  SERIALISE_ELEMENT(refType);
+template <class SerialiserType>
+void DoSerialise(SerialiserType &ser, ImageSubresourceStateForRange &el)
+{
+  SERIALISE_MEMBER(range);
+  SERIALISE_MEMBER(state);
 }
 
 template <typename SerialiserType>
 void DoSerialise(SerialiserType &ser, ImageState &el)
 {
-  rdcarray<TaggedImageSubresourceState> subresourceStates;
+  SERIALISE_ELEMENT_LOCAL(imageInfo, el.GetImageInfo());
+
+  rdcarray<ImageSubresourceStateForRange> subresourceStates;
   if(ser.IsWriting())
   {
     el.subresourceStates.ToArray(subresourceStates);
   }
   SERIALISE_ELEMENT(subresourceStates);
-
-  SERIALISE_ELEMENT_LOCAL(imageInfo, el.GetImageInfo());
 
   if(ser.IsReading())
   {
@@ -8059,7 +8054,7 @@ INSTANTIATE_SERIALISE_TYPE(ImageRegionState);
 INSTANTIATE_SERIALISE_TYPE(ImageLayouts);
 INSTANTIATE_SERIALISE_TYPE(ImageInfo);
 INSTANTIATE_SERIALISE_TYPE(ImageSubresourceRange);
-INSTANTIATE_SERIALISE_TYPE(TaggedImageSubresourceState);
+INSTANTIATE_SERIALISE_TYPE(ImageSubresourceStateForRange);
 INSTANTIATE_SERIALISE_TYPE(ImageState);
 
 #if ENABLED(RDOC_WIN32)

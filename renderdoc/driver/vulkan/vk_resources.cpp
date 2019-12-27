@@ -3436,7 +3436,7 @@ size_t ImageSubresourceMap::SubresourceIndex(uint32_t aspectIndex, uint32_t leve
          slice;
 }
 
-void ImageSubresourceMap::ToArray(rdcarray<TaggedImageSubresourceState> &arr)
+void ImageSubresourceMap::ToArray(rdcarray<ImageSubresourceStateForRange> &arr)
 {
   arr.reserve(arr.size() + m_values.size());
   for(auto src = begin(); src != end(); ++src)
@@ -3445,7 +3445,7 @@ void ImageSubresourceMap::ToArray(rdcarray<TaggedImageSubresourceState> &arr)
   }
 }
 
-void ImageSubresourceMap::FromArray(const rdcarray<TaggedImageSubresourceState> &arr)
+void ImageSubresourceMap::FromArray(const rdcarray<ImageSubresourceStateForRange> &arr)
 {
   if(arr.empty())
   {

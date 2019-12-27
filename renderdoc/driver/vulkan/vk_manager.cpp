@@ -246,7 +246,7 @@ void VulkanResourceManager::MergeBarriers(rdcarray<rdcpair<ResourceId, ImageRegi
 }
 
 template <typename SerialiserType>
-void VulkanResourceManager::SerialiseImageStates2(SerialiserType &ser,
+void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
                                                   std::map<ResourceId, LockingImageState> &states)
 {
   SERIALISE_ELEMENT_LOCAL(NumImages, (uint32_t)states.size());
@@ -280,12 +280,12 @@ void VulkanResourceManager::SerialiseImageStates2(SerialiserType &ser,
         {
           imageState = ImageState(VK_NULL_HANDLE, imageLayouts.imageInfo);
 
-          rdcarray<TaggedImageSubresourceState> subresourceStates;
+          rdcarray<ImageSubresourceStateForRange> subresourceStates;
           subresourceStates.reserve(imageLayouts.subresourceStates.size());
 
           for(ImageRegionState &st : imageLayouts.subresourceStates)
           {
-            TaggedImageSubresourceState p;
+            ImageSubresourceStateForRange p;
             p.range = st.subresourceRange;
             p.range.sliceCount = imageLayouts.imageInfo.extent.depth;
             p.state.oldQueueFamilyIndex = st.dstQueueFamilyIndex;
@@ -360,38 +360,10 @@ void VulkanResourceManager::SerialiseImageStates2(SerialiserType &ser,
     }
   }
 }
-template void VulkanResourceManager::SerialiseImageStates2(
+template void VulkanResourceManager::SerialiseImageStates(
     WriteSerialiser &ser, std::map<ResourceId, LockingImageState> &states);
-template void VulkanResourceManager::SerialiseImageStates2(
+template void VulkanResourceManager::SerialiseImageStates(
     ReadSerialiser &ser, std::map<ResourceId, LockingImageState> &states);
-
-bool VulkanResourceManager::DeserialiseImageRefs2(ReadSerialiser &ser,
-                                                  std::map<ResourceId, LockingImageState> &states)
-{
-  rdcarray<ImgRefsPair> data;
-  SERIALISE_ELEMENT(data);
-
-  SERIALISE_CHECK_READ_ERRORS();
-
-  for(auto it = data.begin(); it != data.end(); ++it)
-  {
-    ResourceId liveid = GetLiveID(it->image);
-    if(liveid == ResourceId())
-      continue;
-
-    auto stit = states.find(liveid);
-    if(stit == states.end())
-    {
-      RDCWARN("Found ImgRefs for unknown image");
-    }
-    else
-    {
-      LockedImageStateRef imst = stit->second.LockWrite();
-      imst->subresourceStates.FromImgRefs(it->imgRefs);
-    }
-  }
-  return true;
-}
 
 template <class SerialiserType>
 void DoSerialise(SerialiserType &ser, MemRefInterval &el)
@@ -488,6 +460,39 @@ template bool VulkanResourceManager::Serialise_DeviceMemoryRefs(ReadSerialiser &
                                                                 rdcarray<MemRefInterval> &data);
 template bool VulkanResourceManager::Serialise_DeviceMemoryRefs(WriteSerialiser &ser,
                                                                 rdcarray<MemRefInterval> &data);
+
+bool VulkanResourceManager::Serialise_ImageRefs(ReadSerialiser &ser,
+                                                std::map<ResourceId, LockingImageState> &states)
+{
+  rdcarray<ImgRefsPair> data;
+  SERIALISE_ELEMENT(data);
+
+  SERIALISE_CHECK_READ_ERRORS();
+
+  if(IsReplayingAndReading())
+  {
+    // unpack data into states
+    for(auto it = data.begin(); it != data.end(); ++it)
+    {
+      ResourceId liveid = GetLiveID(it->image);
+      if(liveid == ResourceId())
+        continue;
+
+      auto stit = states.find(liveid);
+      if(stit == states.end())
+      {
+        RDCWARN("Found ImgRefs for unknown image");
+      }
+      else
+      {
+        LockedImageStateRef imst = stit->second.LockWrite();
+        imst->subresourceStates.FromImgRefs(it->imgRefs);
+      }
+    }
+  }
+
+  return true;
+}
 
 void VulkanResourceManager::InsertDeviceMemoryRefs(WriteSerialiser &ser)
 {

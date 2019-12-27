@@ -268,15 +268,12 @@ public:
                       uint32_t numBarriers, const VkImageMemoryBarrier *barriers);
 
   template <typename SerialiserType>
-  void SerialiseImageStates2(SerialiserType &ser, std::map<ResourceId, LockingImageState> &states);
-  bool DeserialiseImageRefs2(ReadSerialiser &ser, std::map<ResourceId, LockingImageState> &states);
-
-  template <typename SerialiserType>
-  void SerialiseImageStates(SerialiserType &ser, std::map<ResourceId, ImageLayouts> &states,
-                            rdcarray<VkImageMemoryBarrier> &barriers);
+  void SerialiseImageStates(SerialiserType &ser, std::map<ResourceId, LockingImageState> &states);
 
   template <typename SerialiserType>
   bool Serialise_DeviceMemoryRefs(SerialiserType &ser, rdcarray<MemRefInterval> &data);
+
+  bool Serialise_ImageRefs(ReadSerialiser &ser, std::map<ResourceId, LockingImageState> &states);
 
   void InsertDeviceMemoryRefs(WriteSerialiser &ser);
 
