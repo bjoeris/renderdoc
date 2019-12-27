@@ -442,7 +442,7 @@ bool WrappedVulkan::Serialise_vkCreateSwapchainKHR(SerialiserType &ser, VkDevice
       m_CreationInfo.m_Names[liveId] = StringFormat::Fmt("Presentable Image %u", i);
 
       {
-        LockedImageStateRef state = InsertImageState(Unwrap(im), liveId, ImageInfo(swapinfo.imageInfo));
+        LockedImageStateRef state = InsertImageState(im, liveId, ImageInfo(swapinfo.imageInfo));
         state->isMemoryBound = true;
       }
     }
@@ -580,7 +580,7 @@ void WrappedVulkan::WrapAndProcessCreatedSwapchain(VkDevice device,
 // fill out image info so we track resource state barriers
         {
           LockedImageStateRef state =
-              InsertImageState(Unwrap(images[i]), imid, GetRecord(images[i])->resInfo->imageInfo);
+              InsertImageState(images[i], imid, GetRecord(images[i])->resInfo->imageInfo);
           state->isMemoryBound = true;
         }
 

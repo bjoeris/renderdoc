@@ -2804,6 +2804,7 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
 
   VkImage srcImage = Unwrap(GetResourceManager()->GetCurrentHandle<VkImage>(tex));
   VkImage tmpImage = VK_NULL_HANDLE;
+  VkImage wrappedTmpImage = VK_NULL_HANDLE;
   VkDeviceMemory tmpMemory = VK_NULL_HANDLE;
 
   VkFramebuffer *tmpFB = NULL;
@@ -2893,7 +2894,9 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
 
     // create render texture similar to readback texture
     vt->CreateImage(Unwrap(dev), &imCreateInfo, NULL, &tmpImage);
-    tmpImageState = ImageState(tmpImage, ImageInfo(imCreateInfo));
+    wrappedTmpImage = tmpImage;
+    GetResourceManager()->WrapResource(Unwrap(dev), wrappedTmpImage);
+    tmpImageState = ImageState(wrappedTmpImage, ImageInfo(imCreateInfo));
 
     VkMemoryRequirements mrq = {0};
     vt->GetImageMemoryRequirements(Unwrap(dev), tmpImage, &mrq);
@@ -3112,7 +3115,9 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
 
     // create resolve texture
     vt->CreateImage(Unwrap(dev), &imCreateInfo, NULL, &tmpImage);
-    tmpImageState = ImageState(tmpImage, ImageInfo(imCreateInfo));
+    wrappedTmpImage = tmpImage;
+    GetResourceManager()->WrapResource(Unwrap(dev), wrappedTmpImage);
+    tmpImageState = ImageState(wrappedTmpImage, ImageInfo(imCreateInfo));
 
     VkMemoryRequirements mrq = {0};
     vt->GetImageMemoryRequirements(Unwrap(dev), tmpImage, &mrq);
@@ -3201,7 +3206,9 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
 
     // create resolve texture
     vt->CreateImage(Unwrap(dev), &imCreateInfo, NULL, &tmpImage);
-    tmpImageState = ImageState(tmpImage, ImageInfo(imCreateInfo));
+    wrappedTmpImage = tmpImage;
+    GetResourceManager()->WrapResource(Unwrap(dev), wrappedTmpImage);
+    tmpImageState = ImageState(wrappedTmpImage, ImageInfo(imCreateInfo));
 
     VkMemoryRequirements mrq = {0};
     vt->GetImageMemoryRequirements(Unwrap(dev), tmpImage, &mrq);
@@ -3557,6 +3564,7 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
 
   if(tmpImage != VK_NULL_HANDLE)
   {
+    GetResourceManager()->ReleaseWrappedResource(wrappedTmpImage, true);
     vt->DestroyImage(Unwrap(dev), tmpImage, NULL);
     vt->FreeMemory(Unwrap(dev), tmpMemory, NULL);
   }

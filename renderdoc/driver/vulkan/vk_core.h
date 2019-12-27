@@ -1050,7 +1050,7 @@ public:
   void InsertCommandQueueFamily(ResourceId cmdId, uint32_t queueFamilyIndex);
   LockedImageStateRef FindImageState(ResourceId id);
   LockedConstImageStateRef FindConstImageState(ResourceId id);
-  LockedImageStateRef InsertImageState(VkImage handle, ResourceId id, const ImageInfo &info,
+  LockedImageStateRef InsertImageState(VkImage wrappedHandle, ResourceId id, const ImageInfo &info,
                                        bool *inserted = NULL);
   bool EraseImageState(ResourceId id);
   void UpdateImageStates(const std::map<ResourceId, ImageState> &dstStates,

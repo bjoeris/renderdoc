@@ -4047,7 +4047,7 @@ LockedConstImageStateRef WrappedVulkan::FindConstImageState(ResourceId id)
     return LockedConstImageStateRef();
 }
 
-LockedImageStateRef WrappedVulkan::InsertImageState(VkImage handle, ResourceId id,
+LockedImageStateRef WrappedVulkan::InsertImageState(VkImage wrappedHandle, ResourceId id,
                                                     const ImageInfo &info, bool *inserted)
 {
   SCOPED_LOCK(m_ImageStatesLock);
@@ -4062,7 +4062,7 @@ LockedImageStateRef WrappedVulkan::InsertImageState(VkImage handle, ResourceId i
   {
     if(inserted != NULL)
       *inserted = true;
-    it = m_ImageStates.insert({id, LockingImageState(handle, info)}).first;
+    it = m_ImageStates.insert({id, LockingImageState(wrappedHandle, info)}).first;
     return it->second.LockWrite();
   }
 }
@@ -4091,7 +4091,7 @@ void WrappedVulkan::UpdateImageStates(const std::map<ResourceId, ImageState> &ds
     {
       it = m_ImageStates
                .insert({dstIt->first,
-                        LockingImageState(dstIt->second.handle, dstIt->second.GetImageInfo())})
+                        LockingImageState(dstIt->second.wrappedHandle, dstIt->second.GetImageInfo())})
                .first;
       dstIt->second.InitialState(*it->second.LockWrite());
     }

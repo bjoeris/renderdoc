@@ -1536,12 +1536,12 @@ struct ImageState
   VkDeviceSize boundMemoryOffset = 0ull;
   VkDeviceSize boundMemorySize = 0ull;
   FrameRefType maxRefType = eFrameRef_None;
-  VkImage handle = VK_NULL_HANDLE;
+  VkImage wrappedHandle = VK_NULL_HANDLE;
 
   inline const ImageInfo &GetImageInfo() const { return subresourceStates.GetImageInfo(); }
   inline ImageState() {}
-  inline ImageState(VkImage handle, const ImageInfo &imageInfo)
-      : handle(handle), subresourceStates(imageInfo)
+  inline ImageState(VkImage wrappedHandle, const ImageInfo &imageInfo)
+      : wrappedHandle(wrappedHandle), subresourceStates(imageInfo)
   {
   }
   ImageState InitialState() const;
@@ -1651,7 +1651,7 @@ class LockingImageState
 {
 public:
   LockingImageState() = default;
-  LockingImageState(VkImage handle, const ImageInfo &imageInfo) : m_state(handle, imageInfo) {}
+  LockingImageState(VkImage wrappedHandle, const ImageInfo &imageInfo) : m_state(wrappedHandle, imageInfo) {}
   LockingImageState(const ImageState &state) : m_state(state) {}
   LockedImageStateRef LockWrite() { return LockedImageStateRef(&m_state, m_lock); }
   LockedConstImageStateRef LockRead() { return LockedConstImageStateRef(&m_state, m_lock); }

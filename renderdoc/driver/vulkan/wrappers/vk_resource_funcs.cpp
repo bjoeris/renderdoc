@@ -1563,11 +1563,11 @@ bool WrappedVulkan::Serialise_vkCreateImage(SerialiserType &ser, VkDevice device
       m_CreationInfo.m_Image[live].Init(GetResourceManager(), m_CreationInfo, &CreateInfo);
 
       bool inserted = false;
-      auto state = InsertImageState(Unwrap(img), live, CreateInfo, &inserted);
+      auto state = InsertImageState(img, live, CreateInfo, &inserted);
       if(!inserted)
       {
         // Image state already existed.
-        state->handle = Unwrap(img);
+        state->wrappedHandle = img;
         *state = state->InitialState();
       }
     }
@@ -1843,7 +1843,7 @@ VkResult WrappedVulkan::vkCreateImage(VkDevice device, const VkImageCreateInfo *
       m_CreationInfo.m_Image[id].Init(GetResourceManager(), m_CreationInfo, pCreateInfo);
     }
 
-    InsertImageState(Unwrap(*pImage), id, ImageInfo(*pCreateInfo));
+    InsertImageState(*pImage, id, ImageInfo(*pCreateInfo));
   }
 
   return ret;

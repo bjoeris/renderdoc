@@ -3985,7 +3985,7 @@ template void BarrierSequence<VkImageMemoryBarrier>::ExtractLastBatchForQueue(
 
 ImageState ImageState::InitialState() const
 {
-  ImageState result(handle, GetImageInfo());
+  ImageState result(wrappedHandle, GetImageInfo());
   InitialState(result);
   return result;
 }
@@ -4004,12 +4004,12 @@ void ImageState::InitialState(ImageState &result) const
 
 ImageState ImageState::CommandBufferInitialState() const
 {
-  return ImageState(handle, GetImageInfo());
+  return ImageState(wrappedHandle, GetImageInfo());
 }
 
 ImageState ImageState::UniformState(const ImageSubresourceState &sub) const
 {
-  ImageState result(handle, GetImageInfo());
+  ImageState result(wrappedHandle, GetImageInfo());
   result.subresourceStates.begin()->SetState(sub);
   return result;
 }
@@ -4067,8 +4067,8 @@ void ImageState::Update(ImageSubresourceRange range, const ImageSubresourceState
 
 void ImageState::Merge(const ImageState &other, FrameRefCompFunc compose)
 {
-  if(handle == VK_NULL_HANDLE)
-    handle = other.handle;
+  if(wrappedHandle == VK_NULL_HANDLE)
+    wrappedHandle = other.wrappedHandle;
   for(auto it = other.oldQueueFamilyTransfers.begin(); it != other.oldQueueFamilyTransfers.end(); ++it)
   {
     RecordQueueFamilyAcquire(*it);
@@ -4248,12 +4248,13 @@ bool ImageState::CloseTransfers(uint32_t batchIndex, VkAccessFlags dstAccessMask
 {
   if(newQueueFamilyTransfers.empty())
     return false;
+  VkImage unwrappedHandle = Unwrap(wrappedHandle);
   for(auto it = newQueueFamilyTransfers.begin(); it != newQueueFamilyTransfers.end(); ++it)
   {
     Update(it->subresourceRange, ImageSubresourceState(it->dstQueueFamilyIndex, it->newLayout));
 
     it->dstAccessMask = dstAccessMask;
-    it->image = handle;
+    it->image = unwrappedHandle;
     barriers.Add(batchIndex, it->dstQueueFamilyIndex, *it);
   }
   newQueueFamilyTransfers.clear();
@@ -4268,11 +4269,12 @@ bool ImageState::RestoreTransfers(uint32_t batchIndex,
   // TODO: figure out why `transfers` has duplicate entries
   if(transfers.empty())
     return false;
+  VkImage unwrappedHandle = Unwrap(wrappedHandle);
   for(auto it = transfers.begin(); it != transfers.end(); ++it)
   {
     VkImageMemoryBarrier barrier = *it;
     barrier.srcAccessMask = srcAccessMask;
-    barrier.image = handle;
+    barrier.image = unwrappedHandle;
     barriers.Add(batchIndex, barrier.srcQueueFamilyIndex, barrier);
     RecordQueueFamilyRelease(barrier);
   }
@@ -4288,6 +4290,8 @@ void ImageState::ResetToOldState(ImageBarrierSequence &barriers, ImageTransition
   const uint32_t ACQUIRE_BATCH_INDEX = 2;
   const uint32_t RESTORE_TRANSFERS_BATCH_INDEX = 3;
   CloseTransfers(CLOSE_TRANSFERS_BATCH_INDEX, dstAccessMask, barriers, info);
+
+  VkImage unwrappedHandle = Unwrap(wrappedHandle);
 
   for(auto subIt = subresourceStates.begin(); subIt != subresourceStates.end(); ++subIt)
   {
@@ -4392,7 +4396,7 @@ void ImageState::ResetToOldState(ImageBarrierSequence &barriers, ImageTransition
         /* newLayout = */ newLayout,
         /* srcQueueFamilyIndex = */ srcQueueFamilyIndex,
         /* dstQueueFamilyIndex = */ dstQueueFamilyIndex,
-        /* image = */ handle,
+        /* image = */ unwrappedHandle,
         /* subresourceRange = */ subRange,
     };
     barriers.Add(MAIN_BATCH_INDEX, submitQueueFamilyIndex, barrier);
@@ -4416,6 +4420,8 @@ void ImageState::Transition(const ImageState &dstState, VkAccessFlags srcAccessM
   const uint32_t ACQUIRE_BATCH_INDEX = 2;
   const uint32_t RESTORE_TRANSFERS_BATCH_INDEX = 3;
   CloseTransfers(CLOSE_TRANSFERS_BATCH_INDEX, dstAccessMask, barriers, info);
+
+  VkImage unwrappedHandle = Unwrap(wrappedHandle);
 
   for(auto dstIt = dstState.subresourceStates.begin(); dstIt != dstState.subresourceStates.end();
       ++dstIt)
@@ -4535,7 +4541,7 @@ void ImageState::Transition(const ImageState &dstState, VkAccessFlags srcAccessM
           /* newLayout = */ newLayout,
           /* srcQueueFamilyIndex = */ srcQueueFamilyIndex,
           /* dstQueueFamilyIndex = */ dstQueueFamilyIndex,
-          /* image = */ handle,
+          /* image = */ unwrappedHandle,
           /* subresourceRange = */
           {
               /* aspectMask = */ aspectMask,
