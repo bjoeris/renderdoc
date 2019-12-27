@@ -3890,12 +3890,9 @@ template <typename Barrier>
 void BarrierSequence<Barrier>::Add(uint32_t batchIndex, uint32_t queueFamilyIndex,
                                    const Barrier &barrier)
 {
-  if(batches.size() <= batchIndex)
-    batches.resize(batchIndex + 1);
-  rdcarray<rdcarray<Barrier> > &batch = batches[batchIndex];
-  if(batch.size() <= queueFamilyIndex)
-    batch.resize(queueFamilyIndex + 1);
-  batch[queueFamilyIndex].push_back(barrier);
+  RDCASSERT(batchIndex < MAX_BATCH_COUNT);
+  RDCASSERT(queueFamilyIndex < MAX_QUEUE_FAMILY_COUNT);
+  batches[batchIndex][queueFamilyIndex].push_back(barrier);
   ++barrierCount;
 }
 template void BarrierSequence<VkImageMemoryBarrier>::Add(uint32_t batchIndex,
@@ -3905,15 +3902,11 @@ template void BarrierSequence<VkImageMemoryBarrier>::Add(uint32_t batchIndex,
 template <typename Barrier>
 void BarrierSequence<Barrier>::Merge(const BarrierSequence<Barrier> &other)
 {
-  if(other.batches.size() > batches.size())
-    batches.resize(other.batches.size());
-  for(uint32_t batchIndex = 0; batchIndex < other.batches.size(); ++batchIndex)
+  for(uint32_t batchIndex = 0; batchIndex < MAX_BATCH_COUNT; ++batchIndex)
   {
-    rdcarray<rdcarray<Barrier> > &batch = batches[batchIndex];
-    const rdcarray<rdcarray<Barrier> > &otherBatch = other.batches[batchIndex];
-    if(otherBatch.size() > batch.size())
-      batch.resize(otherBatch.size());
-    for(uint32_t queueFamilyIndex = 0; queueFamilyIndex < otherBatch.size(); ++queueFamilyIndex)
+    rdcarray<Barrier> *batch = batches[batchIndex];
+    const rdcarray<Barrier> *otherBatch = other.batches[batchIndex];
+    for(uint32_t queueFamilyIndex = 0; queueFamilyIndex < MAX_QUEUE_FAMILY_COUNT; ++queueFamilyIndex)
     {
       rdcarray<Barrier> &barriers = batch[queueFamilyIndex];
       const rdcarray<Barrier> &otherBarriers = otherBatch[queueFamilyIndex];
@@ -3928,11 +3921,11 @@ template void BarrierSequence<VkImageMemoryBarrier>::Merge(
 template <typename Barrier>
 bool BarrierSequence<Barrier>::IsBatchEmpty(uint32_t batchIndex) const
 {
-  if(batchIndex >= batches.size())
+  if(batchIndex > MAX_BATCH_COUNT)
     return true;
-  for(const rdcarray<Barrier> *it = batches[batchIndex].begin(); it != batches[batchIndex].end(); ++it)
+  for(uint32_t queueFamilyIndex = 0; queueFamilyIndex < MAX_QUEUE_FAMILY_COUNT; ++queueFamilyIndex)
   {
-    if(!it->empty())
+    if(!batches[batchIndex][queueFamilyIndex].empty())
       return false;
   }
   return true;
@@ -3940,23 +3933,24 @@ bool BarrierSequence<Barrier>::IsBatchEmpty(uint32_t batchIndex) const
 template bool BarrierSequence<VkImageMemoryBarrier>::IsBatchEmpty(uint32_t batchIndex) const;
 
 template <typename Barrier>
-void BarrierSequence<Barrier>::ExtractBatch(uint32_t batchIndex, rdcarray<rdcarray<Barrier> > &result)
+void BarrierSequence<Barrier>::ExtractBatch(uint32_t batchIndex, uint32_t queueFamilyIndex,
+                                            rdcarray<Barrier> &result)
 {
-  if(batchIndex >= batches.size())
+  if(batchIndex >= MAX_BATCH_COUNT || queueFamilyIndex >= MAX_QUEUE_FAMILY_COUNT)
     return;
-  batches[batchIndex].swap(result);
-  batches[batchIndex].clear();
-  for(rdcarray<Barrier> *it = result.begin(); it != result.end(); ++it)
-    barrierCount -= it->size();
+  rdcarray<Barrier> &batch = batches[batchIndex][queueFamilyIndex];
+  batch.swap(result);
+  batch.clear();
+  barrierCount -= result.size();
 }
 template void BarrierSequence<VkImageMemoryBarrier>::ExtractBatch(
-    uint32_t batchIndex, rdcarray<rdcarray<VkImageMemoryBarrier> > &result);
+    uint32_t batchIndex, uint32_t queueFamilyIndex, rdcarray<VkImageMemoryBarrier> &result);
 
 template <typename Barrier>
 void BarrierSequence<Barrier>::ExtractFirstBatchForQueue(uint32_t queueFamilyIndex,
                                                          rdcarray<Barrier> &result)
 {
-  for(uint32_t batchIndex = 0; batchIndex < batches.size(); ++batchIndex)
+  for(uint32_t batchIndex = 0; batchIndex < MAX_BATCH_COUNT; ++batchIndex)
   {
     if(!IsBatchEmpty(batchIndex))
     {
@@ -3974,7 +3968,7 @@ template <typename Barrier>
 void BarrierSequence<Barrier>::ExtractLastBatchForQueue(uint32_t queueFamilyIndex,
                                                         rdcarray<Barrier> &result)
 {
-  for(uint32_t batchIndex = (uint32_t)batches.size(); batchIndex > 0;)
+  for(uint32_t batchIndex = MAX_BATCH_COUNT; batchIndex > 0;)
   {
     --batchIndex;
     if(!IsBatchEmpty(batchIndex))

@@ -1489,14 +1489,17 @@ public:
 template <typename Barrier>
 struct BarrierSequence
 {
+  static const uint32_t MAX_BATCH_COUNT = 4;
+  static const uint32_t MAX_QUEUE_FAMILY_COUNT = 3;
+
   // batches[batchIndex][queueFamilyIndex] = array of barriers to submit to queueFamilyIndex as part
   // of batchIndex
-  rdcarray<rdcarray<rdcarray<Barrier> > > batches;
+  rdcarray<Barrier> batches[MAX_BATCH_COUNT][MAX_QUEUE_FAMILY_COUNT];
   size_t barrierCount = 0;
   void Add(uint32_t batchIndex, uint32_t queueFamilyIndex, const Barrier &barrier);
   void Merge(const BarrierSequence<Barrier> &other);
   bool IsBatchEmpty(uint32_t batchIndex) const;
-  void ExtractBatch(uint32_t batchIndex, rdcarray<rdcarray<Barrier> > &result);
+  void ExtractBatch(uint32_t batchIndex, uint32_t queueFamilyIndex, rdcarray<Barrier> &result);
   void ExtractFirstBatchForQueue(uint32_t queueFamilyIndex, rdcarray<Barrier> &result);
   void ExtractLastBatchForQueue(uint32_t queueFamilyIndex, rdcarray<Barrier> &result);
   inline bool empty() const { return barrierCount == 0; }

@@ -412,17 +412,18 @@ void WrappedVulkan::SubmitAndFlushImageStateBarriers(ImageBarrierSequence &barri
 
   VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, NULL,
                                         VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-  rdcarray<VkFence> queueFamilyFences;
+  VkFence queueFamilyFences[ImageBarrierSequence::MAX_QUEUE_FAMILY_COUNT] = {
+      VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
   rdcarray<VkFence> submittedFences;
-  rdcarray<rdcarray<VkImageMemoryBarrier>> batch;
+  rdcarray<VkImageMemoryBarrier> batch;
   VkResult vkr;
-  for(uint32_t batchIndex = 0; !barriers.empty(); ++batchIndex)
+  for(uint32_t batchIndex = 0; batchIndex < ImageBarrierSequence::MAX_BATCH_COUNT; ++batchIndex)
   {
-    barriers.ExtractBatch(batchIndex, batch);
-    for(uint32_t queueFamilyIndex = 0; queueFamilyIndex < batch.size(); ++queueFamilyIndex)
+    for(uint32_t queueFamilyIndex = 0;
+        queueFamilyIndex < ImageBarrierSequence::MAX_QUEUE_FAMILY_COUNT; ++queueFamilyIndex)
     {
-      rdcarray<VkImageMemoryBarrier> &queueBatch = batch[queueFamilyIndex];
-      if(queueBatch.empty())
+      barriers.ExtractBatch(batchIndex, queueFamilyIndex, batch);
+      if(batch.empty())
         continue;
 
       VkCommandBuffer cmd = GetExtQueueCmd(queueFamilyIndex);
@@ -462,31 +463,28 @@ void WrappedVulkan::SubmitAndFlushImageStateBarriers(ImageBarrierSequence &barri
       vkr = ObjDisp(cmd)->BeginCommandBuffer(Unwrap(cmd), &beginInfo);
       RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
-      DoPipelineBarrier(cmd, (uint32_t)queueBatch.size(), queueBatch.data());
+      DoPipelineBarrier(cmd, (uint32_t)batch.size(), batch.data());
 
       vkr = ObjDisp(cmd)->EndCommandBuffer(Unwrap(cmd));
       RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
-      while(queueFamilyIndex >= queueFamilyFences.size())
+      VkFence &fence = queueFamilyFences[queueFamilyIndex];
+      if(fence == VK_NULL_HANDLE)
       {
         VkFenceCreateInfo fenceInfo = {
             /* sType = */ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
             /* pNext = */ NULL,
             /* flags = */ 0,
         };
-        queueFamilyFences.push_back(VK_NULL_HANDLE);
-        vkr = ObjDisp(m_Device)->CreateFence(Unwrap(m_Device), &fenceInfo, NULL,
-                                             &queueFamilyFences.back());
+        vkr = ObjDisp(m_Device)->CreateFence(Unwrap(m_Device), &fenceInfo, NULL, &fence);
         RDCASSERTEQUAL(vkr, VK_SUCCESS);
       }
-
-      VkFence fence = queueFamilyFences[queueFamilyIndex];
 
       vkr = ObjDisp(queue)->QueueSubmit(Unwrap(queue), 1, &submitInfo, fence);
       RDCASSERTEQUAL(vkr, VK_SUCCESS);
       submittedFences.push_back(fence);
 #endif
-      queueBatch.clear();
+      batch.clear();
     }
     if(!submittedFences.empty())
     {
@@ -499,8 +497,12 @@ void WrappedVulkan::SubmitAndFlushImageStateBarriers(ImageBarrierSequence &barri
       submittedFences.clear();
     }
   }
-  for(VkFence *it = queueFamilyFences.begin(); it != queueFamilyFences.end(); ++it)
-    ObjDisp(m_Device)->DestroyFence(Unwrap(m_Device), *it, NULL);
+  for(uint32_t queueFamilyIndex = 0;
+      queueFamilyIndex < ImageBarrierSequence::MAX_QUEUE_FAMILY_COUNT; ++queueFamilyIndex)
+  {
+    if(queueFamilyFences[queueFamilyIndex] != VK_NULL_HANDLE)
+      ObjDisp(m_Device)->DestroyFence(Unwrap(m_Device), queueFamilyFences[queueFamilyIndex], NULL);
+  }
 }
 
 void WrappedVulkan::InlineSetupImageBarriers(VkCommandBuffer cmd, ImageBarrierSequence &barriers)
