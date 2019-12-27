@@ -3412,6 +3412,161 @@ void ImageSubresourceMap::Split(bool splitAspects, bool splitLevels, bool splitL
   m_flags = newFlags;
 }
 
+void ImageSubresourceMap::Unsplit(bool unsplitAspects, bool unsplitLevels, bool unsplitLayers,
+                                  bool unsplitDepth)
+{
+  uint16_t newFlags = m_flags;
+  if(unsplitAspects)
+    newFlags &= ~(uint16_t)FlagBits::AreAspectsSplit;
+
+  if(unsplitLevels)
+    newFlags &= ~(uint16_t)FlagBits::AreLevelsSplit;
+
+  if(unsplitLayers)
+    newFlags &= ~(uint16_t)FlagBits::AreLayersSplit;
+
+  if(unsplitDepth)
+    newFlags &= ~(uint16_t)FlagBits::IsDepthSplit;
+
+  if(newFlags == m_flags)
+    // not splitting anything new
+    return;
+
+  uint32_t newSplitAspectCount = unsplitAspects ? 1 : m_aspectCount;
+
+  uint32_t oldSplitLevelCount = AreLevelsSplit() ? GetImageInfo().levelCount : 1;
+  uint32_t newSplitLevelCount = unsplitLevels ? 1 : GetImageInfo().levelCount;
+
+  uint32_t oldSplitLayerCount = AreLayersSplit() ? GetImageInfo().layerCount : 1;
+  uint32_t newSplitLayerCount = unsplitLayers ? 1 : GetImageInfo().layerCount;
+
+  uint32_t oldSplitSliceCount = IsDepthSplit() ? GetImageInfo().extent.depth : 1;
+  uint32_t newSplitSliceCount = unsplitDepth ? 1 : GetImageInfo().extent.depth;
+
+  uint32_t oldSize = (uint32_t)m_values.size();
+  RDCASSERT(oldSize > 0);
+
+  uint32_t newSize =
+      newSplitAspectCount * newSplitLevelCount * newSplitLayerCount * newSplitSliceCount;
+  RDCASSERT(newSize < oldSize);
+
+  rdcarray<ImageSubresourceState> newValues;
+  newValues.resize(newSize);
+
+  uint32_t aspectIndex = 0;
+  uint32_t level = 0;
+  uint32_t layer = 0;
+  uint32_t slice = 0;
+  uint32_t newIndex = 0;
+
+  while(newIndex < newValues.size())
+  {
+    uint32_t oldIndex = ((aspectIndex * oldSplitLevelCount + level) * oldSplitLayerCount + layer) *
+                            oldSplitSliceCount +
+                        slice;
+    newValues[newIndex] = m_values[oldIndex];
+
+    ++newIndex;
+
+    ++slice;
+    if(slice < newSplitSliceCount)
+      continue;
+    slice = 0;
+
+    ++layer;
+    if(layer < newSplitLayerCount)
+      continue;
+    layer = 0;
+
+    ++level;
+    if(level < newSplitLevelCount)
+      continue;
+    level = 0;
+
+    ++aspectIndex;
+  }
+
+  newValues.swap(m_values);
+  m_flags = newFlags;
+}
+
+void ImageSubresourceMap::Unsplit()
+{
+  if(m_values.size() == 1)
+    return;
+
+  uint32_t aspectCount = AreAspectsSplit() ? m_aspectCount : 1;
+  uint32_t aspectIndex = 0;
+  uint32_t levelCount = AreLevelsSplit() ? m_imageInfo.levelCount : 1;
+  uint32_t level = 0;
+  uint32_t layerCount = AreLayersSplit() ? m_imageInfo.layerCount : 1;
+  uint32_t layer = 0;
+  uint32_t sliceCount = IsDepthSplit() ? m_imageInfo.extent.depth : 1;
+  uint32_t slice = 0;
+  uint32_t index = 0;
+
+  bool canUnsplitAspects = aspectCount > 1;
+  bool canUnsplitLevels = levelCount > 1;
+  bool canUnsplitLayers = layerCount > 1;
+  bool canUnsplitDepth = sliceCount > 1;
+
+  RDCASSERT(aspectCount * levelCount * layerCount * sliceCount == m_values.size());
+#define UNSPLIT_INDEX(ASPECT, LEVEL, LAYER, SLICE) \
+  (((ASPECT * levelCount + LEVEL) * layerCount + LAYER) * sliceCount + SLICE)
+  while(index < m_values.size() &&
+        (canUnsplitAspects || canUnsplitLevels || canUnsplitLayers || canUnsplitDepth))
+  {
+    if(canUnsplitAspects && aspectIndex > 0)
+    {
+      uint32_t index0 = UNSPLIT_INDEX(0, level, layer, slice);
+      if(m_values[index] != m_values[index0])
+        canUnsplitAspects = false;
+    }
+    if(canUnsplitLevels && level > 0)
+    {
+      uint32_t index0 = UNSPLIT_INDEX(aspectIndex, 0, layer, slice);
+      if(m_values[index] != m_values[index0])
+        canUnsplitLevels = false;
+    }
+    if(canUnsplitLayers && layer > 0)
+    {
+      uint32_t index0 = UNSPLIT_INDEX(aspectIndex, level, 0, slice);
+      if(m_values[index] != m_values[index0])
+        canUnsplitLayers = false;
+    }
+    if(canUnsplitDepth && slice > 0)
+    {
+      uint32_t index0 = UNSPLIT_INDEX(aspectIndex, level, layer, 0);
+      if(m_values[index] != m_values[index0])
+        canUnsplitDepth = false;
+    }
+
+    ++index;
+
+    ++slice;
+    if(slice < sliceCount)
+      continue;
+    slice = 0;
+
+    ++layer;
+    if(layer < layerCount)
+      continue;
+    layer = 0;
+
+    ++level;
+    if(level < levelCount)
+      continue;
+    level = 0;
+
+    ++aspectIndex;
+    if(aspectIndex >= aspectCount)
+      break;
+  }
+#undef UNSPLIT_INDEX
+
+  Unsplit(canUnsplitAspects, canUnsplitLevels, canUnsplitLayers, canUnsplitDepth);
+}
+
 size_t ImageSubresourceMap::SubresourceIndex(uint32_t aspectIndex, uint32_t level, uint32_t layer,
                                              uint32_t slice) const
 {

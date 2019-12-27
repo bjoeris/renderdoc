@@ -149,7 +149,7 @@ TEST_CASE("Test ImageState type", "[imagestate]")
   readSubstate.oldQueueFamilyIndex = readSubstate.newQueueFamilyIndex = 0;
   readSubstate.refType = eFrameRef_Read;
 
-  SECTION("unsplit")
+  SECTION("Initial state")
   {
     ImageState state(image, imageInfo);
     CheckSubresourceRanges(state, false, false, false, false);
@@ -569,6 +569,169 @@ TEST_CASE("Test ImageState type", "[imagestate]")
     CHECK(state.oldQueueFamilyTransfers.size() == 0);
 
     CHECK(state.newQueueFamilyTransfers.size() == 0);
+  };
+
+  SECTION("Unsplit aspects")
+  {
+    ImageState state(image, imageInfo);
+
+    // read subresource, triggering a split in every dimension
+    ImageSubresourceRange range0 = imageInfo.FullRange();
+    range0.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+    range0.baseMipLevel = 1;
+    range0.levelCount = imageInfo.levelCount - 1;
+    range0.baseArrayLayer = 1;
+    range0.layerCount = imageInfo.layerCount - 1;
+    range0.baseDepthSlice = 1;
+    range0.sliceCount = imageInfo.extent.depth - 1;
+    state.RecordUse(range0, eFrameRef_Read, 0);
+
+    // read all aspects
+    ImageSubresourceRange range1 = range0;
+    range1.aspectMask = imageInfo.Aspects();
+    state.RecordUse(range1, eFrameRef_Read, 0);
+
+    state.subresourceStates.Unsplit();
+
+    CheckSubresourceRanges(state, false, true, true, true);
+    for(auto it = state.subresourceStates.begin(); it != state.subresourceStates.end(); ++it)
+    {
+      if(it->range().baseMipLevel > 0 && it->range().baseArrayLayer > 0 &&
+         it->range().baseDepthSlice > 0)
+        CheckSubresourceState(it->state(), readSubstate);
+      else
+        CheckSubresourceState(it->state(), initSubstate);
+    }
+  };
+
+  SECTION("Unsplit mip levels")
+  {
+    ImageState state(image, imageInfo);
+
+    // read subresource, triggering a split in every dimension
+    ImageSubresourceRange range0 = imageInfo.FullRange();
+    range0.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+    range0.baseMipLevel = 1;
+    range0.levelCount = imageInfo.levelCount - 1;
+    range0.baseArrayLayer = 1;
+    range0.layerCount = imageInfo.layerCount - 1;
+    range0.baseDepthSlice = 1;
+    range0.sliceCount = imageInfo.extent.depth - 1;
+    state.RecordUse(range0, eFrameRef_Read, 0);
+
+    // read all mip levels
+    ImageSubresourceRange range1 = range0;
+    range1.baseMipLevel = 0;
+    range1.levelCount = imageInfo.levelCount;
+    state.RecordUse(range1, eFrameRef_Read, 0);
+
+    state.subresourceStates.Unsplit();
+
+    CheckSubresourceRanges(state, true, false, true, true);
+    for(auto it = state.subresourceStates.begin(); it != state.subresourceStates.end(); ++it)
+    {
+      if(it->range().aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT && it->range().baseArrayLayer > 0 &&
+         it->range().baseDepthSlice > 0)
+        CheckSubresourceState(it->state(), readSubstate);
+      else
+        CheckSubresourceState(it->state(), initSubstate);
+    }
+  };
+
+  SECTION("Unsplit array layers")
+  {
+    ImageState state(image, imageInfo);
+
+    // read subresource, triggering a split in every dimension
+    ImageSubresourceRange range0 = imageInfo.FullRange();
+    range0.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+    range0.baseMipLevel = 1;
+    range0.levelCount = imageInfo.levelCount - 1;
+    range0.baseArrayLayer = 1;
+    range0.layerCount = imageInfo.layerCount - 1;
+    range0.baseDepthSlice = 1;
+    range0.sliceCount = imageInfo.extent.depth - 1;
+    state.RecordUse(range0, eFrameRef_Read, 0);
+
+    // read all array layers
+    ImageSubresourceRange range1 = range0;
+    range1.baseArrayLayer = 0;
+    range1.layerCount = imageInfo.layerCount;
+    state.RecordUse(range1, eFrameRef_Read, 0);
+
+    state.subresourceStates.Unsplit();
+
+    CheckSubresourceRanges(state, true, true, false, true);
+    for(auto it = state.subresourceStates.begin(); it != state.subresourceStates.end(); ++it)
+    {
+      if(it->range().aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT && it->range().baseMipLevel > 0 &&
+         it->range().baseDepthSlice > 0)
+        CheckSubresourceState(it->state(), readSubstate);
+      else
+        CheckSubresourceState(it->state(), initSubstate);
+    }
+  };
+
+  SECTION("Unsplit depth slices")
+  {
+    ImageState state(image, imageInfo);
+
+    // read subresource, triggering a split in every dimension
+    ImageSubresourceRange range0 = imageInfo.FullRange();
+    range0.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+    range0.baseMipLevel = 1;
+    range0.levelCount = imageInfo.levelCount - 1;
+    range0.baseArrayLayer = 1;
+    range0.layerCount = imageInfo.layerCount - 1;
+    range0.baseDepthSlice = 1;
+    range0.sliceCount = imageInfo.extent.depth - 1;
+    state.RecordUse(range0, eFrameRef_Read, 0);
+
+    // read all depth slices
+    ImageSubresourceRange range1 = range0;
+    range1.baseDepthSlice = 0;
+    range1.sliceCount = imageInfo.extent.depth;
+    state.RecordUse(range1, eFrameRef_Read, 0);
+
+    state.subresourceStates.Unsplit();
+
+    CheckSubresourceRanges(state, true, true, true, false);
+    for(auto it = state.subresourceStates.begin(); it != state.subresourceStates.end(); ++it)
+    {
+      if(it->range().aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT && it->range().baseMipLevel > 0 &&
+         it->range().baseArrayLayer > 0)
+        CheckSubresourceState(it->state(), readSubstate);
+      else
+        CheckSubresourceState(it->state(), initSubstate);
+    }
+  };
+
+  SECTION("Unsplit all")
+  {
+    ImageState state(image, imageInfo);
+
+    // read subresource, triggering a split in every dimension
+    ImageSubresourceRange range0 = imageInfo.FullRange();
+    range0.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+    range0.baseMipLevel = 1;
+    range0.levelCount = imageInfo.levelCount - 1;
+    range0.baseArrayLayer = 1;
+    range0.layerCount = imageInfo.layerCount - 1;
+    range0.baseDepthSlice = 1;
+    range0.sliceCount = imageInfo.extent.depth - 1;
+    state.RecordUse(range0, eFrameRef_Read, 0);
+
+    // read all subresources
+    ImageSubresourceRange range1 = imageInfo.FullRange();
+    state.RecordUse(range1, eFrameRef_Read, 0);
+
+    state.subresourceStates.Unsplit();
+
+    CheckSubresourceRanges(state, false, false, false, false);
+    for(auto it = state.subresourceStates.begin(); it != state.subresourceStates.end(); ++it)
+    {
+      CheckSubresourceState(it->state(), readSubstate);
+    }
   };
 };
 

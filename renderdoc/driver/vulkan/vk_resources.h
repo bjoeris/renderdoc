@@ -1352,6 +1352,7 @@ class ImageSubresourceMap
   inline bool AreLayersSplit() const { return AreLayersSplit(m_flags); }
   inline bool IsDepthSplit() const { return IsDepthSplit(m_flags); }
   void Split(bool splitAspects, bool splitLevels, bool splitLayers, bool splitDepth);
+  void Unsplit(bool unsplitAspects, bool unsplitLevels, bool unsplitLayers, bool unsplitDepth);
   size_t SubresourceIndex(uint32_t aspectIndex, uint32_t level, uint32_t layer, uint32_t z) const;
 
 public:
@@ -1387,6 +1388,7 @@ public:
           range.baseArrayLayer != 0u || range.layerCount < (uint32_t)GetImageInfo().layerCount,
           range.baseDepthSlice != 0u || range.sliceCount < GetImageInfo().extent.depth);
   }
+  void Unsplit();
   inline void Clear()
   {
     m_values.clear();
