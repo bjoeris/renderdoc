@@ -3770,16 +3770,8 @@ void DoSerialise(SerialiserType &ser, ImageSubresourceRange &el)
   SERIALISE_MEMBER(levelCount);
   SERIALISE_MEMBER(baseArrayLayer);
   SERIALISE_MEMBER(layerCount);
-  if(ser.VersionAtLeast(0x11))
-  {
-    SERIALISE_MEMBER(baseDepthSlice);
-    SERIALISE_MEMBER(sliceCount);
-  }
-  else if(ser.IsReading())
-  {
-    el.baseDepthSlice = 0u;
-    el.sliceCount = VK_REMAINING_ARRAY_LAYERS;
-  }
+  SERIALISE_MEMBER(baseDepthSlice);
+  SERIALISE_MEMBER(sliceCount);
 }
 
 template <typename SerialiserType>
