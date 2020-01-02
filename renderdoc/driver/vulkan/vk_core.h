@@ -765,10 +765,9 @@ private:
   std::map<ResourceId, LockingImageState> m_ImageStates;
   Threading::CriticalSection m_ImageStatesLock;
 
-  bool m_SeparateDepthStencilLayouts = false;
   inline ImageTransitionInfo GetImageTransitionInfo() const
   {
-    return ImageTransitionInfo(m_State, m_QueueFamilyIdx, m_SeparateDepthStencilLayouts);
+    return ImageTransitionInfo(m_State, m_QueueFamilyIdx, false);
   }
 
   // find swapchain for an image
