@@ -384,7 +384,7 @@ private:
 
   InstanceDeviceInfo m_EnabledExtensions;
 
-  const InstanceDeviceInfo &GetExtensions(VkResourceRecord *record)
+  const InstanceDeviceInfo &GetExtensions(VkResourceRecord *record) const
   {
     return record ? *record->instDevInfo : m_EnabledExtensions;
   }
@@ -767,7 +767,9 @@ private:
 
   inline ImageTransitionInfo GetImageTransitionInfo() const
   {
-    return ImageTransitionInfo(m_State, m_QueueFamilyIdx, false);
+    return ImageTransitionInfo(
+        m_State, m_QueueFamilyIdx,
+        GetExtensions(GetRecord(m_Device)).ext_KHR_separate_depth_stencil_layouts);
   }
 
   // find swapchain for an image

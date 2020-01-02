@@ -1093,6 +1093,10 @@ static const VkExtensionProperties supportedExtensions[] = {
         VK_KHR_SAMPLER_YCBCR_CONVERSION_EXTENSION_NAME, VK_KHR_SAMPLER_YCBCR_CONVERSION_SPEC_VERSION,
     },
     {
+        VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME,
+        VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_SPEC_VERSION,
+    },
+    {
         VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME, VK_KHR_SHADER_ATOMIC_INT64_SPEC_VERSION,
     },
     {
@@ -1394,6 +1398,35 @@ VkResult WrappedVulkan::FilterDeviceExtensionProperties(VkPhysicalDevice physDev
             RDCWARN(
                 "VkPhysicalDeviceBufferDeviceAddressFeaturesKHR.bufferDeviceAddressCaptureReplay "
                 "is false, can't support capture of VK_KHR_buffer_device_address");
+          }
+        }
+
+        // if it wasn't supported, remove the extension
+        return true;
+      }
+
+      if(!strcmp(ext.extensionName, VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME))
+      {
+        // require GPDP2
+        if(instDevInfo->ext_KHR_get_physical_device_properties2)
+        {
+          VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR separate = {
+              VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES_KHR};
+          VkPhysicalDeviceFeatures2 base = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+          base.pNext = &separate;
+          ObjDisp(physDev)->GetPhysicalDeviceFeatures2(Unwrap(physDev), &base);
+
+          if(separate.separateDepthStencilLayouts)
+          {
+            // supported, don't remove
+            return false;
+          }
+          else
+          {
+            RDCWARN(
+                "VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR."
+                "separateDepthStencilLayouts "
+                "is false, can't support capture of VK_KHR_separate_depth_stencil_layouts");
           }
         }
 
