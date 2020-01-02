@@ -2768,13 +2768,10 @@ void VulkanReplay::GetTextureData(ResourceId tex, const Subresource &sub,
 
   const VulkanCreationInfo::Image &imInfo = m_pDriver->m_CreationInfo.m_Image[tex];
 
-  const ImageState *srcImageState = NULL;
-  {
-    LockedConstImageStateRef lockedImage = m_pDriver->FindConstImageState(tex);
-    if(!lockedImage || !lockedImage->isMemoryBound)
-      return;
-    srcImageState = &*lockedImage;
-  }
+  LockedConstImageStateRef lockedImage = m_pDriver->FindConstImageState(tex);
+  if(!lockedImage || !lockedImage->isMemoryBound)
+    return;
+  const ImageState *srcImageState = &*lockedImage;
   const ImageInfo &imageInfo = srcImageState->GetImageInfo();
   ImageState tmpImageState;
 
