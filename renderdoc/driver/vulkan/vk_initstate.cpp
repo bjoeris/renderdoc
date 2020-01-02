@@ -1229,7 +1229,7 @@ void WrappedVulkan::Create_InitialState(ResourceId id, WrappedVkRes *live, bool 
     LockedImageStateRef pState = FindImageState(liveid);
     if(!pState)
     {
-      RDCERR("Couldn't find image info for %llu", id);
+      RDCERR("Couldn't find image info for %s", ToStr(id).c_str());
       GetResourceManager()->SetInitialContents(
           id, VkInitialContents(type, VkInitialContents::ClearColorImage));
       return;

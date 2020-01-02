@@ -162,7 +162,7 @@ bool VulkanReplay::RenderTextureInternal(TextureDisplay cfg, VkRenderPassBeginIn
   LockedImageStateRef state = m_pDriver->FindImageState(cfg.resourceId);
   if(!state)
   {
-    RDCWARN("Could not find image info for image %llu", cfg.resourceId);
+    RDCWARN("Could not find image info for image %s", ToStr(cfg.resourceId).c_str());
     return false;
   }
   if(!state->isMemoryBound)
