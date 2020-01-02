@@ -1513,8 +1513,11 @@ struct ImageTransitionInfo
   CaptureState capState;
   uint32_t defaultQueueFamilyIndex;
   bool separateDepthStencilLayouts;
-  inline ImageTransitionInfo(CaptureState capState, uint32_t defaultQueueFamilyIndex, bool separateDepthStencilLayouts)
-      : capState(capState), defaultQueueFamilyIndex(defaultQueueFamilyIndex), separateDepthStencilLayouts(separateDepthStencilLayouts)
+  inline ImageTransitionInfo(CaptureState capState, uint32_t defaultQueueFamilyIndex,
+                             bool separateDepthStencilLayouts)
+      : capState(capState),
+        defaultQueueFamilyIndex(defaultQueueFamilyIndex),
+        separateDepthStencilLayouts(separateDepthStencilLayouts)
   {
   }
   inline FrameRefCompFunc GetFrameRefCompFunc()
@@ -1651,7 +1654,10 @@ class LockingImageState
 {
 public:
   LockingImageState() = default;
-  LockingImageState(VkImage wrappedHandle, const ImageInfo &imageInfo) : m_state(wrappedHandle, imageInfo) {}
+  LockingImageState(VkImage wrappedHandle, const ImageInfo &imageInfo)
+      : m_state(wrappedHandle, imageInfo)
+  {
+  }
   LockingImageState(const ImageState &state) : m_state(state) {}
   LockedImageStateRef LockWrite() { return LockedImageStateRef(&m_state, m_lock); }
   LockedConstImageStateRef LockRead() { return LockedConstImageStateRef(&m_state, m_lock); }

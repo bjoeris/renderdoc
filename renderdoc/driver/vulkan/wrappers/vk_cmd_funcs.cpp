@@ -1039,8 +1039,8 @@ bool WrappedVulkan::Serialise_vkEndCommandBuffer(SerialiserType &ser, VkCommandB
 
           ObjDisp(commandBuffer)->CmdEndRenderPass(Unwrap(commandBuffer));
 
-// undo any implicit transitions we just went through, so that we can pretend that the
-// image stayed in the same layout as it was when we stopped partially replaying.
+          // undo any implicit transitions we just went through, so that we can pretend that the
+          // image stayed in the same layout as it was when we stopped partially replaying.
 
           for(auto it = renderPassEndStates.begin(); it != renderPassEndStates.end(); ++it)
           {
@@ -3362,8 +3362,8 @@ bool WrappedVulkan::Serialise_vkCmdExecuteCommands(SerialiserType &ser, VkComman
 
         // if we're replaying a range but not from the start, we are guaranteed to only be replaying
         // one of our executed command buffers and doing it to an outside command buffer. The outer
-        // loop will be doing SetOffset() to jump to each event, and any time we land here is just for
-        // the markers we've added, which have this file offset, so just skip all of our work.
+        // loop will be doing SetOffset() to jump to each event, and any time we land here is just
+        // for the markers we've added, which have this file offset, so just skip all of our work.
         if(m_FirstEventID > 1 && m_FirstEventID + 1 < m_LastEventID)
           return true;
 

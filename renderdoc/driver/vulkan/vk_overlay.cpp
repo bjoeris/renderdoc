@@ -516,7 +516,7 @@ ResourceId VulkanReplay::RenderOverlay(ResourceId texid, CompType typeCast, Floa
     vkr = m_pDriver->vkCreateImageView(m_Device, &viewInfo, NULL, &m_Overlay.ImageView);
     RDCASSERTEQUAL(vkr, VK_SUCCESS);
 
-// need to update image layout into valid state
+    // need to update image layout into valid state
 
     m_pDriver->FindImageState(GetResID(m_Overlay.Image))
         ->InlineTransition(

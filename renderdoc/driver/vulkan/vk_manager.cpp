@@ -247,7 +247,7 @@ void VulkanResourceManager::MergeBarriers(rdcarray<rdcpair<ResourceId, ImageRegi
 
 template <typename SerialiserType>
 void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
-                                                  std::map<ResourceId, LockingImageState> &states)
+                                                 std::map<ResourceId, LockingImageState> &states)
 {
   SERIALISE_ELEMENT_LOCAL(NumImages, (uint32_t)states.size());
 

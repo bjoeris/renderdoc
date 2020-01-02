@@ -2951,7 +2951,8 @@ bool WrappedVulkan::ProcessChunk(ReadSerialiser &ser, VulkanChunk chunk)
       return Serialise_vkResetQueryPoolEXT(ser, VK_NULL_HANDLE, VK_NULL_HANDLE, 0, 0);
     case VulkanChunk::vkCmdSetLineStippleEXT:
       return Serialise_vkCmdSetLineStippleEXT(ser, VK_NULL_HANDLE, 0, 0);
-    case VulkanChunk::ImageRefs: {
+    case VulkanChunk::ImageRefs:
+    {
       SCOPED_LOCK(m_ImageStatesLock);
       return GetResourceManager()->Serialise_ImageRefs(ser, m_ImageStates);
     }
@@ -4090,8 +4091,8 @@ void WrappedVulkan::UpdateImageStates(const std::map<ResourceId, ImageState> &ds
     if(it == m_ImageStates.end() || dstIt->first < it->first)
     {
       it = m_ImageStates
-               .insert({dstIt->first,
-                        LockingImageState(dstIt->second.wrappedHandle, dstIt->second.GetImageInfo())})
+               .insert({dstIt->first, LockingImageState(dstIt->second.wrappedHandle,
+                                                        dstIt->second.GetImageInfo())})
                .first;
       dstIt->second.InitialState(*it->second.LockWrite());
     }

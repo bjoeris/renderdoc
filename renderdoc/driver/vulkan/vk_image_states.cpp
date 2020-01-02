@@ -24,7 +24,6 @@
 
 #include "vk_resources.h"
 
-
 ImageSubresourceRange ImageInfo::FullRange() const
 {
   return ImageSubresourceRange(

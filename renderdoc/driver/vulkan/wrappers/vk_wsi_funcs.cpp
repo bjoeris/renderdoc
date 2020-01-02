@@ -577,7 +577,7 @@ void WrappedVulkan::WrapAndProcessCreatedSwapchain(VkDevice device,
         range.layerCount = pCreateInfo->imageArrayLayers;
         range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
-// fill out image info so we track resource state barriers
+        // fill out image info so we track resource state barriers
         {
           LockedImageStateRef state =
               InsertImageState(images[i], imid, GetRecord(images[i])->resInfo->imageInfo);
