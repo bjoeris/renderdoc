@@ -2118,12 +2118,15 @@ void VulkanReplay::PickPixel(ResourceId texture, uint32_t x, uint32_t y, const S
 bool VulkanReplay::GetMinMax(ResourceId texid, const Subresource &sub, CompType typeCast,
                              float *minval, float *maxval)
 {
-  LockedConstImageStateRef state = m_pDriver->FindConstImageState(texid);
-  if(!state)
-    return false;
-  const ImageInfo &imageInfo = state->GetImageInfo();
+  const ImageInfo *imageInfo = NULL;
+  {
+    LockedConstImageStateRef state = m_pDriver->FindConstImageState(texid);
+    if(!state)
+      return false;
+    imageInfo = &state->GetImageInfo();
+  }
 
-  if(IsDepthAndStencilFormat(imageInfo.format))
+  if(IsDepthAndStencilFormat(imageInfo->format))
   {
     // for depth/stencil we need to run the code twice - once to fetch depth and once to fetch
     // stencil - since we can't process float depth and int stencil at the same time
