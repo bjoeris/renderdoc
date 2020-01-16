@@ -878,15 +878,6 @@ MemRefs *VulkanResourceManager::FindMemRefs(ResourceId mem)
     return NULL;
 }
 
-ImgRefs *VulkanResourceManager::FindImgRefs(ResourceId img)
-{
-  auto it = m_ImgFrameRefs.find(img);
-  if(it != m_ImgFrameRefs.end())
-    return &it->second;
-  else
-    return NULL;
-}
-
 bool VulkanResourceManager::Prepare_InitialState(WrappedVkRes *res)
 {
   return m_Core->Prepare_InitialState(res);
