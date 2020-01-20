@@ -3478,10 +3478,12 @@ void VkResourceRecord::MarkImageViewFrameReferenced(VkResourceRecord *view, cons
   if(view->resInfo->imageInfo.imageType == VK_IMAGE_TYPE_3D &&
      view->viewRange.viewType() != VK_IMAGE_VIEW_TYPE_3D)
   {
-    imgRange.baseDepthSlice = range.baseArrayLayer;
-    imgRange.sliceCount = range.layerCount;
-    SanitiseLayerRange(imgRange.baseDepthSlice, imgRange.sliceCount, view->viewRange.layerCount());
-    imgRange.baseDepthSlice += view->viewRange.baseArrayLayer;
+    imgRange.baseArrayLayer = 0;
+    imgRange.layerCount = 1;
+    RDCASSERT(view->viewRange.baseArrayLayer == 0);
+    RDCASSERT(view->viewRange.layerCount() == 1 ||
+              view->viewRange.layerCount() == VK_REMAINING_ARRAY_LAYERS);
+    RDCASSERT(view->resInfo->imageInfo.layerCount == 0);
   }
   else
   {

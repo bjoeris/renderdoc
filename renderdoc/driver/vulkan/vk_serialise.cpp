@@ -3956,8 +3956,6 @@ void DoSerialise(SerialiserType &ser, ImageSubresourceRange &el)
   SERIALISE_MEMBER(levelCount);
   SERIALISE_MEMBER(baseArrayLayer);
   SERIALISE_MEMBER(layerCount);
-  SERIALISE_MEMBER(baseDepthSlice);
-  SERIALISE_MEMBER(sliceCount);
 }
 
 template <typename SerialiserType>

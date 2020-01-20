@@ -1165,8 +1165,6 @@ struct ImageSubresourceRange
   uint32_t levelCount = VK_REMAINING_MIP_LEVELS;
   uint32_t baseArrayLayer = 0;
   uint32_t layerCount = VK_REMAINING_ARRAY_LAYERS;
-  uint32_t baseDepthSlice = 0;
-  uint32_t sliceCount = VK_REMAINING_ARRAY_LAYERS;
 
   inline ImageSubresourceRange() {}
   inline ImageSubresourceRange(const VkImageSubresourceRange &range)
@@ -1190,21 +1188,16 @@ struct ImageSubresourceRange
         baseMipLevel(range.imageSubresource.mipLevel),
         levelCount(1),
         baseArrayLayer(range.imageSubresource.baseArrayLayer),
-        layerCount(range.imageSubresource.layerCount),
-        baseDepthSlice(range.imageOffset.z),
-        sliceCount(range.imageExtent.depth)
+        layerCount(range.imageSubresource.layerCount)
   {
   }
   inline ImageSubresourceRange(VkImageAspectFlags aspectMask, uint32_t baseMipLevel,
-                               uint32_t levelCount, uint32_t baseArrayLayer, uint32_t layerCount,
-                               uint32_t baseDepthSlice, uint32_t sliceCount)
+                               uint32_t levelCount, uint32_t baseArrayLayer, uint32_t layerCount)
       : aspectMask(aspectMask),
         baseMipLevel(baseMipLevel),
         levelCount(levelCount),
         baseArrayLayer(baseArrayLayer),
-        layerCount(layerCount),
-        baseDepthSlice(baseDepthSlice),
-        sliceCount(sliceCount)
+        layerCount(layerCount)
   {
   }
   inline ImageSubresourceRange(const ImageRange &other)
@@ -1212,9 +1205,7 @@ struct ImageSubresourceRange
         baseMipLevel(other.baseMipLevel),
         levelCount(other.levelCount),
         baseArrayLayer(other.baseArrayLayer),
-        layerCount(other.layerCount),
-        baseDepthSlice(other.offset.z),
-        sliceCount(other.extent.depth)
+        layerCount(other.layerCount)
   {
   }
   inline operator VkImageSubresourceRange() const
@@ -1227,8 +1218,7 @@ struct ImageSubresourceRange
   {
     return aspectMask == other.aspectMask && baseMipLevel == other.baseMipLevel &&
            levelCount == other.levelCount && baseArrayLayer == other.baseArrayLayer &&
-           layerCount == other.layerCount && baseDepthSlice == other.baseDepthSlice &&
-           sliceCount == other.sliceCount;
+           layerCount == other.layerCount;
   }
 
   inline bool operator!=(const ImageSubresourceRange &other) const { return !(*this == other); }
@@ -1236,15 +1226,13 @@ struct ImageSubresourceRange
   {
     return ((aspectMask & other.aspectMask) != 0) &&
            IntervalsOverlap(baseMipLevel, levelCount, other.baseMipLevel, other.levelCount) &&
-           IntervalsOverlap(baseArrayLayer, layerCount, other.baseArrayLayer, other.layerCount) &&
-           IntervalsOverlap(baseDepthSlice, sliceCount, other.baseDepthSlice, other.sliceCount);
+           IntervalsOverlap(baseArrayLayer, layerCount, other.baseArrayLayer, other.layerCount);
   }
   inline bool ContainedIn(const ImageSubresourceRange &other) const
   {
     return ((aspectMask & ~other.aspectMask) == 0) &&
            IntervalContainedIn(baseMipLevel, levelCount, other.baseMipLevel, other.levelCount) &&
-           IntervalContainedIn(baseArrayLayer, layerCount, other.baseArrayLayer, other.layerCount) &&
-           IntervalContainedIn(baseDepthSlice, sliceCount, other.baseDepthSlice, other.sliceCount);
+           IntervalContainedIn(baseArrayLayer, layerCount, other.baseArrayLayer, other.layerCount);
   }
   inline bool Contains(const ImageSubresourceRange &other) const
   {
@@ -1263,7 +1251,6 @@ struct ImageSubresourceRange
     }
     SanitiseLevelRange(baseMipLevel, levelCount, info.levelCount);
     SanitiseLayerRange(baseArrayLayer, layerCount, info.layerCount);
-    SanitiseSliceRange(baseDepthSlice, sliceCount, info.extent.depth);
   }
 };
 
@@ -1337,7 +1324,6 @@ class ImageSubresourceMap
     AreAspectsSplit = 0x1,
     AreLevelsSplit = 0x2,
     AreLayersSplit = 0x4,
-    IsDepthSplit = 0x8,
     IsUninitialized = 0x8000,
   };
   uint16_t m_flags = 0;
@@ -1354,17 +1340,12 @@ class ImageSubresourceMap
   {
     return (flags & (uint16_t)FlagBits::AreLayersSplit) != 0;
   }
-  inline static bool IsDepthSplit(uint16_t flags)
-  {
-    return (flags & (uint16_t)FlagBits::IsDepthSplit) != 0;
-  }
   inline bool AreAspectsSplit() const { return AreAspectsSplit(m_flags); }
   inline bool AreLevelsSplit() const { return AreLevelsSplit(m_flags); }
   inline bool AreLayersSplit() const { return AreLayersSplit(m_flags); }
-  inline bool IsDepthSplit() const { return IsDepthSplit(m_flags); }
-  void Split(bool splitAspects, bool splitLevels, bool splitLayers, bool splitDepth);
-  void Unsplit(bool unsplitAspects, bool unsplitLevels, bool unsplitLayers, bool unsplitDepth);
-  size_t SubresourceIndex(uint32_t aspectIndex, uint32_t level, uint32_t layer, uint32_t z) const;
+  void Split(bool splitAspects, bool splitLevels, bool splitLayers);
+  void Unsplit(bool unsplitAspects, bool unsplitLevels, bool unsplitLayers);
+  size_t SubresourceIndex(uint32_t aspectIndex, uint32_t level, uint32_t layer) const;
 
 public:
   inline const ImageInfo &GetImageInfo() const { return m_imageInfo; }
@@ -1385,33 +1366,31 @@ public:
 
   void FromImgRefs(const ImgRefs &imgRefs);
 
-  inline ImageSubresourceState &SubresourceValue(uint32_t aspectIndex, uint32_t level,
-                                                 uint32_t layer, uint32_t slice)
+  inline ImageSubresourceState &SubresourceValue(uint32_t aspectIndex, uint32_t level, uint32_t layer)
   {
-    return m_values[SubresourceIndex(aspectIndex, level, layer, slice)];
+    return m_values[SubresourceIndex(aspectIndex, level, layer)];
   }
   inline ImageSubresourceState &SubresourceValue(VkImageAspectFlagBits aspect, uint32_t level,
-                                                 uint32_t layer, uint32_t slice)
+                                                 uint32_t layer)
   {
     uint32_t aspectIndex = 0;
     for(auto it = ImageAspectFlagIter::begin(GetImageInfo().Aspects());
         it != ImageAspectFlagIter::end() && *it != aspect; ++it, ++aspectIndex)
     {
     }
-    return SubresourceValue(aspectIndex, level, layer, slice);
+    return SubresourceValue(aspectIndex, level, layer);
   }
 
   inline const ImageSubresourceState &SubresourceValue(uint32_t aspectIndex, uint32_t level,
-                                                       uint32_t layer, uint32_t slice) const
+                                                       uint32_t layer) const
   {
-    return m_values[SubresourceIndex(aspectIndex, level, layer, slice)];
+    return m_values[SubresourceIndex(aspectIndex, level, layer)];
   }
   inline void Split(const ImageSubresourceRange &range)
   {
     Split(range.aspectMask != GetImageInfo().Aspects(),
           range.baseMipLevel != 0u || range.levelCount < (uint32_t)GetImageInfo().levelCount,
-          range.baseArrayLayer != 0u || range.layerCount < (uint32_t)GetImageInfo().layerCount,
-          range.baseDepthSlice != 0u || range.sliceCount < GetImageInfo().extent.depth);
+          range.baseArrayLayer != 0u || range.layerCount < (uint32_t)GetImageInfo().layerCount);
   }
   void Unsplit();
   inline void Clear()
@@ -1434,8 +1413,7 @@ public:
              (isValid && otherIsValid &&
               (m_aspectIndex == other.m_aspectIndex || !m_map->AreAspectsSplit()) &&
               (m_level == other.m_level || !m_map->AreLevelsSplit()) &&
-              (m_layer == other.m_layer || !m_map->AreLayersSplit()) &&
-              (m_slice == other.m_slice || !m_map->IsDepthSplit()));
+              (m_layer == other.m_layer || !m_map->AreLayersSplit()));
     }
     inline bool operator!=(const SubresourceRangeIterTemplate &other) { return !(*this == other); }
     SubresourceRangeIterTemplate &operator++();
@@ -1451,7 +1429,6 @@ public:
     uint32_t m_aspectIndex = 0u;
     uint32_t m_level = 0u;
     uint32_t m_layer = 0u;
-    uint32_t m_slice = 0u;
     Pair m_value;
     SubresourceRangeIterTemplate() {}
     SubresourceRangeIterTemplate(Map &map, const ImageSubresourceRange &range);
@@ -1459,8 +1436,7 @@ public:
     {
       return m_map && m_aspectIndex < m_map->m_aspectCount &&
              m_level < m_range.baseMipLevel + m_range.levelCount &&
-             m_layer < m_range.baseArrayLayer + m_range.layerCount &&
-             m_slice < m_range.baseDepthSlice + m_range.sliceCount;
+             m_layer < m_range.baseArrayLayer + m_range.layerCount;
     }
     void FixSubRange();
   };

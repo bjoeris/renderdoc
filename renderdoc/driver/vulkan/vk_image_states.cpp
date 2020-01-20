@@ -31,9 +31,7 @@ ImageSubresourceRange ImageInfo::FullRange() const
       /* baseMipLevel = */ 0u,
       /* levelCount = */ (uint32_t)levelCount,
       /* baseArrayLayer = */ 0u,
-      /* layerCount = */ (uint32_t)layerCount,
-      /* baseDepthSlice = */ 0u,
-      /* sliceCount = */ extent.depth);
+      /* layerCount = */ (uint32_t)layerCount);
 }
 
 void ImageSubresourceState::Update(const ImageSubresourceState &other, FrameRefCompFunc compose)
@@ -69,14 +67,6 @@ typename ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>
   if(!IsValid())
     return *this;
   FixSubRange();
-
-  ++m_slice;
-  if(IsDepthSplit(m_splitFlags) && m_slice < m_range.baseDepthSlice + m_range.sliceCount)
-  {
-    m_value.m_range.baseDepthSlice = m_slice;
-    return *this;
-  }
-  m_value.m_range.baseDepthSlice = m_slice = m_range.baseDepthSlice;
 
   ++m_layer;
   if(AreLayersSplit(m_splitFlags) && m_layer < m_range.baseArrayLayer + m_range.layerCount)
@@ -129,7 +119,7 @@ template typename ImageSubresourceMap::SubresourceRangeIterTemplate<
     &ImageSubresourceMap::SubresourceRangeIterTemplate<
         const ImageSubresourceMap, ImageSubresourceMap::ConstSubresourcePairRef>::operator++();
 
-void ImageSubresourceMap::Split(bool splitAspects, bool splitLevels, bool splitLayers, bool splitDepth)
+void ImageSubresourceMap::Split(bool splitAspects, bool splitLevels, bool splitLayers)
 {
   uint16_t newFlags = m_flags;
   if(splitAspects)
@@ -147,11 +137,6 @@ void ImageSubresourceMap::Split(bool splitAspects, bool splitLevels, bool splitL
   else
     splitLayers = AreLayersSplit();
 
-  if(splitDepth)
-    newFlags |= (uint16_t)FlagBits::IsDepthSplit;
-  else
-    splitDepth = IsDepthSplit();
-
   if(newFlags == m_flags)
     // not splitting anything new
     return;
@@ -165,14 +150,10 @@ void ImageSubresourceMap::Split(bool splitAspects, bool splitLevels, bool splitL
   uint32_t oldSplitLayerCount = AreLayersSplit() ? GetImageInfo().layerCount : 1;
   uint32_t newSplitLayerCount = splitLayers ? GetImageInfo().layerCount : oldSplitLayerCount;
 
-  uint32_t oldSplitSliceCount = IsDepthSplit() ? GetImageInfo().extent.depth : 1;
-  uint32_t newSplitSliceCount = splitDepth ? GetImageInfo().extent.depth : oldSplitSliceCount;
-
   uint32_t oldSize = (uint32_t)m_values.size();
   RDCASSERT(oldSize > 0);
 
-  uint32_t newSize =
-      newSplitAspectCount * newSplitLevelCount * newSplitLayerCount * newSplitSliceCount;
+  uint32_t newSize = newSplitAspectCount * newSplitLevelCount * newSplitLayerCount;
   RDCASSERT(newSize > oldSize);
 
   m_values.resize(newSize);
@@ -183,15 +164,11 @@ void ImageSubresourceMap::Split(bool splitAspects, bool splitLevels, bool splitL
   uint32_t oldLevel = AreLevelsSplit() ? newLevel : 0;
   uint32_t newLayer = newSplitLayerCount - 1;
   uint32_t oldLayer = AreLayersSplit() ? newLayer : 0;
-  uint32_t newSlice = newSplitSliceCount - 1;
-  uint32_t oldSlice = IsDepthSplit() ? newSlice : 0;
   uint32_t newIndex = newSize - 1;
   while(true)
   {
     uint32_t oldIndex =
-        ((oldAspectIndex * oldSplitLevelCount + oldLevel) * oldSplitLayerCount + oldLayer) *
-            oldSplitSliceCount +
-        oldSlice;
+        (oldAspectIndex * oldSplitLevelCount + oldLevel) * oldSplitLayerCount + oldLayer;
     m_values[newIndex] = m_values[oldIndex];
 
     if(newIndex == 0)
@@ -200,15 +177,6 @@ void ImageSubresourceMap::Split(bool splitAspects, bool splitLevels, bool splitL
       break;
     }
     --newIndex;
-
-    if(newSlice > 0)
-    {
-      --newSlice;
-      oldSlice = IsDepthSplit() ? newSlice : 0;
-      continue;
-    }
-    newSlice = newSplitSliceCount - 1;
-    oldSlice = oldSplitSliceCount - 1;
 
     if(newLayer > 0)
     {
@@ -241,8 +209,7 @@ void ImageSubresourceMap::Split(bool splitAspects, bool splitLevels, bool splitL
   m_flags = newFlags;
 }
 
-void ImageSubresourceMap::Unsplit(bool unsplitAspects, bool unsplitLevels, bool unsplitLayers,
-                                  bool unsplitDepth)
+void ImageSubresourceMap::Unsplit(bool unsplitAspects, bool unsplitLevels, bool unsplitLayers)
 {
   uint16_t newFlags = m_flags;
   if(unsplitAspects)
@@ -253,9 +220,6 @@ void ImageSubresourceMap::Unsplit(bool unsplitAspects, bool unsplitLevels, bool 
 
   if(unsplitLayers)
     newFlags &= ~(uint16_t)FlagBits::AreLayersSplit;
-
-  if(unsplitDepth)
-    newFlags &= ~(uint16_t)FlagBits::IsDepthSplit;
 
   if(newFlags == m_flags)
     // not splitting anything new
@@ -270,14 +234,10 @@ void ImageSubresourceMap::Unsplit(bool unsplitAspects, bool unsplitLevels, bool 
   uint32_t oldSplitLayerCount = AreLayersSplit() ? GetImageInfo().layerCount : 1;
   uint32_t newSplitLayerCount = unsplitLayers ? 1 : oldSplitLayerCount;
 
-  uint32_t oldSplitSliceCount = IsDepthSplit() ? GetImageInfo().extent.depth : 1;
-  uint32_t newSplitSliceCount = unsplitDepth ? 1 : oldSplitSliceCount;
-
   uint32_t oldSize = (uint32_t)m_values.size();
   RDCASSERT(oldSize > 0);
 
-  uint32_t newSize =
-      newSplitAspectCount * newSplitLevelCount * newSplitLayerCount * newSplitSliceCount;
+  uint32_t newSize = newSplitAspectCount * newSplitLevelCount * newSplitLayerCount;
   RDCASSERT(newSize < oldSize);
 
   rdcarray<ImageSubresourceState> newValues;
@@ -286,22 +246,14 @@ void ImageSubresourceMap::Unsplit(bool unsplitAspects, bool unsplitLevels, bool 
   uint32_t aspectIndex = 0;
   uint32_t level = 0;
   uint32_t layer = 0;
-  uint32_t slice = 0;
   uint32_t newIndex = 0;
 
   while(newIndex < newValues.size())
   {
-    uint32_t oldIndex = ((aspectIndex * oldSplitLevelCount + level) * oldSplitLayerCount + layer) *
-                            oldSplitSliceCount +
-                        slice;
+    uint32_t oldIndex = (aspectIndex * oldSplitLevelCount + level) * oldSplitLayerCount + layer;
     newValues[newIndex] = m_values[oldIndex];
 
     ++newIndex;
-
-    ++slice;
-    if(slice < newSplitSliceCount)
-      continue;
-    slice = 0;
 
     ++layer;
     if(layer < newSplitLayerCount)
@@ -331,52 +283,36 @@ void ImageSubresourceMap::Unsplit()
   uint32_t level = 0;
   uint32_t layerCount = AreLayersSplit() ? m_imageInfo.layerCount : 1;
   uint32_t layer = 0;
-  uint32_t sliceCount = IsDepthSplit() ? m_imageInfo.extent.depth : 1;
-  uint32_t slice = 0;
   uint32_t index = 0;
 
   bool canUnsplitAspects = aspectCount > 1;
   bool canUnsplitLevels = levelCount > 1;
   bool canUnsplitLayers = layerCount > 1;
-  bool canUnsplitDepth = sliceCount > 1;
 
-  RDCASSERT(aspectCount * levelCount * layerCount * sliceCount == m_values.size());
-#define UNSPLIT_INDEX(ASPECT, LEVEL, LAYER, SLICE) \
-  (((ASPECT * levelCount + LEVEL) * layerCount + LAYER) * sliceCount + SLICE)
-  while(index < m_values.size() &&
-        (canUnsplitAspects || canUnsplitLevels || canUnsplitLayers || canUnsplitDepth))
+  RDCASSERT(aspectCount * levelCount * layerCount == m_values.size());
+#define UNSPLIT_INDEX(ASPECT, LEVEL, LAYER) ((ASPECT * levelCount + LEVEL) * layerCount + LAYER)
+  while(index < m_values.size() && (canUnsplitAspects || canUnsplitLevels || canUnsplitLayers))
   {
     if(canUnsplitAspects && aspectIndex > 0)
     {
-      uint32_t index0 = UNSPLIT_INDEX(0, level, layer, slice);
+      uint32_t index0 = UNSPLIT_INDEX(0, level, layer);
       if(m_values[index] != m_values[index0])
         canUnsplitAspects = false;
     }
     if(canUnsplitLevels && level > 0)
     {
-      uint32_t index0 = UNSPLIT_INDEX(aspectIndex, 0, layer, slice);
+      uint32_t index0 = UNSPLIT_INDEX(aspectIndex, 0, layer);
       if(m_values[index] != m_values[index0])
         canUnsplitLevels = false;
     }
     if(canUnsplitLayers && layer > 0)
     {
-      uint32_t index0 = UNSPLIT_INDEX(aspectIndex, level, 0, slice);
+      uint32_t index0 = UNSPLIT_INDEX(aspectIndex, level, 0);
       if(m_values[index] != m_values[index0])
         canUnsplitLayers = false;
     }
-    if(canUnsplitDepth && slice > 0)
-    {
-      uint32_t index0 = UNSPLIT_INDEX(aspectIndex, level, layer, 0);
-      if(m_values[index] != m_values[index0])
-        canUnsplitDepth = false;
-    }
 
     ++index;
-
-    ++slice;
-    if(slice < sliceCount)
-      continue;
-    slice = 0;
 
     ++layer;
     if(layer < layerCount)
@@ -394,7 +330,7 @@ void ImageSubresourceMap::Unsplit()
   }
 #undef UNSPLIT_INDEX
 
-  Unsplit(canUnsplitAspects, canUnsplitLevels, canUnsplitLayers, canUnsplitDepth);
+  Unsplit(canUnsplitAspects, canUnsplitLevels, canUnsplitLayers);
 }
 
 inline FrameRefType ImageSubresourceMap::Merge(const ImageSubresourceMap &other,
@@ -423,8 +359,7 @@ inline FrameRefType ImageSubresourceMap::Merge(const ImageSubresourceMap &other,
   return maxRefType;
 }
 
-size_t ImageSubresourceMap::SubresourceIndex(uint32_t aspectIndex, uint32_t level, uint32_t layer,
-                                             uint32_t slice) const
+size_t ImageSubresourceMap::SubresourceIndex(uint32_t aspectIndex, uint32_t level, uint32_t layer) const
 {
   if(!AreAspectsSplit())
     aspectIndex = 0;
@@ -438,13 +373,7 @@ size_t ImageSubresourceMap::SubresourceIndex(uint32_t aspectIndex, uint32_t leve
     splitLayerCount = GetImageInfo().layerCount;
   else
     layer = 0;
-  int splitSliceCount = 1;
-  if(IsDepthSplit())
-    splitSliceCount = GetImageInfo().extent.depth;
-  else
-    slice = 0;
-  return ((aspectIndex * splitLevelCount + level) * splitLayerCount + layer) * splitSliceCount +
-         slice;
+  return (aspectIndex * splitLevelCount + level) * splitLayerCount + layer;
 }
 
 void ImageSubresourceMap::ToArray(rdcarray<ImageSubresourceStateForRange> &arr)
@@ -484,23 +413,22 @@ void ImageSubresourceMap::FromArray(const rdcarray<ImageSubresourceStateForRange
 
 void ImageSubresourceMap::FromImgRefs(const ImgRefs &imgRefs)
 {
-  bool splitLayers = imgRefs.areLayersSplit;
-  bool splitDepth = false;
-  if(GetImageInfo().extent.depth > 1)
-  {
-    RDCASSERT(GetImageInfo().layerCount == 1);
-    splitDepth = splitLayers;
-    splitLayers = false;
-  }
-  Split(imgRefs.areAspectsSplit, imgRefs.areLevelsSplit, splitLayers, splitDepth);
-  RDCASSERT(!(AreLayersSplit() && IsDepthSplit()));
+  Split(imgRefs.areAspectsSplit, imgRefs.areLevelsSplit, imgRefs.areLayersSplit);
+
+  int depth = imgRefs.areLayersSplit ? RDCMAX((int)GetImageInfo().extent.depth, 1) : 1;
 
   for(auto dstIt = begin(); dstIt != end(); ++dstIt)
   {
     int aspectIndex = imgRefs.AspectIndex((VkImageAspectFlagBits)dstIt->range().aspectMask);
     int level = (int)dstIt->range().baseMipLevel;
-    int layer = (int)(dstIt->range().baseArrayLayer + dstIt->range().baseDepthSlice);
-    dstIt->state().refType = imgRefs.SubresourceRef(aspectIndex, level, layer);
+    int layer = (int)dstIt->range().baseArrayLayer;
+    FrameRefType refType = eFrameRef_None;
+    for(int i = 0; i < depth; ++i)
+    {
+      refType =
+          ComposeFrameRefsUnordered(refType, imgRefs.SubresourceRef(aspectIndex, level, layer + i));
+    }
+    dstIt->state().refType = refType;
   }
 }
 
@@ -622,11 +550,7 @@ bool SanitiseSliceRange(uint32_t &baseSlice, uint32_t &sliceCount, uint32_t imag
 template <typename Map, typename Pair>
 ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>::SubresourceRangeIterTemplate(
     Map &map, const ImageSubresourceRange &range)
-    : m_map(&map),
-      m_range(range),
-      m_level(range.baseMipLevel),
-      m_layer(range.baseArrayLayer),
-      m_slice(range.baseDepthSlice)
+    : m_map(&map), m_range(range), m_level(range.baseMipLevel), m_layer(range.baseArrayLayer)
 {
   m_range.Sanitise(m_map->GetImageInfo());
   m_splitFlags = (uint16_t)ImageSubresourceMap::FlagBits::IsUninitialized;
@@ -646,17 +570,6 @@ void ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>::FixSubRange()
     return;
   uint16_t oldFlags = m_splitFlags;
   m_splitFlags = m_map->m_flags;
-
-  if(IsDepthSplit(m_splitFlags))
-  {
-    m_value.m_range.baseDepthSlice = m_slice;
-    m_value.m_range.sliceCount = 1u;
-  }
-  else
-  {
-    m_value.m_range.baseDepthSlice = 0u;
-    m_value.m_range.sliceCount = m_map->GetImageInfo().extent.depth;
-  }
 
   if(AreLayersSplit(m_splitFlags))
   {
@@ -710,7 +623,7 @@ template <typename Map, typename Pair>
 Pair *ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>::operator->()
 {
   FixSubRange();
-  m_value.m_state = &m_map->SubresourceValue(m_aspectIndex, m_level, m_layer, m_slice);
+  m_value.m_state = &m_map->SubresourceValue(m_aspectIndex, m_level, m_layer);
   return &m_value;
 }
 template ImageSubresourceMap::SubresourcePairRef *ImageSubresourceMap::SubresourceRangeIterTemplate<
@@ -722,7 +635,7 @@ template <typename Map, typename Pair>
 Pair &ImageSubresourceMap::SubresourceRangeIterTemplate<Map, Pair>::operator*()
 {
   FixSubRange();
-  m_value.m_state = &m_map->SubresourceValue(m_aspectIndex, m_level, m_layer, m_slice);
+  m_value.m_state = &m_map->SubresourceValue(m_aspectIndex, m_level, m_layer);
   return m_value;
 }
 template ImageSubresourceMap::SubresourcePairRef &ImageSubresourceMap::SubresourceRangeIterTemplate<
@@ -1206,13 +1119,6 @@ void ImageState::ResetToOldState(ImageBarrierSequence &barriers, ImageTransition
 
     ImageSubresourceRange subRange = subIt->range();
 
-    if(subRange.baseDepthSlice != 0)
-    {
-      // We can't issue barriers per depth slice, so skip the barriers for non-zero depth slices.
-      // The zero depth slice barrier will implicitly cover the non-zerp depth slices.
-      continue;
-    }
-
     if((GetImageInfo().Aspects() & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) ==
        (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
     {
@@ -1342,13 +1248,6 @@ void ImageState::Transition(const ImageState &dstState, VkAccessFlags srcAccessM
         // Skip the barriers, because it would do nothing
         continue;
 
-      if(srcRng.baseDepthSlice != 0 || dstRng.baseDepthSlice != 0)
-      {
-        // We can't issue barriers per depth slice, so skip the barriers for non-zero depth slices.
-        // The zero depth slice barrier will implicitly cover the non-zerp depth slices.
-        continue;
-      }
-
       VkImageAspectFlags aspectMask = srcRng.aspectMask & dstRng.aspectMask;
       if((GetImageInfo().Aspects() & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) ==
          (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
@@ -1468,7 +1367,7 @@ InitReqType ImageState::MaxInitReq(const ImageSubresourceRange &range, InitPolic
 VkImageLayout ImageState::GetImageLayout(VkImageAspectFlagBits aspect, uint32_t mipLevel,
                                          uint32_t arrayLayer) const
 {
-  return subresourceStates.SubresourceValue(aspect, mipLevel, arrayLayer, 0).newLayout;
+  return subresourceStates.SubresourceValue(aspect, mipLevel, arrayLayer).newLayout;
 }
 
 void ImageState::BeginCapture()

@@ -90,17 +90,6 @@ void CheckSubresourceRanges(const ImageState &state, bool expectAspectsSplit,
       CHECK(range.layerCount == (uint32_t)state.GetImageInfo().layerCount);
     }
 
-    if(expectDepthSplit)
-    {
-      CHECK(range.baseDepthSlice == slice);
-      CHECK(range.sliceCount == 1);
-    }
-    else
-    {
-      CHECK(range.baseDepthSlice == 0);
-      CHECK(range.sliceCount == (uint32_t)state.GetImageInfo().extent.depth);
-    }
-
     ++slice;
     if(slice < splitSliceCount)
       continue;
@@ -212,26 +201,7 @@ TEST_CASE("Test ImageState type", "[imagestate]")
     }
   };
 
-  SECTION("Split depth slices")
-  {
-    ImageState state(image, imageInfo, eFrameRef_None);
-    ImageSubresourceRange range = imageInfo.FullRange();
-    range.baseDepthSlice = 1;
-    range.sliceCount = 1;
-    state.RecordUse(range, eFrameRef_Read, 0);
-
-    CheckSubresourceRanges(state, false, false, false, true);
-    for(auto it = state.subresourceStates.begin(); it != state.subresourceStates.end(); ++it)
-    {
-      if(it->range().baseDepthSlice >= range.baseDepthSlice &&
-         it->range().baseDepthSlice - range.baseDepthSlice < range.sliceCount)
-        CheckSubresourceState(it->state(), readSubstate);
-      else
-        CheckSubresourceState(it->state(), initSubstate);
-    }
-  };
-
-  SECTION("Split aspect to depth")
+  SECTION("Split aspect to array")
   {
     ImageState state(image, imageInfo, eFrameRef_None);
 
@@ -251,12 +221,6 @@ TEST_CASE("Test ImageState type", "[imagestate]")
     layerRange.layerCount = 1;
     state.RecordUse(layerRange, eFrameRef_Read, 2);
     CheckSubresourceRanges(state, true, true, true, false);
-
-    ImageSubresourceRange sliceRange(imageInfo.FullRange());
-    sliceRange.baseDepthSlice = 0;
-    sliceRange.sliceCount = 1;
-    state.RecordUse(sliceRange, eFrameRef_CompleteWrite, 3);
-    CheckSubresourceRanges(state, true, true, true, true);
 
     for(auto it = state.subresourceStates.begin(); it != state.subresourceStates.end(); ++it)
     {
@@ -284,28 +248,14 @@ TEST_CASE("Test ImageState type", "[imagestate]")
         if(substate.oldQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
           substate.oldQueueFamilyIndex = substate.newQueueFamilyIndex;
       }
-      if(sliceRange.baseDepthSlice <= it->range().baseDepthSlice &&
-         it->range().baseDepthSlice - sliceRange.baseDepthSlice < sliceRange.sliceCount)
-      {
-        substate.refType = ComposeFrameRefs(substate.refType, eFrameRef_CompleteWrite);
-        substate.newQueueFamilyIndex = 3;
-        if(substate.oldQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-          substate.oldQueueFamilyIndex = substate.newQueueFamilyIndex;
-      }
 
       CheckSubresourceState(it->state(), substate);
     }
   };
 
-  SECTION("Split depth to aspect")
+  SECTION("Layer to aspect")
   {
     ImageState state(image, imageInfo, eFrameRef_None);
-
-    ImageSubresourceRange sliceRange(imageInfo.FullRange());
-    sliceRange.baseDepthSlice = 0;
-    sliceRange.sliceCount = 1;
-    state.RecordUse(sliceRange, eFrameRef_CompleteWrite, 3);
-    CheckSubresourceRanges(state, false, false, false, true);
 
     ImageSubresourceRange layerRange(imageInfo.FullRange());
     layerRange.baseArrayLayer = 0;
@@ -327,14 +277,6 @@ TEST_CASE("Test ImageState type", "[imagestate]")
     for(auto it = state.subresourceStates.begin(); it != state.subresourceStates.end(); ++it)
     {
       ImageSubresourceState substate(initSubstate);
-      if(sliceRange.baseDepthSlice <= it->range().baseDepthSlice &&
-         it->range().baseDepthSlice - sliceRange.baseDepthSlice < sliceRange.sliceCount)
-      {
-        substate.refType = ComposeFrameRefs(substate.refType, eFrameRef_CompleteWrite);
-        substate.newQueueFamilyIndex = 3;
-        if(substate.oldQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-          substate.oldQueueFamilyIndex = substate.newQueueFamilyIndex;
-      }
       if(layerRange.baseArrayLayer <= it->range().baseArrayLayer &&
          it->range().baseArrayLayer - layerRange.baseArrayLayer < layerRange.layerCount)
       {
@@ -583,8 +525,6 @@ TEST_CASE("Test ImageState type", "[imagestate]")
     range0.levelCount = imageInfo.levelCount - 1;
     range0.baseArrayLayer = 1;
     range0.layerCount = imageInfo.layerCount - 1;
-    range0.baseDepthSlice = 0;
-    range0.sliceCount = imageInfo.extent.depth;
     state.RecordUse(range0, eFrameRef_Read, 0);
 
     // read all aspects
@@ -615,8 +555,6 @@ TEST_CASE("Test ImageState type", "[imagestate]")
     range0.levelCount = imageInfo.levelCount - 1;
     range0.baseArrayLayer = 1;
     range0.layerCount = imageInfo.layerCount - 1;
-    range0.baseDepthSlice = 1;
-    range0.sliceCount = imageInfo.extent.depth - 1;
     state.RecordUse(range0, eFrameRef_Read, 0);
 
     // read all mip levels
@@ -630,7 +568,7 @@ TEST_CASE("Test ImageState type", "[imagestate]")
     CheckSubresourceRanges(state, false, false, true, true);
     for(auto it = state.subresourceStates.begin(); it != state.subresourceStates.end(); ++it)
     {
-      if(it->range().baseArrayLayer > 0 && it->range().baseDepthSlice > 0)
+      if(it->range().baseArrayLayer > 0)
         CheckSubresourceState(it->state(), readSubstate);
       else
         CheckSubresourceState(it->state(), initSubstate);
@@ -648,8 +586,6 @@ TEST_CASE("Test ImageState type", "[imagestate]")
     range0.levelCount = imageInfo.levelCount;
     range0.baseArrayLayer = 1;
     range0.layerCount = imageInfo.layerCount - 1;
-    range0.baseDepthSlice = 1;
-    range0.sliceCount = imageInfo.extent.depth - 1;
     state.RecordUse(range0, eFrameRef_Read, 0);
 
     // read all array layers
@@ -663,7 +599,7 @@ TEST_CASE("Test ImageState type", "[imagestate]")
     CheckSubresourceRanges(state, true, false, false, true);
     for(auto it = state.subresourceStates.begin(); it != state.subresourceStates.end(); ++it)
     {
-      if(it->range().aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT && it->range().baseDepthSlice > 0)
+      if(it->range().aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT)
         CheckSubresourceState(it->state(), readSubstate);
       else
         CheckSubresourceState(it->state(), initSubstate);
@@ -681,14 +617,10 @@ TEST_CASE("Test ImageState type", "[imagestate]")
     range0.levelCount = imageInfo.levelCount - 1;
     range0.baseArrayLayer = 0;
     range0.layerCount = imageInfo.layerCount;
-    range0.baseDepthSlice = 1;
-    range0.sliceCount = imageInfo.extent.depth - 1;
     state.RecordUse(range0, eFrameRef_Read, 0);
 
     // read all depth slices
     ImageSubresourceRange range1 = range0;
-    range1.baseDepthSlice = 0;
-    range1.sliceCount = imageInfo.extent.depth;
     state.RecordUse(range1, eFrameRef_Read, 0);
 
     state.subresourceStates.Unsplit();
@@ -714,8 +646,6 @@ TEST_CASE("Test ImageState type", "[imagestate]")
     range0.levelCount = imageInfo.levelCount - 1;
     range0.baseArrayLayer = 1;
     range0.layerCount = imageInfo.layerCount - 1;
-    range0.baseDepthSlice = 1;
-    range0.sliceCount = imageInfo.extent.depth - 1;
     state.RecordUse(range0, eFrameRef_Read, 0);
 
     // read all subresources

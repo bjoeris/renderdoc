@@ -308,7 +308,6 @@ void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
           {
             ImageSubresourceStateForRange p;
             p.range = st.subresourceRange;
-            p.range.sliceCount = imageLayouts.imageInfo.extent.depth;
             p.state.oldQueueFamilyIndex = st.dstQueueFamilyIndex;
             p.state.newQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             p.state.oldLayout = st.newLayout;
@@ -375,8 +374,7 @@ void VulkanResourceManager::SerialiseImageStates(SerialiserType &ser,
             {
             }
             auto currentSub = current->subresourceStates.SubresourceValue(
-                aspectIndex, subit->range().baseMipLevel, subit->range().baseArrayLayer,
-                subit->range().baseDepthSlice);
+                aspectIndex, subit->range().baseMipLevel, subit->range().baseArrayLayer);
             RDCASSERT(currentSub.refType == subit->state().refType ||
                       subit->state().refType == eFrameRef_Unknown);
             RDCASSERT(currentSub.oldLayout == subit->state().oldLayout);
