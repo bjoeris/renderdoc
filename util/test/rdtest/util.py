@@ -29,6 +29,7 @@ _artifact_dir = os.path.realpath('artifacts')
 _data_dir = os.path.realpath('data')
 _data_extra_dir = os.path.realpath('data_extra')
 _temp_dir = os.path.realpath('tmp')
+_prev_capture_dir = ''
 _test_name = 'Unknown_Test'
 _demos_bin = os.path.realpath('demos_x64')
 
@@ -56,6 +57,14 @@ def set_artifact_dir(path: str):
 def set_temp_dir(path: str):
     global _temp_dir
     _temp_dir = os.path.abspath(path)
+
+
+def set_prev_capture_dir(path: str):
+    global _prev_capture_dir
+    if path:
+        _prev_capture_dir = os.path.abspath(path)
+    else:
+        _prev_capture_dir = ''
 
 
 def set_demos_binary(path: str):
@@ -123,6 +132,10 @@ def get_tmp_dir():
     return _temp_dir
 
 
+def get_prev_capture_dir():
+    return _prev_capture_dir
+
+
 def get_demos_binary():
     return _demos_bin
 
@@ -130,6 +143,10 @@ def get_demos_binary():
 def get_tmp_path(name: str):
     os.makedirs(os.path.join(_temp_dir, _test_name), exist_ok=True)
     return os.path.join(_temp_dir, _test_name, name)
+
+
+def get_prev_capture_path(name: str):
+    return os.path.join(_prev_capture_dir, _test_name, name)
 
 
 def sanitise_filename(name: str):

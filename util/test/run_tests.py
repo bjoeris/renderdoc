@@ -30,6 +30,8 @@ parser.add_argument('--artifacts', default=os.path.join(script_dir, "artifacts")
                     help="The folder to put output artifacts in. Will be completely cleared.", type=str)
 parser.add_argument('--temp', default=os.path.join(script_dir, "tmp"),
                     help="The folder to put temporary run data in. Will be completely cleared.", type=str)
+parser.add_argument('--prev-captures', default="",
+                    help="The folder containing previous captures to be used instead of re-capturing.", type=str)
 parser.add_argument('--debugger',
                     help="Enable debugger mode, exceptions are not caught by the framework.", action="store_true")
 # Internal command, when we fork out to run a test in a separate process
@@ -65,6 +67,10 @@ sys.path.insert(0, os.path.realpath(os.path.dirname(__file__)))
 data_path = os.path.realpath(args.data)
 data_extra_path = os.path.realpath(args.data_extra)
 temp_path = os.path.realpath(args.temp)
+prev_capture_path = ''
+if args.prev_captures != '':
+    prev_capture_path = os.path.realpath(args.prev_captures)
+print("prev_capture_path='", prev_capture_path, "'")
 demos_binary = args.demos_binary
 if demos_binary != "":
     demos_binary = os.path.realpath(demos_binary)
@@ -104,6 +110,7 @@ rdtest.set_artifact_dir(artifacts_dir)
 rdtest.set_data_dir(data_path)
 rdtest.set_data_extra_dir(data_extra_path)
 rdtest.set_temp_dir(temp_path)
+rdtest.set_prev_capture_dir(prev_capture_path)
 rdtest.set_demos_binary(demos_binary)
 
 # debugger option implies in-process test running

@@ -197,7 +197,12 @@ class TestCase:
         """
 
         if self.demos_test_name != '':
-            return capture.run_and_capture(util.get_demos_binary(), self.demos_test_name, self.demos_frame_cap, opts=self.get_capture_options())
+            if util.get_prev_capture_dir() != '':
+                print("reusing capture file", util.get_prev_capture_path('capture_frame{}.rdc'.format(self.demos_frame_cap)))
+                return util.get_prev_capture_path('capture_frame{}.rdc'.format(self.demos_frame_cap))
+            else:
+                print("creating new capture file")
+                return capture.run_and_capture(util.get_demos_binary(), self.demos_test_name, self.demos_frame_cap, opts=self.get_capture_options())
 
         raise NotImplementedError("If run() is not implemented in a test, then"
                                   "get_capture() and check_capture() must be.")
