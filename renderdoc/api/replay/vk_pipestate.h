@@ -985,11 +985,15 @@ struct ImageLayout
 
   bool operator==(const ImageLayout &o) const
   {
-    return baseMip == o.baseMip && baseLayer == o.baseLayer && numMip == o.numMip &&
-           numLayer == o.numLayer && name == o.name;
+    return aspects == o.aspects && baseMip == o.baseMip && baseLayer == o.baseLayer &&
+           numMip == o.numMip && numLayer == o.numLayer && name == o.name &&
+           queueFamily == o.queueFamily && srcQueueFamily == o.srcQueueFamily &&
+           srcLayout == o.srcLayout;
   }
   bool operator<(const ImageLayout &o) const
   {
+    if(!(aspects == o.aspects))
+      return aspects < o.aspects;
     if(!(baseMip == o.baseMip))
       return baseMip < o.baseMip;
     if(!(baseLayer == o.baseLayer))
@@ -1000,8 +1004,16 @@ struct ImageLayout
       return numLayer < o.numLayer;
     if(!(name == o.name))
       return name < o.name;
+    if(!(queueFamily == o.queueFamily))
+      return queueFamily < o.queueFamily;
+    if(!(srcQueueFamily == o.srcQueueFamily))
+      return srcQueueFamily < o.srcQueueFamily;
+    if(!(srcLayout == o.srcLayout))
+      return srcLayout < o.srcLayout;
     return false;
   }
+  DOCUMENT("The image aspects used in the range.");
+  rdcarray<rdcstr> aspects;
   DOCUMENT("The first mip level used in the range.");
   uint32_t baseMip = 0;
   DOCUMENT("For 3D textures and texture arrays, the first slice used in the range.");
@@ -1012,6 +1024,12 @@ struct ImageLayout
   uint32_t numLayer = 1;
   DOCUMENT("The name of the current image state.");
   rdcstr name;
+  DOCUMENT("The queue family index that currently owns the image subresource.");
+  uint32_t queueFamily = ~0u;
+  DOCUMENT("The queue family index that has released ownership.");
+  uint32_t srcQueueFamily = ~0u;
+  DOCUMENT("The name of the image src image layout when ownership was released.");
+  rdcstr srcLayout;
 };
 
 DOCUMENT("Contains the current layout of all subresources in the image.");

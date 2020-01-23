@@ -2168,13 +2168,23 @@ void DoSerialise(SerialiserType &ser, VKPipe::CurrentPass &el)
 template <typename SerialiserType>
 void DoSerialise(SerialiserType &ser, VKPipe::ImageLayout &el)
 {
+  if(ser.VersionAtLeast(0x11))
+  {
+    SERIALISE_MEMBER(aspects);
+  }
   SERIALISE_MEMBER(baseMip);
   SERIALISE_MEMBER(baseLayer);
   SERIALISE_MEMBER(numMip);
   SERIALISE_MEMBER(numLayer);
   SERIALISE_MEMBER(name);
+  if(ser.VersionAtLeast(0x11))
+  {
+    SERIALISE_MEMBER(queueFamily);
+    SERIALISE_MEMBER(srcQueueFamily);
+    SERIALISE_MEMBER(srcLayout);
+  }
 
-  SIZE_CHECK(40);
+  SIZE_CHECK(96);
 }
 
 template <typename SerialiserType>

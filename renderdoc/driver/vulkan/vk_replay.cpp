@@ -1862,14 +1862,43 @@ void VulkanReplay::SavePipelineState(uint32_t eventId)
 
       LockedConstImageStateRef imState = it->second.LockRead();
       img.layouts.resize(imState->subresourceStates.size());
-      auto subIt = imState->subresourceStates.begin();
-      for(size_t l = 0; l < img.layouts.size(); ++l, ++subIt)
       {
-        img.layouts[l].name = ToStr(subIt->state().newLayout);
-        img.layouts[l].baseMip = subIt->range().baseMipLevel;
-        img.layouts[l].numMip = subIt->range().levelCount;
-        img.layouts[l].baseLayer = subIt->range().baseArrayLayer;
-        img.layouts[l].numLayer = subIt->range().layerCount;
+        auto subIt = imState->subresourceStates.begin();
+        for(size_t l = 0; l < img.layouts.size(); ++subIt)
+        {
+          if(subIt->range().baseDepthSlice != 0)
+            continue;
+          for(auto aspectIt = ImageAspectFlagIter::begin(subIt->range().aspectMask);
+              aspectIt != ImageAspectFlagIter::end(); ++aspectIt)
+          {
+            img.layouts[l].aspects.push_back(ToStr(*aspectIt));
+          }
+          img.layouts[l].name = ToStr(subIt->state().newLayout);
+          img.layouts[l].baseMip = subIt->range().baseMipLevel;
+          img.layouts[l].numMip = subIt->range().levelCount;
+          img.layouts[l].baseLayer = subIt->range().baseArrayLayer;
+          img.layouts[l].numLayer = subIt->range().layerCount;
+          img.layouts[l].queueFamily = subIt->state().newQueueFamilyIndex;
+          ++l;
+        }
+      }
+
+      for(auto transferIt = imState->newQueueFamilyTransfers.begin();
+          transferIt != imState->newQueueFamilyTransfers.end(); ++transferIt)
+      {
+        for(auto subIt = imState->subresourceStates.RangeBegin(transferIt->subresourceRange);
+            subIt != imState->subresourceStates.end(); ++subIt)
+        {
+          if(subIt->range().baseDepthSlice != 0)
+            continue;
+          size_t l = imState->subresourceStates.SubresourceIndex(subIt->range().aspectMask,
+                                                                 subIt->range().baseMipLevel,
+                                                                 subIt->range().baseArrayLayer, 0);
+          img.layouts[l].queueFamily = transferIt->dstQueueFamilyIndex;
+          img.layouts[l].srcQueueFamily = transferIt->srcQueueFamilyIndex;
+          img.layouts[l].name = ToStr(transferIt->newLayout);
+          img.layouts[l].srcLayout = ToStr(transferIt->oldLayout);
+        }
       }
 
       if(img.layouts.empty())

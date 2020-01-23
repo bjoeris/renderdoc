@@ -1364,7 +1364,6 @@ class ImageSubresourceMap
   inline bool IsDepthSplit() const { return IsDepthSplit(m_flags); }
   void Split(bool splitAspects, bool splitLevels, bool splitLayers, bool splitDepth);
   void Unsplit(bool unsplitAspects, bool unsplitLevels, bool unsplitLayers, bool unsplitDepth);
-  size_t SubresourceIndex(uint32_t aspectIndex, uint32_t level, uint32_t layer, uint32_t z) const;
 
 public:
   inline const ImageInfo &GetImageInfo() const { return m_imageInfo; }
@@ -1384,6 +1383,17 @@ public:
   void FromArray(const rdcarray<ImageSubresourceStateForRange> &arr);
 
   void FromImgRefs(const ImgRefs &imgRefs);
+
+  size_t SubresourceIndex(uint32_t aspectIndex, uint32_t level, uint32_t layer, uint32_t z) const;
+  size_t SubresourceIndex(VkImageAspectFlagBits aspect, uint32_t level, uint32_t layer, uint32_t z) const
+  {
+    uint32_t aspectIndex = 0;
+    for(auto it = ImageAspectFlagIter::begin(GetImageInfo().Aspects());
+        it != ImageAspectFlagIter::end() && *it != aspect; ++it, ++aspectIndex)
+    {
+    }
+    return SubresourceIndex(aspectIndex, level, layer, z);
+  }
 
   inline ImageSubresourceState &SubresourceValue(uint32_t aspectIndex, uint32_t level,
                                                  uint32_t layer, uint32_t slice)
