@@ -454,6 +454,8 @@ void main()
                   depthStencilImg.image, vkh::ImageSubresourceRange(VK_IMAGE_ASPECT_DEPTH_BIT)),
           });
 
+      setMarker(cmd, "After Transition");
+
       vkCmdBeginRenderPass(
           cmd, vkh::RenderPassBeginInfo(renderPass, frameBuffer, mainWindow->scissor,
                                         {vkh::ClearValue(1, 0, 1, 1), vkh::ClearValue(1.0f, 0)}),
@@ -467,15 +469,17 @@ void main()
       vkCmdDraw(cmd, 3, 1, 0, 0);
       popMarker(cmd);
 
-      pushMarker(cmd, "Depth write, stencil read");
       vkCmdNextSubpass(cmd, VK_SUBPASS_CONTENTS_INLINE);
+
+      pushMarker(cmd, "Depth write, stencil read");
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, depthPipe);
       vkh::cmdBindVertexBuffers(cmd, 0, {depthVB.buffer}, {0});
       vkCmdDraw(cmd, 3, 1, 0, 0);
       popMarker(cmd);
 
-      pushMarker(cmd, "Depth input attachment");
       vkCmdNextSubpass(cmd, VK_SUBPASS_CONTENTS_INLINE);
+
+      pushMarker(cmd, "Depth input attachment");
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, inputAttPipe);
       vkh::updateDescriptorSets(
           device, {vkh::WriteDescriptorSet(inputAttDescSet, 0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
@@ -486,14 +490,17 @@ void main()
       vkCmdDraw(cmd, 3, 1, 0, 0);
       popMarker(cmd);
 
-      pushMarker(cmd, "Depth/stencil read");
       vkCmdNextSubpass(cmd, VK_SUBPASS_CONTENTS_INLINE);
+
+      pushMarker(cmd, "Depth/stencil read");
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, colorPipe);
       vkh::cmdBindVertexBuffers(cmd, 0, {colorVB.buffer}, {0});
       vkCmdDraw(cmd, 3, 1, 0, 0);
       popMarker(cmd);
 
       vkCmdEndRenderPass(cmd);
+
+      setMarker(cmd, "After Render Pass");
 
       vkh::cmdPipelineBarrier(
           cmd, {
